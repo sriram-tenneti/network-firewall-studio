@@ -8,14 +8,12 @@ from app.routes.migrations import router as migrations_router
 from app.routes.reference import router as reference_router
 from app.routes.policy import router as policy_router
 from app.database import seed_database
-from app.mongodb import close_connection
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     await seed_database()
     yield
-    await close_connection()
 
 
 app = FastAPI(lifespan=lifespan)

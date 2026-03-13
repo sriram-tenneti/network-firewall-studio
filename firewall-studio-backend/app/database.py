@@ -1,16 +1,20 @@
-"""MongoDB-backed database for the Network Firewall Studio.
+"""JSON-file-backed database for the Network Firewall Studio.
 
 All reference data (Neighbourhoods, Security Zones, Data Centers, Applications,
 IP Ranges, Naming Standards, Policy Matrix) is fully customizable via CRUD APIs.
 
-Data is seeded on first startup and persisted in MongoDB.
+Data is stored in JSON files under the data/ directory and seeded on first startup.
 """
 
+import json
+import os
 import uuid
+from copy import deepcopy
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
-from app.mongodb import get_db, COLLECTIONS
+DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 def _id() -> str:
@@ -21,16 +25,23 @@ def _now() -> str:
     return datetime.utcnow().isoformat()
 
 
-def _strip_mongo_id(doc: dict[str, Any] | None) -> dict[str, Any] | None:
-    if doc and "_id" in doc:
-        doc.pop("_id")
-    return doc
+def _ensure_dir() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _strip_many(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    for d in docs:
-        d.pop("_id", None)
-    return docs
+def _load(name: str) -> Any:
+    path = DATA_DIR / f"{name}.json"
+    if not path.exists():
+        return None
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _save(name: str, data: Any) -> None:
+    _ensure_dir()
+    path = DATA_DIR / f"{name}.json"
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
 
 
 # ============================================================
@@ -357,41 +368,48 @@ SEED_ORG_CONFIG = {
     "chg_id_start": 10000,
 }
 
-# Sample firewall rules
-SEED_FIREWALL_RULES: list[dict[str, Any]] = []
-_base_time = datetime.utcnow()
-_rule_defs = [
-    ("R-3001", "grp-CRM-NH02-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
-     "CRM to Core Banking DB", "CRM", "Deployed", True, -30),
-    ("R-3002", "grp-DIG-NH03-CDE-WEB", "CDE", "grp-PAY-NH07-CDE-APP", "CDE", "TCP 8443",
-     "Digital Channels to Payments", "DIG", "Certified", True, -15),
-    ("R-3003", "grp-ENT-NH05-GEN-APP", "GEN", "grp-SHR-NH13-GEN-SVC", "GEN", "TCP 8080",
-     "Enterprise to Shared Services", "ENT", "Pending Review", True, -5),
-    ("R-3004", "grp-WHL-NH06-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
-     "Wholesale to Core Banking DB", "WHL", "Draft", True, -1),
-    ("R-3005", "grp-PAY-NH07-CDE-APP", "CDE", "grp-EXT-NH14-DMZ-API", "DMZ", "TCP 443",
-     "Payments to External API", "PAY", "Certified", False, -20),
-    ("R-3006", "grp-DAT-NH08-GEN-APP", "GEN", "grp-ENT-NH05-GEN-APP", "GEN", "TCP 8443",
-     "Analytics to Enterprise", "SHR", "Deployed", True, -45),
-]
-for _rid, _src, _sz_s, _dst, _sz_d, _port, _desc, _app, _st, _g2g, _days in _rule_defs:
-    _ct = (_base_time + timedelta(days=_days)).isoformat()
-    SEED_FIREWALL_RULES.append({
-        "rule_id": _rid, "source": _src, "source_zone": _sz_s, "destination": _dst,
-        "destination_zone": _sz_d, "port": _port, "protocol": _port.split(" ")[0],
-        "action": "Allow", "description": _desc, "application": _app, "status": _st,
-        "is_group_to_group": _g2g, "environment": "Production", "datacenter": "EAST_NGDC",
-        "created_at": _ct, "updated_at": _ct,
-        "certified_date": _ct if _st in ("Certified", "Deployed") else None,
-        "expiry_date": (_base_time + timedelta(days=365)).isoformat() if _st in ("Certified", "Deployed") else None,
-    })
+
+def _build_seed_rules() -> list[dict[str, Any]]:
+    rules: list[dict[str, Any]] = []
+    base = datetime.utcnow()
+    defs = [
+        ("R-3001", "grp-CRM-NH02-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
+         "CRM to Core Banking DB", "CRM", "Deployed", True, -30),
+        ("R-3002", "grp-DIG-NH03-CDE-WEB", "CDE", "grp-PAY-NH07-CDE-APP", "CDE", "TCP 8443",
+         "Digital Channels to Payments", "DIG", "Certified", True, -15),
+        ("R-3003", "grp-ENT-NH05-GEN-APP", "GEN", "grp-SHR-NH13-GEN-SVC", "GEN", "TCP 8080",
+         "Enterprise to Shared Services", "ENT", "Pending Review", True, -5),
+        ("R-3004", "grp-WHL-NH06-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
+         "Wholesale to Core Banking DB", "WHL", "Draft", True, -1),
+        ("R-3005", "grp-PAY-NH07-CDE-APP", "CDE", "grp-EXT-NH14-DMZ-API", "DMZ", "TCP 443",
+         "Payments to External API", "PAY", "Certified", False, -20),
+        ("R-3006", "grp-DAT-NH08-GEN-APP", "GEN", "grp-ENT-NH05-GEN-APP", "GEN", "TCP 8443",
+         "Analytics to Enterprise", "SHR", "Deployed", True, -45),
+        ("R-3007", "192.168.1.10", "GEN", "grp-SHR-NH13-GEN-SVC", "GEN", "TCP 8443",
+         "Single IP to Shared Services", "SHR", "Pending Review", False, -2),
+    ]
+    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in defs:
+        ct = (base + timedelta(days=days)).isoformat()
+        rules.append({
+            "rule_id": rid, "source": src, "source_zone": sz_s, "destination": dst,
+            "destination_zone": sz_d, "port": port, "protocol": port.split(" ")[0],
+            "action": "Allow", "description": desc, "application": app, "status": st,
+            "is_group_to_group": g2g, "environment": "Production", "datacenter": "EAST_NGDC",
+            "created_at": ct, "updated_at": ct,
+            "certified_date": ct if st in ("Certified", "Deployed") else None,
+            "expiry_date": (base + timedelta(days=365)).isoformat() if st in ("Certified", "Deployed") else None,
+        })
+    return rules
+
 
 SEED_MIGRATIONS = [
     {"migration_id": "mig-001", "name": "DC Garland to Central NGDC Wave 1",
+     "application": "CRM", "source_legacy_dc": "DC_GARLAND", "target_ngdc": "CENTRAL_NGDC",
      "legacy_dc": "DC_GARLAND", "target_dc": "CENTRAL_NGDC",
      "status": "In Progress", "progress": 35,
      "total_rules": 45, "migrated_rules": 16, "failed_rules": 2,
-     "created_at": (_base_time + timedelta(days=-60)).isoformat(), "updated_at": _now()},
+     "created_at": (datetime.utcnow() + timedelta(days=-60)).isoformat(),
+     "updated_at": _now()},
 ]
 
 SEED_MIGRATION_MAPPINGS = [
@@ -424,40 +442,35 @@ SEED_CHG_REQUESTS = [
     {"chg_id": "CHG10001", "rule_ids": ["R-3001"], "status": "Approved",
      "description": "Deploy CRM to Core Banking DB rule",
      "requested_by": "Jane Smith", "approved_by": "Security Team",
-     "created_at": (_base_time + timedelta(days=-31)).isoformat(),
-     "updated_at": (_base_time + timedelta(days=-30)).isoformat()},
+     "created_at": (datetime.utcnow() + timedelta(days=-31)).isoformat(),
+     "updated_at": (datetime.utcnow() + timedelta(days=-30)).isoformat()},
 ]
 
 
 # ============================================================
-# Seed Function
+# Seed / Init
 # ============================================================
 
 async def seed_database() -> None:
-    """Seed MongoDB with initial data if collections are empty."""
-    db = get_db()
-    count = await db[COLLECTIONS["neighbourhoods"]].count_documents({})
-    if count > 0:
+    """Seed JSON files with initial data if they don't exist."""
+    _ensure_dir()
+    if _load("neighbourhoods") is not None:
         return
-
-    await db[COLLECTIONS["neighbourhoods"]].insert_many([dict(n) for n in SEED_NEIGHBOURHOODS])
-    await db[COLLECTIONS["security_zones"]].insert_many([dict(s) for s in SEED_SECURITY_ZONES])
-    await db[COLLECTIONS["ngdc_datacenters"]].insert_many([dict(d) for d in SEED_NGDC_DATACENTERS])
-    await db[COLLECTIONS["legacy_datacenters"]].insert_many([dict(d) for d in SEED_LEGACY_DATACENTERS])
-    await db[COLLECTIONS["applications"]].insert_many([dict(a) for a in SEED_APPLICATIONS])
-    await db[COLLECTIONS["environments"]].insert_many([dict(e) for e in SEED_ENVIRONMENTS])
-    await db[COLLECTIONS["predefined_destinations"]].insert_many([dict(p) for p in SEED_PREDEFINED_DESTINATIONS])
-    await db[COLLECTIONS["naming_standards"]].insert_one(dict(SEED_NAMING_STANDARDS))
-    await db[COLLECTIONS["policy_matrix"]].insert_many([dict(p) for p in SEED_POLICY_MATRIX])
-    await db[COLLECTIONS["org_config"]].insert_one(dict(SEED_ORG_CONFIG))
-    if SEED_FIREWALL_RULES:
-        await db[COLLECTIONS["firewall_rules"]].insert_many([dict(r) for r in SEED_FIREWALL_RULES])
-    if SEED_MIGRATIONS:
-        await db[COLLECTIONS["migrations"]].insert_many([dict(m) for m in SEED_MIGRATIONS])
-    if SEED_MIGRATION_MAPPINGS:
-        await db[COLLECTIONS["migration_mappings"]].insert_many([dict(m) for m in SEED_MIGRATION_MAPPINGS])
-    if SEED_CHG_REQUESTS:
-        await db[COLLECTIONS["chg_requests"]].insert_many([dict(c) for c in SEED_CHG_REQUESTS])
+    _save("neighbourhoods", deepcopy(SEED_NEIGHBOURHOODS))
+    _save("security_zones", deepcopy(SEED_SECURITY_ZONES))
+    _save("ngdc_datacenters", deepcopy(SEED_NGDC_DATACENTERS))
+    _save("legacy_datacenters", deepcopy(SEED_LEGACY_DATACENTERS))
+    _save("applications", deepcopy(SEED_APPLICATIONS))
+    _save("environments", deepcopy(SEED_ENVIRONMENTS))
+    _save("predefined_destinations", deepcopy(SEED_PREDEFINED_DESTINATIONS))
+    _save("naming_standards", deepcopy(SEED_NAMING_STANDARDS))
+    _save("policy_matrix", deepcopy(SEED_POLICY_MATRIX))
+    _save("org_config", deepcopy(SEED_ORG_CONFIG))
+    _save("firewall_rules", _build_seed_rules())
+    _save("rule_history", [])
+    _save("migrations", deepcopy(SEED_MIGRATIONS))
+    _save("migration_mappings", deepcopy(SEED_MIGRATION_MAPPINGS))
+    _save("chg_requests", deepcopy(SEED_CHG_REQUESTS))
 
 
 # ============================================================
@@ -465,63 +478,43 @@ async def seed_database() -> None:
 # ============================================================
 
 async def get_neighbourhoods() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["neighbourhoods"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("neighbourhoods") or []
 
 
 async def get_security_zones() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["security_zones"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("security_zones") or []
 
 
 async def get_ngdc_datacenters() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["ngdc_datacenters"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("ngdc_datacenters") or []
 
 
 async def get_legacy_datacenters() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["legacy_datacenters"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("legacy_datacenters") or []
 
 
 async def get_applications() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["applications"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("applications") or []
 
 
 async def get_environments() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["environments"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("environments") or []
 
 
 async def get_predefined_destinations() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["predefined_destinations"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("predefined_destinations") or []
 
 
 async def get_naming_standards() -> dict[str, Any] | None:
-    db = get_db()
-    doc = await db[COLLECTIONS["naming_standards"]].find_one()
-    return _strip_mongo_id(doc)
+    return _load("naming_standards")
 
 
 async def get_policy_matrix() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["policy_matrix"]].find().to_list(length=200)
-    return _strip_many(docs)
+    return _load("policy_matrix") or []
 
 
 async def get_org_config() -> dict[str, Any] | None:
-    db = get_db()
-    doc = await db[COLLECTIONS["org_config"]].find_one()
-    return _strip_mongo_id(doc)
+    return _load("org_config")
 
 
 # ============================================================
@@ -529,30 +522,34 @@ async def get_org_config() -> dict[str, Any] | None:
 # ============================================================
 
 async def get_rules() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["firewall_rules"]].find().to_list(length=1000)
-    return _strip_many(docs)
+    return _load("firewall_rules") or []
 
 
 async def get_rule(rule_id: str) -> dict[str, Any] | None:
-    db = get_db()
-    doc = await db[COLLECTIONS["firewall_rules"]].find_one({"rule_id": rule_id})
-    return _strip_mongo_id(doc)
+    rules = _load("firewall_rules") or []
+    for r in rules:
+        if r.get("rule_id") == rule_id:
+            return r
+    return None
 
 
 async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
+    rules = _load("firewall_rules") or []
     now = _now()
-    config = await get_org_config() or SEED_ORG_CONFIG
-    last = await db[COLLECTIONS["firewall_rules"]].find_one(sort=[("rule_id", -1)])
-    if last and last.get("rule_id", "").startswith(config.get("rule_id_prefix", "R-")):
-        try:
-            num = int(last["rule_id"].split("-")[-1]) + 1
-        except (ValueError, IndexError):
-            num = config.get("rule_id_start", 3000)
-    else:
-        num = config.get("rule_id_start", 3000)
-    rule_id = f"{config.get('rule_id_prefix', 'R-')}{num}"
+    config = (await get_org_config()) or SEED_ORG_CONFIG
+    prefix = config.get("rule_id_prefix", "R-")
+    start = config.get("rule_id_start", 3000)
+    max_num = start - 1
+    for r in rules:
+        rid = r.get("rule_id", "")
+        if rid.startswith(prefix):
+            try:
+                num = int(rid.split("-")[-1])
+                if num > max_num:
+                    max_num = num
+            except (ValueError, IndexError):
+                pass
+    rule_id = f"{prefix}{max_num + 1}"
     rule = {
         "rule_id": rule_id,
         "source": rule_data.get("source", ""),
@@ -573,49 +570,63 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "certified_date": None,
         "expiry_date": None,
     }
-    await db[COLLECTIONS["firewall_rules"]].insert_one(dict(rule))
-    await db[COLLECTIONS["rule_history"]].insert_one({
+    rules.append(rule)
+    _save("firewall_rules", rules)
+    history = _load("rule_history") or []
+    history.append({
         "rule_id": rule_id, "action": "Created", "timestamp": now,
         "details": f"Rule created: {rule['description']}", "user": "system",
     })
+    _save("rule_history", history)
     return rule
 
 
 async def update_rule(rule_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
-    db = get_db()
-    updates["updated_at"] = _now()
-    await db[COLLECTIONS["firewall_rules"]].update_one({"rule_id": rule_id}, {"$set": updates})
-    doc = await db[COLLECTIONS["firewall_rules"]].find_one({"rule_id": rule_id})
-    return _strip_mongo_id(doc)
+    rules = _load("firewall_rules") or []
+    for r in rules:
+        if r.get("rule_id") == rule_id:
+            r.update(updates)
+            r["updated_at"] = _now()
+            _save("firewall_rules", rules)
+            return r
+    return None
 
 
 async def update_rule_status(rule_id: str, new_status: str) -> dict[str, Any] | None:
-    db = get_db()
+    rules = _load("firewall_rules") or []
     now = _now()
-    update_fields: dict[str, Any] = {"status": new_status, "updated_at": now}
-    if new_status == "Certified":
-        update_fields["certified_date"] = now
-        config = await get_org_config() or SEED_ORG_CONFIG
-        expiry_days = config.get("auto_certify_days", 365)
-        update_fields["expiry_date"] = (datetime.utcnow() + timedelta(days=expiry_days)).isoformat()
-    await db[COLLECTIONS["firewall_rules"]].update_one({"rule_id": rule_id}, {"$set": update_fields})
-    await db[COLLECTIONS["rule_history"]].insert_one({
-        "rule_id": rule_id, "action": f"Status changed to {new_status}",
-        "timestamp": now, "details": f"Status updated to {new_status}", "user": "system",
-    })
-    return await get_rule(rule_id)
+    for r in rules:
+        if r.get("rule_id") == rule_id:
+            r["status"] = new_status
+            r["updated_at"] = now
+            if new_status == "Certified":
+                r["certified_date"] = now
+                config = (await get_org_config()) or SEED_ORG_CONFIG
+                expiry_days = config.get("auto_certify_days", 365)
+                r["expiry_date"] = (datetime.utcnow() + timedelta(days=expiry_days)).isoformat()
+            _save("firewall_rules", rules)
+            history = _load("rule_history") or []
+            history.append({
+                "rule_id": rule_id, "action": f"Status changed to {new_status}",
+                "timestamp": now, "details": f"Status updated to {new_status}", "user": "system",
+            })
+            _save("rule_history", history)
+            return r
+    return None
 
 
 async def delete_rule(rule_id: str) -> bool:
-    db = get_db()
-    result = await db[COLLECTIONS["firewall_rules"]].delete_one({"rule_id": rule_id})
-    return result.deleted_count > 0
+    rules = _load("firewall_rules") or []
+    new_rules = [r for r in rules if r.get("rule_id") != rule_id]
+    if len(new_rules) == len(rules):
+        return False
+    _save("firewall_rules", new_rules)
+    return True
 
 
 async def get_rule_history(rule_id: str) -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["rule_history"]].find({"rule_id": rule_id}).to_list(length=500)
-    return _strip_many(docs)
+    history = _load("rule_history") or []
+    return [h for h in history if h.get("rule_id") == rule_id]
 
 
 # ============================================================
@@ -623,27 +634,34 @@ async def get_rule_history(rule_id: str) -> list[dict[str, Any]]:
 # ============================================================
 
 async def get_migrations() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["migrations"]].find().to_list(length=100)
-    return _strip_many(docs)
+    return _load("migrations") or []
 
 
 async def get_migration(migration_id: str) -> dict[str, Any] | None:
-    db = get_db()
-    doc = await db[COLLECTIONS["migrations"]].find_one({"migration_id": migration_id})
-    return _strip_mongo_id(doc)
+    migrations = _load("migrations") or []
+    for m in migrations:
+        if m.get("migration_id") == migration_id:
+            return m
+    return None
 
 
 async def create_migration(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
+    migrations = _load("migrations") or []
     now = _now()
-    config = await get_org_config() or SEED_ORG_CONFIG
+    config = (await get_org_config()) or SEED_ORG_CONFIG
     migration_id = f"{config.get('migration_id_prefix', 'mig-')}{_id()}"
+    legacy_dc = data.get("source_legacy_dc", data.get("legacy_dc", ""))
+    target_dc = data.get("target_ngdc", data.get("target_dc", ""))
+    application = data.get("application", "")
     migration = {
         "migration_id": migration_id,
-        "name": data.get("name", ""),
-        "legacy_dc": data.get("legacy_dc", ""),
-        "target_dc": data.get("target_dc", ""),
+        "id": migration_id,
+        "name": data.get("name", f"{application} migration from {legacy_dc} to {target_dc}"),
+        "application": application,
+        "source_legacy_dc": legacy_dc,
+        "target_ngdc": target_dc,
+        "legacy_dc": legacy_dc,
+        "target_dc": target_dc,
         "status": "Planning",
         "progress": 0,
         "total_rules": data.get("total_rules", 0),
@@ -652,36 +670,42 @@ async def create_migration(data: dict[str, Any]) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
     }
-    await db[COLLECTIONS["migrations"]].insert_one(dict(migration))
+    migrations.append(migration)
+    _save("migrations", migrations)
     return migration
 
 
 async def get_migration_mappings(migration_id: str) -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["migration_mappings"]].find({"migration_id": migration_id}).to_list(length=1000)
-    return _strip_many(docs)
+    mappings = _load("migration_mappings") or []
+    return [m for m in mappings if m.get("migration_id") == migration_id]
 
 
 async def create_migration_mapping(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
+    mappings = _load("migration_mappings") or []
     mapping = dict(data)
     mapping["mapping_id"] = f"map-{_id()}"
-    await db[COLLECTIONS["migration_mappings"]].insert_one(dict(mapping))
+    mappings.append(mapping)
+    _save("migration_mappings", mappings)
     return mapping
 
 
 async def execute_migration(migration_id: str) -> dict[str, Any] | None:
-    db = get_db()
+    migrations = _load("migrations") or []
     now = _now()
     mappings = await get_migration_mappings(migration_id)
     compliant = sum(1 for m in mappings if m.get("compliance") == "Compliant")
     total = len(mappings)
     progress = int((compliant / total) * 100) if total > 0 else 0
-    await db[COLLECTIONS["migrations"]].update_one(
-        {"migration_id": migration_id},
-        {"$set": {"status": "In Progress", "progress": progress, "migrated_rules": compliant,
-                  "total_rules": total, "updated_at": now}})
-    return await get_migration(migration_id)
+    for m in migrations:
+        if m.get("migration_id") == migration_id:
+            m["status"] = "In Progress"
+            m["progress"] = progress
+            m["migrated_rules"] = compliant
+            m["total_rules"] = total
+            m["updated_at"] = now
+            _save("migrations", migrations)
+            return m
+    return None
 
 
 # ============================================================
@@ -689,25 +713,28 @@ async def execute_migration(migration_id: str) -> dict[str, Any] | None:
 # ============================================================
 
 async def get_chg_requests() -> list[dict[str, Any]]:
-    db = get_db()
-    docs = await db[COLLECTIONS["chg_requests"]].find().to_list(length=500)
-    return _strip_many(docs)
+    return _load("chg_requests") or []
 
 
 async def create_chg_request(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
+    chg_list = _load("chg_requests") or []
     now = _now()
-    config = await get_org_config() or SEED_ORG_CONFIG
-    last = await db[COLLECTIONS["chg_requests"]].find_one(sort=[("chg_id", -1)])
-    if last and last.get("chg_id", "").startswith(config.get("chg_id_prefix", "CHG")):
-        try:
-            num = int(last["chg_id"].replace(config.get("chg_id_prefix", "CHG"), "")) + 1
-        except (ValueError, IndexError):
-            num = config.get("chg_id_start", 10000)
-    else:
-        num = config.get("chg_id_start", 10000)
+    config = (await get_org_config()) or SEED_ORG_CONFIG
+    prefix = config.get("chg_id_prefix", "CHG")
+    start = config.get("chg_id_start", 10000)
+    max_num = start - 1
+    for c in chg_list:
+        cid = c.get("chg_id", "")
+        if cid.startswith(prefix):
+            try:
+                num = int(cid.replace(prefix, ""))
+                if num > max_num:
+                    max_num = num
+            except (ValueError, IndexError):
+                pass
     chg = {
-        "chg_id": f"{config.get('chg_id_prefix', 'CHG')}{num}",
+        "chg_id": f"{prefix}{max_num + 1}",
+        "chg_number": f"{prefix}{max_num + 1}",
         "rule_ids": data.get("rule_ids", []),
         "status": "Submitted",
         "description": data.get("description", ""),
@@ -716,7 +743,8 @@ async def create_chg_request(data: dict[str, Any]) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
     }
-    await db[COLLECTIONS["chg_requests"]].insert_one(dict(chg))
+    chg_list.append(chg)
+    _save("chg_requests", chg_list)
     return chg
 
 
@@ -726,7 +754,7 @@ async def create_chg_request(data: dict[str, Any]) -> dict[str, Any]:
 
 async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
                           application: str = "", environment: str = "Production") -> dict[str, Any]:
-    db = get_db()
+    policy_matrix = _load("policy_matrix") or []
     source_zone = source.get("security_zone", "GEN") if isinstance(source, dict) else "GEN"
     dest_zone = destination.get("security_zone", "GEN") if isinstance(destination, dict) else "GEN"
     source_type = source.get("source_type", "Group") if isinstance(source, dict) else "Group"
@@ -734,13 +762,16 @@ async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
     is_group_to_group = source_type == "Group" and bool(group_name)
     naming_compliant = bool(group_name and group_name.startswith("grp-")) if group_name else True
 
-    policy = await db[COLLECTIONS["policy_matrix"]].find_one(
-        {"source_zone": source_zone, "dest_zone": dest_zone})
+    policy = None
+    for p in policy_matrix:
+        if p.get("source_zone") == source_zone and p.get("dest_zone") == dest_zone:
+            policy = p
+            break
 
-    details = []
+    details: list[str] = []
     if policy:
-        result = policy.get("default_action", "Permitted")
-        requires_exception = policy.get("requires_exception", False)
+        result = policy.get("action", "Permitted")
+        requires_exception = result == "Exception Required"
         details.append(f"Policy: {source_zone} -> {dest_zone} = {result}")
     else:
         result = "Permitted"
@@ -768,135 +799,179 @@ async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
 # ============================================================
 
 async def update_org_config(updates: dict[str, Any]) -> dict[str, Any] | None:
-    db = get_db()
-    await db[COLLECTIONS["org_config"]].update_one({}, {"$set": updates}, upsert=True)
-    return await get_org_config()
+    config = _load("org_config") or {}
+    config.update(updates)
+    _save("org_config", config)
+    return config
 
 
 async def create_neighbourhood(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
-    await db[COLLECTIONS["neighbourhoods"]].insert_one(dict(data))
+    items = _load("neighbourhoods") or []
+    items.append(dict(data))
+    _save("neighbourhoods", items)
     return data
 
 
 async def update_neighbourhood(nh_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
-    db = get_db()
-    await db[COLLECTIONS["neighbourhoods"]].update_one({"nh_id": nh_id}, {"$set": updates})
-    doc = await db[COLLECTIONS["neighbourhoods"]].find_one({"nh_id": nh_id})
-    return _strip_mongo_id(doc)
+    items = _load("neighbourhoods") or []
+    for item in items:
+        if item.get("nh_id") == nh_id:
+            item.update(updates)
+            _save("neighbourhoods", items)
+            return item
+    return None
 
 
 async def delete_neighbourhood(nh_id: str) -> bool:
-    db = get_db()
-    result = await db[COLLECTIONS["neighbourhoods"]].delete_one({"nh_id": nh_id})
-    return result.deleted_count > 0
+    items = _load("neighbourhoods") or []
+    new_items = [i for i in items if i.get("nh_id") != nh_id]
+    if len(new_items) == len(items):
+        return False
+    _save("neighbourhoods", new_items)
+    return True
 
 
 async def create_security_zone(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
-    await db[COLLECTIONS["security_zones"]].insert_one(dict(data))
+    items = _load("security_zones") or []
+    items.append(dict(data))
+    _save("security_zones", items)
     return data
 
 
 async def update_security_zone(code: str, updates: dict[str, Any]) -> dict[str, Any] | None:
-    db = get_db()
-    await db[COLLECTIONS["security_zones"]].update_one({"code": code}, {"$set": updates})
-    doc = await db[COLLECTIONS["security_zones"]].find_one({"code": code})
-    return _strip_mongo_id(doc)
+    items = _load("security_zones") or []
+    for item in items:
+        if item.get("code") == code:
+            item.update(updates)
+            _save("security_zones", items)
+            return item
+    return None
 
 
 async def delete_security_zone(code: str) -> bool:
-    db = get_db()
-    result = await db[COLLECTIONS["security_zones"]].delete_one({"code": code})
-    return result.deleted_count > 0
+    items = _load("security_zones") or []
+    new_items = [i for i in items if i.get("code") != code]
+    if len(new_items) == len(items):
+        return False
+    _save("security_zones", new_items)
+    return True
 
 
 async def create_application(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
-    await db[COLLECTIONS["applications"]].insert_one(dict(data))
+    items = _load("applications") or []
+    items.append(dict(data))
+    _save("applications", items)
     return data
 
 
 async def update_application(app_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
-    db = get_db()
-    await db[COLLECTIONS["applications"]].update_one({"app_id": app_id}, {"$set": updates})
-    doc = await db[COLLECTIONS["applications"]].find_one({"app_id": app_id})
-    return _strip_mongo_id(doc)
+    items = _load("applications") or []
+    for item in items:
+        if item.get("app_id") == app_id:
+            item.update(updates)
+            _save("applications", items)
+            return item
+    return None
 
 
 async def delete_application(app_id: str) -> bool:
-    db = get_db()
-    result = await db[COLLECTIONS["applications"]].delete_one({"app_id": app_id})
-    return result.deleted_count > 0
+    items = _load("applications") or []
+    new_items = [i for i in items if i.get("app_id") != app_id]
+    if len(new_items) == len(items):
+        return False
+    _save("applications", new_items)
+    return True
 
 
 async def create_datacenter(data: dict[str, Any], dc_type: str = "ngdc") -> dict[str, Any]:
-    db = get_db()
-    coll = COLLECTIONS["ngdc_datacenters"] if dc_type == "ngdc" else COLLECTIONS["legacy_datacenters"]
-    await db[coll].insert_one(dict(data))
+    coll = "ngdc_datacenters" if dc_type == "ngdc" else "legacy_datacenters"
+    items = _load(coll) or []
+    items.append(dict(data))
+    _save(coll, items)
     return data
 
 
 async def update_datacenter(code: str, updates: dict[str, Any], dc_type: str = "ngdc") -> dict[str, Any] | None:
-    db = get_db()
-    coll = COLLECTIONS["ngdc_datacenters"] if dc_type == "ngdc" else COLLECTIONS["legacy_datacenters"]
-    await db[coll].update_one({"code": code}, {"$set": updates})
-    doc = await db[coll].find_one({"code": code})
-    return _strip_mongo_id(doc)
+    coll = "ngdc_datacenters" if dc_type == "ngdc" else "legacy_datacenters"
+    items = _load(coll) or []
+    for item in items:
+        if item.get("code") == code:
+            item.update(updates)
+            _save(coll, items)
+            return item
+    return None
 
 
 async def delete_datacenter(code: str, dc_type: str = "ngdc") -> bool:
-    db = get_db()
-    coll = COLLECTIONS["ngdc_datacenters"] if dc_type == "ngdc" else COLLECTIONS["legacy_datacenters"]
-    result = await db[coll].delete_one({"code": code})
-    return result.deleted_count > 0
+    coll = "ngdc_datacenters" if dc_type == "ngdc" else "legacy_datacenters"
+    items = _load(coll) or []
+    new_items = [i for i in items if i.get("code") != code]
+    if len(new_items) == len(items):
+        return False
+    _save(coll, new_items)
+    return True
 
 
 async def update_naming_standards(updates: dict[str, Any]) -> dict[str, Any] | None:
-    db = get_db()
-    await db[COLLECTIONS["naming_standards"]].update_one({}, {"$set": updates}, upsert=True)
-    return await get_naming_standards()
+    standards = _load("naming_standards") or {}
+    standards.update(updates)
+    _save("naming_standards", standards)
+    return standards
 
 
 async def create_policy_entry(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
-    await db[COLLECTIONS["policy_matrix"]].insert_one(dict(data))
+    items = _load("policy_matrix") or []
+    items.append(dict(data))
+    _save("policy_matrix", items)
     return data
 
 
 async def delete_policy_entry(source_zone: str, dest_zone: str) -> bool:
-    db = get_db()
-    result = await db[COLLECTIONS["policy_matrix"]].delete_one(
-        {"source_zone": source_zone, "dest_zone": dest_zone})
-    return result.deleted_count > 0
+    items = _load("policy_matrix") or []
+    new_items = [i for i in items if not (i.get("source_zone") == source_zone and i.get("dest_zone") == dest_zone)]
+    if len(new_items) == len(items):
+        return False
+    _save("policy_matrix", new_items)
+    return True
 
 
 async def create_predefined_destination(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
-    await db[COLLECTIONS["predefined_destinations"]].insert_one(dict(data))
+    items = _load("predefined_destinations") or []
+    items.append(dict(data))
+    _save("predefined_destinations", items)
     return data
 
 
 async def update_predefined_destination(name: str, updates: dict[str, Any]) -> dict[str, Any] | None:
-    db = get_db()
-    await db[COLLECTIONS["predefined_destinations"]].update_one({"name": name}, {"$set": updates})
-    doc = await db[COLLECTIONS["predefined_destinations"]].find_one({"name": name})
-    return _strip_mongo_id(doc)
+    items = _load("predefined_destinations") or []
+    for item in items:
+        if item.get("name") == name:
+            item.update(updates)
+            _save("predefined_destinations", items)
+            return item
+    return None
 
 
 async def delete_predefined_destination(name: str) -> bool:
-    db = get_db()
-    result = await db[COLLECTIONS["predefined_destinations"]].delete_one({"name": name})
-    return result.deleted_count > 0
+    items = _load("predefined_destinations") or []
+    new_items = [i for i in items if i.get("name") != name]
+    if len(new_items) == len(items):
+        return False
+    _save("predefined_destinations", new_items)
+    return True
 
 
 async def create_environment(data: dict[str, Any]) -> dict[str, Any]:
-    db = get_db()
-    await db[COLLECTIONS["environments"]].insert_one(dict(data))
+    items = _load("environments") or []
+    items.append(dict(data))
+    _save("environments", items)
     return data
 
 
 async def delete_environment(code: str) -> bool:
-    db = get_db()
-    result = await db[COLLECTIONS["environments"]].delete_one({"code": code})
-    return result.deleted_count > 0
+    items = _load("environments") or []
+    new_items = [i for i in items if i.get("code") != code]
+    if len(new_items) == len(items):
+        return False
+    _save("environments", new_items)
+    return True

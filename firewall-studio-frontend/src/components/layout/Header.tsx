@@ -16,7 +16,7 @@ export function Header({ currentPage, onNavigate, application, environment, data
           <div className="flex items-center gap-2">
             <Shield className="h-7 w-7 text-blue-400" />
             <h1 className="text-lg font-bold tracking-tight">
-              {currentPage === 'design' ? 'Network Firewall Design Studio' : 'Network Firewall Migration Studio'}
+              {currentPage === 'design' ? 'Network Firewall Design Studio' : currentPage === 'migration' ? 'Network Firewall Migration Studio' : 'Org Administration'}
             </h1>
           </div>
 
