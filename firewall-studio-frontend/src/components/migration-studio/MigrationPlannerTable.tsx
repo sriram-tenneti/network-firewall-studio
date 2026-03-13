@@ -1,10 +1,26 @@
 import { ArrowRight, Database, Shield, List } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Badge } from '@/components/ui/badge';
-import type { MigrationMapping } from '@/types';
+
+interface MappingRow {
+  id?: string;
+  mapping_id?: string;
+  legacy_source?: string;
+  legacy_source_detail?: string | null;
+  legacy_group?: string | null;
+  ngdc_target?: string;
+  ngdc_target_detail?: string | null;
+  ngdc_source?: string;
+  ngdc_destination?: string;
+  mapping_status?: string;
+  status?: string;
+  trust_zones_automapped?: number;
+  related_policies?: string[];
+  [key: string]: unknown;
+}
 
 interface MigrationPlannerTableProps {
-  mappings: MigrationMapping[];
+  mappings: MappingRow[];
   filterStatus: string;
   onFilterChange: (status: string) => void;
 }
@@ -18,14 +34,15 @@ const filterTabs = [
 ];
 
 export function MigrationPlannerTable({ mappings, filterStatus, onFilterChange }: MigrationPlannerTableProps) {
-  const filtered = filterStatus === 'all' ? mappings : mappings.filter(m => m.mapping_status === filterStatus);
+  const getStatus = (m: MappingRow) => m.mapping_status || m.status || 'Unknown';
+  const filtered = filterStatus === 'all' ? mappings : mappings.filter(m => getStatus(m) === filterStatus);
 
   const counts = {
     all: mappings.length,
-    'Auto-Mapped': mappings.filter(m => m.mapping_status === 'Auto-Mapped').length,
-    'New Group': mappings.filter(m => m.mapping_status === 'New Group').length,
-    'Needs Review': mappings.filter(m => m.mapping_status === 'Needs Review').length,
-    'Conflict': mappings.filter(m => m.mapping_status === 'Conflict').length,
+    'Auto-Mapped': mappings.filter(m => getStatus(m) === 'Auto-Mapped' || getStatus(m) === 'Mapped').length,
+    'New Group': mappings.filter(m => getStatus(m) === 'New Group').length,
+    'Needs Review': mappings.filter(m => getStatus(m) === 'Needs Review' || getStatus(m) === 'Review Required').length,
+    'Conflict': mappings.filter(m => getStatus(m) === 'Conflict').length,
   };
 
   return (
@@ -73,53 +90,60 @@ export function MigrationPlannerTable({ mappings, filterStatus, onFilterChange }
 
       {/* Mapping Rows */}
       <div className="divide-y divide-slate-50">
-        {filtered.map((mapping) => (
-          <div key={mapping.id} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-blue-50/30 transition-colors items-center">
-            <div className="col-span-4">
-              <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-slate-800">{mapping.legacy_source}</div>
-                  <div className="text-xs text-slate-500">{mapping.legacy_source_detail}</div>
+        {filtered.map((mapping, idx) => {
+          const policies = mapping.related_policies || [];
+          const target = mapping.ngdc_target || mapping.ngdc_destination || '';
+          const targetDetail = mapping.ngdc_target_detail || mapping.ngdc_source || '';
+          const status = getStatus(mapping);
+          const tzAuto = mapping.trust_zones_automapped || 0;
+          return (
+            <div key={mapping.id || mapping.mapping_id || idx} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-blue-50/30 transition-colors items-center">
+              <div className="col-span-4">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">{mapping.legacy_source || ''}</div>
+                    <div className="text-xs text-slate-500">{mapping.legacy_source_detail || ''}</div>
+                  </div>
                 </div>
+                {policies.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1 ml-6">
+                    {policies.map((p) => (
+                      <span key={p} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 font-mono">{p}</span>
+                    ))}
+                  </div>
+                )}
               </div>
-              {mapping.related_policies.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1 ml-6">
-                  {mapping.related_policies.map((p) => (
-                    <span key={p} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 font-mono">{p}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="col-span-1">
-              {mapping.legacy_group && (
-                <span className="text-xs text-slate-500">{mapping.legacy_group}</span>
-              )}
-            </div>
-            <div className="col-span-1 flex justify-center">
-              <ArrowRight className="h-5 w-5 text-blue-400" />
-            </div>
-            <div className="col-span-4">
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-teal-500 flex-shrink-0" />
-                <div>
-                  <div className="text-sm font-semibold text-slate-800">{mapping.ngdc_target}</div>
-                  <div className="text-xs text-slate-500">{mapping.ngdc_target_detail}</div>
-                </div>
+              <div className="col-span-1">
+                {mapping.legacy_group && (
+                  <span className="text-xs text-slate-500">{mapping.legacy_group}</span>
+                )}
               </div>
-              {mapping.trust_zones_automapped > 0 && (
-                <div className="mt-1 flex items-center gap-1 ml-6">
-                  <span className="text-xs text-teal-600">
-                    Auto-Mapped &bull; {mapping.trust_zones_automapped} Trust Zones automapped
-                  </span>
+              <div className="col-span-1 flex justify-center">
+                <ArrowRight className="h-5 w-5 text-blue-400" />
+              </div>
+              <div className="col-span-4">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-teal-500 flex-shrink-0" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">{target}</div>
+                    <div className="text-xs text-slate-500">{targetDetail}</div>
+                  </div>
                 </div>
-              )}
+                {tzAuto > 0 && (
+                  <div className="mt-1 flex items-center gap-1 ml-6">
+                    <span className="text-xs text-teal-600">
+                      Auto-Mapped &bull; {tzAuto} Trust Zones automapped
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="col-span-2">
+                <StatusBadge status={status} />
+              </div>
             </div>
-            <div className="col-span-2">
-              <StatusBadge status={mapping.mapping_status} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Summary */}

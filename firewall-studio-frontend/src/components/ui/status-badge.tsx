@@ -26,6 +26,11 @@ const statusConfig: Record<string, { variant: 'default' | 'success' | 'warning' 
   'Submitted': { variant: 'success', icon: <CheckCircle className="h-3 w-3" /> },
   'Open': { variant: 'info', icon: <Clock className="h-3 w-3" /> },
   'Closed': { variant: 'default', icon: <CheckCircle className="h-3 w-3" /> },
+  'Mapped': { variant: 'success', icon: <CheckCircle className="h-3 w-3" /> },
+  'Review Required': { variant: 'warning', icon: <AlertTriangle className="h-3 w-3" /> },
+  'Compliant': { variant: 'success', icon: <Shield className="h-3 w-3" /> },
+  'Non-Compliant': { variant: 'danger', icon: <XCircle className="h-3 w-3" /> },
+  'Unknown': { variant: 'default', icon: null },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

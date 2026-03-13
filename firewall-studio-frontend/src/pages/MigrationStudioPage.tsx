@@ -5,13 +5,13 @@ import { MigrationPlannerTable } from '@/components/migration-studio/MigrationPl
 import { MigrationRuleTable } from '@/components/migration-studio/MigrationRuleTable';
 import { MigrationFirewallPlanner } from '@/components/migration-studio/MigrationFirewallPlanner';
 import { NGDCSidebar } from '@/components/migration-studio/NGDCSidebar';
-import type { MigrationDetails, MigrationMapping, MigrationRuleLifecycle, NGDCDataCenter, Application } from '@/types';
+import type { MigrationDetails, MigrationRuleLifecycle, NGDCDataCenter, Application } from '@/types';
 import * as api from '@/lib/api';
 
 export function MigrationStudioPage() {
   const [, setMigrations] = useState<MigrationDetails[]>([]);
   const [selectedMigration, setSelectedMigration] = useState<MigrationDetails | null>(null);
-  const [mappings, setMappings] = useState<MigrationMapping[]>([]);
+  const [mappings, setMappings] = useState<Record<string, unknown>[]>([]);
   const [ruleLifecycle, setRuleLifecycle] = useState<MigrationRuleLifecycle[]>([]);
   const [ngdcDCs, setNgdcDCs] = useState<NGDCDataCenter[]>([]);
   const [legacyDCs, setLegacyDCs] = useState<{ name: string; code: string }[]>([]);
@@ -58,10 +58,10 @@ export function MigrationStudioPage() {
   const loadMigrationDetails = async (migrationId: string) => {
     try {
       const [mapData, rlData] = await Promise.all([
-        api.getMigrationMappings(migrationId),
-        api.getMigrationRuleLifecycle(migrationId),
+        api.getMigrationMappings(migrationId).catch(() => []),
+        api.getMigrationRuleLifecycle(migrationId).catch(() => []),
       ]);
-      setMappings(mapData);
+      setMappings(mapData as Record<string, unknown>[]);
       setRuleLifecycle(rlData);
     } catch (err) {
       console.error('Failed to load migration details:', err);
