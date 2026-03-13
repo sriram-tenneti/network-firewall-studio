@@ -4,6 +4,7 @@ import { SourcePanel } from '@/components/design-studio/SourcePanel';
 import { PolicyFlowCanvas } from '@/components/design-studio/PolicyFlowCanvas';
 import { RuleLifecycleTable } from '@/components/design-studio/RuleLifecycleTable';
 import { HistoryModal } from '@/components/design-studio/HistoryModal';
+import { GroupManagementPanel } from '@/components/design-studio/GroupManagementPanel';
 import type { SourceConfig, DestinationConfig, FirewallRule, PolicyValidationResult, PredefinedDestination, RuleHistoryEntry, NeighbourhoodRegistry, Application, NamingStandardsInfo } from '@/types';
 import * as api from '@/lib/api';
 
@@ -34,6 +35,9 @@ export function DesignStudioPage() {
   const [namingStandards, setNamingStandards] = useState<NamingStandardsInfo | null>(null);
   const [historyModal, setHistoryModal] = useState<{ ruleId: string; history: RuleHistoryEntry[] } | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [selectedAppFilter, setSelectedAppFilter] = useState<string>('');
+  const [selectedRule, setSelectedRule] = useState<FirewallRule | null>(null);
+  const [showGroupPanel, setShowGroupPanel] = useState(false);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
@@ -61,12 +65,16 @@ export function DesignStudioPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const filteredRules = selectedAppFilter
+    ? rules.filter(r => r.application === selectedAppFilter && r.status !== 'Deleted')
+    : rules.filter(r => r.status !== 'Deleted');
+
   const handleValidate = async () => {
     try {
       const result = await api.validatePolicy({
         source,
         destination,
-        application: 'Ordering System',
+        application: selectedAppFilter || 'ORD',
         environment: 'Production',
       });
       setPolicyResult(result);
@@ -83,9 +91,9 @@ export function DesignStudioPage() {
   const handleCreateRule = async () => {
     try {
       await api.createRule({
-        application: 'Ordering System',
+        application: selectedAppFilter || 'ORD',
         environment: 'Production',
-        datacenter: 'DC1',
+        datacenter: 'EAST_NGDC',
         source,
         destination,
         owner: 'Jon',
@@ -100,6 +108,7 @@ export function DesignStudioPage() {
   const handleModifyRule = (rule: FirewallRule) => {
     setSource(rule.source);
     setDestination(rule.destination);
+    setSelectedRule(rule);
     setPolicyResult(null);
     showNotification(`Loaded rule ${rule.rule_id} for editing`, 'info');
   };
@@ -118,6 +127,7 @@ export function DesignStudioPage() {
     try {
       await api.deleteRule(ruleId);
       showNotification(`Rule ${ruleId} deleted`);
+      setSelectedRule(null);
       loadData();
     } catch {
       showNotification('Failed to delete rule', 'error');
@@ -134,6 +144,16 @@ export function DesignStudioPage() {
     }
   };
 
+  const handleSaveDraft = async (ruleId: string) => {
+    try {
+      await api.updateRule(ruleId, { source, destination });
+      showNotification(`Rule ${ruleId} draft saved`);
+      loadData();
+    } catch {
+      showNotification('Failed to save draft', 'error');
+    }
+  };
+
   const handleViewHistory = async (ruleId: string) => {
     try {
       const history = await api.getRuleHistory(ruleId);
@@ -143,7 +163,6 @@ export function DesignStudioPage() {
     }
   };
 
-  // Drag handler for predefined destinations
   const handleDragStart = (e: React.DragEvent, dest: PredefinedDestination) => {
     e.dataTransfer.setData('application/json', JSON.stringify({ name: dest.name, security_zone: dest.security_zone }));
     e.dataTransfer.effectAllowed = 'copy';
@@ -154,16 +173,13 @@ export function DesignStudioPage() {
       <ActionBar
         mode="design"
         onAdd={handleCreateRule}
-        onCertify={() => {
-          const draft = rules.find(r => r.status === 'Draft');
-          if (draft) handleCertify(draft.rule_id);
-        }}
-        onViewHistory={() => {
-          if (rules.length > 0) handleViewHistory(rules[0].rule_id);
-        }}
+        onModify={() => { if (selectedRule) handleModifyRule(selectedRule); }}
+        onDelete={() => { if (selectedRule) handleDelete(selectedRule.rule_id); }}
+        onCertify={() => { if (selectedRule) handleCertify(selectedRule.rule_id); }}
+        onReCertify={() => { if (selectedRule) handleCertify(selectedRule.rule_id); }}
+        onViewHistory={() => { if (selectedRule) handleViewHistory(selectedRule.rule_id); }}
       />
 
-      {/* Notification */}
       {notification && (
         <div className={`mx-6 mt-3 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm animate-in fade-in ${
           notification.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
@@ -174,14 +190,25 @@ export function DesignStudioPage() {
         </div>
       )}
 
-      {/* Main content */}
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
-        {/* Source Panel */}
         <div className="w-64 flex-shrink-0 overflow-y-auto">
           <SourcePanel source={source} onChange={setSource} neighbourhoods={neighbourhoods} applications={applications} namingStandards={namingStandards} />
+          <button
+            onClick={() => setShowGroupPanel(!showGroupPanel)}
+            className="mt-3 w-full rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+          >
+            {showGroupPanel ? 'Hide Group Management' : 'Manage Groups'}
+          </button>
+          {showGroupPanel && (
+            <div className="mt-2">
+              <GroupManagementPanel
+                appFilter={selectedAppFilter}
+                onNotification={showNotification}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Center: Policy Flow Canvas */}
         <div className="flex-1 overflow-y-auto">
           <PolicyFlowCanvas
             source={source}
@@ -192,7 +219,6 @@ export function DesignStudioPage() {
           />
         </div>
 
-        {/* Destination Panel - with drag support */}
         <div className="w-64 flex-shrink-0 overflow-y-auto">
           <div className="flex flex-col rounded-xl border-2 border-orange-200 bg-orange-50/50 shadow-sm">
             <div className="rounded-t-xl bg-gradient-to-r from-amber-600 to-orange-500 px-4 py-3">
@@ -239,7 +265,6 @@ export function DesignStudioPage() {
                 </div>
               </div>
 
-              {/* Custom Destination */}
               <div>
                 <h4 className="mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom Destination</h4>
                 <div className="space-y-2">
@@ -274,19 +299,21 @@ export function DesignStudioPage() {
         </div>
       </div>
 
-      {/* Rule Lifecycle Table */}
       <div className="p-4 pt-0">
         <RuleLifecycleTable
-          rules={rules.filter(r => r.status !== 'Deleted')}
+          rules={filteredRules}
+          applications={applications}
+          selectedAppFilter={selectedAppFilter}
+          onAppFilterChange={setSelectedAppFilter}
           onModify={handleModifyRule}
           onCertify={handleCertify}
           onDelete={handleDelete}
           onSubmit={handleSubmit}
           onViewHistory={handleViewHistory}
+          onSaveDraft={handleSaveDraft}
         />
       </div>
 
-      {/* History Modal */}
       {historyModal && (
         <HistoryModal
           ruleId={historyModal.ruleId}

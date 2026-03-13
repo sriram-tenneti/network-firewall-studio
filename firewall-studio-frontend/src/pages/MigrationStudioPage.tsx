@@ -5,7 +5,8 @@ import { MigrationPlannerTable } from '@/components/migration-studio/MigrationPl
 import { MigrationRuleTable } from '@/components/migration-studio/MigrationRuleTable';
 import { MigrationFirewallPlanner } from '@/components/migration-studio/MigrationFirewallPlanner';
 import { NGDCSidebar } from '@/components/migration-studio/NGDCSidebar';
-import type { MigrationDetails, MigrationRuleLifecycle, NGDCDataCenter, Application } from '@/types';
+import { StatusBadge } from '@/components/ui/status-badge';
+import type { MigrationDetails, MigrationRuleLifecycle, NGDCDataCenter, Application, FirewallRule } from '@/types';
 import * as api from '@/lib/api';
 
 export function MigrationStudioPage() {
@@ -21,6 +22,9 @@ export function MigrationStudioPage() {
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [chgNumber, setChgNumber] = useState<string | undefined>(undefined);
   const [validationResult, setValidationResult] = useState<{ validation_passed: boolean; message: string; auto_mapped: number; conflicts: number } | null>(null);
+  const [selectedAppId, setSelectedAppId] = useState('');
+  const [existingRules, setExistingRules] = useState<FirewallRule[]>([]);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
@@ -68,10 +72,24 @@ export function MigrationStudioPage() {
     }
   };
 
+  const loadExistingRules = useCallback(async (appId: string) => {
+    if (!appId) { setExistingRules([]); return; }
+    try {
+      const rules = await api.getRules(appId);
+      setExistingRules(rules);
+    } catch (err) {
+      console.error('Failed to load existing rules:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadReferenceData();
     loadMigrations();
   }, [loadReferenceData, loadMigrations]);
+
+  useEffect(() => {
+    loadExistingRules(selectedAppId);
+  }, [selectedAppId, loadExistingRules]);
 
   const handleCreateMigration = async (data: {
     application: string;
@@ -114,6 +132,36 @@ export function MigrationStudioPage() {
     }
   };
 
+  const handleModifyRule = () => {
+    const rule = existingRules.find(r => r.rule_id === selectedRuleId);
+    if (rule) {
+      showNotification(`Loaded rule ${rule.rule_id} for migration review`, 'info');
+    }
+  };
+
+  const handleDeleteRule = async () => {
+    if (!selectedRuleId) return;
+    try {
+      await api.deleteRule(selectedRuleId);
+      showNotification(`Rule ${selectedRuleId} deleted`);
+      setSelectedRuleId(null);
+      loadExistingRules(selectedAppId);
+    } catch {
+      showNotification('Failed to delete rule', 'error');
+    }
+  };
+
+  const handleCertifyRule = async () => {
+    if (!selectedRuleId) return;
+    try {
+      await api.certifyRule(selectedRuleId);
+      showNotification(`Rule ${selectedRuleId} certified`);
+      loadExistingRules(selectedAppId);
+    } catch {
+      showNotification('Failed to certify rule', 'error');
+    }
+  };
+
   // Mock migration planner rules for the firewall planner view
   const firewallPlannerRules = [
     { source: '192.168.2.0/24', destination: 'PSA_GEN_PROD', status: 'Automapped' as const, details: '' },
@@ -127,8 +175,15 @@ export function MigrationStudioPage() {
       <ActionBar
         mode="migration"
         onAdd={() => setSelectedMigration(null)}
-        onCertify={handleValidateMigration}
-        onViewHistory={() => {}}
+        onModify={handleModifyRule}
+        onDelete={handleDeleteRule}
+        onCertify={handleCertifyRule}
+        onReCertify={handleCertifyRule}
+        onViewHistory={() => {
+          if (selectedRuleId) {
+            showNotification(`View history for ${selectedRuleId}`, 'info');
+          }
+        }}
       />
 
       {/* Notification */}
@@ -146,12 +201,16 @@ export function MigrationStudioPage() {
       <div className="flex items-center gap-6 border-b border-slate-200 bg-white px-6 py-3">
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-slate-700">Application ID</label>
-          <input
-            type="text"
-            value={selectedMigration?.application || 'CRMApp'}
-            readOnly
-            className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium w-48"
-          />
+          <select
+            value={selectedAppId}
+            onChange={(e) => setSelectedAppId(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium w-48"
+          >
+            <option value="">All Applications</option>
+            {applications.map((app) => (
+              <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+            ))}
+          </select>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-slate-700">Data Center Scope:</label>
@@ -165,12 +224,60 @@ export function MigrationStudioPage() {
             ))}
           </select>
         </div>
+        {selectedAppId && (
+          <div className="ml-auto text-xs text-slate-500">
+            {existingRules.length} existing rule(s) for {selectedAppId}
+          </div>
+        )}
       </div>
 
       {/* Main content */}
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         {/* Left: Migration Details + Planner Tables */}
         <div className="flex-1 space-y-4 overflow-y-auto">
+          {/* Existing Rules Panel */}
+          {selectedAppId && existingRules.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-4 py-3">
+                <h3 className="text-sm font-bold text-slate-800">Existing Rules for {selectedAppId}</h3>
+              </div>
+              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 w-8"></th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Rule ID</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Source</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Destination</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {existingRules.map((rule) => (
+                      <tr
+                        key={rule.rule_id}
+                        onClick={() => setSelectedRuleId(rule.rule_id === selectedRuleId ? null : rule.rule_id)}
+                        className={`border-b border-slate-50 cursor-pointer transition-colors ${
+                          selectedRuleId === rule.rule_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-blue-50/30'
+                        }`}
+                      >
+                        <td className="px-3 py-2">
+                          <input type="radio" name="migRule" checked={selectedRuleId === rule.rule_id}
+                            onChange={() => setSelectedRuleId(rule.rule_id)}
+                            className="h-3.5 w-3.5 border-slate-300 text-blue-600" />
+                        </td>
+                        <td className="px-3 py-2 text-xs font-semibold text-slate-700">{rule.rule_id}</td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{rule.source.group_name || rule.source.ip_address || rule.source.cidr || '-'}</td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{rule.destination.name}</td>
+                        <td className="px-3 py-2"><StatusBadge status={rule.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-4">
             {/* Migration Details Form */}
             <div className="w-80 flex-shrink-0">
@@ -221,7 +328,7 @@ export function MigrationStudioPage() {
 
           {/* Firewall Migration Planner */}
           <MigrationFirewallPlanner
-            applicationId={selectedMigration?.application || 'CRMApp'}
+            applicationId={selectedAppId || selectedMigration?.application || 'CRMApp'}
             dcScope={selectedDC}
             rules={firewallPlannerRules}
             onValidate={handleValidateMigration}

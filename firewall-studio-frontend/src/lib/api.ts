@@ -14,6 +14,8 @@ import type {
   NeighbourhoodRegistry,
   Application,
   NamingStandardsInfo,
+  FirewallGroup,
+  GroupMember,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -27,13 +29,113 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// Transform flat backend rule data to structured frontend FirewallRule
+interface RawBackendRule {
+  rule_id: string;
+  source: string;
+  source_zone: string;
+  destination: string;
+  destination_zone: string;
+  port: string;
+  protocol: string;
+  action: string;
+  description: string;
+  application: string;
+  status: string;
+  is_group_to_group: boolean;
+  environment: string;
+  datacenter: string;
+  created_at: string;
+  updated_at: string;
+  certified_date: string | null;
+  expiry_date: string | null;
+}
+
+function parseSourceConfig(src: string, srcZone: string, port: string): SourceConfig {
+  const isGroup = src.startsWith('grp-');
+  const isServer = src.startsWith('svr-');
+  const isRange = src.startsWith('rng-');
+  const isCidr = /\/\d+$/.test(src);
+
+  if (isGroup || isServer || isRange) {
+    return {
+      source_type: 'Group',
+      ip_address: null,
+      cidr: null,
+      group_name: src,
+      ports: port,
+      neighbourhood: null,
+      security_zone: srcZone,
+    };
+  } else if (isCidr) {
+    return {
+      source_type: 'Subnet',
+      ip_address: null,
+      cidr: src,
+      group_name: null,
+      ports: port,
+      neighbourhood: null,
+      security_zone: srcZone,
+    };
+  } else {
+    return {
+      source_type: 'Single IP',
+      ip_address: src,
+      cidr: null,
+      group_name: null,
+      ports: port,
+      neighbourhood: null,
+      security_zone: srcZone,
+    };
+  }
+}
+
+function parseDestConfig(dst: string, dstZone: string, port: string): DestinationConfig {
+  return {
+    name: dst,
+    security_zone: dstZone,
+    dest_ip: /^\d/.test(dst) ? dst : null,
+    ports: port,
+    is_predefined: dst.startsWith('grp-'),
+  };
+}
+
+function transformRule(raw: RawBackendRule): FirewallRule {
+  const src = raw.source;
+  const isNamingValid = src.startsWith('grp-') || src.startsWith('svr-') || src.startsWith('rng-');
+  const dstNamingValid = raw.destination.startsWith('grp-') || raw.destination.startsWith('svr-') || raw.destination.startsWith('rng-');
+  return {
+    id: raw.rule_id,
+    rule_id: raw.rule_id,
+    application: raw.application,
+    environment: raw.environment,
+    datacenter: raw.datacenter,
+    source: parseSourceConfig(raw.source, raw.source_zone, raw.port),
+    destination: parseDestConfig(raw.destination, raw.destination_zone, raw.port),
+    policy_result: 'Permitted',
+    status: raw.status as FirewallRule['status'],
+    compliance: {
+      naming_valid: isNamingValid && dstNamingValid,
+      group_to_group: raw.is_group_to_group,
+      requires_exception: !raw.is_group_to_group,
+    },
+    expiry: raw.expiry_date,
+    owner: 'System',
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+    certified_at: raw.certified_date,
+    certified_by: raw.certified_date ? 'System' : null,
+  };
+}
+
 // Firewall Rules
-export const getRules = (application?: string, status?: string) => {
+export const getRules = async (application?: string, status?: string): Promise<FirewallRule[]> => {
   const params = new URLSearchParams();
   if (application) params.set('application', application);
   if (status) params.set('status', status);
   const qs = params.toString();
-  return fetchJSON<FirewallRule[]>(`/api/rules${qs ? `?${qs}` : ''}`);
+  const rawRules = await fetchJSON<RawBackendRule[]>(`/api/rules${qs ? `?${qs}` : ''}`);
+  return rawRules.map(transformRule);
 };
 
 export const getRule = (ruleId: string) => fetchJSON<FirewallRule>(`/api/rules/${ruleId}`);
@@ -226,3 +328,22 @@ export const deleteEnvironment = (code: string) =>
 // Naming Standards CRUD
 export const updateNamingStandards = (data: Record<string, unknown>) =>
   fetchJSON<Record<string, unknown>>('/api/reference/naming-standards', { method: 'PUT', body: JSON.stringify(data) });
+
+// Groups CRUD
+export const getGroups = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<FirewallGroup[]>(`/api/reference/groups${qs ? `?${qs}` : ''}`);
+};
+export const getGroup = (name: string) => fetchJSON<FirewallGroup>(`/api/reference/groups/${name}`);
+export const createGroup = (data: Record<string, unknown>) =>
+  fetchJSON<FirewallGroup>('/api/reference/groups', { method: 'POST', body: JSON.stringify(data) });
+export const updateGroup = (name: string, data: Record<string, unknown>) =>
+  fetchJSON<FirewallGroup>(`/api/reference/groups/${name}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteGroup = (name: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/groups/${name}`, { method: 'DELETE' });
+export const addGroupMember = (groupName: string, member: GroupMember) =>
+  fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members`, { method: 'POST', body: JSON.stringify(member) });
+export const removeGroupMember = (groupName: string, memberValue: string) =>
+  fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });

@@ -13,6 +13,8 @@ from app.database import (
     update_org_config, update_naming_standards,
     create_policy_entry, delete_policy_entry,
     create_chg_request,
+    get_groups, get_group, create_group, update_group, delete_group,
+    add_group_member, remove_group_member,
 )
 from app.services.naming_standards import (
     validate_name, generate_group_name, generate_server_name,
@@ -372,3 +374,57 @@ async def delete_policy(source_zone: str, dest_zone: str):
     if not await delete_policy_entry(source_zone, dest_zone):
         raise HTTPException(status_code=404, detail="Policy entry not found")
     return {"message": "Policy entry deleted"}
+
+
+# ---- CRUD: Groups ----
+
+@router.get("/groups")
+async def list_groups(app_id: str | None = None):
+    groups = await get_groups()
+    if app_id:
+        groups = [g for g in groups if g.get("app_id") == app_id]
+    return groups
+
+
+@router.get("/groups/{name:path}")
+async def get_group_endpoint(name: str):
+    group = await get_group(name)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return group
+
+
+@router.post("/groups")
+async def create_new_group(data: dict):
+    return await create_group(data)
+
+
+@router.put("/groups/{name:path}")
+async def update_existing_group(name: str, data: dict):
+    result = await update_group(name, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return result
+
+
+@router.delete("/groups/{name:path}")
+async def delete_existing_group(name: str):
+    if not await delete_group(name):
+        raise HTTPException(status_code=404, detail="Group not found")
+    return {"message": "Group deleted"}
+
+
+@router.post("/groups/{name:path}/members")
+async def add_member_to_group(name: str, data: dict):
+    result = await add_group_member(name, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return result
+
+
+@router.delete("/groups/{name:path}/members/{member_value}")
+async def remove_member_from_group(name: str, member_value: str):
+    result = await remove_group_member(name, member_value)
+    if not result:
+        raise HTTPException(status_code=404, detail="Group or member not found")
+    return result

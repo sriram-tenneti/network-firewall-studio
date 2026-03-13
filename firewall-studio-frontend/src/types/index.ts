@@ -212,3 +212,21 @@ export interface RuleHistoryEntry {
   user: string;
   details: string;
 }
+
+export interface GroupMember {
+  type: 'ip' | 'cidr';
+  value: string;
+  description: string;
+}
+
+export interface FirewallGroup {
+  name: string;
+  app_id: string;
+  nh: string;
+  sz: string;
+  subtype: string;
+  description: string;
+  members: GroupMember[];
+  created_at?: string;
+  updated_at?: string;
+}

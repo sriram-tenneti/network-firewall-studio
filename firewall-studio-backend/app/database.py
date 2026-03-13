@@ -753,6 +753,143 @@ SEED_MIGRATION_MAPPINGS = [
      "status": "Review Required", "compliance": "Non-Compliant"},
 ]
 
+# Groups: collections of IPs/ranges that follow naming standards
+# Each group has a name (grp-/svr-/rng-), app_id, nh, sz, subtype, and a list of members (IPs or CIDRs)
+SEED_GROUPS = [
+    # CRM groups
+    {"name": "grp-CRM-NH02-CDE-APP", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+     "description": "CRM Application Servers", "members": [
+        {"type": "ip", "value": "10.1.1.10", "description": "CRM App Server 1"},
+        {"type": "ip", "value": "10.1.1.11", "description": "CRM App Server 2"},
+        {"type": "ip", "value": "10.1.1.12", "description": "CRM App Server 3"},
+     ]},
+    {"name": "grp-CRM-NH02-CDE-DB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+     "description": "CRM Database Servers", "members": [
+        {"type": "ip", "value": "10.1.2.10", "description": "CRM Oracle Primary"},
+        {"type": "ip", "value": "10.1.2.11", "description": "CRM Oracle Standby"},
+     ]},
+    # CBK groups
+    {"name": "grp-CBK-NH02-CDE-DB", "app_id": "CBK", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+     "description": "Core Banking Database", "members": [
+        {"type": "ip", "value": "10.1.2.20", "description": "CBK DB Primary"},
+        {"type": "ip", "value": "10.1.2.21", "description": "CBK DB Standby"},
+        {"type": "cidr", "value": "10.1.2.64/28", "description": "CBK DB Pool"},
+     ]},
+    # DIG groups
+    {"name": "grp-DIG-NH03-CDE-WEB", "app_id": "DIG", "nh": "NH03", "sz": "CDE", "subtype": "WEB",
+     "description": "Digital Banking Web Servers", "members": [
+        {"type": "ip", "value": "10.2.1.10", "description": "DIG Web 1"},
+        {"type": "ip", "value": "10.2.1.11", "description": "DIG Web 2"},
+     ]},
+    # PAY groups
+    {"name": "grp-PAY-NH07-CDE-APP", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "APP",
+     "description": "Payment Processing App Servers", "members": [
+        {"type": "ip", "value": "10.6.1.10", "description": "PAY App 1"},
+        {"type": "ip", "value": "10.6.1.11", "description": "PAY App 2"},
+        {"type": "cidr", "value": "10.6.1.64/28", "description": "PAY App Pool"},
+     ]},
+    # ENT groups
+    {"name": "grp-ENT-NH05-GEN-APP", "app_id": "ENT", "nh": "NH05", "sz": "GEN", "subtype": "APP",
+     "description": "Enterprise CRM App Servers", "members": [
+        {"type": "ip", "value": "10.4.1.10", "description": "ENT App 1"},
+        {"type": "ip", "value": "10.4.1.11", "description": "ENT App 2"},
+     ]},
+    # SHR groups
+    {"name": "grp-SHR-NH13-GEN-SVC", "app_id": "SHR", "nh": "NH13", "sz": "GEN", "subtype": "SVC",
+     "description": "Shared Analytics Services", "members": [
+        {"type": "cidr", "value": "10.100.1.0/28", "description": "Shared SVC Subnet"},
+     ]},
+    # HRM groups
+    {"name": "grp-HRM-NH01-GEN-WEB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
+     "description": "HR Portal Web Servers", "members": [
+        {"type": "ip", "value": "10.0.1.10", "description": "HR Web 1"},
+        {"type": "ip", "value": "10.0.1.11", "description": "HR Web 2"},
+     ]},
+    {"name": "grp-HRM-NH01-GEN-APP", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "APP",
+     "description": "HR Application Servers", "members": [
+        {"type": "ip", "value": "10.0.1.20", "description": "HR App 1"},
+        {"type": "ip", "value": "10.0.1.21", "description": "HR App 2"},
+     ]},
+    {"name": "grp-HRM-NH01-GEN-DB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "DB",
+     "description": "HR Database", "members": [
+        {"type": "ip", "value": "10.0.1.30", "description": "HR Postgres Primary"},
+        {"type": "ip", "value": "10.0.1.31", "description": "HR Postgres Replica"},
+     ]},
+    {"name": "grp-HRM-NH01-GEN-BAT", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
+     "description": "HR Payroll Batch Servers", "members": [
+        {"type": "ip", "value": "10.0.1.40", "description": "HR Batch 1"},
+     ]},
+    # TRD groups
+    {"name": "grp-TRD-NH06-CDE-WEB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
+     "description": "Trading Web Tier", "members": [
+        {"type": "ip", "value": "10.5.1.10", "description": "TRD Web 1"},
+        {"type": "ip", "value": "10.5.1.11", "description": "TRD Web 2"},
+     ]},
+    {"name": "grp-TRD-NH06-CDE-APP", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
+     "description": "Trading Application Servers", "members": [
+        {"type": "ip", "value": "10.5.1.20", "description": "TRD App 1"},
+        {"type": "ip", "value": "10.5.1.21", "description": "TRD App 2"},
+        {"type": "ip", "value": "10.5.1.22", "description": "TRD App 3"},
+     ]},
+    {"name": "grp-TRD-NH06-CDE-DB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "DB",
+     "description": "Trading Oracle DB", "members": [
+        {"type": "ip", "value": "10.5.1.30", "description": "TRD Oracle Primary"},
+        {"type": "ip", "value": "10.5.1.31", "description": "TRD Oracle Standby"},
+     ]},
+    {"name": "grp-TRD-NH06-CDE-MQ", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "MQ",
+     "description": "Trading MQ Broker", "members": [
+        {"type": "ip", "value": "10.5.1.40", "description": "TRD MQ Broker 1"},
+     ]},
+    # FRD groups
+    {"name": "grp-FRD-NH02-CDE-APP", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+     "description": "Fraud Detection Engine", "members": [
+        {"type": "ip", "value": "10.1.1.50", "description": "FRD Engine 1"},
+        {"type": "ip", "value": "10.1.1.51", "description": "FRD Engine 2"},
+     ]},
+    # AGW groups
+    {"name": "grp-AGW-NH14-DMZ-API", "app_id": "AGW", "nh": "NH14", "sz": "DMZ", "subtype": "API",
+     "description": "API Gateway Servers", "members": [
+        {"type": "ip", "value": "10.70.1.10", "description": "AGW API 1"},
+        {"type": "ip", "value": "10.70.1.11", "description": "AGW API 2"},
+     ]},
+    {"name": "grp-AGW-NH14-DMZ-LB", "app_id": "AGW", "nh": "NH14", "sz": "DMZ", "subtype": "LB",
+     "description": "API Gateway Load Balancer", "members": [
+        {"type": "ip", "value": "10.70.1.5", "description": "AGW LB VIP"},
+     ]},
+    # EXT group (DMZ external API)
+    {"name": "grp-EXT-NH14-DMZ-API", "app_id": "EXT", "nh": "NH14", "sz": "DMZ", "subtype": "API",
+     "description": "External Partner API Endpoints", "members": [
+        {"type": "cidr", "value": "10.70.2.0/28", "description": "External API Subnet"},
+     ]},
+    # MBL groups
+    {"name": "grp-MBL-NH03-CDE-API", "app_id": "MBL", "nh": "NH03", "sz": "CDE", "subtype": "API",
+     "description": "Mobile Banking API", "members": [
+        {"type": "ip", "value": "10.2.1.50", "description": "MBL API 1"},
+        {"type": "ip", "value": "10.2.1.51", "description": "MBL API 2"},
+     ]},
+    {"name": "grp-MBL-NH03-CDE-APP", "app_id": "MBL", "nh": "NH03", "sz": "CDE", "subtype": "APP",
+     "description": "Mobile Banking App Servers", "members": [
+        {"type": "ip", "value": "10.2.2.10", "description": "MBL App 1"},
+        {"type": "ip", "value": "10.2.2.11", "description": "MBL App 2"},
+     ]},
+    # SOC groups
+    {"name": "grp-SOC-NH01-GEN-APP", "app_id": "SOC", "nh": "NH01", "sz": "GEN", "subtype": "APP",
+     "description": "SIEM and SOC Collectors", "members": [
+        {"type": "ip", "value": "10.0.2.10", "description": "SOC SIEM 1"},
+        {"type": "ip", "value": "10.0.2.11", "description": "SOC SIEM 2"},
+     ]},
+    {"name": "grp-SOC-NH01-GEN-DB", "app_id": "SOC", "nh": "NH01", "sz": "GEN", "subtype": "DB",
+     "description": "SOC Elasticsearch Cluster", "members": [
+        {"type": "ip", "value": "10.0.2.20", "description": "SOC ES Node 1"},
+        {"type": "ip", "value": "10.0.2.21", "description": "SOC ES Node 2"},
+        {"type": "ip", "value": "10.0.2.22", "description": "SOC ES Node 3"},
+     ]},
+    {"name": "grp-SOC-NH01-GEN-MON", "app_id": "SOC", "nh": "NH01", "sz": "GEN", "subtype": "MON",
+     "description": "SOC Monitoring Agents", "members": [
+        {"type": "cidr", "value": "10.0.2.64/28", "description": "SOC Mon Subnet"},
+     ]},
+]
+
 SEED_CHG_REQUESTS = [
     {"chg_id": "CHG10001", "rule_ids": ["R-3001"], "status": "Approved",
      "description": "Deploy CRM to Core Banking DB rule",
@@ -786,6 +923,7 @@ async def seed_database() -> None:
     _save("migrations", deepcopy(SEED_MIGRATIONS))
     _save("migration_mappings", deepcopy(SEED_MIGRATION_MAPPINGS))
     _save("chg_requests", deepcopy(SEED_CHG_REQUESTS))
+    _save("groups", deepcopy(SEED_GROUPS))
 
 
 # ============================================================
@@ -1290,3 +1428,76 @@ async def delete_environment(code: str) -> bool:
         return False
     _save("environments", new_items)
     return True
+
+
+# ============================================================
+# Groups CRUD
+# ============================================================
+
+async def get_groups() -> list[dict[str, Any]]:
+    return _load("groups") or []
+
+
+async def get_group(name: str) -> dict[str, Any] | None:
+    groups = _load("groups") or []
+    for g in groups:
+        if g.get("name") == name:
+            return g
+    return None
+
+
+async def create_group(data: dict[str, Any]) -> dict[str, Any]:
+    groups = _load("groups") or []
+    data["created_at"] = _now()
+    data["updated_at"] = _now()
+    groups.append(dict(data))
+    _save("groups", groups)
+    return data
+
+
+async def update_group(name: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    groups = _load("groups") or []
+    for g in groups:
+        if g.get("name") == name:
+            g.update(data)
+            g["updated_at"] = _now()
+            _save("groups", groups)
+            return g
+    return None
+
+
+async def delete_group(name: str) -> bool:
+    groups = _load("groups") or []
+    new_groups = [g for g in groups if g.get("name") != name]
+    if len(new_groups) == len(groups):
+        return False
+    _save("groups", new_groups)
+    return True
+
+
+async def add_group_member(group_name: str, member: dict[str, Any]) -> dict[str, Any] | None:
+    groups = _load("groups") or []
+    for g in groups:
+        if g.get("name") == group_name:
+            members = g.get("members", [])
+            members.append(member)
+            g["members"] = members
+            g["updated_at"] = _now()
+            _save("groups", groups)
+            return g
+    return None
+
+
+async def remove_group_member(group_name: str, member_value: str) -> dict[str, Any] | None:
+    groups = _load("groups") or []
+    for g in groups:
+        if g.get("name") == group_name:
+            members = g.get("members", [])
+            new_members = [m for m in members if m.get("value") != member_value]
+            if len(new_members) == len(members):
+                return None
+            g["members"] = new_members
+            g["updated_at"] = _now()
+            _save("groups", groups)
+            return g
+    return None
