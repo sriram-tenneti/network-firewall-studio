@@ -140,6 +140,7 @@ export interface Application {
   id?: string;
   name: string;
   app_id: string;
+  app_distributed_id?: string;
   owner: string;
   nh: string;
   sz: string;
@@ -214,7 +215,7 @@ export interface RuleHistoryEntry {
 }
 
 export interface GroupMember {
-  type: 'ip' | 'cidr';
+  type: 'ip' | 'cidr' | 'group' | 'range';
   value: string;
   description: string;
 }
@@ -229,4 +230,25 @@ export interface FirewallGroup {
   members: GroupMember[];
   created_at?: string;
   updated_at?: string;
+}
+
+// Legacy non-standard rule for migration
+export interface LegacyRule {
+  id: string;
+  app_id: string;
+  app_distributed_id: string;
+  rule_name: string;
+  inventory: string;
+  policy_row: string;
+  rule_status: string;
+  rule_action: string;
+  source_zone: string;
+  source_entries: string[];
+  source_expanded: string[];
+  destination_entries: string[];
+  destination_expanded: string[];
+  ports: string[];
+  is_standard: boolean;
+  migration_status: 'Not Started' | 'In Progress' | 'Mapped' | 'Needs Review' | 'Completed';
+  suggested_standard_name?: string;
 }

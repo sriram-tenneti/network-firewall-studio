@@ -354,61 +354,143 @@ SEED_LEGACY_DATACENTERS = [
 ]
 
 SEED_APPLICATIONS = [
-    {"app_id": "CRM", "name": "App Alpha", "owner": "Owner A", "team": "Team Alpha",
+    {"app_id": "CRM", "app_distributed_id": "SEA3", "name": "App Alpha", "owner": "Owner A", "team": "Team Alpha",
      "nh": "NH02", "sz": "CDE", "criticality": 2, "pci_scope": True, "description": "Application alpha system"},
-    {"app_id": "ORD", "name": "App Beta", "owner": "Jon", "team": "Team Beta",
+    {"app_id": "ORD", "app_distributed_id": "LOGIN", "name": "App Beta", "owner": "Jon", "team": "Team Beta",
      "nh": "NH03", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application beta platform"},
-    {"app_id": "PSA", "name": "App Gamma", "owner": "Owner A", "team": "Team Gamma",
+    {"app_id": "PSA", "app_distributed_id": "PSA01", "name": "App Gamma", "owner": "Owner A", "team": "Team Gamma",
      "nh": "NH05", "sz": "GEN", "criticality": 3, "pci_scope": False, "description": "Application gamma automation"},
-    {"app_id": "DIG", "name": "App Delta", "owner": "Jon", "team": "Team Delta",
+    {"app_id": "DIG", "app_distributed_id": "DIG01", "name": "App Delta", "owner": "Jon", "team": "Team Delta",
      "nh": "NH03", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application delta platform"},
-    {"app_id": "PAY", "name": "App Epsilon", "owner": "Owner A", "team": "Team Epsilon",
+    {"app_id": "PAY", "app_distributed_id": "PAY01", "name": "App Epsilon", "owner": "Owner A", "team": "Team Epsilon",
      "nh": "NH07", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application epsilon engine"},
-    {"app_id": "ENT", "name": "App Zeta", "owner": "Jon", "team": "Team Gamma",
+    {"app_id": "ENT", "app_distributed_id": "ENT01", "name": "App Zeta", "owner": "Jon", "team": "Team Gamma",
      "nh": "NH05", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application zeta system"},
-    {"app_id": "SHR", "name": "App Eta", "owner": "Owner A", "team": "Team Eta",
+    {"app_id": "SHR", "app_distributed_id": "SHR01", "name": "App Eta", "owner": "Owner A", "team": "Team Eta",
      "nh": "NH08", "sz": "GEN", "criticality": 3, "pci_scope": False, "description": "Application eta platform"},
-    {"app_id": "WHL", "name": "Team Theta", "owner": "Jon", "team": "Team Theta",
+    {"app_id": "WHL", "app_distributed_id": "WHL01", "name": "Team Theta", "owner": "Jon", "team": "Team Theta",
      "nh": "NH06", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application theta system"},
-    {"app_id": "CBK", "name": "Team Iota", "owner": "Owner A", "team": "Team Iota",
+    {"app_id": "CBK", "app_distributed_id": "CBK01", "name": "Team Iota", "owner": "Owner A", "team": "Team Iota",
      "nh": "NH02", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application iota ledger"},
-    {"app_id": "CLN", "name": "Team Kappa", "owner": "Jon", "team": "Team Kappa",
+    {"app_id": "CLN", "app_distributed_id": "CLN01", "name": "Team Kappa", "owner": "Jon", "team": "Team Kappa",
      "nh": "NH10", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application kappa origination"},
-    {"app_id": "WLT", "name": "App Lambda", "owner": "Owner A", "team": "Team Lambda",
+    {"app_id": "WLT", "app_distributed_id": "WLT01", "name": "App Lambda", "owner": "Owner A", "team": "Team Lambda",
      "nh": "NH04", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application lambda advisory"},
-    {"app_id": "ACH", "name": "Team Mu", "owner": "Jon", "team": "Team Mu",
+    {"app_id": "ACH", "app_distributed_id": "ACH01", "name": "Team Mu", "owner": "Jon", "team": "Team Mu",
      "nh": "NH09", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application mu services"},
     # --- 15 additional applications ---
-    {"app_id": "HRM", "name": "App Nu", "owner": "Owner B", "team": "Team Nu",
+    {"app_id": "HRM", "app_distributed_id": "HRM01", "name": "App Nu", "owner": "Owner B", "team": "Team Nu",
      "nh": "NH01", "sz": "GEN", "criticality": 3, "pci_scope": False, "description": "Application nu management"},
-    {"app_id": "TRD", "name": "App Xi", "owner": "Owner C", "team": "Team Xi",
+    {"app_id": "TRD", "app_distributed_id": "TRD01", "name": "App Xi", "owner": "Owner C", "team": "Team Xi",
      "nh": "NH06", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application xi processing"},
-    {"app_id": "FRD", "name": "App Omicron", "owner": "Owner D", "team": "Team Omicron",
+    {"app_id": "FRD", "app_distributed_id": "FRD01", "name": "App Omicron", "owner": "Owner D", "team": "Team Omicron",
      "nh": "NH02", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application omicron detection"},
-    {"app_id": "RGM", "name": "App Pi", "owner": "Owner E", "team": "Team Pi",
+    {"app_id": "RGM", "app_distributed_id": "RGM01", "name": "App Pi", "owner": "Owner E", "team": "Team Pi",
      "nh": "NH11", "sz": "RST", "criticality": 1, "pci_scope": True, "description": "Application pi reporting"},
-    {"app_id": "MBL", "name": "App Rho", "owner": "Owner F", "team": "Team Delta",
+    {"app_id": "MBL", "app_distributed_id": "MBL01", "name": "App Rho", "owner": "Owner F", "team": "Team Delta",
      "nh": "NH03", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application rho mobile app"},
-    {"app_id": "INS", "name": "App Sigma", "owner": "Owner G", "team": "Team Lambda",
+    {"app_id": "INS", "app_distributed_id": "INS01", "name": "App Sigma", "owner": "Owner G", "team": "Team Lambda",
      "nh": "NH04", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application sigma underwriting"},
-    {"app_id": "TAX", "name": "App Tau", "owner": "Owner H", "team": "Team Tau",
+    {"app_id": "TAX", "app_distributed_id": "TAX01", "name": "App Tau", "owner": "Owner H", "team": "Team Tau",
      "nh": "NH10", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application tau calculation"},
-    {"app_id": "AML", "name": "App Upsilon", "owner": "Owner I", "team": "Team Omicron",
+    {"app_id": "AML", "app_distributed_id": "AML01", "name": "App Upsilon", "owner": "Owner I", "team": "Team Omicron",
      "nh": "NH07", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application upsilon screening"},
-    {"app_id": "KYC", "name": "App Phi", "owner": "Owner J", "team": "Team Pi",
+    {"app_id": "KYC", "app_distributed_id": "KYC01", "name": "App Phi", "owner": "Owner J", "team": "Team Pi",
      "nh": "NH05", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application phi verification"},
-    {"app_id": "TRS", "name": "App Chi", "owner": "Owner K", "team": "Team Chi",
+    {"app_id": "TRS", "app_distributed_id": "TRS01", "name": "App Chi", "owner": "Owner K", "team": "Team Chi",
      "nh": "NH06", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application chi management"},
-    {"app_id": "CCM", "name": "App Psi", "owner": "Owner L", "team": "Team Psi",
+    {"app_id": "CCM", "app_distributed_id": "CCM01", "name": "App Psi", "owner": "Owner L", "team": "Team Psi",
      "nh": "NH02", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application psi processing"},
-    {"app_id": "LON", "name": "App Omega", "owner": "Owner M", "team": "Team Kappa",
+    {"app_id": "LON", "app_distributed_id": "LON01", "name": "App Omega", "owner": "Owner M", "team": "Team Kappa",
      "nh": "NH10", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application omega underwriting"},
-    {"app_id": "BRK", "name": "App Alpha2", "owner": "Owner N", "team": "Team Lambda",
+    {"app_id": "BRK", "app_distributed_id": "BRK01", "name": "App Alpha2", "owner": "Owner N", "team": "Team Lambda",
      "nh": "NH04", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application alpha2 platform"},
-    {"app_id": "AGW", "name": "App Beta2", "owner": "Owner O", "team": "Team Beta2",
+    {"app_id": "AGW", "app_distributed_id": "AGW01", "name": "App Beta2", "owner": "Owner O", "team": "Team Beta2",
      "nh": "NH14", "sz": "DMZ", "criticality": 1, "pci_scope": False, "description": "Application beta2 gateway"},
-    {"app_id": "SOC", "name": "App Gamma2", "owner": "Owner P", "team": "Team Gamma2",
+    {"app_id": "SOC", "app_distributed_id": "SOC01", "name": "App Gamma2", "owner": "Owner P", "team": "Team Gamma2",
      "nh": "NH01", "sz": "GEN", "criticality": 1, "pci_scope": False, "description": "Application gamma2 monitoring"},
+]
+
+# =====================================================================
+# LEGACY NON-STANDARD RULES (for Migration Studio)
+# These represent legacy rules that need to be migrated to standard naming
+# =====================================================================
+SEED_LEGACY_RULES = [
+    {"id": "LR-001", "app_id": "CRM", "app_distributed_id": "SEA3", "rule_name": "OGDC-PROD-allow-CRM",
+     "inventory": "Legacy DC Alpha", "policy_row": "Row-14", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "GEN", "source_entries": ["grp-OGDC-PROD"], "source_expanded": ["10.25.1.0/24", "10.25.2.0/24"],
+     "destination_entries": ["grp-BRAS-Rollem"], "destination_expanded": ["10.50.1.10", "10.50.1.11"],
+     "ports": ["TCP 8443", "TCP 443"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-CRM-NH02-CDE-APP"},
+    {"id": "LR-002", "app_id": "CRM", "app_distributed_id": "SEA3", "rule_name": "Legacy-CRM-DB-Access",
+     "inventory": "Legacy DC Alpha", "policy_row": "Row-15", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "CDE", "source_entries": ["CRM-AppServers"], "source_expanded": ["10.25.3.100", "10.25.3.101"],
+     "destination_entries": ["CRM-Database-Cluster"], "destination_expanded": ["10.50.2.0/24"],
+     "ports": ["TCP 1521"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-CRM-NH02-CDE-DB"},
+    {"id": "LR-003", "app_id": "ORD", "app_distributed_id": "LOGIN", "rule_name": "OLD-LoginSvc-Inbound",
+     "inventory": "Legacy DC Beta", "policy_row": "Row-22", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "DMZ", "source_entries": ["External-LB-Pool"], "source_expanded": ["10.26.1.0/24"],
+     "destination_entries": ["Login-WebFarm"], "destination_expanded": ["10.26.5.10", "10.26.5.11", "10.26.5.12"],
+     "ports": ["TCP 443", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-ORD-NH03-CDE-WEB"},
+    {"id": "LR-004", "app_id": "ORD", "app_distributed_id": "LOGIN", "rule_name": "LoginSvc-to-AuthDB",
+     "inventory": "Legacy DC Beta", "policy_row": "Row-23", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "CDE", "source_entries": ["Login-WebFarm"], "source_expanded": ["10.26.5.10", "10.26.5.11"],
+     "destination_entries": ["Auth-DB-Primary", "Auth-DB-Secondary"],
+     "destination_expanded": ["10.26.8.20", "10.26.8.21"],
+     "ports": ["TCP 1521", "TCP 5432"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-ORD-NH03-CDE-DB"},
+    {"id": "LR-005", "app_id": "PAY", "app_distributed_id": "PAY01", "rule_name": "PayEngine-PCI-Flow",
+     "inventory": "Legacy DC Gamma", "policy_row": "Row-31", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "CDE", "source_entries": ["PayGW-Servers"], "source_expanded": ["10.27.10.0/24"],
+     "destination_entries": ["HSM-Cluster", "TokenVault"], "destination_expanded": ["10.27.20.5", "10.27.20.6"],
+     "ports": ["TCP 9443", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-PAY-NH07-CDE-APP"},
+    {"id": "LR-006", "app_id": "DIG", "app_distributed_id": "DIG01", "rule_name": "DigitalChannel-WebTier",
+     "inventory": "Legacy DC Alpha", "policy_row": "Row-40", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "DMZ", "source_entries": ["CDN-Endpoints"], "source_expanded": ["10.25.50.0/24"],
+     "destination_entries": ["Digital-WebServers"], "destination_expanded": ["10.25.60.0/24"],
+     "ports": ["TCP 443", "TCP 80"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-DIG-NH03-CDE-WEB"},
+    {"id": "LR-007", "app_id": "ENT", "app_distributed_id": "ENT01", "rule_name": "EntSvc-SharedDB",
+     "inventory": "Legacy DC Delta", "policy_row": "Row-51", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "GEN", "source_entries": ["ENT-AppPool"], "source_expanded": ["10.28.1.0/24"],
+     "destination_entries": ["SharedDB-Cluster"], "destination_expanded": ["10.28.10.0/24"],
+     "ports": ["TCP 1521", "TCP 3306"], "is_standard": False, "migration_status": "Needs Review",
+     "suggested_standard_name": "grp-ENT-NH05-GEN-DB"},
+    {"id": "LR-008", "app_id": "WHL", "app_distributed_id": "WHL01", "rule_name": "WholesaleBnk-API",
+     "inventory": "Legacy DC Gamma", "policy_row": "Row-55", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "CDE", "source_entries": ["WHL-Partners"], "source_expanded": ["10.27.30.0/24"],
+     "destination_entries": ["WHL-API-Gateway"], "destination_expanded": ["10.27.40.10", "10.27.40.11"],
+     "ports": ["TCP 8443", "TCP 443"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-WHL-NH06-CDE-API"},
+    {"id": "LR-009", "app_id": "CBK", "app_distributed_id": "CBK01", "rule_name": "CoreBanking-MF-Link",
+     "inventory": "Legacy DC Alpha", "policy_row": "Row-60", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "CDE", "source_entries": ["CBK-Middleware"], "source_expanded": ["10.25.70.0/24"],
+     "destination_entries": ["Mainframe-CICS", "Mainframe-IMS"],
+     "destination_expanded": ["10.25.80.10", "10.25.80.11"],
+     "ports": ["TCP 3270", "TCP 8080"], "is_standard": False, "migration_status": "In Progress",
+     "suggested_standard_name": "grp-CBK-NH02-CDE-MFR"},
+    {"id": "LR-010", "app_id": "AML", "app_distributed_id": "AML01", "rule_name": "AML-ScreeningEngine",
+     "inventory": "Legacy DC Epsilon", "policy_row": "Row-72", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "CDE", "source_entries": ["AML-BatchServers"], "source_expanded": ["10.29.5.0/24"],
+     "destination_entries": ["AML-DB", "AML-Analytics"],
+     "destination_expanded": ["10.29.10.20", "10.29.10.21"],
+     "ports": ["TCP 1521", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-AML-NH07-CDE-BAT"},
+    {"id": "LR-011", "app_id": "AGW", "app_distributed_id": "AGW01", "rule_name": "APIGateway-External",
+     "inventory": "Legacy DC Zeta", "policy_row": "Row-80", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "DMZ", "source_entries": ["Internet-Facing-LB"], "source_expanded": ["10.30.1.0/24"],
+     "destination_entries": ["API-Backend-Pool"], "destination_expanded": ["10.30.10.0/24"],
+     "ports": ["TCP 443", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
+     "suggested_standard_name": "grp-AGW-NH14-DMZ-API"},
+    {"id": "LR-012", "app_id": "TRD", "app_distributed_id": "TRD01", "rule_name": "TradingPlatform-FIX",
+     "inventory": "Legacy DC Gamma", "policy_row": "Row-85", "rule_status": "Active", "rule_action": "Allow",
+     "source_zone": "CDE", "source_entries": ["FIX-Engine-Cluster"], "source_expanded": ["10.27.50.0/24"],
+     "destination_entries": ["Exchange-Connectors"], "destination_expanded": ["10.27.60.0/24"],
+     "ports": ["TCP 9878", "TCP 9879"], "is_standard": False, "migration_status": "Mapped",
+     "suggested_standard_name": "grp-TRD-NH06-CDE-APP"},
 ]
 
 SEED_ENVIRONMENTS = [
@@ -1171,6 +1253,7 @@ async def seed_database() -> None:
     _save("migration_mappings", deepcopy(SEED_MIGRATION_MAPPINGS))
     _save("chg_requests", deepcopy(SEED_CHG_REQUESTS))
     _save("groups", deepcopy(SEED_GROUPS))
+    _save("legacy_rules", deepcopy(SEED_LEGACY_RULES))
 
 
 # ============================================================
@@ -1232,6 +1315,20 @@ async def get_org_config() -> dict[str, Any] | None:
 # ============================================================
 # Firewall Rules CRUD
 # ============================================================
+
+async def get_legacy_rules() -> list[dict[str, Any]]:
+    return _load("legacy_rules") or []
+
+
+async def update_legacy_rule(rule_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    rules = _load("legacy_rules") or []
+    for r in rules:
+        if r["id"] == rule_id:
+            r.update(data)
+            _save("legacy_rules", rules)
+            return r
+    return None
+
 
 async def get_rules() -> list[dict[str, Any]]:
     return _load("firewall_rules") or []

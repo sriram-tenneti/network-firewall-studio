@@ -1,5 +1,6 @@
 import type {
   FirewallRule,
+  LegacyRule,
   MigrationDetails,
   MigrationMapping,
   MigrationRuleLifecycle,
@@ -359,3 +360,13 @@ export const addGroupMember = (groupName: string, member: GroupMember) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members`, { method: 'POST', body: JSON.stringify(member) });
 export const removeGroupMember = (groupName: string, memberValue: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
+
+// Legacy Rules (for Migration Studio)
+export const getLegacyRules = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<LegacyRule[]>(`/api/reference/legacy-rules${qs ? `?${qs}` : ''}`);
+};
+export const updateLegacyRule = (ruleId: string, data: Partial<LegacyRule>) =>
+  fetchJSON<LegacyRule>(`/api/reference/legacy-rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) });

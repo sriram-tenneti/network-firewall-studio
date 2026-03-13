@@ -1,4 +1,4 @@
-import { Shield, Menu, Plus, ChevronDown, User } from 'lucide-react';
+import { Shield, Menu, ChevronDown, User } from 'lucide-react';
 
 interface HeaderProps {
   currentPage: 'design' | 'migration' | 'admin';
@@ -65,15 +65,7 @@ export function Header({ currentPage, onNavigate, application, environment, data
             Org Admin
           </button>
 
-          <div className="ml-4 flex items-center gap-2">
-            <button className="flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium hover:bg-blue-500 transition-colors">
-              <Plus className="h-4 w-4" />
-              Add
-              <ChevronDown className="h-3 w-3" />
-            </button>
-          </div>
-
-          <button className="rounded-md p-1.5 hover:bg-slate-600 transition-colors">
+          <button className="ml-2 rounded-md p-1.5 hover:bg-slate-600 transition-colors">
             <Menu className="h-5 w-5" />
           </button>
 
