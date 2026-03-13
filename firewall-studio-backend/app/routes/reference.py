@@ -3,7 +3,7 @@ from app.database import (
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
-    get_policy_matrix,
+    get_policy_matrix, get_rules,
     create_neighbourhood, update_neighbourhood, delete_neighbourhood,
     create_security_zone, update_security_zone, delete_security_zone,
     create_application, update_application, delete_application,
@@ -27,7 +27,64 @@ router = APIRouter(prefix="/api/reference", tags=["Reference Data"])
 
 @router.get("/ngdc-datacenters")
 async def list_ngdc_datacenters():
-    return await get_ngdc_datacenters()
+    """Return NGDC datacenters enriched with full neighbourhood objects for the UI.
+
+    The raw JSON stores neighbourhoods as ID strings (e.g. ["NH01","NH02"]).
+    The frontend NGDCSidebar expects objects: {name, subnets: string[]}.
+    This endpoint resolves those IDs and also computes rule_count + ip_groups.
+    """
+    raw_dcs = await get_ngdc_datacenters()
+    all_nhs = await get_neighbourhoods()
+    all_rules = await get_rules()
+    nh_lookup: dict[str, dict] = {nh["nh_id"]: nh for nh in all_nhs}
+
+    enriched = []
+    for dc in raw_dcs:
+        dc_code = dc.get("code", "")
+        # Resolve neighbourhood IDs to objects with subnets filtered to this DC
+        nh_ids = dc.get("neighbourhoods", [])
+        resolved_nhs = []
+        ip_groups: list[dict] = []
+        for nh_id in nh_ids:
+            if isinstance(nh_id, str):
+                nh_data = nh_lookup.get(nh_id)
+                if nh_data:
+                    # Filter IP ranges to those belonging to this DC
+                    dc_ranges = [r for r in nh_data.get("ip_ranges", []) if r.get("dc") == dc_code]
+                    subnets = [r["cidr"] for r in dc_ranges]
+                    resolved_nhs.append({
+                        "name": f"{nh_id} - {nh_data.get('name', '')}",
+                        "nh_id": nh_id,
+                        "zone": nh_data.get("zone", ""),
+                        "subnets": subnets,
+                    })
+                    # Also build ip_groups entries
+                    if dc_ranges:
+                        ip_groups.append({
+                            "name": f"{nh_id} Groups",
+                            "entries": [
+                                {"name": r.get("description", r["cidr"]), "cidr": r["cidr"]}
+                                for r in dc_ranges
+                            ],
+                        })
+                else:
+                    resolved_nhs.append({"name": nh_id, "nh_id": nh_id, "zone": "", "subnets": []})
+            elif isinstance(nh_id, dict):
+                # Already an object – ensure subnets key exists
+                if "subnets" not in nh_id:
+                    nh_id["subnets"] = []
+                resolved_nhs.append(nh_id)
+
+        # Count rules assigned to this DC
+        rule_count = sum(1 for r in all_rules if r.get("datacenter") == dc_code)
+
+        enriched.append({
+            **dc,
+            "neighbourhoods": resolved_nhs,
+            "ip_groups": ip_groups,
+            "rule_count": rule_count,
+        })
+    return enriched
 
 
 @router.get("/security-zones")
