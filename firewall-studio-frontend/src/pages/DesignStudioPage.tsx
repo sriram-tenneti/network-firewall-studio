@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Plus } from 'lucide-react';
 import { ActionBar } from '@/components/layout/ActionBar';
 import { SourcePanel } from '@/components/design-studio/SourcePanel';
 import { PolicyFlowCanvas } from '@/components/design-studio/PolicyFlowCanvas';
@@ -164,6 +165,10 @@ export function DesignStudioPage() {
     }
   };
 
+  const handleRequestReview = async (ruleId: string) => {
+    showNotification(`Review requested for rule ${ruleId}`, 'info');
+  };
+
   const handleDragStart = (e: React.DragEvent, dest: PredefinedDestination) => {
     e.dataTransfer.setData('application/json', JSON.stringify({ name: dest.name, security_zone: dest.security_zone }));
     e.dataTransfer.effectAllowed = 'copy';
@@ -171,18 +176,11 @@ export function DesignStudioPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <ActionBar
-        mode="design"
-        onAdd={handleCreateRule}
-        onModify={() => { if (selectedRule) handleModifyRule(selectedRule); }}
-        onDelete={() => { if (selectedRule) handleDelete(selectedRule.rule_id); }}
-        onCertify={() => { if (selectedRule) handleCertify(selectedRule.rule_id); }}
-        onReCertify={() => { if (selectedRule) handleCertify(selectedRule.rule_id); }}
-        onViewHistory={() => { if (selectedRule) handleViewHistory(selectedRule.rule_id); }}
-      />
+      <ActionBar mode="design" />
 
+      {/* Notification */}
       {notification && (
-        <div className={`mx-6 mt-3 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm animate-in fade-in ${
+        <div className={`mx-6 mt-3 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm ${
           notification.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
           notification.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
           'bg-blue-50 text-blue-700 border border-blue-200'
@@ -191,26 +189,27 @@ export function DesignStudioPage() {
         </div>
       )}
 
+      {/* Rule Builder Section */}
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
-        <div className="w-64 flex-shrink-0 overflow-y-auto">
+        {/* Left Panel: Source + Groups */}
+        <div className="w-64 flex-shrink-0 overflow-y-auto space-y-3">
           <SourcePanel source={source} onChange={setSource} neighbourhoods={neighbourhoods} applications={applications} namingStandards={namingStandards} />
           <button
             onClick={() => setShowGroupPanel(!showGroupPanel)}
-            className="mt-3 w-full rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+            className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
           >
             {showGroupPanel ? 'Hide Group Management' : 'Manage Groups'}
           </button>
           {showGroupPanel && (
-            <div className="mt-2">
-              <GroupManagementPanel
-                appFilter={selectedAppFilter}
-                onNotification={showNotification}
-              />
-            </div>
+            <GroupManagementPanel
+              appFilter={selectedAppFilter}
+              onNotification={showNotification}
+            />
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        {/* Center: Policy Flow + Create Button */}
+        <div className="flex-1 overflow-y-auto space-y-4">
           <PolicyFlowCanvas
             source={source}
             destination={destination}
@@ -218,8 +217,27 @@ export function DesignStudioPage() {
             onValidate={handleValidate}
             onDrop={handleDrop}
           />
+          {/* Create Rule Button */}
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={handleCreateRule}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              {selectedRule ? `Update Rule ${selectedRule.rule_id}` : 'Create New Rule'}
+            </button>
+            {selectedRule && (
+              <button
+                onClick={() => { setSelectedRule(null); setPolicyResult(null); }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel Edit
+              </button>
+            )}
+          </div>
         </div>
 
+        {/* Right Panel: Destination */}
         <div className="w-64 flex-shrink-0 overflow-y-auto">
           <div className="flex flex-col rounded-xl border-2 border-orange-200 bg-orange-50/50 shadow-sm">
             <div className="rounded-t-xl bg-gradient-to-r from-amber-600 to-orange-500 px-4 py-3">
@@ -300,6 +318,7 @@ export function DesignStudioPage() {
         </div>
       </div>
 
+      {/* Collapsible Rule Lifecycle Table */}
       <div className="p-4 pt-0">
         <RuleLifecycleTable
           rules={filteredRules}
@@ -312,9 +331,11 @@ export function DesignStudioPage() {
           onSubmit={handleSubmit}
           onViewHistory={handleViewHistory}
           onSaveDraft={handleSaveDraft}
+          onRequestReview={handleRequestReview}
         />
       </div>
 
+      {/* History Modal */}
       {historyModal && (
         <HistoryModal
           ruleId={historyModal.ruleId}

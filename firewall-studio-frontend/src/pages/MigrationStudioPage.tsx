@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Edit, Trash2, Shield, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { ActionBar } from '@/components/layout/ActionBar';
 import { MigrationDetailsForm } from '@/components/migration-studio/MigrationDetailsForm';
 import { MigrationPlannerTable } from '@/components/migration-studio/MigrationPlannerTable';
@@ -24,7 +25,8 @@ export function MigrationStudioPage() {
   const [validationResult, setValidationResult] = useState<{ validation_passed: boolean; message: string; auto_mapped: number; conflicts: number } | null>(null);
   const [selectedAppId, setSelectedAppId] = useState('');
   const [existingRules, setExistingRules] = useState<FirewallRule[]>([]);
-  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [rulesCollapsed, setRulesCollapsed] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
@@ -132,34 +134,29 @@ export function MigrationStudioPage() {
     }
   };
 
-  const handleModifyRule = () => {
-    const rule = existingRules.find(r => r.rule_id === selectedRuleId);
-    if (rule) {
-      showNotification(`Loaded rule ${rule.rule_id} for migration review`, 'info');
-    }
-  };
-
-  const handleDeleteRule = async () => {
-    if (!selectedRuleId) return;
+  const handleDeleteRule = async (ruleId: string) => {
     try {
-      await api.deleteRule(selectedRuleId);
-      showNotification(`Rule ${selectedRuleId} deleted`);
-      setSelectedRuleId(null);
+      await api.deleteRule(ruleId);
+      showNotification(`Rule ${ruleId} deleted`);
+      setConfirmDeleteId(null);
       loadExistingRules(selectedAppId);
     } catch {
       showNotification('Failed to delete rule', 'error');
     }
   };
 
-  const handleCertifyRule = async () => {
-    if (!selectedRuleId) return;
+  const handleCertifyRule = async (ruleId: string) => {
     try {
-      await api.certifyRule(selectedRuleId);
-      showNotification(`Rule ${selectedRuleId} certified`);
+      await api.certifyRule(ruleId);
+      showNotification(`Rule ${ruleId} certified`);
       loadExistingRules(selectedAppId);
     } catch {
       showNotification('Failed to certify rule', 'error');
     }
+  };
+
+  const handleRequestReview = (ruleId: string) => {
+    showNotification(`Review requested for migration rule ${ruleId}`, 'info');
   };
 
   // Mock migration planner rules for the firewall planner view
@@ -172,19 +169,7 @@ export function MigrationStudioPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <ActionBar
-        mode="migration"
-        onAdd={() => setSelectedMigration(null)}
-        onModify={handleModifyRule}
-        onDelete={handleDeleteRule}
-        onCertify={handleCertifyRule}
-        onReCertify={handleCertifyRule}
-        onViewHistory={() => {
-          if (selectedRuleId) {
-            showNotification(`View history for ${selectedRuleId}`, 'info');
-          }
-        }}
-      />
+      <ActionBar mode="migration" />
 
       {/* Notification */}
       {notification && (
@@ -235,46 +220,113 @@ export function MigrationStudioPage() {
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         {/* Left: Migration Details + Planner Tables */}
         <div className="flex-1 space-y-4 overflow-y-auto">
-          {/* Existing Rules Panel */}
+          {/* Collapsible Existing Rules Panel with inline actions */}
           {selectedAppId && existingRules.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-4 py-3">
-                <h3 className="text-sm font-bold text-slate-800">Existing Rules for {selectedAppId}</h3>
-              </div>
-              <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 w-8"></th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Rule ID</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Source</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Destination</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {existingRules.map((rule) => (
-                      <tr
-                        key={rule.rule_id}
-                        onClick={() => setSelectedRuleId(rule.rule_id === selectedRuleId ? null : rule.rule_id)}
-                        className={`border-b border-slate-50 cursor-pointer transition-colors ${
-                          selectedRuleId === rule.rule_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-blue-50/30'
-                        }`}
-                      >
-                        <td className="px-3 py-2">
-                          <input type="radio" name="migRule" checked={selectedRuleId === rule.rule_id}
-                            onChange={() => setSelectedRuleId(rule.rule_id)}
-                            className="h-3.5 w-3.5 border-slate-300 text-blue-600" />
-                        </td>
-                        <td className="px-3 py-2 text-xs font-semibold text-slate-700">{rule.rule_id}</td>
-                        <td className="px-3 py-2 text-xs text-slate-600">{rule.source.group_name || rule.source.ip_address || rule.source.cidr || '-'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-600">{rule.destination.name}</td>
-                        <td className="px-3 py-2"><StatusBadge status={rule.status} /></td>
+              <button
+                onClick={() => setRulesCollapsed(!rulesCollapsed)}
+                className="flex w-full items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors rounded-t-xl"
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-800">Existing Rules for {selectedAppId}</h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                    {existingRules.length}
+                  </span>
+                </div>
+                {rulesCollapsed ? (
+                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                ) : (
+                  <ChevronUp className="h-4 w-4 text-slate-400" />
+                )}
+              </button>
+              {!rulesCollapsed && (
+                <div className="overflow-x-auto max-h-64 overflow-y-auto border-t border-slate-100">
+                  <table className="w-full">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-slate-100 bg-slate-50">
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Rule ID</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Source</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Destination</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {existingRules.map((rule) => {
+                        const isConfirming = confirmDeleteId === rule.rule_id;
+                        return (
+                          <tr
+                            key={rule.rule_id}
+                            className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
+                          >
+                            <td className="px-3 py-2 text-xs font-semibold text-slate-700">{rule.rule_id}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600">
+                              <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-blue-700 font-medium">
+                                {rule.source.group_name || rule.source.ip_address || rule.source.cidr || '-'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-600">
+                              <span className="rounded bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-orange-700 font-medium">
+                                {rule.destination.name}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2"><StatusBadge status={rule.status} /></td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => handleRequestReview(rule.rule_id)}
+                                  className="rounded p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                  title="Review rule"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => showNotification(`Loaded rule ${rule.rule_id} for migration review`, 'info')}
+                                  className="rounded p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                                  title="Edit rule"
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleCertifyRule(rule.rule_id)}
+                                  className="rounded p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                  title="Certify rule"
+                                >
+                                  <Shield className="h-3.5 w-3.5" />
+                                </button>
+                                {isConfirming ? (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => handleDeleteRule(rule.rule_id)}
+                                      className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
+                                    >
+                                      Confirm
+                                    </button>
+                                    <button
+                                      onClick={() => setConfirmDeleteId(null)}
+                                      className="rounded bg-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-300"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => setConfirmDeleteId(rule.rule_id)}
+                                    className="rounded p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    title="Delete rule"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

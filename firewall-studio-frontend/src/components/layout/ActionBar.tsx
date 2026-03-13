@@ -1,58 +1,27 @@
-import { Plus, Edit, Trash2, Shield, RefreshCw, History, Users, ChevronDown } from 'lucide-react';
+import { Shield, ChevronDown, User } from 'lucide-react';
 
 interface ActionBarProps {
   mode: 'design' | 'migration';
-  onAdd?: () => void;
-  onModify?: () => void;
-  onDelete?: () => void;
-  onCertify?: () => void;
-  onReCertify?: () => void;
-  onViewHistory?: () => void;
+  title?: string;
 }
 
-export function ActionBar({ mode, onAdd, onModify, onDelete, onCertify, onReCertify, onViewHistory }: ActionBarProps) {
-  const buttons = mode === 'design'
-    ? [
-        { label: 'All', icon: Plus, onClick: onAdd, primary: true },
-        { label: 'Modify', icon: Edit, onClick: onModify },
-        { label: 'Delete', icon: Trash2, onClick: onDelete },
-        { label: 'Certify', icon: Shield, onClick: onCertify },
-        { label: 'Re Certify', icon: RefreshCw, onClick: onReCertify },
-        { label: 'View History', icon: History, onClick: onViewHistory },
-      ]
-    : [
-        { label: 'Add', icon: Plus, onClick: onAdd, primary: true },
-        { label: 'Modify', icon: Edit, onClick: onModify },
-        { label: 'Delete', icon: Trash2, onClick: onDelete },
-        { label: 'Certify', icon: Shield, onClick: onCertify },
-        { label: 'View History', icon: History, onClick: onViewHistory },
-      ];
-
+export function ActionBar({ mode, title }: ActionBarProps) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-2">
-      <div className="flex items-center gap-1">
-        {buttons.map((btn) => (
-          <button
-            key={btn.label}
-            onClick={btn.onClick}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              btn.primary
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <btn.icon className="h-3.5 w-3.5" />
-            {btn.label}
-          </button>
-        ))}
+    <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-2.5">
+      <div className="flex items-center gap-3">
+        <Shield className="h-5 w-5 text-blue-600" />
+        <h2 className="text-base font-bold text-slate-800">
+          {title || (mode === 'design' ? 'Design Studio' : 'Migration Studio')}
+        </h2>
+        <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 border border-blue-200">
+          {mode === 'design' ? 'Rule Management' : 'Legacy Migration'}
+        </span>
       </div>
       <div className="flex items-center gap-2">
-        <button className="flex items-center gap-1 rounded-md p-1.5 text-slate-500 hover:bg-slate-200">
-          <Users className="h-4 w-4" />
-        </button>
-        <div className="flex items-center gap-1 text-sm text-slate-600">
-          <span>Jon</span>
-          <ChevronDown className="h-3 w-3" />
+        <div className="flex items-center gap-1.5 rounded-md bg-slate-50 px-3 py-1.5 text-sm text-slate-600 border border-slate-200">
+          <User className="h-3.5 w-3.5 text-slate-400" />
+          <span className="font-medium">Jon</span>
+          <ChevronDown className="h-3 w-3 text-slate-400" />
         </div>
       </div>
     </div>
