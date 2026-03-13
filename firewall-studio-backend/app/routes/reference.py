@@ -1,8 +1,18 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.database import (
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
-    get_environments, get_chg_requests, get_naming_standards,
+    get_environments, get_chg_requests, get_naming_standards, get_org_config,
+    get_policy_matrix,
+    create_neighbourhood, update_neighbourhood, delete_neighbourhood,
+    create_security_zone, update_security_zone, delete_security_zone,
+    create_application, update_application, delete_application,
+    create_datacenter, update_datacenter, delete_datacenter,
+    create_predefined_destination, update_predefined_destination, delete_predefined_destination,
+    create_environment, delete_environment,
+    update_org_config, update_naming_standards,
+    create_policy_entry, delete_policy_entry,
+    create_chg_request,
 )
 from app.services.naming_standards import (
     validate_name, generate_group_name, generate_server_name,
@@ -13,50 +23,72 @@ from app.services.naming_standards import (
 router = APIRouter(prefix="/api/reference", tags=["Reference Data"])
 
 
+# ---- Read endpoints ----
+
 @router.get("/ngdc-datacenters")
 async def list_ngdc_datacenters():
-    return get_ngdc_datacenters()
+    return await get_ngdc_datacenters()
 
 
 @router.get("/security-zones")
 async def list_security_zones():
-    return get_security_zones()
+    return await get_security_zones()
 
 
 @router.get("/predefined-destinations")
 async def list_predefined_destinations():
-    return get_predefined_destinations()
+    return await get_predefined_destinations()
 
 
 @router.get("/neighbourhoods")
 async def list_neighbourhoods():
-    return get_neighbourhoods()
+    return await get_neighbourhoods()
 
 
 @router.get("/legacy-datacenters")
 async def list_legacy_datacenters():
-    return get_legacy_datacenters()
+    return await get_legacy_datacenters()
 
 
 @router.get("/applications")
 async def list_applications():
-    return get_applications()
+    return await get_applications()
 
 
 @router.get("/environments")
 async def list_environments():
-    return get_environments()
+    return await get_environments()
 
 
 @router.get("/chg-requests")
 async def list_chg_requests():
-    return get_chg_requests()
+    return await get_chg_requests()
+
+
+@router.post("/chg-requests")
+async def create_new_chg_request(data: dict):
+    return await create_chg_request(data)
+
+
+@router.get("/org-config")
+async def get_org_config_endpoint():
+    config = await get_org_config()
+    if not config:
+        raise HTTPException(status_code=404, detail="Org config not found")
+    return config
+
+
+@router.get("/policy-matrix")
+async def list_policy_matrix():
+    return await get_policy_matrix()
 
 
 @router.get("/naming-standards")
 async def list_naming_standards():
     return get_naming_standards_info()
 
+
+# ---- Naming Standards utilities ----
 
 @router.post("/naming-standards/validate")
 async def validate_naming(data: dict):
@@ -105,3 +137,181 @@ async def determine_zone(data: dict):
         criticality_rating=data.get("criticality_rating", 3),
         environment=data.get("environment", "Production"),
     )
+
+
+# ---- CRUD: Neighbourhoods ----
+
+@router.post("/neighbourhoods")
+async def create_nh(data: dict):
+    return await create_neighbourhood(data)
+
+
+@router.put("/neighbourhoods/{nh_id}")
+async def update_nh(nh_id: str, data: dict):
+    result = await update_neighbourhood(nh_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Neighbourhood not found")
+    return result
+
+
+@router.delete("/neighbourhoods/{nh_id}")
+async def delete_nh(nh_id: str):
+    if not await delete_neighbourhood(nh_id):
+        raise HTTPException(status_code=404, detail="Neighbourhood not found")
+    return {"message": "Neighbourhood deleted"}
+
+
+# ---- CRUD: Security Zones ----
+
+@router.post("/security-zones")
+async def create_sz(data: dict):
+    return await create_security_zone(data)
+
+
+@router.put("/security-zones/{code}")
+async def update_sz(code: str, data: dict):
+    result = await update_security_zone(code, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Security zone not found")
+    return result
+
+
+@router.delete("/security-zones/{code}")
+async def delete_sz(code: str):
+    if not await delete_security_zone(code):
+        raise HTTPException(status_code=404, detail="Security zone not found")
+    return {"message": "Security zone deleted"}
+
+
+# ---- CRUD: Applications ----
+
+@router.post("/applications")
+async def create_app(data: dict):
+    return await create_application(data)
+
+
+@router.put("/applications/{app_id}")
+async def update_app(app_id: str, data: dict):
+    result = await update_application(app_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return result
+
+
+@router.delete("/applications/{app_id}")
+async def delete_app(app_id: str):
+    if not await delete_application(app_id):
+        raise HTTPException(status_code=404, detail="Application not found")
+    return {"message": "Application deleted"}
+
+
+# ---- CRUD: Datacenters ----
+
+@router.post("/ngdc-datacenters")
+async def create_ngdc_dc(data: dict):
+    return await create_datacenter(data, "ngdc")
+
+
+@router.put("/ngdc-datacenters/{code}")
+async def update_ngdc_dc(code: str, data: dict):
+    result = await update_datacenter(code, data, "ngdc")
+    if not result:
+        raise HTTPException(status_code=404, detail="Datacenter not found")
+    return result
+
+
+@router.delete("/ngdc-datacenters/{code}")
+async def delete_ngdc_dc(code: str):
+    if not await delete_datacenter(code, "ngdc"):
+        raise HTTPException(status_code=404, detail="Datacenter not found")
+    return {"message": "Datacenter deleted"}
+
+
+@router.post("/legacy-datacenters")
+async def create_legacy_dc(data: dict):
+    return await create_datacenter(data, "legacy")
+
+
+@router.put("/legacy-datacenters/{code}")
+async def update_legacy_dc(code: str, data: dict):
+    result = await update_datacenter(code, data, "legacy")
+    if not result:
+        raise HTTPException(status_code=404, detail="Legacy datacenter not found")
+    return result
+
+
+@router.delete("/legacy-datacenters/{code}")
+async def delete_legacy_dc(code: str):
+    if not await delete_datacenter(code, "legacy"):
+        raise HTTPException(status_code=404, detail="Legacy datacenter not found")
+    return {"message": "Legacy datacenter deleted"}
+
+
+# ---- CRUD: Predefined Destinations ----
+
+@router.post("/predefined-destinations")
+async def create_dest(data: dict):
+    return await create_predefined_destination(data)
+
+
+@router.put("/predefined-destinations/{name}")
+async def update_dest(name: str, data: dict):
+    result = await update_predefined_destination(name, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Destination not found")
+    return result
+
+
+@router.delete("/predefined-destinations/{name}")
+async def delete_dest(name: str):
+    if not await delete_predefined_destination(name):
+        raise HTTPException(status_code=404, detail="Destination not found")
+    return {"message": "Destination deleted"}
+
+
+# ---- CRUD: Environments ----
+
+@router.post("/environments")
+async def create_env(data: dict):
+    return await create_environment(data)
+
+
+@router.delete("/environments/{code}")
+async def delete_env(code: str):
+    if not await delete_environment(code):
+        raise HTTPException(status_code=404, detail="Environment not found")
+    return {"message": "Environment deleted"}
+
+
+# ---- CRUD: Org Config ----
+
+@router.put("/org-config")
+async def update_org(data: dict):
+    result = await update_org_config(data)
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to update org config")
+    return result
+
+
+# ---- CRUD: Naming Standards ----
+
+@router.put("/naming-standards")
+async def update_standards(data: dict):
+    result = await update_naming_standards(data)
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to update naming standards")
+    return result
+
+
+# ---- CRUD: Policy Matrix ----
+
+@router.post("/policy-matrix")
+async def create_policy(data: dict):
+    return await create_policy_entry(data)
+
+
+@router.delete("/policy-matrix/{source_zone}/{dest_zone}")
+async def delete_policy(source_zone: str, dest_zone: str):
+    if not await delete_policy_entry(source_zone, dest_zone):
+        raise HTTPException(status_code=404, detail="Policy entry not found")
+    return {"message": "Policy entry deleted"}

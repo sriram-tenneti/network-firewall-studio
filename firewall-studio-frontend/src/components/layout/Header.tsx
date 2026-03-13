@@ -1,8 +1,8 @@
 import { Shield, Menu, Plus, ChevronDown, User } from 'lucide-react';
 
 interface HeaderProps {
-  currentPage: 'design' | 'migration';
-  onNavigate: (page: 'design' | 'migration') => void;
+  currentPage: 'design' | 'migration' | 'admin';
+  onNavigate: (page: 'design' | 'migration' | 'admin') => void;
   application?: string;
   environment?: string;
   datacenter?: string;
@@ -53,6 +53,16 @@ export function Header({ currentPage, onNavigate, application, environment, data
             }`}
           >
             Migration Studio
+          </button>
+          <button
+            onClick={() => onNavigate('admin')}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              currentPage === 'admin'
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-300 hover:bg-slate-600 hover:text-white'
+            }`}
+          >
+            Org Admin
           </button>
 
           <div className="ml-4 flex items-center gap-2">

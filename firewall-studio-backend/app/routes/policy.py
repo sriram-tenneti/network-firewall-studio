@@ -10,4 +10,4 @@ async def validate_policy_endpoint(data: dict):
     destination = data.get("destination", {})
     application = data.get("application", "")
     environment = data.get("environment", "Production")
-    return validate_policy(source, destination, application, environment)
+    return await validate_policy(source, destination, application, environment)

@@ -96,11 +96,20 @@ export interface Neighbourhood {
   subnets: string[];
 }
 
+export interface IPRange {
+  cidr: string;
+  description: string;
+  dc: string;
+}
+
 export interface NeighbourhoodRegistry {
-  id: string;
+  id?: string;
+  nh_id: string;
   name: string;
   zone: string;
   environment: string;
+  description?: string;
+  ip_ranges?: IPRange[];
 }
 
 export interface NGDCDataCenter {
@@ -115,6 +124,9 @@ export interface SecurityZone {
   name: string;
   code: string;
   description: string;
+  risk_level?: string;
+  pci_scope?: boolean;
+  ip_ranges?: IPRange[];
 }
 
 export interface PredefinedDestination {
@@ -125,12 +137,43 @@ export interface PredefinedDestination {
 }
 
 export interface Application {
-  id: string;
+  id?: string;
   name: string;
   app_id: string;
   owner: string;
   nh: string;
   sz: string;
+  criticality?: number;
+  pci_scope?: boolean;
+}
+
+export interface OrgConfig {
+  org_name: string;
+  org_code: string;
+  servicenow_instance: string;
+  servicenow_api_path: string;
+  gitops_repo: string;
+  gitops_branch: string;
+  approval_required: boolean;
+  auto_certify_birthright: boolean;
+  notification_email: string;
+  notification_slack_channel: string;
+  max_rule_expiry_days: number;
+  enforce_group_to_group: boolean;
+}
+
+export interface PolicyMatrixEntry {
+  source_zone: string;
+  dest_zone: string;
+  default_action: string;
+  requires_exception: boolean;
+  description: string;
+}
+
+export interface EnvironmentEntry {
+  code: string;
+  name: string;
+  description: string;
 }
 
 export interface NamingStandardsInfo {

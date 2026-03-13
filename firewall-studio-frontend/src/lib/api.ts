@@ -157,3 +157,72 @@ export const validatePolicy = (data: {
   environment: string;
 }) =>
   fetchJSON<PolicyValidationResult>('/api/policy/validate', { method: 'POST', body: JSON.stringify(data) });
+
+// Org Config
+export const getOrgConfig = () => fetchJSON<Record<string, unknown>>('/api/reference/org-config');
+export const updateOrgConfig = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/org-config', { method: 'PUT', body: JSON.stringify(data) });
+
+// Policy Matrix
+export const getPolicyMatrix = () => fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix');
+export const createPolicyEntry = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/policy-matrix', { method: 'POST', body: JSON.stringify(data) });
+export const deletePolicyEntry = (sourceZone: string, destZone: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/policy-matrix/${sourceZone}/${destZone}`, { method: 'DELETE' });
+
+// CRUD: Neighbourhoods
+export const createNeighbourhood = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/neighbourhoods', { method: 'POST', body: JSON.stringify(data) });
+export const updateNeighbourhood = (nhId: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/neighbourhoods/${nhId}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteNeighbourhood = (nhId: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/neighbourhoods/${nhId}`, { method: 'DELETE' });
+
+// CRUD: Security Zones
+export const createSecurityZone = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/security-zones', { method: 'POST', body: JSON.stringify(data) });
+export const updateSecurityZone = (code: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/security-zones/${code}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteSecurityZone = (code: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/security-zones/${code}`, { method: 'DELETE' });
+
+// CRUD: Applications
+export const createApplication = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/applications', { method: 'POST', body: JSON.stringify(data) });
+export const updateApplication = (appId: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/applications/${appId}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteApplication = (appId: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/applications/${appId}`, { method: 'DELETE' });
+
+// CRUD: Datacenters
+export const createNGDCDatacenter = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/ngdc-datacenters', { method: 'POST', body: JSON.stringify(data) });
+export const updateNGDCDatacenter = (code: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/ngdc-datacenters/${code}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteNGDCDatacenter = (code: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/ngdc-datacenters/${code}`, { method: 'DELETE' });
+
+export const createLegacyDatacenter = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/legacy-datacenters', { method: 'POST', body: JSON.stringify(data) });
+export const updateLegacyDatacenter = (code: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/legacy-datacenters/${code}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteLegacyDatacenter = (code: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/legacy-datacenters/${code}`, { method: 'DELETE' });
+
+// CRUD: Predefined Destinations
+export const createPredefinedDestination = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/predefined-destinations', { method: 'POST', body: JSON.stringify(data) });
+export const updatePredefinedDestination = (name: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/predefined-destinations/${name}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deletePredefinedDestination = (name: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/predefined-destinations/${name}`, { method: 'DELETE' });
+
+// CRUD: Environments
+export const createEnvironment = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/environments', { method: 'POST', body: JSON.stringify(data) });
+export const deleteEnvironment = (code: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/environments/${code}`, { method: 'DELETE' });
+
+// Naming Standards CRUD
+export const updateNamingStandards = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/naming-standards', { method: 'PUT', body: JSON.stringify(data) });
