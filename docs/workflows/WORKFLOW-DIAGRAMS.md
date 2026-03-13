@@ -462,12 +462,12 @@ The workflow for migrating existing legacy firewall rules to modernized NGDC sta
          | MIGRATION STUDIO          |
          | Select Legacy DC          |
          +---------------------------+
-         | - DC GARLAND              |
-         | - DC LYNHAVEN             |
-         | - DC RICHARDSON           |
-         | - DC STERLING             |
-         | - DC GLEN BORNIE          |
-         | - DC MANASSAS             |
+         | - DC LEGACY A              |
+         | - DC LEGACY B             |
+         | - DC LEGACY C           |
+         | - DC LEGACY D             |
+         | - DC LEGACY E          |
+         | - DC LEGACY F             |
          +------------+--------------+
                       |
                       v
@@ -581,12 +581,12 @@ The workflow for migrating existing legacy firewall rules to modernized NGDC sta
 
 | Legacy DC | Target NGDC | Migration Status |
 |-----------|------------|-----------------|
-| DC GARLAND | EAST NGDC | Active migration |
-| DC LYNHAVEN | EAST NGDC | Active migration |
-| DC RICHARDSON | CENTRAL NGDC | Active migration |
-| DC STERLING | EAST NGDC | Active migration |
-| DC GLEN BORNIE | EAST NGDC | Active migration |
-| DC MANASSAS | WEST NGDC | Active migration |
+| DC LEGACY A | ALPHA NGDC | Active migration |
+| DC LEGACY B | ALPHA NGDC | Active migration |
+| DC LEGACY C | GAMMA NGDC | Active migration |
+| DC LEGACY D | ALPHA NGDC | Active migration |
+| DC LEGACY E | ALPHA NGDC | Active migration |
+| DC LEGACY F | BETA NGDC | Active migration |
 
 ### Migration Compliance Levels
 

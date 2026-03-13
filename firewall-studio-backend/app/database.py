@@ -52,10 +52,10 @@ SEED_NEIGHBOURHOODS = [
     # From reference: Each NH has multiple security zones with VRF-IDs and Transit VNIs
     {"nh_id": "NH01", "name": "Platform Services", "environment": "Production",
      "description": "Platform and infrastructure services", "ip_ranges": [
-        {"cidr": "10.0.1.0/24", "description": "NH01 East Primary", "dc": "EAST_NGDC"},
-        {"cidr": "10.0.2.0/24", "description": "NH01 East Secondary", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.50.0/24", "description": "NH01 West Primary", "dc": "WEST_NGDC"},
-        {"cidr": "10.50.50.0/24", "description": "NH01 Central Primary", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.0.1.0/24", "description": "NH01 East Primary", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.0.2.0/24", "description": "NH01 East Secondary", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.50.0/24", "description": "NH01 West Primary", "dc": "BETA_NGDC"},
+        {"cidr": "10.50.50.0/24", "description": "NH01 Central Primary", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH01 sz04", "description": "Critical Core Services"},
@@ -66,10 +66,10 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH02", "name": "Team Eta", "environment": "Production",
      "description": "Data processing and analytics platforms", "ip_ranges": [
-        {"cidr": "10.1.1.0/24", "description": "NH02 East App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.1.2.0/24", "description": "NH02 East DB Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.1.0/24", "description": "NH02 West App", "dc": "WEST_NGDC"},
-        {"cidr": "10.50.1.0/24", "description": "NH02 Central App", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.1.1.0/24", "description": "NH02 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.1.2.0/24", "description": "NH02 East DB Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.1.0/24", "description": "NH02 West App", "dc": "BETA_NGDC"},
+        {"cidr": "10.50.1.0/24", "description": "NH02 Central App", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH02 sz04", "description": "Critical Core Services"},
@@ -79,9 +79,9 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH03", "name": "Team Delta", "environment": "Production",
      "description": "Web application and API hosting", "ip_ranges": [
-        {"cidr": "10.2.1.0/24", "description": "NH03 East Web Servers", "dc": "EAST_NGDC"},
-        {"cidr": "10.2.2.0/24", "description": "NH03 East App Servers", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.3.0/24", "description": "NH03 West Web", "dc": "WEST_NGDC"},
+        {"cidr": "10.2.1.0/24", "description": "NH03 East Web Servers", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.2.2.0/24", "description": "NH03 East App Servers", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.3.0/24", "description": "NH03 West Web", "dc": "BETA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH03 sz04", "description": "Critical Core Services"},
@@ -90,8 +90,8 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH04", "name": "Customer Portal", "environment": "Production",
      "description": "Customer-facing portal services", "ip_ranges": [
-        {"cidr": "10.3.1.0/24", "description": "NH04 East App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.5.0/24", "description": "NH04 West Primary", "dc": "WEST_NGDC"},
+        {"cidr": "10.3.1.0/24", "description": "NH04 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.5.0/24", "description": "NH04 West Primary", "dc": "BETA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH04 sz04", "description": "Critical Core Services"},
@@ -101,10 +101,10 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH05", "name": "Team Theta", "environment": "Production",
      "description": "Enterprise system hosting", "ip_ranges": [
-        {"cidr": "10.4.1.0/24", "description": "NH05 East App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.4.2.0/24", "description": "NH05 East DB Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.10.0/24", "description": "NH05 West App", "dc": "WEST_NGDC"},
-        {"cidr": "10.54.1.0/24", "description": "NH05 Central App", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.4.1.0/24", "description": "NH05 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.4.2.0/24", "description": "NH05 East DB Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.10.0/24", "description": "NH05 West App", "dc": "BETA_NGDC"},
+        {"cidr": "10.54.1.0/24", "description": "NH05 Central App", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH05 sz04", "description": "Critical Core Services"},
@@ -114,8 +114,8 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH06", "name": "Enterprise Extended", "environment": "Production",
      "description": "Enterprise extended services (overlay)", "ip_ranges": [
-        {"cidr": "10.5.1.0/24", "description": "NH06 East App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.20.0/24", "description": "NH06 West App", "dc": "WEST_NGDC"},
+        {"cidr": "10.5.1.0/24", "description": "NH06 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.20.0/24", "description": "NH06 West App", "dc": "BETA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH06 sz04", "description": "Critical Core Services"},
@@ -125,10 +125,10 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH07", "name": "Transaction Processing", "environment": "Production",
      "description": "Transaction processing and settlement", "ip_ranges": [
-        {"cidr": "10.6.1.0/24", "description": "NH07 East App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.6.2.0/24", "description": "NH07 East DB Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.22.0/24", "description": "NH07 West App", "dc": "WEST_NGDC"},
-        {"cidr": "10.56.1.0/24", "description": "NH07 Central App", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.6.1.0/24", "description": "NH07 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.6.2.0/24", "description": "NH07 East DB Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.22.0/24", "description": "NH07 West App", "dc": "BETA_NGDC"},
+        {"cidr": "10.56.1.0/24", "description": "NH07 Central App", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH07 sz04", "description": "Critical Core Services"},
@@ -139,8 +139,8 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH08", "name": "Data Processing Extended", "environment": "Production",
      "description": "Extended data processing platforms", "ip_ranges": [
-        {"cidr": "10.7.1.0/24", "description": "NH08 East App", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.30.0/24", "description": "NH08 West App", "dc": "WEST_NGDC"},
+        {"cidr": "10.7.1.0/24", "description": "NH08 East App", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.30.0/24", "description": "NH08 West App", "dc": "BETA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH08 sz04", "description": "Critical Core Services"},
@@ -150,8 +150,8 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH09", "name": "Team Mu", "environment": "Production",
      "description": "Support and service channel applications", "ip_ranges": [
-        {"cidr": "10.8.1.0/24", "description": "NH09 East App", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.40.0/24", "description": "NH09 West App", "dc": "WEST_NGDC"},
+        {"cidr": "10.8.1.0/24", "description": "NH09 East App", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.40.0/24", "description": "NH09 West App", "dc": "BETA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH09 sz04", "description": "Critical Core Services"},
@@ -161,8 +161,8 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH10", "name": "Team Kappa", "environment": "Production",
      "description": "Lending and origination services", "ip_ranges": [
-        {"cidr": "10.9.1.0/24", "description": "NH10 East App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.55.1.0/24", "description": "NH10 Central App", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.9.1.0/24", "description": "NH10 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.55.1.0/24", "description": "NH10 Central App", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH10 sz04", "description": "Critical Core Services"},
@@ -172,20 +172,20 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH11", "name": "Production Mainframe", "environment": "Production",
      "description": "Production mainframe systems", "ip_ranges": [
-        {"cidr": "10.10.1.0/24", "description": "NH11 East Primary", "dc": "EAST_NGDC"},
-        {"cidr": "10.60.1.0/24", "description": "NH11 Central Primary", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.10.1.0/24", "description": "NH11 East Primary", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.60.1.0/24", "description": "NH11 Central Primary", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": []},
     {"nh_id": "NH12", "name": "Non-Production Mainframe", "environment": "Non-Production",
      "description": "Non-production mainframe systems", "ip_ranges": [
-        {"cidr": "10.11.1.0/24", "description": "NH12 East Primary", "dc": "EAST_NGDC"},
-        {"cidr": "10.61.1.0/24", "description": "NH12 Central Primary", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.11.1.0/24", "description": "NH12 East Primary", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.61.1.0/24", "description": "NH12 Central Primary", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": []},
     {"nh_id": "NH13", "name": "Non-Production Shared", "environment": "Non-Production",
      "description": "Shared non-production environment", "ip_ranges": [
-        {"cidr": "10.100.1.0/24", "description": "NH13 East App", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.100.0/24", "description": "NH13 West App", "dc": "WEST_NGDC"},
+        {"cidr": "10.100.1.0/24", "description": "NH13 East App", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.100.0/24", "description": "NH13 West App", "dc": "BETA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH13 sz04", "transit_vni": 3061, "description": "Critical Core Services"},
@@ -195,28 +195,28 @@ SEED_NEIGHBOURHOODS = [
      ]},
     {"nh_id": "NH14", "name": "DMZ", "environment": "Production",
      "description": "Demilitarized zone for external-facing services", "ip_ranges": [
-        {"cidr": "10.70.1.0/24", "description": "NH14 East Web Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.70.2.0/24", "description": "NH14 East API Gateway", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.70.0/24", "description": "NH14 West Web", "dc": "WEST_NGDC"},
-        {"cidr": "10.70.10.0/24", "description": "NH14 Central Web", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.70.1.0/24", "description": "NH14 East Web Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.70.2.0/24", "description": "NH14 East API Gateway", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.70.0/24", "description": "NH14 West Web", "dc": "BETA_NGDC"},
+        {"cidr": "10.70.10.0/24", "description": "NH14 Central Web", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": []},
     {"nh_id": "NH15", "name": "Non-Production DMZ", "environment": "Non-Production",
      "description": "Non-production DMZ for test external services", "ip_ranges": [
-        {"cidr": "10.80.1.0/24", "description": "NH15 East Web", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.80.0/24", "description": "NH15 West Web", "dc": "WEST_NGDC"},
+        {"cidr": "10.80.1.0/24", "description": "NH15 East Web", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.80.0/24", "description": "NH15 West Web", "dc": "BETA_NGDC"},
      ],
      "security_zones": []},
     {"nh_id": "NH16", "name": "Pre-Production Shared", "environment": "Pre-Production",
      "description": "Pre-production staging environment", "ip_ranges": [
-        {"cidr": "10.90.1.0/24", "description": "NH16 East App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.65.1.0/24", "description": "NH16 Central App", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.90.1.0/24", "description": "NH16 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.65.1.0/24", "description": "NH16 Central App", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": []},
     {"nh_id": "NH17", "name": "Pre-Production DMZ", "environment": "Pre-Production",
      "description": "Pre-production DMZ for staging external services", "ip_ranges": [
-        {"cidr": "10.91.1.0/24", "description": "NH17 East Web", "dc": "EAST_NGDC"},
-        {"cidr": "10.66.1.0/24", "description": "NH17 Central Web", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.91.1.0/24", "description": "NH17 East Web", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.66.1.0/24", "description": "NH17 Central Web", "dc": "GAMMA_NGDC"},
      ],
      "security_zones": []},
 ]
@@ -226,130 +226,130 @@ SEED_SECURITY_ZONES = [
     {"code": "CCS", "name": "Critical Core Services", "description": "Critical core services zone - highest security tier",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
      "vrf_suffix": "sz04", "ip_ranges": [
-        {"cidr": "10.1.0.0/16", "description": "CCS East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.0.0/20", "description": "CCS West Block", "dc": "WEST_NGDC"},
-        {"cidr": "10.50.0.0/16", "description": "CCS Central Block", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.1.0.0/16", "description": "CCS East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.0.0/20", "description": "CCS West Block", "dc": "BETA_NGDC"},
+        {"cidr": "10.50.0.0/16", "description": "CCS Central Block", "dc": "GAMMA_NGDC"},
      ]},
     {"code": "CDE", "name": "Card Holder Data", "description": "Cardholder Data Environment - PCI DSS compliant",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
      "vrf_suffix": "sz05", "ip_ranges": [
-        {"cidr": "10.2.0.0/16", "description": "CDE East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.16.0/20", "description": "CDE West Block", "dc": "WEST_NGDC"},
-        {"cidr": "10.52.0.0/16", "description": "CDE Central Block", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.2.0.0/16", "description": "CDE East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.16.0/20", "description": "CDE West Block", "dc": "BETA_NGDC"},
+        {"cidr": "10.52.0.0/16", "description": "CDE Central Block", "dc": "GAMMA_NGDC"},
      ]},
     {"code": "CPA", "name": "Critical Payment Applications", "description": "Critical payment application processing zone",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
      "vrf_suffix": "sz06", "ip_ranges": [
-        {"cidr": "10.3.0.0/16", "description": "CPA East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.32.0/20", "description": "CPA West Block", "dc": "WEST_NGDC"},
-        {"cidr": "10.53.0.0/16", "description": "CPA Central Block", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.3.0.0/16", "description": "CPA East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.32.0/20", "description": "CPA West Block", "dc": "BETA_NGDC"},
+        {"cidr": "10.53.0.0/16", "description": "CPA Central Block", "dc": "GAMMA_NGDC"},
      ]},
     {"code": "PSE", "name": "Production Simulation Environment", "description": "Production simulation for testing in prod-like conditions",
      "risk_level": "High", "pci_scope": False, "zone_type": "Production",
      "vrf_suffix": "sz07", "ip_ranges": [
-        {"cidr": "10.4.0.0/16", "description": "PSE East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.4.0.0/16", "description": "PSE East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "Standard", "name": "Standard/General", "description": "Standard general-purpose zone (GEN VRF)",
      "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
      "vrf_suffix": "gen", "ip_ranges": [
-        {"cidr": "10.0.0.0/16", "description": "Standard East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.48.0/20", "description": "Standard West Block", "dc": "WEST_NGDC"},
+        {"cidr": "10.0.0.0/16", "description": "Standard East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.48.0/20", "description": "Standard West Block", "dc": "BETA_NGDC"},
      ]},
     {"code": "GEN", "name": "General", "description": "General purpose security zone (alias for Standard)",
      "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
      "vrf_suffix": "gen", "ip_ranges": [
-        {"cidr": "10.0.0.0/16", "description": "GEN East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.48.0/20", "description": "GEN West Block", "dc": "WEST_NGDC"},
+        {"cidr": "10.0.0.0/16", "description": "GEN East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.48.0/20", "description": "GEN West Block", "dc": "BETA_NGDC"},
      ]},
     {"code": "DMZ", "name": "DMZ", "description": "Demilitarized zone for external-facing services",
      "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.70.0.0/16", "description": "DMZ East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.70.0/22", "description": "DMZ West Block", "dc": "WEST_NGDC"},
+        {"cidr": "10.70.0.0/16", "description": "DMZ East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.70.0/22", "description": "DMZ West Block", "dc": "BETA_NGDC"},
      ]},
     {"code": "RST", "name": "Restricted", "description": "Highly restricted zone for sensitive systems",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.10.0.0/16", "description": "RST East Block", "dc": "EAST_NGDC"},
-        {"cidr": "10.60.0.0/16", "description": "RST Central Block", "dc": "CENTRAL_NGDC"},
+        {"cidr": "10.10.0.0/16", "description": "RST East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.60.0.0/16", "description": "RST Central Block", "dc": "GAMMA_NGDC"},
      ]},
     {"code": "PAA", "name": "Publicly Accessible Applications", "description": "Publicly accessible application zone",
      "risk_level": "High", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.71.0.0/16", "description": "PAA East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.71.0.0/16", "description": "PAA East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "3PY", "name": "Third Party", "description": "Third-party connectivity zone",
      "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.79.0.0/16", "description": "3PY East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.79.0.0/16", "description": "3PY East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "PCI_CAN", "name": "PCI CAN", "description": "PCI Cardholder Area Network",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Heritage", "ip_ranges": [
-        {"cidr": "10.73.0.0/16", "description": "PCI CAN East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.73.0.0/16", "description": "PCI CAN East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "CAN", "name": "CAN", "description": "Campus Area Network",
      "risk_level": "High", "pci_scope": False, "zone_type": "Heritage", "ip_ranges": [
-        {"cidr": "10.74.0.0/16", "description": "CAN East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.74.0.0/16", "description": "CAN East Block", "dc": "ALPHA_NGDC"},
      ]},
     # === Non-Production Security Zones ===
     {"code": "UGEN", "name": "Non-Prod General", "description": "Non-production general zone (UGEN/USTD)",
      "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.100.0.0/16", "description": "UGEN East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.100.0.0/16", "description": "UGEN East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "USTD", "name": "Non-Prod Standard", "description": "Non-production standard zone",
      "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.101.0.0/16", "description": "USTD East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.101.0.0/16", "description": "USTD East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "UCCS", "name": "Non-Prod Critical Core Services", "description": "Non-production CCS zone",
      "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.102.0.0/16", "description": "UCCS East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.102.0.0/16", "description": "UCCS East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "UPAA", "name": "Non-Prod PAA", "description": "Non-production publicly accessible apps zone",
      "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.103.0.0/16", "description": "UPAA East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.103.0.0/16", "description": "UPAA East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "UCPA", "name": "Non-Prod Critical Payment Apps", "description": "Non-production critical payment apps zone",
      "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.104.0.0/16", "description": "UCPA East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.104.0.0/16", "description": "UCPA East Block", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "UCDE", "name": "Non-Prod Card Holder Data", "description": "Non-production cardholder data zone",
      "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.105.0.0/16", "description": "UCDE East Block", "dc": "EAST_NGDC"},
+        {"cidr": "10.105.0.0/16", "description": "UCDE East Block", "dc": "ALPHA_NGDC"},
      ]},
     # === Additional Zones ===
     {"code": "MGT", "name": "Management", "description": "Network management and monitoring zone",
      "risk_level": "High", "pci_scope": False, "zone_type": "Infrastructure", "ip_ranges": [
-        {"cidr": "10.200.1.0/24", "description": "MGT East", "dc": "EAST_NGDC"},
+        {"cidr": "10.200.1.0/24", "description": "MGT East", "dc": "ALPHA_NGDC"},
      ]},
     {"code": "EXT", "name": "External Partners", "description": "External partner connectivity zone",
      "risk_level": "High", "pci_scope": False, "zone_type": "External", "ip_ranges": [
-        {"cidr": "10.79.1.0/24", "description": "EXT East", "dc": "EAST_NGDC"},
+        {"cidr": "10.79.1.0/24", "description": "EXT East", "dc": "ALPHA_NGDC"},
      ]},
 ]
 
 SEED_NGDC_DATACENTERS = [
-    {"name": "Alpha NGDC", "code": "EAST_NGDC", "location": "Region Alpha", "status": "Active",
+    {"name": "Alpha NGDC", "code": "ALPHA_NGDC", "location": "Region Alpha", "status": "Active",
      "description": "Primary Alpha NGDC facility", "contact": "noc-alpha@example.com",
      "capacity": "2000 racks", "ip_supernet": "10.0.0.0/8",
      "neighbourhoods": ["NH01","NH02","NH03","NH04","NH05","NH07","NH08","NH09","NH13","NH14","NH15","NH16","NH17"]},
-    {"name": "Beta NGDC", "code": "WEST_NGDC", "location": "Region Beta", "status": "Active",
+    {"name": "Beta NGDC", "code": "BETA_NGDC", "location": "Region Beta", "status": "Active",
      "description": "Primary Beta NGDC facility", "contact": "noc-beta@example.com",
      "capacity": "1500 racks", "ip_supernet": "172.16.0.0/12",
      "neighbourhoods": ["NH03","NH05","NH06","NH08","NH09","NH14","NH15"]},
-    {"name": "Gamma NGDC", "code": "CENTRAL_NGDC", "location": "Region Gamma", "status": "Active",
+    {"name": "Gamma NGDC", "code": "GAMMA_NGDC", "location": "Region Gamma", "status": "Active",
      "description": "Gamma NGDC for DR and mainframe", "contact": "noc-gamma@example.com",
      "capacity": "1200 racks", "ip_supernet": "10.50.0.0/12",
      "neighbourhoods": ["NH02","NH10","NH11","NH12","NH16","NH17"]},
 ]
 
 SEED_LEGACY_DATACENTERS = [
-    {"name": "Legacy DC Alpha", "code": "DC_GARLAND", "location": "Legacy Region A", "status": "Decommissioning",
+    {"name": "Legacy DC Alpha", "code": "DC_LEGACY_A", "location": "Legacy Region A", "status": "Decommissioning",
      "description": "Legacy DC - migration to Gamma NGDC", "ip_range": "10.25.0.0/16", "server_count": 450, "app_count": 35},
-    {"name": "Legacy DC Beta", "code": "DC_LYNHAVEN", "location": "Legacy Region B", "status": "Decommissioning",
+    {"name": "Legacy DC Beta", "code": "DC_LEGACY_B", "location": "Legacy Region B", "status": "Decommissioning",
      "description": "Legacy DC - migration to Alpha NGDC", "ip_range": "10.26.0.0/16", "server_count": 320, "app_count": 22},
-    {"name": "Legacy DC Gamma", "code": "DC_RICHARDSON", "location": "Legacy Region C", "status": "Active",
+    {"name": "Legacy DC Gamma", "code": "DC_LEGACY_C", "location": "Legacy Region C", "status": "Active",
      "description": "Legacy DC - partial migration in progress", "ip_range": "10.27.0.0/16", "server_count": 580, "app_count": 41},
-    {"name": "Legacy DC Delta", "code": "DC_STERLING", "location": "Legacy Region D", "status": "Active",
+    {"name": "Legacy DC Delta", "code": "DC_LEGACY_D", "location": "Legacy Region D", "status": "Active",
      "description": "Legacy DC - migration planned", "ip_range": "10.28.0.0/16", "server_count": 410, "app_count": 29},
-    {"name": "Legacy DC Epsilon", "code": "DC_GLEN_BORNIE", "location": "Legacy Region E", "status": "Decommissioning",
+    {"name": "Legacy DC Epsilon", "code": "DC_LEGACY_E", "location": "Legacy Region E", "status": "Decommissioning",
      "description": "Legacy DC - final migration wave", "ip_range": "10.29.0.0/16", "server_count": 270, "app_count": 18},
-    {"name": "Legacy DC Zeta", "code": "DC_MANASSAS", "location": "Legacy Region F", "status": "Active",
+    {"name": "Legacy DC Zeta", "code": "DC_LEGACY_F", "location": "Legacy Region F", "status": "Active",
      "description": "Legacy DC - migration in planning", "ip_range": "10.30.0.0/16", "server_count": 390, "app_count": 27},
 ]
 
@@ -635,7 +635,7 @@ SEED_ORG_CONFIG = {
     "notification_email": "firewall-ops@example.com",
     "notification_slack_channel": "#firewall-changes",
     "default_environment": "Production",
-    "default_datacenter": "EAST_NGDC",
+    "default_datacenter": "ALPHA_NGDC",
     "rule_id_prefix": "R-",
     "rule_id_start": 3000,
     "migration_id_prefix": "mig-",
@@ -788,7 +788,7 @@ def _build_seed_rules() -> list[dict[str, Any]]:
             "rule_id": rid, "source": src, "source_zone": sz_s, "destination": dst,
             "destination_zone": sz_d, "port": port, "protocol": port.split(" ")[0],
             "action": "Allow", "description": desc, "application": app, "status": st,
-            "is_group_to_group": g2g, "environment": "Production", "datacenter": "EAST_NGDC",
+            "is_group_to_group": g2g, "environment": "Production", "datacenter": "ALPHA_NGDC",
             "created_at": ct, "updated_at": ct,
             "certified_date": ct if st in ("Certified", "Deployed") else None,
             "expiry_date": (base + timedelta(days=365)).isoformat() if st in ("Certified", "Deployed") else None,
@@ -798,43 +798,43 @@ def _build_seed_rules() -> list[dict[str, Any]]:
 
 SEED_MIGRATIONS = [
     {"migration_id": "mig-001", "name": "Legacy DC Alpha to Gamma NGDC Wave 1",
-     "application": "CRM", "source_legacy_dc": "DC_GARLAND", "target_ngdc": "CENTRAL_NGDC",
-     "legacy_dc": "DC_GARLAND", "target_dc": "CENTRAL_NGDC",
+     "application": "CRM", "source_legacy_dc": "DC_LEGACY_A", "target_ngdc": "GAMMA_NGDC",
+     "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
      "status": "In Progress", "progress": 35,
      "total_rules": 45, "migrated_rules": 16, "failed_rules": 2,
      "created_at": (datetime.utcnow() + timedelta(days=-60)).isoformat(),
      "updated_at": _now()},
     {"migration_id": "mig-002", "name": "Legacy DC Beta to Alpha NGDC Wave 1",
-     "application": "HRM", "source_legacy_dc": "DC_LYNHAVEN", "target_ngdc": "EAST_NGDC",
-     "legacy_dc": "DC_LYNHAVEN", "target_dc": "EAST_NGDC",
+     "application": "HRM", "source_legacy_dc": "DC_LEGACY_B", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
      "status": "In Progress", "progress": 60,
      "total_rules": 32, "migrated_rules": 19, "failed_rules": 1,
      "created_at": (datetime.utcnow() + timedelta(days=-45)).isoformat(),
      "updated_at": _now()},
     {"migration_id": "mig-003", "name": "Legacy DC Gamma App Migration",
-     "application": "TRD", "source_legacy_dc": "DC_RICHARDSON", "target_ngdc": "WEST_NGDC",
-     "legacy_dc": "DC_RICHARDSON", "target_dc": "WEST_NGDC",
+     "application": "TRD", "source_legacy_dc": "DC_LEGACY_C", "target_ngdc": "BETA_NGDC",
+     "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
      "status": "Planning", "progress": 10,
      "total_rules": 58, "migrated_rules": 0, "failed_rules": 0,
      "created_at": (datetime.utcnow() + timedelta(days=-15)).isoformat(),
      "updated_at": _now()},
     {"migration_id": "mig-004", "name": "Legacy DC Delta App Migration",
-     "application": "INS", "source_legacy_dc": "DC_STERLING", "target_ngdc": "EAST_NGDC",
-     "legacy_dc": "DC_STERLING", "target_dc": "EAST_NGDC",
+     "application": "INS", "source_legacy_dc": "DC_LEGACY_D", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "status": "In Progress", "progress": 45,
      "total_rules": 28, "migrated_rules": 12, "failed_rules": 3,
      "created_at": (datetime.utcnow() + timedelta(days=-30)).isoformat(),
      "updated_at": _now()},
     {"migration_id": "mig-005", "name": "Legacy DC Epsilon Systems Migration",
-     "application": "FRD", "source_legacy_dc": "DC_GLEN_BORNIE", "target_ngdc": "EAST_NGDC",
-     "legacy_dc": "DC_GLEN_BORNIE", "target_dc": "EAST_NGDC",
+     "application": "FRD", "source_legacy_dc": "DC_LEGACY_E", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
      "status": "Completed", "progress": 100,
      "total_rules": 22, "migrated_rules": 22, "failed_rules": 0,
      "created_at": (datetime.utcnow() + timedelta(days=-90)).isoformat(),
      "updated_at": (datetime.utcnow() + timedelta(days=-10)).isoformat()},
     {"migration_id": "mig-006", "name": "Legacy DC Zeta App Migration",
-     "application": "KYC", "source_legacy_dc": "DC_MANASSAS", "target_ngdc": "EAST_NGDC",
-     "legacy_dc": "DC_MANASSAS", "target_dc": "EAST_NGDC",
+     "application": "KYC", "source_legacy_dc": "DC_LEGACY_F", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
      "status": "In Progress", "progress": 25,
      "total_rules": 38, "migrated_rules": 9, "failed_rules": 1,
      "created_at": (datetime.utcnow() + timedelta(days=-20)).isoformat(),
@@ -842,7 +842,7 @@ SEED_MIGRATIONS = [
 ]
 
 SEED_MIGRATION_MAPPINGS = [
-    # --- mig-001: CRM from DC Garland ---
+    # --- mig-001: CRM from DC Legacy A ---
     {"mapping_id": "map-001", "migration_id": "mig-001",
      "legacy_rule": "permit tcp 10.25.1.0/24 10.25.2.0/24 eq 1521",
      "legacy_source": "10.25.1.0/24", "legacy_destination": "10.25.2.0/24",
@@ -866,7 +866,7 @@ SEED_MIGRATION_MAPPINGS = [
      "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
      "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
      "status": "Review Required", "compliance": "Non-Compliant"},
-    # --- mig-002: HRM from DC Lynhaven ---
+    # --- mig-002: HRM from DC Legacy B ---
     {"mapping_id": "map-004", "migration_id": "mig-002",
      "legacy_rule": "permit tcp 10.26.5.0/24 10.26.15.0/24 eq 8443",
      "legacy_source": "10.26.5.0/24", "legacy_destination": "10.26.15.0/24",
@@ -890,7 +890,7 @@ SEED_MIGRATION_MAPPINGS = [
      "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
      "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
      "status": "Review Required", "compliance": "Non-Compliant"},
-    # --- mig-003: TRD from DC Richardson ---
+    # --- mig-003: TRD from DC Legacy C ---
     {"mapping_id": "map-007", "migration_id": "mig-003",
      "legacy_rule": "permit tcp 10.27.1.0/24 10.27.2.0/24 eq 443",
      "legacy_source": "10.27.1.0/24", "legacy_destination": "10.27.2.0/24",
@@ -922,7 +922,7 @@ SEED_MIGRATION_MAPPINGS = [
      "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
      "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
      "status": "Review Required", "compliance": "Non-Compliant"},
-    # --- mig-004: INS from DC Sterling ---
+    # --- mig-004: INS from DC Legacy D ---
     {"mapping_id": "map-011", "migration_id": "mig-004",
      "legacy_rule": "permit tcp 10.28.10.0/24 10.28.20.0/24 eq 8443",
      "legacy_source": "10.28.10.0/24", "legacy_destination": "10.28.20.0/24",
@@ -946,7 +946,7 @@ SEED_MIGRATION_MAPPINGS = [
      "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
      "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
      "status": "Review Required", "compliance": "Non-Compliant"},
-    # --- mig-005: FRD from DC Glen Bornie (completed) ---
+    # --- mig-005: FRD from DC Legacy E (completed) ---
     {"mapping_id": "map-014", "migration_id": "mig-005",
      "legacy_rule": "permit tcp 10.29.1.0/24 10.29.2.0/24 eq 1521",
      "legacy_source": "10.29.1.0/24", "legacy_destination": "10.29.2.0/24",
@@ -963,7 +963,7 @@ SEED_MIGRATION_MAPPINGS = [
      "ngdc_port": "TCP 1521", "ngdc_action": "Allow",
      "source_nh": "NH02", "source_sz": "CDE", "dest_nh": "NH02", "dest_sz": "CDE",
      "status": "Mapped", "compliance": "Compliant"},
-    # --- mig-006: KYC from DC Manassas ---
+    # --- mig-006: KYC from DC Legacy F ---
     {"mapping_id": "map-016", "migration_id": "mig-006",
      "legacy_rule": "permit tcp 10.30.5.0/24 10.30.10.0/24 eq 8443",
      "legacy_source": "10.30.5.0/24", "legacy_destination": "10.30.10.0/24",
@@ -1276,7 +1276,7 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "status": "Draft",
         "is_group_to_group": rule_data.get("is_group_to_group", True),
         "environment": rule_data.get("environment", "Production"),
-        "datacenter": rule_data.get("datacenter", "EAST_NGDC"),
+        "datacenter": rule_data.get("datacenter", "ALPHA_NGDC"),
         "created_at": now,
         "updated_at": now,
         "certified_date": None,
