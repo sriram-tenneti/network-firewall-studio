@@ -724,14 +724,43 @@ async def create_chg_request(data: dict[str, Any]) -> dict[str, Any]:
 # Policy Validation
 # ============================================================
 
-async def validate_policy(source_zone: str, dest_zone: str) -> dict[str, Any]:
+async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
+                          application: str = "", environment: str = "Production") -> dict[str, Any]:
     db = get_db()
+    source_zone = source.get("security_zone", "GEN") if isinstance(source, dict) else "GEN"
+    dest_zone = destination.get("security_zone", "GEN") if isinstance(destination, dict) else "GEN"
+    source_type = source.get("source_type", "Group") if isinstance(source, dict) else "Group"
+    group_name = source.get("group_name", "") if isinstance(source, dict) else ""
+    is_group_to_group = source_type == "Group" and bool(group_name)
+    naming_compliant = bool(group_name and group_name.startswith("grp-")) if group_name else True
+
     policy = await db[COLLECTIONS["policy_matrix"]].find_one(
         {"source_zone": source_zone, "dest_zone": dest_zone})
+
+    details = []
     if policy:
-        return {"allowed": policy["action"] == "Permitted",
-                "action": policy["action"], "reason": policy["reason"]}
-    return {"allowed": True, "action": "Permitted", "reason": "No explicit policy restriction found"}
+        result = policy.get("default_action", "Permitted")
+        requires_exception = policy.get("requires_exception", False)
+        details.append(f"Policy: {source_zone} -> {dest_zone} = {result}")
+    else:
+        result = "Permitted"
+        requires_exception = False
+        details.append(f"No explicit policy for {source_zone} -> {dest_zone}, defaulting to Permitted")
+
+    if not is_group_to_group:
+        details.append("Warning: Rule is not group-to-group")
+    if not naming_compliant and group_name:
+        details.append(f"Warning: Group name '{group_name}' does not follow naming standards")
+
+    return {
+        "result": result,
+        "message": f"Traffic from {source_zone} to {dest_zone}: {result}",
+        "details": details,
+        "ngdc_zone_check": True,
+        "birthright_compliant": not requires_exception,
+        "naming_compliant": naming_compliant,
+        "group_to_group_compliant": is_group_to_group,
+    }
 
 
 # ============================================================
