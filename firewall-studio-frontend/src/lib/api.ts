@@ -164,10 +164,22 @@ export const certifyRule = (ruleId: string, user = 'Jon') =>
   fetchJSON<FirewallRule>(`/api/rules/${ruleId}/certify?user=${user}`, { method: 'POST' });
 
 export const submitRule = (ruleId: string) =>
-  fetchJSON<{ rule: FirewallRule; chg: CHGRequest }>(`/api/rules/${ruleId}/submit`, { method: 'POST' });
+  fetchJSON<Record<string, unknown>>(`/api/rules/${ruleId}/submit`, { method: 'POST' });
 
 export const getRuleHistory = (ruleId: string) =>
   fetchJSON<RuleHistoryEntry[]>(`/api/rules/${ruleId}/history`);
+
+export const saveDraft = (ruleId: string, data: { source: SourceConfig; destination: DestinationConfig }) =>
+  fetchJSON<Record<string, unknown>>(`/api/rules/${ruleId}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      source: data.source.group_name || data.source.cidr || data.source.ip_address || '',
+      source_zone: data.source.security_zone || '',
+      destination: data.destination.name || '',
+      destination_zone: data.destination.security_zone || '',
+      port: data.source.ports || data.destination.ports || '',
+    }),
+  });
 
 // Migrations
 export const getMigrations = () => fetchJSON<MigrationDetails[]>('/api/migrations');

@@ -136,8 +136,9 @@ export function DesignStudioPage() {
 
   const handleSubmit = async (ruleId: string) => {
     try {
-      const result = await api.submitRule(ruleId);
-      showNotification(`Rule ${ruleId} submitted - ServiceNow ${result.chg.chg_number} created`);
+      await api.submitRule(ruleId);
+      showNotification(`Rule ${ruleId} submitted for review`);
+      setSelectedRule(null);
       loadData();
     } catch {
       showNotification('Failed to submit rule', 'error');
@@ -146,7 +147,7 @@ export function DesignStudioPage() {
 
   const handleSaveDraft = async (ruleId: string) => {
     try {
-      await api.updateRule(ruleId, { source, destination });
+      await api.saveDraft(ruleId, { source, destination });
       showNotification(`Rule ${ruleId} draft saved`);
       loadData();
     } catch {
