@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Network Firewall Studio - C4 Architecture &amp; Workflow Documentation</title>
+<style>
+/* Confluence-compatible styling */
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; line-height: 1.6; color: #172B4D; max-width: 1200px; margin: 0 auto; padding: 20px; }
+h1 { color: #0052CC; border-bottom: 3px solid #0052CC; padding-bottom: 10px; font-size: 28px; }
+h2 { color: #172B4D; border-bottom: 2px solid #DFE1E6; padding-bottom: 8px; margin-top: 40px; font-size: 22px; }
+h3 { color: #344563; margin-top: 24px; font-size: 18px; }
+h4 { color: #505F79; font-size: 15px; }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+th { background-color: #F4F5F7; color: #172B4D; font-weight: 600; text-align: left; padding: 10px 12px; border: 1px solid #DFE1E6; }
+td { padding: 8px 12px; border: 1px solid #DFE1E6; vertical-align: top; }
+tr:nth-child(even) { background-color: #FAFBFC; }
+pre { background-color: #F4F5F7; border: 1px solid #DFE1E6; border-radius: 3px; padding: 16px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 13px; line-height: 1.5; }
+code { background-color: #F4F5F7; padding: 2px 6px; border-radius: 3px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 13px; }
+.panel { background-color: #DEEBFF; border: 1px solid #B3D4FF; border-radius: 3px; padding: 16px; margin: 16px 0; }
+.panel-warning { background-color: #FFFAE6; border-color: #FFE380; }
+.panel-success { background-color: #E3FCEF; border-color: #ABF5D1; }
+.panel-error { background-color: #FFEBE6; border-color: #FFBDAD; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; font-weight: 600; }
+.badge-green { background-color: #E3FCEF; color: #006644; }
+.badge-amber { background-color: #FFFAE6; color: #FF8B00; }
+.badge-red { background-color: #FFEBE6; color: #DE350B; }
+.badge-blue { background-color: #DEEBFF; color: #0052CC; }
+.toc { background-color: #F4F5F7; border: 1px solid #DFE1E6; border-radius: 3px; padding: 20px; margin: 20px 0; }
+.toc ul { list-style: none; padding-left: 0; }
+.toc ul ul { padding-left: 20px; }
+.toc li { margin: 4px 0; }
+.toc a { color: #0052CC; text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+.doc-control { margin-bottom: 30px; }
+.status-tag { display: inline-block; padding: 4px 12px; border-radius: 3px; font-weight: 600; font-size: 13px; }
+.status-approved { background-color: #E3FCEF; color: #006644; }
+.diagram-container { margin: 16px 0; border: 1px solid #DFE1E6; border-radius: 3px; overflow: hidden; }
+.diagram-title { background-color: #F4F5F7; padding: 8px 16px; font-weight: 600; border-bottom: 1px solid #DFE1E6; }
+.diagram-body { padding: 16px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #DFE1E6; margin: 30px 0; }
+</style>
+</head>
+<body>
+
+<!-- DOCUMENT CONTROL -->
+<div class="doc-control">
+<h1>Network Firewall Studio</h1>
+<h2 style="border: none; margin-top: 0; color: #505F79; font-size: 18px;">C4 Architecture Model &amp; Workflow Documentation</h2>
+
+<table style="max-width: 500px;">
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Document Title</td><td>Network Firewall Studio - Architecture &amp; Workflows</td></tr>
+<tr><td>Version</td><td>1.0.0</td></tr>
+<tr><td>Classification</td><td><span class="badge badge-blue">Internal - Architecture</span></td></tr>
+<tr><td>Author</td><td>Network Engineering Team</td></tr>
+<tr><td>Last Updated</td><td>2026-03-13</td></tr>
+<tr><td>Status</td><td><span class="status-tag status-approved">Approved</span></td></tr>
+</table>
+</div>
+
+<hr>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+<h3 style="margin-top: 0;">Table of Contents</h3>
+<ul>
+<li><strong>Part 1: C4 Architecture Model</strong>
+<ul>
+<li><a href="#exec-summary">1. Executive Summary</a></li>
+<li><a href="#c4-overview">2. C4 Model Overview</a></li>
+<li><a href="#l1-context">3. Level 1: System Context Diagram</a></li>
+<li><a href="#l2-container">4. Level 2: Container Diagram</a></li>
+<li><a href="#l3-backend">5. Level 3: Component Diagram - Backend</a></li>
+<li><a href="#l3-frontend">6. Level 3: Component Diagram - Frontend</a></li>
+<li><a href="#l4-naming">7. Level 4: Code - Naming Standards Engine</a></li>
+<li><a href="#l4-ngdc">8. Level 4: Code - NGDC Data Model</a></li>
+<li><a href="#deployment">9. Deployment Architecture</a></li>
+<li><a href="#security">10. Security Architecture</a></li>
+</ul>
+</li>
+<li><strong>Part 2: Workflow Diagrams</strong>
+<ul>
+<li><a href="#wf-rule-creation">11. Firewall Rule Creation Workflow</a></li>
+<li><a href="#wf-naming">12. Naming Standards Enforcement Workflow</a></li>
+<li><a href="#wf-certification">13. Rule Certification Workflow</a></li>
+<li><a href="#wf-chg">14. CHG Submission Workflow</a></li>
+<li><a href="#wf-migration">15. Legacy Rule Migration Workflow</a></li>
+<li><a href="#wf-nhsz">16. NH/SZ Decision Engine Workflow</a></li>
+<li><a href="#wf-g2g">17. Group-to-Group Enforcement Workflow</a></li>
+<li><a href="#wf-lifecycle">18. Rule Lifecycle State Machine</a></li>
+<li><a href="#wf-dnd">19. Drag-and-Drop Destination Workflow</a></li>
+<li><a href="#wf-e2e">20. End-to-End Application Workflow</a></li>
+</ul>
+</li>
+<li><strong>Part 3: Reference</strong>
+<ul>
+<li><a href="#ref-tech">21. Technology Stack</a></li>
+<li><a href="#ref-api">22. API Endpoint Summary</a></li>
+<li><a href="#ref-glossary">23. Glossary</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+<hr>
+
+<!-- ==================== PART 1: C4 ARCHITECTURE ==================== -->
+
+<h1>Part 1: C4 Architecture Model</h1>
+
+<!-- 1. EXECUTIVE SUMMARY -->
+<h2 id="exec-summary">1. Executive Summary</h2>
+
+<div class="panel">
+<strong>Network Firewall Studio</strong> is an enterprise-grade web application designed to modernize and streamline the lifecycle management of network firewall rules across NGDC (Next-Generation Data Center) infrastructure.
+</div>
+
+<h3>Key Capabilities</h3>
+<table>
+<tr><th>Capability</th><th>Description</th></tr>
+<tr><td><strong>New Rule Design</strong></td><td>Drag-and-drop interface for creating firewall rules with strict naming standards enforcement</td></tr>
+<tr><td><strong>Migration Management</strong></td><td>Automated migration of legacy firewall rules from Legacy Data Centers to modernized NGDC infrastructure</td></tr>
+<tr><td><strong>Standards Enforcement</strong></td><td>Comprehensive naming standards engine with group-to-group policy enforcement</td></tr>
+<tr><td><strong>Rule Certification</strong></td><td>Periodic certification workflows to ensure compliance and recertification</td></tr>
+<tr><td><strong>Change Management</strong></td><td>Integration with ServiceNow for CHG request submission and tracking</td></tr>
+<tr><td><strong>GitOps Integration</strong></td><td>Repository-based rule storage and version control</td></tr>
+</table>
+
+<!-- 2. C4 MODEL OVERVIEW -->
+<h2 id="c4-overview">2. C4 Model Overview</h2>
+
+<p>The C4 model provides four levels of abstraction for describing the software architecture:</p>
+
+<table>
+<tr><th>Level</th><th>Name</th><th>Purpose</th><th>Audience</th></tr>
+<tr><td><span class="badge badge-blue">Level 1</span></td><td>System Context</td><td>How the system fits into the world</td><td>Everyone</td></tr>
+<tr><td><span class="badge badge-blue">Level 2</span></td><td>Container</td><td>High-level technology choices</td><td>Technical stakeholders</td></tr>
+<tr><td><span class="badge badge-blue">Level 3</span></td><td>Component</td><td>Internal structure of containers</td><td>Developers, architects</td></tr>
+<tr><td><span class="badge badge-blue">Level 4</span></td><td>Code</td><td>Implementation details</td><td>Developers</td></tr>
+</table>
+
+<!-- 3. LEVEL 1: SYSTEM CONTEXT -->
+<h2 id="l1-context">3. Level 1: System Context Diagram</h2>
+
+<p>The System Context diagram shows the Network Firewall Studio as a central system and its interactions with external actors and systems.</p>
+
+<div class="diagram-container">
+<div class="diagram-title">System Context Diagram</div>
+<div class="diagram-body">
+<pre>
++----------------------------------------------------------+
+|                   EXTERNAL SYSTEMS                        |
++----------------------------------------------------------+
+
+    +-------------------+         +---------------------+
+    |  Network Engineer |         |  Security Analyst   |
+    |    (Primary User) |         |  (Rule Reviewer)    |
+    +--------+----------+         +----------+----------+
+             |                               |
+             |  Creates/manages              |  Reviews/certifies
+             |  firewall rules               |  firewall rules
+             v                               v
+    +--------------------------------------------------------+
+    |                                                        |
+    |          NETWORK FIREWALL STUDIO                       |
+    |                                                        |
+    |  - Design Studio (New Rule Creation)                   |
+    |  - Migration Studio (Legacy to NGDC)                   |
+    |  - Rule Certification Engine                           |
+    |  - Standards Enforcement Engine                        |
+    |  - Change Management Integration                       |
+    |                                                        |
+    +------+-----------+-----------+-----------+-------------+
+           |           |           |           |
+           v           v           v           v
+    +----------+ +----------+ +---------+ +-----------+
+    |ServiceNow| |  GitOps  | |  NGDC   | |  Legacy   |
+    |  (ITSM)  | |  Repo    | | Firewall| |  Firewall |
+    |          | |          | | Infra   | |  Systems  |
+    +----------+ +----------+ +---------+ +-----------+
+    Submit CHG   Store rules   Deploy      Import
+    requests     as code       rules       existing rules
+</pre>
+</div>
+</div>
+
+<h3>External Actors</h3>
+<table>
+<tr><th>Actor</th><th>Role</th><th>Interaction</th></tr>
+<tr><td><strong>Network Engineer</strong></td><td>Primary user</td><td>Creates, modifies, and manages firewall rules through Design Studio and Migration Studio</td></tr>
+<tr><td><strong>Security Analyst</strong></td><td>Reviewer/Approver</td><td>Reviews firewall rule requests, certifies rules, approves exceptions to group-to-group policy</td></tr>
+<tr><td><strong>Change Manager</strong></td><td>Approver</td><td>Reviews and approves Change Requests (CHGs) submitted through ServiceNow</td></tr>
+<tr><td><strong>Application Owner</strong></td><td>Requestor</td><td>Initiates firewall rule requests for their applications</td></tr>
+</table>
+
+<h3>External Systems</h3>
+<table>
+<tr><th>System</th><th>Purpose</th><th>Integration Type</th></tr>
+<tr><td><strong>ServiceNow (ITSM)</strong></td><td>Change management and ticketing</td><td>REST API - CHG request submission</td></tr>
+<tr><td><strong>GitOps Repository</strong></td><td>Rule version control and deployment pipeline</td><td>Git API - Rule storage as code</td></tr>
+<tr><td><strong>NGDC Firewall Infrastructure</strong></td><td>Target deployment infrastructure</td><td>API - Rule deployment and status</td></tr>
+<tr><td><strong>Legacy Firewall Systems</strong></td><td>Source of existing rules for migration</td><td>Data Import - Rule extraction</td></tr>
+<tr><td><strong>LDAP/Active Directory</strong></td><td>User authentication and authorization</td><td>LDAP/SAML - SSO integration</td></tr>
+</table>
+
+<!-- 4. LEVEL 2: CONTAINER DIAGRAM -->
+<h2 id="l2-container">4. Level 2: Container Diagram</h2>
+
+<p>The Container diagram shows the high-level shape of the software architecture and how responsibilities are distributed.</p>
+
+<div class="diagram-container">
+<div class="diagram-title">Container Diagram</div>
+<div class="diagram-body">
+<pre>
++------------------------------------------------------------------+
+|                    NETWORK FIREWALL STUDIO                        |
++------------------------------------------------------------------+
+|                                                                  |
+|  +--------------------------+   +-----------------------------+  |
+|  |   FRONTEND APPLICATION   |   |    BACKEND API SERVICE      |  |
+|  |   (React + TypeScript)   |   |    (FastAPI + Python)       |  |
+|  |                          |   |                             |  |
+|  | +--------------------+   |   | +------------------------+  |  |
+|  | | Design Studio      |   |   | | REST API Layer         |  |  |
+|  | | - Source Panel      |   |   | | - /api/firewall-rules  |  |  |
+|  | | - Destination Panel |   |   | | - /api/migration       |  |  |
+|  | | - Policy Canvas     |   |   | | - /api/reference       |  |  |
+|  | | - Rule Lifecycle    |   |   | | - /api/naming-standards|  |  |
+|  | +--------------------+   |   | +------------------------+  |  |
+|  |                          |   |                             |  |
+|  | +--------------------+   |   | +------------------------+  |  |
+|  | | Migration Studio   |   |   | | Business Logic Layer   |  |  |
+|  | | - Legacy Rules     |&lt;--+--&gt;| | - Naming Standards Eng.|  |  |
+|  | | - NGDC Sidebar     |   |   | | - Policy Validation    |  |  |
+|  | | - Migration Planner|   |   | | - Migration Engine     |  |  |
+|  | | - Details Form     |   |   | | - Rule Lifecycle Mgr   |  |  |
+|  | +--------------------+   |   | +------------------------+  |  |
+|  |                          |   |                             |  |
+|  | +--------------------+   |   | +------------------------+  |  |
+|  | | Shared Components  |   |   | | Data Layer             |  |  |
+|  | | - Action Bar       |   |   | | - NGDC Registry        |  |  |
+|  | | - History Modal    |   |   | | - Neighbourhood Data   |  |  |
+|  | | - Naming Builder   |   |   | | - Security Zones       |  |  |
+|  | +--------------------+   |   | | - Legacy DC Data       |  |  |
+|  |                          |   | +------------------------+  |  |
+|  +--------------------------+   +-----------------------------+  |
+|                                                                  |
+|  Technology Stack:                                               |
+|  Frontend: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui  |
+|  Backend: FastAPI, Python 3.12, Poetry, Uvicorn                  |
+|  Communication: REST API (JSON over HTTPS)                       |
++------------------------------------------------------------------+
+</pre>
+</div>
+</div>
+
+<h3>Container Details</h3>
+<table>
+<tr><th>Container</th><th>Technology</th><th>Purpose</th><th>Port</th></tr>
+<tr><td><strong>Frontend Application</strong></td><td>React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui</td><td>Single Page Application providing the user interface</td><td>5173 (dev) / 80 (prod)</td></tr>
+<tr><td><strong>Backend API Service</strong></td><td>FastAPI + Python 3.12 + Poetry + Uvicorn</td><td>RESTful API service providing business logic and data management</td><td>8000</td></tr>
+<tr><td><strong>In-Memory Database</strong></td><td>Python dictionaries (PoC) / PostgreSQL (Production)</td><td>Data persistence for rules, configurations, and audit trails</td><td>N/A</td></tr>
+</table>
+
+<!-- 5. LEVEL 3: COMPONENT - BACKEND -->
+<h2 id="l3-backend">5. Level 3: Component Diagram - Backend</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Backend Component Diagram</div>
+<div class="diagram-body">
+<pre>
++----------------------------------------------------------------------+
+|                     BACKEND API SERVICE                               |
+|                     (FastAPI + Python 3.12)                           |
++----------------------------------------------------------------------+
+|                                                                      |
+|  +---------------------------- API ROUTES --------------------------+|
+|  |                                                                  ||
+|  |  +------------------+  +------------------+  +----------------+  ||
+|  |  | firewall_rules.py|  | migration.py     |  | reference.py   |  ||
+|  |  |                  |  |                  |  |                |  ||
+|  |  | POST /rules      |  | GET /legacy-rules|  | GET /nh        |  ||
+|  |  | GET  /rules      |  | POST /validate   |  | GET /sz        |  ||
+|  |  | PUT  /rules/{id} |  | POST /map        |  | GET /apps      |  ||
+|  |  | DELETE /rules/{id}|  | POST /execute    |  | GET /naming-std|  ||
+|  |  | POST /certify    |  | GET /status       |  | POST /validate |  ||
+|  |  | POST /submit-chg |  |                  |  | POST /generate |  ||
+|  |  | GET  /history    |  |                  |  | POST /suggest  |  ||
+|  |  +--------+---------+  +--------+---------+  +--------+-------+  ||
+|  +-----------+----------------------+---------------------+----------+|
+|              |                      |                     |           |
+|  +--------------------------- SERVICES -----------------------------+|
+|  |                                                                  ||
+|  |  +------------------+  +------------------+  +----------------+  ||
+|  |  | Rule Lifecycle   |  | Migration Engine |  | Naming Stds    |  ||
+|  |  | Manager          |  |                  |  | Engine         |  ||
+|  |  |                  |  | - Legacy parser  |  |                |  ||
+|  |  | - Create rule    |  | - NH/SZ mapper   |  | - validate()   |  ||
+|  |  | - Validate rule  |  | - Standards check|  | - generate()   |  ||
+|  |  | - Certify rule   |  | - Migration plan |  | - suggest()    |  ||
+|  |  | - Submit CHG     |  | - Execute migrate|  | - determine_sz |  ||
+|  |  | - Track history  |  |                  |  | - check_g2g()  |  ||
+|  |  +------------------+  +------------------+  +----------------+  ||
+|  +------------------------------------------------------------------+|
+|                                                                      |
+|  +--------------------------- DATA LAYER ----------------------------+|
+|  |                                                                   ||
+|  |  +-------------------+  +------------------+  +-----------------+ ||
+|  |  | NGDC Registry     |  | Rule Store       |  | Config Store    | ||
+|  |  | - 17 Neighbourhoods|  | - Firewall Rules |  | - Naming Stds  | ||
+|  |  | - 17 Security Zones|  | - Rule History   |  | - NGDC Matrix  | ||
+|  |  | - 3 NGDC DCs      |  | - Certifications |  | - Policy Config| ||
+|  |  | - 6 Legacy DCs    |  | - CHG Requests   |  | - Birthright   | ||
+|  |  | - Applications    |  |                  |  |                 | ||
+|  |  +-------------------+  +------------------+  +-----------------+ ||
+|  +-------------------------------------------------------------------+|
++----------------------------------------------------------------------+
+</pre>
+</div>
+</div>
+
+<h3>Component Details</h3>
+<table>
+<tr><th>Component</th><th>File</th><th>Responsibility</th></tr>
+<tr><td><strong>Firewall Rules Router</strong></td><td><code>app/routes/firewall_rules.py</code></td><td>CRUD operations for firewall rules, certification, CHG submission, history tracking</td></tr>
+<tr><td><strong>Migration Router</strong></td><td><code>app/routes/migration.py</code></td><td>Legacy rule import, validation, NH/SZ mapping, migration execution</td></tr>
+<tr><td><strong>Reference Router</strong></td><td><code>app/routes/reference.py</code></td><td>Neighbourhoods, security zones, applications, naming standards, zone determination</td></tr>
+<tr><td><strong>Naming Standards Engine</strong></td><td><code>app/services/naming_standards.py</code></td><td>Name validation, generation, suggestion, group-to-group enforcement</td></tr>
+<tr><td><strong>NGDC Registry</strong></td><td><code>app/database.py</code></td><td>In-memory data store for all NGDC constructs, legacy DC data, applications</td></tr>
+</table>
+
+<!-- 6. LEVEL 3: COMPONENT - FRONTEND -->
+<h2 id="l3-frontend">6. Level 3: Component Diagram - Frontend</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Frontend Component Diagram</div>
+<div class="diagram-body">
+<pre>
++----------------------------------------------------------------------+
+|                    FRONTEND APPLICATION                               |
+|                    (React 18 + TypeScript + Vite)                     |
++----------------------------------------------------------------------+
+|                                                                      |
+|  +--------------------------- PAGES --------------------------------+|
+|  |  +---------------------+        +----------------------------+   ||
+|  |  | DesignStudioPage    |        | MigrationStudioPage        |   ||
+|  |  | - Rule creation     |        | - Legacy rule selection    |   ||
+|  |  | - Drag-and-drop     |        | - NGDC mapping             |   ||
+|  |  | - Standards builder |        | - Standards compliance     |   ||
+|  |  | - Policy flow       |        | - Migration execution      |   ||
+|  |  | - Rule lifecycle    |        | - Validation status        |   ||
+|  |  +---------------------+        +----------------------------+   ||
+|  +------------------------------------------------------------------+|
+|                                                                      |
+|  +----------------------- COMPONENTS --------------------------------+|
+|  |  +---------------------+  +------------------------------------+ ||
+|  |  | Design Studio       |  | Migration Studio                   | ||
+|  |  | Components          |  | Components                         | ||
+|  |  |                     |  |                                    | ||
+|  |  | - SourcePanel       |  | - MigrationRuleTable              | ||
+|  |  |   (App selector,    |  |   (Legacy rules, status)          | ||
+|  |  |    NH selector,     |  |                                    | ||
+|  |  |    Name builder)    |  | - NGDCSidebar                     | ||
+|  |  |                     |  |   (NH list, SZ zones, DC maps)    | ||
+|  |  | - DestinationPanel  |  |                                    | ||
+|  |  |   (Drag targets,    |  | - MigrationPlannerTable           | ||
+|  |  |    Drop zones,      |  |   (Mapping table, NH/SZ assign)   | ||
+|  |  |    Custom dest)     |  |                                    | ||
+|  |  |                     |  | - MigrationDetailsForm            | ||
+|  |  | - PolicyFlowCanvas  |  |   (App selection, DC mapping)     | ||
+|  |  |   (Visual flow,     |  |                                    | ||
+|  |  |    Rule preview)    |  +------------------------------------+ ||
+|  |  |                     |                                        ||
+|  |  | - RuleLifecycleTable|                                        ||
+|  |  |   (Rule list,       |                                        ||
+|  |  |    Compliance,      |                                        ||
+|  |  |    Status, Actions) |                                        ||
+|  |  +---------------------+                                        ||
+|  +------------------------------------------------------------------+|
+|                                                                      |
+|  +----------------------- SHARED LAYER ------------------------------+|
+|  |  +-------------+  +------------+  +-----------+  +------------+  ||
+|  |  | api.ts      |  | types/     |  | ActionBar |  | History    |  ||
+|  |  | - REST calls|  | index.ts   |  | - Nav     |  | Modal      |  ||
+|  |  | - Type-safe |  | - Interfaces| | - Actions |  | - Audit    |  ||
+|  |  | - Error hdl |  | - Enums    |  | - Status  |  | - Timeline |  ||
+|  |  +-------------+  +------------+  +-----------+  +------------+  ||
+|  +------------------------------------------------------------------+|
++----------------------------------------------------------------------+
+</pre>
+</div>
+</div>
+
+<h3>Frontend Component Details</h3>
+<table>
+<tr><th>Component</th><th>File</th><th>Responsibility</th></tr>
+<tr><td><strong>DesignStudioPage</strong></td><td><code>src/pages/DesignStudioPage.tsx</code></td><td>Orchestrates Design Studio, manages rule creation workflow state</td></tr>
+<tr><td><strong>MigrationStudioPage</strong></td><td><code>src/pages/MigrationStudioPage.tsx</code></td><td>Orchestrates Migration Studio, manages legacy-to-NGDC migration</td></tr>
+<tr><td><strong>SourcePanel</strong></td><td><code>src/components/design-studio/SourcePanel.tsx</code></td><td>App selection, NH selection, naming standards builder with real-time validation</td></tr>
+<tr><td><strong>DestinationPanel</strong></td><td><code>src/components/design-studio/DestinationPanel.tsx</code></td><td>Drag-and-drop destinations, group-to-group enforcement, custom destinations</td></tr>
+<tr><td><strong>RuleLifecycleTable</strong></td><td><code>src/components/design-studio/RuleLifecycleTable.tsx</code></td><td>Rule listing with compliance indicators (green/amber/red), status, actions</td></tr>
+<tr><td><strong>NGDCSidebar</strong></td><td><code>src/components/migration-studio/NGDCSidebar.tsx</code></td><td>NGDC neighbourhood and security zone reference panel</td></tr>
+</table>
+
+<!-- 7. LEVEL 4: NAMING STANDARDS ENGINE -->
+<h2 id="l4-naming">7. Level 4: Code - Naming Standards Engine</h2>
+
+<div class="panel">
+<strong>Core Module:</strong> <code>app/services/naming_standards.py</code><br>
+The Naming Standards Engine is the heart of standards enforcement, providing validation, generation, and suggestion capabilities for all firewall object names.
+</div>
+
+<h3>Naming Standards Patterns</h3>
+<table>
+<tr><th>Type</th><th>Prefix</th><th>Pattern</th><th>Example</th></tr>
+<tr><td><strong>Group</strong></td><td><code>grp-</code></td><td><code>grp-{AppID}-{NH}-{SZ}-{Subtype}</code></td><td><span class="badge badge-green">grp-APP001-NH01-CDE-WEB</span></td></tr>
+<tr><td><strong>Server</strong></td><td><code>svr-</code></td><td><code>svr-{AppID}-{NH}-{SZ}-{ServerName}</code></td><td><span class="badge badge-green">svr-APP001-NH05-GEN-DBPROD01</span></td></tr>
+<tr><td><strong>Subnet</strong></td><td><code>rng-</code></td><td><code>rng-{AppID}-{NH}-{SZ}-{Descriptor}</code></td><td><span class="badge badge-green">rng-APP001-NH12-DMZ-WEBSUBNET</span></td></tr>
+</table>
+
+<h3>Valid Subtypes</h3>
+<table>
+<tr><th>Subtype</th><th>Description</th><th>Subtype</th><th>Description</th></tr>
+<tr><td><code>WEB</code></td><td>Web servers</td><td><code>CACHE</code></td><td>Cache servers</td></tr>
+<tr><td><code>APP</code></td><td>Application servers</td><td><code>LB</code></td><td>Load balancers</td></tr>
+<tr><td><code>DB</code></td><td>Database servers</td><td><code>PROXY</code></td><td>Proxy servers</td></tr>
+<tr><td><code>BATCH</code></td><td>Batch processing</td><td><code>MON</code></td><td>Monitoring servers</td></tr>
+<tr><td><code>MQ</code></td><td>Message queue servers</td><td><code>API</code></td><td>API gateway servers</td></tr>
+</table>
+
+<h3>Validation Rules</h3>
+<table>
+<tr><th>Rule</th><th>Description</th><th>Error Message</th></tr>
+<tr><td>Prefix Check</td><td>Name must start with <code>grp-</code>, <code>svr-</code>, or <code>rng-</code></td><td>"Invalid prefix: must be grp-, svr-, or rng-"</td></tr>
+<tr><td>Segment Count</td><td>Must have exactly 5 segments</td><td>"Invalid format: expected 5 segments"</td></tr>
+<tr><td>AppID Valid</td><td>AppID must exist in the application registry</td><td>"Unknown AppID: {value}"</td></tr>
+<tr><td>NH Valid</td><td>NH must be NH01 through NH17</td><td>"Invalid Neighbourhood: {value}"</td></tr>
+<tr><td>SZ Valid</td><td>SZ must be a recognized security zone code</td><td>"Invalid Security Zone: {value}"</td></tr>
+<tr><td>Case Check</td><td>All segments must be uppercase</td><td>"Name must be uppercase"</td></tr>
+</table>
+
+<!-- 8. LEVEL 4: NGDC DATA MODEL -->
+<h2 id="l4-ngdc">8. Level 4: Code - NGDC Data Model</h2>
+
+<h3>Neighbourhood Registry (NH01-NH17)</h3>
+<table>
+<tr><th>ID</th><th>Name</th><th>Zone</th><th>Environment</th></tr>
+<tr><td>NH01</td><td>Technology Enablement Services</td><td>General</td><td>Production</td></tr>
+<tr><td>NH02</td><td>Customer Facing Applications</td><td>DMZ</td><td>Production</td></tr>
+<tr><td>NH03</td><td>Internal Business Applications</td><td>General</td><td>Production</td></tr>
+<tr><td>NH04</td><td>Data Analytics &amp; Warehousing</td><td>General</td><td>Production</td></tr>
+<tr><td>NH05</td><td>Database Services</td><td>Restricted</td><td>Production</td></tr>
+<tr><td>NH06</td><td>Middleware &amp; Integration</td><td>General</td><td>Production</td></tr>
+<tr><td>NH07</td><td>Security Services</td><td>Restricted</td><td>Production</td></tr>
+<tr><td>NH08</td><td>Network Management</td><td>Management</td><td>Production</td></tr>
+<tr><td>NH09</td><td>Storage &amp; Backup</td><td>Restricted</td><td>Production</td></tr>
+<tr><td>NH10</td><td>Development &amp; Testing</td><td>General</td><td>Non-Production</td></tr>
+<tr><td>NH11</td><td>Staging &amp; UAT</td><td>General</td><td>Non-Production</td></tr>
+<tr><td>NH12</td><td>DMZ External Services</td><td>DMZ</td><td>Production</td></tr>
+<tr><td>NH13</td><td>PCI Cardholder Data Env</td><td>CDE</td><td>Production</td></tr>
+<tr><td>NH14</td><td>Legacy Integration</td><td>General</td><td>Production</td></tr>
+<tr><td>NH15</td><td>Cloud Connectivity</td><td>DMZ</td><td>Production</td></tr>
+<tr><td>NH16</td><td>Disaster Recovery</td><td>General</td><td>DR</td></tr>
+<tr><td>NH17</td><td>Pre-Production DMZ</td><td>DMZ</td><td>Non-Production</td></tr>
+</table>
+
+<h3>Security Zones (17 Zones)</h3>
+<table>
+<tr><th>Code</th><th>Name</th><th>Risk Level</th></tr>
+<tr><td><span class="badge badge-red">CDE</span></td><td>Cardholder Data Environment</td><td>Critical</td></tr>
+<tr><td><span class="badge badge-green">GEN</span></td><td>General Zone</td><td>Standard</td></tr>
+<tr><td><span class="badge badge-amber">DMZ</span></td><td>Demilitarized Zone</td><td>High</td></tr>
+<tr><td><span class="badge badge-amber">RST</span></td><td>Restricted Zone</td><td>High</td></tr>
+<tr><td><span class="badge badge-amber">MGT</span></td><td>Management Zone</td><td>High</td></tr>
+<tr><td><span class="badge badge-red">PNA</span></td><td>PCI Network Access</td><td>Critical</td></tr>
+<tr><td><span class="badge badge-amber">EPAA</span></td><td>External PAA</td><td>High</td></tr>
+<tr><td><span class="badge badge-red">UCPA</span></td><td>UC Payment Area</td><td>Critical</td></tr>
+<tr><td><span class="badge badge-green">BCCI</span></td><td>BCC Internal</td><td>Standard</td></tr>
+<tr><td><span class="badge badge-green">GGEN</span></td><td>Global General</td><td>Standard</td></tr>
+<tr><td><span class="badge badge-red">EPIN</span></td><td>External PIN</td><td>Critical</td></tr>
+<tr><td><span class="badge badge-amber">LPAA</span></td><td>Local PAA</td><td>High</td></tr>
+<tr><td><span class="badge badge-red">USPP</span></td><td>US Payment Processing</td><td>Critical</td></tr>
+<tr><td><span class="badge badge-amber">EXEN</span></td><td>External Enterprise</td><td>High</td></tr>
+<tr><td><span class="badge badge-amber">SPN</span></td><td>Secure Private Network</td><td>High</td></tr>
+<tr><td><span class="badge badge-green">CPN</span></td><td>Corporate Private Network</td><td>Standard</td></tr>
+<tr><td><span class="badge badge-amber">EXT</span></td><td>External</td><td>High</td></tr>
+</table>
+
+<!-- 9. DEPLOYMENT ARCHITECTURE -->
+<h2 id="deployment">9. Deployment Architecture</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Deployment Architecture</div>
+<div class="diagram-body">
+<pre>
++----------------------------------------------------------------------+
+|                    DEPLOYMENT ARCHITECTURE                            |
++----------------------------------------------------------------------+
+|                                                                      |
+|  +------- PRODUCTION ENVIRONMENT -----------------------------------+|
+|  |                                                                  ||
+|  |  +------------------+       +------------------+                 ||
+|  |  |  CDN / WAF       |       |  Load Balancer   |                 ||
+|  |  |  (CloudFlare)    +------&gt;+  (L7 Routing)    |                 ||
+|  |  +------------------+       +--------+---------+                 ||
+|  |                                      |                           ||
+|  |                     +----------------+----------------+          ||
+|  |                     |                                 |          ||
+|  |              +------v------+                  +-------v-----+   ||
+|  |              |  Frontend   |                  |  Backend     |   ||
+|  |              |  Container  |                  |  Container   |   ||
+|  |              |  React SPA  |    REST API      |  FastAPI     |   ||
+|  |              |  (Nginx)    +-----------------&gt;+  (Uvicorn)   |   ||
+|  |              |  Port: 80   |                  |  Port: 8000  |   ||
+|  |              +-------------+                  +------+-------+   ||
+|  |                                                      |           ||
+|  |                                               +------v-------+  ||
+|  |                                               |  Database    |  ||
+|  |                                               |  PostgreSQL  |  ||
+|  |                                               +--------------+  ||
+|  +------------------------------------------------------------------+|
++----------------------------------------------------------------------+
+</pre>
+</div>
+</div>
+
+<h3>Environment Configuration</h3>
+<table>
+<tr><th>Environment</th><th>Frontend</th><th>Backend</th><th>Database</th></tr>
+<tr><td><strong>Development</strong></td><td>Vite Dev Server (localhost:5173)</td><td>Uvicorn (localhost:8000)</td><td>In-Memory (Python Dict)</td></tr>
+<tr><td><strong>Staging</strong></td><td>Nginx Container</td><td>Uvicorn Container</td><td>PostgreSQL</td></tr>
+<tr><td><strong>Production</strong></td><td>Nginx Container (HA)</td><td>Uvicorn Container (HA)</td><td>PostgreSQL (HA + Replication)</td></tr>
+</table>
+
+<!-- 10. SECURITY ARCHITECTURE -->
+<h2 id="security">10. Security Architecture</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Security Architecture</div>
+<div class="diagram-body">
+<pre>
++----------------------------------------------------------------------+
+|                    SECURITY ARCHITECTURE                             |
++----------------------------------------------------------------------+
+|                                                                      |
+|  +------ AUTHENTICATION LAYER ------------------------------------+ |
+|  |  User Request -&gt; WAF/Rate Limit -&gt; SAML SSO/LDAP -&gt; JWT Token | |
+|  +----------------------------------------------------------------+ |
+|                                                                      |
+|  +------ AUTHORIZATION LAYER --------------------------------------+ |
+|  |  Role-Based Access Control    |    Policy Engine (NGDC Matrix)  | |
+|  |  - Admin                      |    - NH access                  | |
+|  |  - Engineer                   |    - SZ permissions             | |
+|  |  - Analyst                    |    - Rule scopes                | |
+|  |  - Viewer                     |    - App ownership              | |
+|  +----------------------------------------------------------------+ |
+|                                                                      |
+|  +------ DATA PROTECTION LAYER -----------------------------------+ |
+|  |  - TLS 1.3 for all communications                             | |
+|  |  - AES-256 encryption at rest                                 | |
+|  |  - Audit logging for all rule changes                         | |
+|  |  - Naming standards prevent IP exposure                       | |
+|  |  - Group-to-group enforcement reduces attack surface          | |
+|  +----------------------------------------------------------------+ |
++----------------------------------------------------------------------+
+</pre>
+</div>
+</div>
+
+<h3>Security Roles</h3>
+<table>
+<tr><th>Role</th><th>Permissions</th></tr>
+<tr><td><strong>Admin</strong></td><td>Full system access, configuration management, user management</td></tr>
+<tr><td><strong>Network Engineer</strong></td><td>Create/modify rules, submit CHG requests, execute migrations</td></tr>
+<tr><td><strong>Security Analyst</strong></td><td>Review rules, certify rules, approve exceptions, audit trail access</td></tr>
+<tr><td><strong>Viewer</strong></td><td>Read-only access to rules, reports, and dashboards</td></tr>
+</table>
+
+<hr>
+
+<!-- ==================== PART 2: WORKFLOW DIAGRAMS ==================== -->
+
+<h1>Part 2: Workflow Diagrams</h1>
+
+<!-- 11. RULE CREATION WORKFLOW -->
+<h2 id="wf-rule-creation">11. Firewall Rule Creation Workflow</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Rule Creation Workflow</div>
+<div class="diagram-body">
+<pre>
+                    START
+                      |
+                      v
+            +-------------------+
+            | Select Application|     +-------------------+
+            | (AppID Lookup)    |     | Select            |
+            +--------+----------+     | Neighbourhood     |
+                     |                | (NH01 - NH17)     |
+                     v                +--------+----------+
+            +-------------------+              |
+            | Auto-Determine    |&lt;-------------+
+            | Security Zone     |
+            +--------+----------+
+                     |
+                     v
+            +-------------------+
+            | Build Source Name  |
+            | grp-{AppID}-{NH}- |
+            | {SZ}-{Subtype}    |
+            +--------+----------+
+                     |
+                     v
+            +-------------------+
+            | Validate Name     |&lt;--------+ Fix &amp; Retry
+            +--------+----------+         |
+                     |                    |
+              [VALID]    [INVALID] -------+
+                |
+                v
+        +-------------------+
+        | Configure         |
+        | Destinations      |
+        | (Drag &amp; Drop)     |
+        +--------+----------+
+                 |
+                 v
+        +-------------------+
+        | Group-to-Group    |
+        | Check             |
+        +--------+----------+
+                 |
+          [G2G OK]    [Not G2G] --&gt; Exception Required
+                |
+                v
+        +-------------------+
+        | Select Port /     |
+        | Protocol / Action |
+        +--------+----------+
+                 |
+                 v
+        +-------------------+
+        | Create Rule       |
+        | Status: DRAFT     |
+        +-------------------+
+                 |
+                 v
+               END
+</pre>
+</div>
+</div>
+
+<h3>Workflow Steps</h3>
+<table>
+<tr><th>Step</th><th>Action</th><th>Actor</th><th>System Response</th></tr>
+<tr><td>1</td><td>Select Application</td><td>Network Engineer</td><td>Loads AppID, auto-fills NH/SZ if known</td></tr>
+<tr><td>2</td><td>Select Neighbourhood</td><td>Network Engineer</td><td>Displays available NHs with descriptions</td></tr>
+<tr><td>3</td><td>Auto-determine SZ</td><td>System</td><td>Runs decision engine based on app attributes</td></tr>
+<tr><td>4</td><td>Build Source Name</td><td>System + User</td><td>Auto-generates compliant name with user subtype input</td></tr>
+<tr><td>5</td><td>Validate Name</td><td>System</td><td>Real-time validation with green/red indicators</td></tr>
+<tr><td>6</td><td>Configure Destinations</td><td>Network Engineer</td><td>Drag-and-drop interface with available targets</td></tr>
+<tr><td>7</td><td>Group-to-Group Check</td><td>System</td><td>Validates both source and destination are group-based</td></tr>
+<tr><td>8</td><td>Select Port/Protocol</td><td>Network Engineer</td><td>Standard port/protocol/action selection</td></tr>
+<tr><td>9</td><td>Create Rule</td><td>System</td><td>Rule created with DRAFT status</td></tr>
+</table>
+
+<!-- 12. NAMING STANDARDS WORKFLOW -->
+<h2 id="wf-naming">12. Naming Standards Enforcement Workflow</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Naming Standards Enforcement</div>
+<div class="diagram-body">
+<pre>
+              INPUT NAME
+                  |
+                  v
+         +------------------+
+         | Detect Prefix    |
+         +--------+---------+
+                  |
+         +--------+--------+--------+
+         |        |        |        |
+      [grp-]  [svr-]   [rng-]   [other]
+         |        |        |        |
+         v        v        v        v
+    +--------+ +--------+ +--------+ +--------+
+    | Group  | | Server | | Subnet | | INVALID|
+    | Valid. | | Valid. | | Valid. | | Prefix |
+    +---+----+ +---+----+ +---+----+ +---+----+
+        |          |          |          |
+        v          v          v          v
+  +-------------------------------------------+
+  |     PARSE NAME SEGMENTS                   |
+  |  Segment 1: AppID (must exist in registry)|
+  |  Segment 2: NH (must be NH01-NH17)        |
+  |  Segment 3: SZ (must be valid code)       |
+  |  Segment 4: Subtype/Name/Descriptor       |
+  +-------------------+-----------------------+
+                      |
+               [ALL VALID]    [HAS ERRORS]
+                    |              |
+                    v              v
+             +-----------+  +------------------+
+             | COMPLIANT |  | NON-COMPLIANT    |
+             | Green     |  | Red Badge        |
+             | Badge     |  | Error Messages   |
+             +-----------+  | + SUGGESTIONS    |
+                            +------------------+
+</pre>
+</div>
+</div>
+
+<!-- 13. CERTIFICATION WORKFLOW -->
+<h2 id="wf-certification">13. Rule Certification Workflow</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Rule Certification Workflow</div>
+<div class="diagram-body">
+<pre>
+  CERTIFICATION TRIGGER (Periodic / On-demand)
+         |
+         v
+  Select Rules for Certification (Filter by expiry)
+         |
+         v
+  For Each Rule:
+         |
+         v
+  Check Naming Standards Compliance
+         |
+    [Compliant]     [Non-Compliant]
+         |                |
+         v                v
+    Continue        Flag for Remediation
+    Review          Assign to Owner
+         |
+         v
+  Check Group-to-Group Enforcement
+         |
+    [G2G]           [Non-G2G]
+         |                |
+         v                v
+    Continue        Requires Exception Approval
+         |
+         v
+  Security Analyst Review
+         |
+    [Certify]       [Reject]
+         |                |
+         v                v
+  Status: CERTIFIED  Status: EXPIRED/REVOKED
+  Set new expiry     Notify owner
+         |
+         v
+  Update Audit Trail
+</pre>
+</div>
+</div>
+
+<h3>Certification Status Matrix</h3>
+<table>
+<tr><th>Current Status</th><th>Action</th><th>New Status</th><th>Notification</th></tr>
+<tr><td>Certified</td><td>Recertify</td><td>Certified (renewed)</td><td>Owner notified of renewal</td></tr>
+<tr><td>Certified</td><td>Reject</td><td>Revoked</td><td>Owner + Engineer notified</td></tr>
+<tr><td>Pending Review</td><td>Certify</td><td>Certified</td><td>Engineer notified</td></tr>
+<tr><td>Expired</td><td>No Action</td><td>Disabled</td><td>Auto-disabled after grace period</td></tr>
+</table>
+
+<!-- 14. CHG SUBMISSION WORKFLOW -->
+<h2 id="wf-chg">14. CHG Submission Workflow</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Change Request Submission Workflow</div>
+<div class="diagram-body">
+<pre>
+  Rule Status: CERTIFIED
+         |
+         v
+  Engineer clicks "Submit CHG"
+         |
+         v
+  Generate CHG Payload
+  (Rule details, Source/Dest, Compliance, Risk, Plans)
+         |
+         v
+  Validate CHG Prerequisites
+         |
+    [Valid]           [Missing Info]
+         |                |
+         v                v
+  Submit to         Return to Rule Editor
+  ServiceNow        Show missing fields
+         |
+         v
+  ServiceNow Processing
+  (CHG ticket created, Assign to SNS team, CAB review)
+         |
+         v
+  Rule Status: CHG_SUBMITTED (CHG Number: CHG0012345)
+         |
+         v
+  Monitor CHG Status
+         |
+    [Approved]        [Rejected]
+         |                |
+         v                v
+  Deploy Rules       Status: CHG_REJECTED
+  to NGDC            Notify engineer
+         |
+         v
+  Rule Status: DEPLOYED
+</pre>
+</div>
+</div>
+
+<!-- 15. MIGRATION WORKFLOW -->
+<h2 id="wf-migration">15. Legacy Rule Migration Workflow</h2>
+
+<div class="panel panel-warning">
+<strong>Migration Studio</strong> enables the transition from 6 Legacy Data Centers to 3 modernized NGDC Data Centers with full standards compliance enforcement.
+</div>
+
+<div class="diagram-container">
+<div class="diagram-title">Legacy Rule Migration Workflow</div>
+<div class="diagram-body">
+<pre>
+  MIGRATION STUDIO - Select Legacy DC
+  (DC GARLAND | DC LYNHAVEN | DC RICHARDSON |
+   DC STERLING | DC GLEN BORNIE | DC MANASSAS)
+         |
+         v
+  Load Legacy Rules from selected DC
+         |
+         v
+  Display in Migration Rule Table
+  (Source/dest IPs, ports/protocols, status)
+         |
+         v
+  Select Rules for Migration (multi-select)
+         |
+         v
+  Open Migration Details Form
+  (Select target app, NH, SZ, review naming standards)
+         |
+         v
+  Standards Compliance Analysis
+         |
+    [Compliant]    [Partially]     [Non-Compliant]
+         |              |                |
+         v              v                v
+    Direct Map    Auto-Suggest     Manual Intervention
+    to NGDC       Fixes            Required
+         |              |                |
+         +------+-------+--------+------+
+                |
+                v
+  Generate Migration Plan
+  (Old: 10.1.2.0/24 -&gt; New: grp-APP001-NH01-CDE-WEB)
+                |
+                v
+  Validate Migration Plan
+  (All names compliant, NH/SZ valid, G2G met)
+                |
+           [Valid]        [Has Issues]
+                |              |
+                v              v
+         Execute         Show Issues
+         Migration       Return to Edit
+                |
+                v
+  Create New NGDC Rules (Status: DRAFT)
+  Mark Legacy Rules as MIGRATED
+</pre>
+</div>
+</div>
+
+<h3>Migration Mapping Table</h3>
+<table>
+<tr><th>Legacy DC</th><th>Target NGDC</th><th>Migration Status</th></tr>
+<tr><td>DC GARLAND</td><td>EAST NGDC</td><td><span class="badge badge-blue">Active migration</span></td></tr>
+<tr><td>DC LYNHAVEN</td><td>EAST NGDC</td><td><span class="badge badge-blue">Active migration</span></td></tr>
+<tr><td>DC RICHARDSON</td><td>CENTRAL NGDC</td><td><span class="badge badge-blue">Active migration</span></td></tr>
+<tr><td>DC STERLING</td><td>EAST NGDC</td><td><span class="badge badge-blue">Active migration</span></td></tr>
+<tr><td>DC GLEN BORNIE</td><td>EAST NGDC</td><td><span class="badge badge-blue">Active migration</span></td></tr>
+<tr><td>DC MANASSAS</td><td>WEST NGDC</td><td><span class="badge badge-blue">Active migration</span></td></tr>
+</table>
+
+<!-- 16. NH/SZ DECISION ENGINE -->
+<h2 id="wf-nhsz">16. NH/SZ Decision Engine Workflow</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">NH/SZ Decision Engine</div>
+<div class="diagram-body">
+<pre>
+  INPUT: Application Attributes
+  (PAA Zone, @Exposure, PCI Compliance, Data Class, Criticality)
+         |
+         v
+  Step 1: Check PCI Compliance
+         |
+    [PCI=Yes]           [PCI=No]
+         |                   |
+         v                   v
+    SZ=CDE, NH=NH13     Step 2: Check PAA Zone
+                             |
+                   +---------+---------+---------+
+                   |         |         |         |
+              [External] [Internal] [Payment]  [None]
+                   |         |         |         |
+                   v         v         v         v
+              EPAA/NH12  LPAA/NH03  UCPA/NH13  Step 3: Check @Exposure
+                                                    |
+                                            [External]    [Internal]
+                                                |              |
+                                                v              v
+                                           DMZ/NH02      Step 4: Check Data Class
+                                           or NH12            |
+                                                    +---------+---------+
+                                                    |         |         |
+                                               [Critical] [Conf.]  [Standard]
+                                                    |         |         |
+                                                    v         v         v
+                                               RST/NH05  RST/NH07  GEN/NH03
+                                               or NH09             or NH01
+</pre>
+</div>
+</div>
+
+<h3>Decision Matrix</h3>
+<table>
+<tr><th>PCI</th><th>PAA Zone</th><th>@Exposure</th><th>Data Class</th><th>&rarr; NH</th><th>&rarr; SZ</th></tr>
+<tr><td>Yes</td><td>Any</td><td>Any</td><td>Any</td><td>NH13</td><td><span class="badge badge-red">CDE</span></td></tr>
+<tr><td>No</td><td>External</td><td>External</td><td>Any</td><td>NH12</td><td><span class="badge badge-amber">EPAA</span></td></tr>
+<tr><td>No</td><td>Internal</td><td>Internal</td><td>Any</td><td>NH03</td><td><span class="badge badge-amber">LPAA</span></td></tr>
+<tr><td>No</td><td>Payment</td><td>Any</td><td>Any</td><td>NH13</td><td><span class="badge badge-red">UCPA</span></td></tr>
+<tr><td>No</td><td>None</td><td>External</td><td>Any</td><td>NH02/NH12</td><td><span class="badge badge-amber">DMZ</span></td></tr>
+<tr><td>No</td><td>None</td><td>Internal</td><td>Critical</td><td>NH05/NH09</td><td><span class="badge badge-amber">RST</span></td></tr>
+<tr><td>No</td><td>None</td><td>Internal</td><td>Confidential</td><td>NH07</td><td><span class="badge badge-amber">RST</span></td></tr>
+<tr><td>No</td><td>None</td><td>Internal</td><td>Standard</td><td>NH03/NH01</td><td><span class="badge badge-green">GEN</span></td></tr>
+</table>
+
+<!-- 17. GROUP-TO-GROUP ENFORCEMENT -->
+<h2 id="wf-g2g">17. Group-to-Group Enforcement Workflow</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Group-to-Group Enforcement</div>
+<div class="diagram-body">
+<pre>
+  New Rule / Rule Update
+         |
+         v
+  Check Source Prefix       Check Destination Prefix
+  [grp-*] = Group OK       [grp-*] = Group OK
+  [svr-*/rng-*/IP] = Flag  [svr-*/rng-*/IP] = Flag
+         |                         |
+         +------------+------------+
+                      |
+         +------------+------------+
+         |            |            |
+    [Both Group] [One Non-Grp] [Both Non-Grp]
+         |            |            |
+         v            v            v
+    COMPLIANT    EXCEPTION     NON-COMPLIANT
+    Green Badge  NEEDED        Blocked unless
+                 Amber Badge   exception approved
+                 Requires      Red Badge
+                 Security      Requires Security
+                 Analyst       Analyst + Manager
+                 Approval      Approval
+</pre>
+</div>
+</div>
+
+<h3>Enforcement Rules</h3>
+<table>
+<tr><th>Scenario</th><th>Source Type</th><th>Dest Type</th><th>Status</th><th>Action Required</th></tr>
+<tr><td>Ideal</td><td><code>grp-*</code></td><td><code>grp-*</code></td><td><span class="badge badge-green">Compliant</span></td><td>None</td></tr>
+<tr><td>Exception</td><td><code>grp-*</code></td><td><code>svr-*</code></td><td><span class="badge badge-amber">Needs Exception</span></td><td>Security Analyst approval</td></tr>
+<tr><td>Exception</td><td><code>svr-*</code></td><td><code>grp-*</code></td><td><span class="badge badge-amber">Needs Exception</span></td><td>Security Analyst approval</td></tr>
+<tr><td>Non-Compliant</td><td><code>svr-*</code></td><td><code>svr-*</code></td><td><span class="badge badge-red">Blocked</span></td><td>Security Analyst + Manager approval</td></tr>
+<tr><td>Non-Compliant</td><td>Raw IP</td><td>Any</td><td><span class="badge badge-red">Blocked</span></td><td>Full exception process</td></tr>
+</table>
+
+<!-- 18. RULE LIFECYCLE STATE MACHINE -->
+<h2 id="wf-lifecycle">18. Rule Lifecycle State Machine</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Rule Lifecycle State Machine</div>
+<div class="diagram-body">
+<pre>
+                          +----------+
+                          |  DRAFT   |&lt;--------------------------+
+                          +----+-----+                           |
+                               |                            [Reject &amp;
+                    [Submit for Review]                       Revise]
+                               |                                 |
+                               v                                 |
+                     +------------------+                        |
+                     | PENDING REVIEW   +------------------------+
+                     +--------+---------+
+                              |
+                   [Security Analyst Review]
+                              |
+                    +---------+---------+
+                    |                   |
+               [Certify]          [Reject]
+                    |                   |
+                    v                   v
+             +-----------+      +-----------+
+             | CERTIFIED |      | REJECTED  |
+             +-----+-----+      +-----------+
+                   |
+          [Submit CHG Request]
+                   |
+                   v
+          +-----------------+
+          | CHG_SUBMITTED   |
+          +--------+--------+
+                   |
+          +--------+--------+
+          |                 |
+     [CHG Approved]   [CHG Rejected]
+          |                 |
+          v                 v
+     +-----------+   +--------------+
+     | DEPLOYED  |   | CHG_REJECTED |
+     +-----+-----+   +--------------+
+           |
+    [Cert. Expires]
+           |
+           v
+     +-----------+
+     | EXPIRED   |
+     +-----+-----+
+           |
+    +------+------+
+    |             |
+ [Recertify]  [Disable]
+    |             |
+    v             v
+ CERTIFIED  +-----------+
+            | DISABLED  | --[Reactivate]--&gt; DRAFT
+            +-----------+
+</pre>
+</div>
+</div>
+
+<h3>State Definitions</h3>
+<table>
+<tr><th>State</th><th>Description</th><th>Allowed Actions</th></tr>
+<tr><td><span class="badge badge-blue">DRAFT</span></td><td>Rule created, not yet submitted</td><td>Edit, Delete, Submit for Review</td></tr>
+<tr><td><span class="badge badge-amber">PENDING REVIEW</span></td><td>Awaiting security analyst review</td><td>Certify, Reject</td></tr>
+<tr><td><span class="badge badge-green">CERTIFIED</span></td><td>Approved by security analyst</td><td>Submit CHG, Edit (new version)</td></tr>
+<tr><td><span class="badge badge-red">REJECTED</span></td><td>Failed security review</td><td>Edit &amp; Resubmit, Delete</td></tr>
+<tr><td><span class="badge badge-blue">CHG_SUBMITTED</span></td><td>Change request submitted to ServiceNow</td><td>Monitor status</td></tr>
+<tr><td><span class="badge badge-green">DEPLOYED</span></td><td>Rule deployed to NGDC firewalls</td><td>Monitor, Recertify when expired</td></tr>
+<tr><td><span class="badge badge-red">EXPIRED</span></td><td>Certification period elapsed</td><td>Recertify, Disable</td></tr>
+<tr><td><span class="badge badge-red">DISABLED</span></td><td>Rule deactivated</td><td>Reactivate (DRAFT), Delete</td></tr>
+</table>
+
+<!-- 19. DRAG AND DROP -->
+<h2 id="wf-dnd">19. Drag-and-Drop Destination Workflow</h2>
+
+<div class="diagram-container">
+<div class="diagram-title">Drag-and-Drop Destination Interface</div>
+<div class="diagram-body">
+<pre>
++--------------------------------------------------------------+
+|                DESIGN STUDIO - DESTINATIONS                   |
++--------------------------------------------------------------+
+|                                                              |
+|  +------ AVAILABLE TARGETS --------+  +-- DROP ZONE ------+ |
+|  |                                 |  |                    | |
+|  | NGDC Groups (grp-*)             |  | Destination List   | |
+|  | - grp-APP001-NH01-CDE-WEB      |  |                    | |
+|  | - grp-APP001-NH01-CDE-APP      |  | [Drop items here]  | |
+|  | - grp-APP002-NH05-GEN-DB       |  |                    | |
+|  |                                 |  | +----------+      | |
+|  | Birthright Groups               |  | |Dropped #1|      | |
+|  | - grp-INFRA-NH08-MGT-MON       |  | +----------+      | |
+|  | - grp-INFRA-NH08-MGT-DNS       |  | +----------+      | |
+|  |                                 |  | |Dropped #2|      | |
+|  | Custom Destination              |  | +----------+      | |
+|  | [+ Add Custom Target]          |  |                    | |
+|  +---------------------------------+  +--------------------+ |
++--------------------------------------------------------------+
+         |
+         v
+  On Drop: 1. Validate G2G  2. Check naming  3. Add to list
+</pre>
+</div>
+</div>
+
+<!-- 20. END-TO-END WORKFLOW -->
+<h2 id="wf-e2e">20. End-to-End Application Workflow</h2>
+
+<div class="panel panel-success">
+<strong>Complete 5-Phase Workflow</strong> covering the full lifecycle from rule design through deployment and ongoing management.
+</div>
+
+<table>
+<tr><th>Phase</th><th>Steps</th><th>Primary Actor</th><th>Key Deliverable</th></tr>
+<tr><td><strong>Phase 1: Design</strong></td><td>
+1. App Owner submits request<br>
+2. Engineer opens Design Studio<br>
+3. Select Application &rarr; Auto-populate NH/SZ<br>
+4. Build compliant source name<br>
+5. Drag-and-drop destinations (G2G enforced)<br>
+6. Configure ports, protocols, action<br>
+7. Create Rule &rarr; Status: DRAFT
+</td><td>Network Engineer</td><td>Draft firewall rule</td></tr>
+<tr><td><strong>Phase 2: Review</strong></td><td>
+8. Submit for review<br>
+9. Security Analyst reviews compliance<br>
+10. Certify or Reject<br>
+11. Status: CERTIFIED
+</td><td>Security Analyst</td><td>Certified rule</td></tr>
+<tr><td><strong>Phase 3: Change Mgmt</strong></td><td>
+12. Submit CHG request<br>
+13. ServiceNow ticket created<br>
+14. CAB reviews and approves<br>
+15. Status: CHG_APPROVED
+</td><td>Change Manager</td><td>Approved change</td></tr>
+<tr><td><strong>Phase 4: Deployment</strong></td><td>
+16. Rules committed to GitOps<br>
+17. CI/CD deploys to NGDC<br>
+18. Deployment verified<br>
+19. Audit trail updated
+</td><td>System (automated)</td><td>Deployed rule</td></tr>
+<tr><td><strong>Phase 5: Ongoing</strong></td><td>
+20. Periodic certification reminders<br>
+21. Owner recertifies or disables<br>
+22. Auto-disable if expired<br>
+23. All actions in audit history
+</td><td>Rule Owner</td><td>Maintained compliance</td></tr>
+</table>
+
+<hr>
+
+<!-- ==================== PART 3: REFERENCE ==================== -->
+
+<h1>Part 3: Reference</h1>
+
+<!-- 21. TECHNOLOGY STACK -->
+<h2 id="ref-tech">21. Technology Stack</h2>
+
+<table>
+<tr><th>Layer</th><th>Technology</th><th>Version</th><th>Purpose</th></tr>
+<tr><td>Frontend Framework</td><td>React</td><td>18.x</td><td>UI component framework</td></tr>
+<tr><td>Frontend Language</td><td>TypeScript</td><td>5.x</td><td>Type-safe JavaScript</td></tr>
+<tr><td>Build Tool</td><td>Vite</td><td>6.x</td><td>Fast build and HMR</td></tr>
+<tr><td>CSS Framework</td><td>Tailwind CSS</td><td>3.x</td><td>Utility-first styling</td></tr>
+<tr><td>UI Components</td><td>shadcn/ui</td><td>Latest</td><td>Pre-built accessible components</td></tr>
+<tr><td>Backend Framework</td><td>FastAPI</td><td>0.115.x</td><td>High-performance Python API</td></tr>
+<tr><td>Backend Language</td><td>Python</td><td>3.12</td><td>Server-side logic</td></tr>
+<tr><td>Package Manager</td><td>Poetry</td><td>1.x</td><td>Python dependency management</td></tr>
+<tr><td>ASGI Server</td><td>Uvicorn</td><td>0.34.x</td><td>Production ASGI server</td></tr>
+<tr><td>Icons</td><td>Lucide React</td><td>Latest</td><td>Icon library</td></tr>
+</table>
+
+<!-- 22. API ENDPOINTS -->
+<h2 id="ref-api">22. API Endpoint Summary</h2>
+
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="badge badge-green">GET</span></td><td><code>/api/firewall-rules</code></td><td>List all firewall rules</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/firewall-rules</code></td><td>Create a new firewall rule</td></tr>
+<tr><td><span class="badge badge-amber">PUT</span></td><td><code>/api/firewall-rules/{id}</code></td><td>Update a firewall rule</td></tr>
+<tr><td><span class="badge badge-red">DELETE</span></td><td><code>/api/firewall-rules/{id}</code></td><td>Delete a firewall rule</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/firewall-rules/{id}/certify</code></td><td>Certify a firewall rule</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/firewall-rules/{id}/submit-chg</code></td><td>Submit CHG request</td></tr>
+<tr><td><span class="badge badge-green">GET</span></td><td><code>/api/firewall-rules/{id}/history</code></td><td>Get rule history</td></tr>
+<tr><td><span class="badge badge-green">GET</span></td><td><code>/api/migration/legacy-rules</code></td><td>Get legacy firewall rules</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/migration/validate</code></td><td>Validate migration mapping</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/migration/map</code></td><td>Create migration mapping</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/migration/execute</code></td><td>Execute migration</td></tr>
+<tr><td><span class="badge badge-green">GET</span></td><td><code>/api/reference/neighbourhoods</code></td><td>Get all NGDC neighbourhoods</td></tr>
+<tr><td><span class="badge badge-green">GET</span></td><td><code>/api/reference/security-zones</code></td><td>Get all security zones</td></tr>
+<tr><td><span class="badge badge-green">GET</span></td><td><code>/api/reference/applications</code></td><td>Get all applications</td></tr>
+<tr><td><span class="badge badge-green">GET</span></td><td><code>/api/reference/naming-standards</code></td><td>Get naming standards info</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/reference/naming-standards/validate</code></td><td>Validate a name</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/reference/naming-standards/generate</code></td><td>Generate compliant name</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/reference/naming-standards/suggest</code></td><td>Suggest compliant name</td></tr>
+<tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/reference/naming-standards/determine-zone</code></td><td>Determine security zone</td></tr>
+</table>
+
+<!-- 23. GLOSSARY -->
+<h2 id="ref-glossary">23. Glossary</h2>
+
+<table>
+<tr><th>Term</th><th>Definition</th></tr>
+<tr><td><strong>NGDC</strong></td><td>Next-Generation Data Center - Modernized infrastructure with neighbourhood-based segmentation</td></tr>
+<tr><td><strong>NH</strong></td><td>Neighbourhood - A logical grouping within NGDC (NH01-NH17)</td></tr>
+<tr><td><strong>SZ</strong></td><td>Security Zone - A security classification within a neighbourhood</td></tr>
+<tr><td><strong>Birthright</strong></td><td>Default firewall rules automatically applied based on NH/SZ membership</td></tr>
+<tr><td><strong>CHG</strong></td><td>Change Request - ServiceNow change management ticket</td></tr>
+<tr><td><strong>G2G</strong></td><td>Group-to-Group - Policy requiring rules to reference groups rather than individual IPs</td></tr>
+<tr><td><strong>CDE</strong></td><td>Cardholder Data Environment - PCI DSS compliant zone</td></tr>
+<tr><td><strong>DMZ</strong></td><td>Demilitarized Zone - Network segment between internal and external networks</td></tr>
+<tr><td><strong>PAA</strong></td><td>Payment Application Area - Zone for payment processing applications</td></tr>
+<tr><td><strong>C4 Model</strong></td><td>Context, Container, Component, Code - Software architecture documentation model</td></tr>
+<tr><td><strong>GitOps</strong></td><td>Git-based operations - Using Git as single source of truth for infrastructure</td></tr>
+<tr><td><strong>SNS</strong></td><td>Security &amp; Network Services - Team responsible for firewall rule deployment</td></tr>
+</table>
+
+<hr>
+
+<div class="panel">
+<strong>Document maintained by:</strong> Network Engineering Team<br>
+<strong>Repository:</strong> <a href="https://github.com/sriram-tenneti/network-firewall-studio">github.com/sriram-tenneti/network-firewall-studio</a><br>
+<strong>Last updated:</strong> 2026-03-13<br>
+<em>This document follows the C4 model architecture standard and is maintained as part of the Network Firewall Studio documentation suite.</em>
+</div>
+
+</body>
+</html>
