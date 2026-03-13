@@ -49,177 +49,277 @@ def _save(name: str, data: Any) -> None:
 # ============================================================
 
 SEED_NEIGHBOURHOODS = [
-    {"nh_id": "NH01", "name": "Technology Enablement Services", "zone": "GEN", "environment": "Production",
-     "description": "Infrastructure and platform services", "ip_ranges": [
+    # From reference: Each NH has multiple security zones with VRF-IDs and Transit VNIs
+    {"nh_id": "NH01", "name": "Technology Enablement", "environment": "Production",
+     "description": "Technology enablement services", "ip_ranges": [
         {"cidr": "10.0.1.0/24", "description": "TES Primary", "dc": "EAST_NGDC"},
         {"cidr": "10.0.2.0/24", "description": "TES Secondary", "dc": "EAST_NGDC"},
         {"cidr": "172.16.50.0/24", "description": "TES West Primary", "dc": "WEST_NGDC"},
         {"cidr": "10.50.50.0/24", "description": "TES Central Primary", "dc": "CENTRAL_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH01 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH01 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH01 sz06", "description": "Critical Payment Applications"},
+        {"zone": "PSE", "vrf_id": "NH01 sz07", "description": "Production Simulation Environment"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH02", "name": "Core Banking", "zone": "CDE", "environment": "Production",
-     "description": "Core banking applications and databases", "ip_ranges": [
-        {"cidr": "10.1.1.0/24", "description": "Core Banking App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.1.2.0/24", "description": "Core Banking DB Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.1.0/24", "description": "Core Banking West App", "dc": "WEST_NGDC"},
-        {"cidr": "10.50.1.0/24", "description": "Core Banking Central App", "dc": "CENTRAL_NGDC"},
+    {"nh_id": "NH02", "name": "Data and Analytics", "environment": "Production",
+     "description": "Data warehousing, analytics, and BI platforms", "ip_ranges": [
+        {"cidr": "10.1.1.0/24", "description": "Data Analytics App Tier", "dc": "EAST_NGDC"},
+        {"cidr": "10.1.2.0/24", "description": "Data Analytics DB Tier", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.1.0/24", "description": "Data Analytics West App", "dc": "WEST_NGDC"},
+        {"cidr": "10.50.1.0/24", "description": "Data Analytics Central App", "dc": "CENTRAL_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH02 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH02 sz05", "transit_vni": 8051, "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH02 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH03", "name": "Digital Channels", "zone": "CDE", "environment": "Production",
+    {"nh_id": "NH03", "name": "Digital Channels", "environment": "Production",
      "description": "Digital banking channels - web, mobile, API", "ip_ranges": [
         {"cidr": "10.2.1.0/24", "description": "Digital Web Servers", "dc": "EAST_NGDC"},
         {"cidr": "10.2.2.0/24", "description": "Digital App Servers", "dc": "EAST_NGDC"},
         {"cidr": "172.16.3.0/24", "description": "Digital West Web", "dc": "WEST_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH03 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH03 sz05", "description": "Card Holder Data"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH04", "name": "Wealth Management", "zone": "GEN", "environment": "Production",
-     "description": "Wealth management and advisory platforms", "ip_ranges": [
-        {"cidr": "10.3.1.0/24", "description": "Wealth Mgmt App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.5.0/24", "description": "Wealth West Primary", "dc": "WEST_NGDC"},
+    {"nh_id": "NH04", "name": "Consumer Landing", "environment": "Production",
+     "description": "Consumer lending and landing platforms", "ip_ranges": [
+        {"cidr": "10.3.1.0/24", "description": "Consumer Landing App Tier", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.5.0/24", "description": "Consumer Landing West Primary", "dc": "WEST_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH04 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH04 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH04 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH05", "name": "Enterprise Services", "zone": "GEN", "environment": "Production",
-     "description": "Shared enterprise platforms and services", "ip_ranges": [
-        {"cidr": "10.4.1.0/24", "description": "Enterprise App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "10.4.2.0/24", "description": "Enterprise DB Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.10.0/24", "description": "Enterprise West App", "dc": "WEST_NGDC"},
-        {"cidr": "10.54.1.0/24", "description": "Enterprise Central App", "dc": "CENTRAL_NGDC"},
-     ]},
-    {"nh_id": "NH06", "name": "Wholesale Banking", "zone": "CDE", "environment": "Production",
+    {"nh_id": "NH05", "name": "Wholesale Banking", "environment": "Production",
      "description": "Wholesale and commercial banking", "ip_ranges": [
-        {"cidr": "10.5.1.0/24", "description": "Wholesale App Tier", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.20.0/24", "description": "Wholesale West App", "dc": "WEST_NGDC"},
+        {"cidr": "10.4.1.0/24", "description": "Wholesale App Tier", "dc": "EAST_NGDC"},
+        {"cidr": "10.4.2.0/24", "description": "Wholesale DB Tier", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.10.0/24", "description": "Wholesale West App", "dc": "WEST_NGDC"},
+        {"cidr": "10.54.1.0/24", "description": "Wholesale Central App", "dc": "CENTRAL_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH05 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH05 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH05 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH07", "name": "Global Payments and Liquidity", "zone": "CDE", "environment": "Production",
+    {"nh_id": "NH06", "name": "Wholesale Banking Extended", "environment": "Production",
+     "description": "Wholesale banking extended services (overlay)", "ip_ranges": [
+        {"cidr": "10.5.1.0/24", "description": "Wholesale Ext App Tier", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.20.0/24", "description": "Wholesale Ext West App", "dc": "WEST_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH06 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH06 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH06 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "Overlay01", "transit_vni": 4000, "description": "Standard/General (Overlay)"},
+     ]},
+    {"nh_id": "NH07", "name": "Global Payments and Liquidity", "environment": "Production",
      "description": "Payment processing and liquidity management", "ip_ranges": [
         {"cidr": "10.6.1.0/24", "description": "Payments App Tier", "dc": "EAST_NGDC"},
         {"cidr": "10.6.2.0/24", "description": "Payments DB Tier", "dc": "EAST_NGDC"},
         {"cidr": "172.16.22.0/24", "description": "Payments West App", "dc": "WEST_NGDC"},
         {"cidr": "10.56.1.0/24", "description": "Payments Central App", "dc": "CENTRAL_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH07 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH07 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH07 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Extra", "vrf_id": "NH07 sz08", "description": "Additional zone"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH08", "name": "Data and Analytics", "zone": "GEN", "environment": "Production",
-     "description": "Data warehousing, analytics, and BI platforms", "ip_ranges": [
-        {"cidr": "10.7.1.0/24", "description": "Data Analytics App", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.30.0/24", "description": "Data West App", "dc": "WEST_NGDC"},
+    {"nh_id": "NH08", "name": "Data and Analytics Extended", "environment": "Production",
+     "description": "Extended data and analytics platforms", "ip_ranges": [
+        {"cidr": "10.7.1.0/24", "description": "Data Analytics Ext App", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.30.0/24", "description": "Data Ext West App", "dc": "WEST_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH08 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH08 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH08 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH09", "name": "Assisted Channels", "zone": "GEN", "environment": "Production",
+    {"nh_id": "NH09", "name": "Assisted Channels", "environment": "Production",
      "description": "Branch, call center, and assisted channel apps", "ip_ranges": [
         {"cidr": "10.8.1.0/24", "description": "Assisted Channels App", "dc": "EAST_NGDC"},
         {"cidr": "172.16.40.0/24", "description": "Assisted West App", "dc": "WEST_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH09 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH09 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH09 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH10", "name": "Consumer Lending", "zone": "GEN", "environment": "Production",
+    {"nh_id": "NH10", "name": "Consumer Lending", "environment": "Production",
      "description": "Consumer lending and loan origination", "ip_ranges": [
         {"cidr": "10.9.1.0/24", "description": "Lending App Tier", "dc": "EAST_NGDC"},
         {"cidr": "10.55.1.0/24", "description": "Lending Central App", "dc": "CENTRAL_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH10 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH10 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH10 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH11", "name": "Production Mainframe", "zone": "RST", "environment": "Production",
+    {"nh_id": "NH11", "name": "Production Mainframe", "environment": "Production",
      "description": "Production mainframe systems (z/OS, CICS, DB2)", "ip_ranges": [
         {"cidr": "10.10.1.0/24", "description": "Mainframe LPAR Primary", "dc": "EAST_NGDC"},
         {"cidr": "10.60.1.0/24", "description": "Mainframe Central Primary", "dc": "CENTRAL_NGDC"},
-     ]},
-    {"nh_id": "NH12", "name": "Non-Production Mainframe", "zone": "GEN", "environment": "Non-Production",
+     ],
+     "security_zones": []},
+    {"nh_id": "NH12", "name": "Non-Production Mainframe", "environment": "Non-Production",
      "description": "Non-production mainframe systems (test, dev)", "ip_ranges": [
         {"cidr": "10.11.1.0/24", "description": "Non-Prod MF Primary", "dc": "EAST_NGDC"},
         {"cidr": "10.61.1.0/24", "description": "Non-Prod MF Central", "dc": "CENTRAL_NGDC"},
-     ]},
-    {"nh_id": "NH13", "name": "Non-Production Shared", "zone": "GEN", "environment": "Non-Production",
-     "description": "Shared non-production environment for testing", "ip_ranges": [
+     ],
+     "security_zones": []},
+    {"nh_id": "NH13", "name": "Non-Production Shared", "environment": "Non-Production",
+     "description": "Shared non-production environment", "ip_ranges": [
         {"cidr": "10.100.1.0/24", "description": "Non-Prod Shared App", "dc": "EAST_NGDC"},
         {"cidr": "172.16.100.0/24", "description": "Non-Prod West Shared", "dc": "WEST_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH13 sz04", "transit_vni": 3061, "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH13 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH13 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "Overlay01", "transit_vni": 4000, "description": "Standard/General (Overlay)"},
      ]},
-    {"nh_id": "NH14", "name": "DMZ", "zone": "DMZ", "environment": "Production",
+    {"nh_id": "NH14", "name": "DMZ", "environment": "Production",
      "description": "Demilitarized zone for external-facing services", "ip_ranges": [
         {"cidr": "10.70.1.0/24", "description": "DMZ Web Tier", "dc": "EAST_NGDC"},
         {"cidr": "10.70.2.0/24", "description": "DMZ API Gateway", "dc": "EAST_NGDC"},
         {"cidr": "172.16.70.0/24", "description": "DMZ West Web", "dc": "WEST_NGDC"},
         {"cidr": "10.70.10.0/24", "description": "DMZ Central Web", "dc": "CENTRAL_NGDC"},
-     ]},
-    {"nh_id": "NH15", "name": "Non-Production DMZ", "zone": "DMZ", "environment": "Non-Production",
+     ],
+     "security_zones": []},
+    {"nh_id": "NH15", "name": "Non-Production DMZ", "environment": "Non-Production",
      "description": "Non-production DMZ for test external services", "ip_ranges": [
         {"cidr": "10.80.1.0/24", "description": "Non-Prod DMZ Web", "dc": "EAST_NGDC"},
         {"cidr": "172.16.80.0/24", "description": "Non-Prod DMZ West", "dc": "WEST_NGDC"},
-     ]},
-    {"nh_id": "NH16", "name": "Pre-Production (Non-Prod Shared)", "zone": "GEN", "environment": "Pre-Production",
+     ],
+     "security_zones": []},
+    {"nh_id": "NH16", "name": "Pre-Production Shared", "environment": "Pre-Production",
      "description": "Pre-production staging environment", "ip_ranges": [
         {"cidr": "10.90.1.0/24", "description": "Pre-Prod App Tier", "dc": "EAST_NGDC"},
         {"cidr": "10.65.1.0/24", "description": "Pre-Prod Central App", "dc": "CENTRAL_NGDC"},
-     ]},
-    {"nh_id": "NH17", "name": "Pre-Production DMZ", "zone": "DMZ", "environment": "Pre-Production",
+     ],
+     "security_zones": []},
+    {"nh_id": "NH17", "name": "Pre-Production DMZ", "environment": "Pre-Production",
      "description": "Pre-production DMZ for staging external services", "ip_ranges": [
         {"cidr": "10.91.1.0/24", "description": "Pre-Prod DMZ Web", "dc": "EAST_NGDC"},
         {"cidr": "10.66.1.0/24", "description": "Pre-Prod DMZ Central", "dc": "CENTRAL_NGDC"},
-     ]},
+     ],
+     "security_zones": []},
 ]
 
 SEED_SECURITY_ZONES = [
-    {"code": "CDE", "name": "Cardholder Data Environment", "description": "PCI DSS compliant zone",
-     "risk_level": "Critical", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.1.0.0/16", "description": "CDE East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.0.0/20", "description": "CDE West Block", "dc": "WEST_NGDC"},
-        {"cidr": "10.50.0.0/16", "description": "CDE Central Block", "dc": "CENTRAL_NGDC"},
+    # === Production Security Zones (per NH reference) ===
+    {"code": "CCS", "name": "Critical Core Services", "description": "Critical core services zone - highest security tier",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
+     "vrf_suffix": "sz04", "ip_ranges": [
+        {"cidr": "10.1.0.0/16", "description": "CCS East Block", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.0.0/20", "description": "CCS West Block", "dc": "WEST_NGDC"},
+        {"cidr": "10.50.0.0/16", "description": "CCS Central Block", "dc": "CENTRAL_NGDC"},
      ]},
-    {"code": "GEN", "name": "General", "description": "General purpose security zone",
-     "risk_level": "Medium", "pci_scope": False, "ip_ranges": [
+    {"code": "CDE", "name": "Card Holder Data", "description": "Cardholder Data Environment - PCI DSS compliant",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
+     "vrf_suffix": "sz05", "ip_ranges": [
+        {"cidr": "10.2.0.0/16", "description": "CDE East Block", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.16.0/20", "description": "CDE West Block", "dc": "WEST_NGDC"},
+        {"cidr": "10.52.0.0/16", "description": "CDE Central Block", "dc": "CENTRAL_NGDC"},
+     ]},
+    {"code": "CPA", "name": "Critical Payment Applications", "description": "Critical payment application processing zone",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
+     "vrf_suffix": "sz06", "ip_ranges": [
+        {"cidr": "10.3.0.0/16", "description": "CPA East Block", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.32.0/20", "description": "CPA West Block", "dc": "WEST_NGDC"},
+        {"cidr": "10.53.0.0/16", "description": "CPA Central Block", "dc": "CENTRAL_NGDC"},
+     ]},
+    {"code": "PSE", "name": "Production Simulation Environment", "description": "Production simulation for testing in prod-like conditions",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Production",
+     "vrf_suffix": "sz07", "ip_ranges": [
+        {"cidr": "10.4.0.0/16", "description": "PSE East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "Standard", "name": "Standard/General", "description": "Standard general-purpose zone (GEN VRF)",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
+     "vrf_suffix": "gen", "ip_ranges": [
+        {"cidr": "10.0.0.0/16", "description": "Standard East Block", "dc": "EAST_NGDC"},
+        {"cidr": "172.16.48.0/20", "description": "Standard West Block", "dc": "WEST_NGDC"},
+     ]},
+    {"code": "GEN", "name": "General", "description": "General purpose security zone (alias for Standard)",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
+     "vrf_suffix": "gen", "ip_ranges": [
         {"cidr": "10.0.0.0/16", "description": "GEN East Block", "dc": "EAST_NGDC"},
-        {"cidr": "172.16.32.0/20", "description": "GEN West Block", "dc": "WEST_NGDC"},
+        {"cidr": "172.16.48.0/20", "description": "GEN West Block", "dc": "WEST_NGDC"},
      ]},
     {"code": "DMZ", "name": "DMZ", "description": "Demilitarized zone for external-facing services",
-     "risk_level": "High", "pci_scope": False, "ip_ranges": [
+     "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
         {"cidr": "10.70.0.0/16", "description": "DMZ East Block", "dc": "EAST_NGDC"},
         {"cidr": "172.16.70.0/22", "description": "DMZ West Block", "dc": "WEST_NGDC"},
      ]},
     {"code": "RST", "name": "Restricted", "description": "Highly restricted zone for sensitive systems",
-     "risk_level": "Critical", "pci_scope": True, "ip_ranges": [
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
         {"cidr": "10.10.0.0/16", "description": "RST East Block", "dc": "EAST_NGDC"},
         {"cidr": "10.60.0.0/16", "description": "RST Central Block", "dc": "CENTRAL_NGDC"},
      ]},
+    {"code": "PAA", "name": "Publicly Accessible Applications", "description": "Publicly accessible application zone",
+     "risk_level": "High", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
+        {"cidr": "10.71.0.0/16", "description": "PAA East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "3PY", "name": "Third Party", "description": "Third-party connectivity zone",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
+        {"cidr": "10.79.0.0/16", "description": "3PY East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "PCI_CAN", "name": "PCI CAN", "description": "PCI Cardholder Area Network",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Heritage", "ip_ranges": [
+        {"cidr": "10.73.0.0/16", "description": "PCI CAN East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "CAN", "name": "CAN", "description": "Campus Area Network",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Heritage", "ip_ranges": [
+        {"cidr": "10.74.0.0/16", "description": "CAN East Block", "dc": "EAST_NGDC"},
+     ]},
+    # === Non-Production Security Zones ===
+    {"code": "UGEN", "name": "Non-Prod General", "description": "Non-production general zone (UGEN/USTD)",
+     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
+        {"cidr": "10.100.0.0/16", "description": "UGEN East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "USTD", "name": "Non-Prod Standard", "description": "Non-production standard zone",
+     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
+        {"cidr": "10.101.0.0/16", "description": "USTD East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "UCCS", "name": "Non-Prod Critical Core Services", "description": "Non-production CCS zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
+        {"cidr": "10.102.0.0/16", "description": "UCCS East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "UPAA", "name": "Non-Prod PAA", "description": "Non-production publicly accessible apps zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
+        {"cidr": "10.103.0.0/16", "description": "UPAA East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "UCPA", "name": "Non-Prod Critical Payment Apps", "description": "Non-production critical payment apps zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production", "ip_ranges": [
+        {"cidr": "10.104.0.0/16", "description": "UCPA East Block", "dc": "EAST_NGDC"},
+     ]},
+    {"code": "UCDE", "name": "Non-Prod Card Holder Data", "description": "Non-production cardholder data zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production", "ip_ranges": [
+        {"cidr": "10.105.0.0/16", "description": "UCDE East Block", "dc": "EAST_NGDC"},
+     ]},
+    # === Additional Zones ===
     {"code": "MGT", "name": "Management", "description": "Network management and monitoring zone",
-     "risk_level": "High", "pci_scope": False, "ip_ranges": [
+     "risk_level": "High", "pci_scope": False, "zone_type": "Infrastructure", "ip_ranges": [
         {"cidr": "10.200.1.0/24", "description": "MGT East", "dc": "EAST_NGDC"},
      ]},
-    {"code": "PNA", "name": "PAA Zone", "description": "Publicly Accessible Application zone",
-     "risk_level": "High", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.71.1.0/24", "description": "PNA East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "EPAA", "name": "Extended PAA", "description": "Extended PAA zone",
-     "risk_level": "High", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.72.1.0/24", "description": "EPAA East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "UCPA", "name": "Ultra-Critical Payment Apps", "description": "Critical Payment Application zone",
-     "risk_level": "Critical", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.73.1.0/24", "description": "UCPA East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "BCCI", "name": "Business Critical CI", "description": "Business Critical CI zone",
-     "risk_level": "Critical", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.74.1.0/24", "description": "BCCI East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "GGEN", "name": "Global General", "description": "Global general purpose zone",
-     "risk_level": "Medium", "pci_scope": False, "ip_ranges": [
-        {"cidr": "10.75.1.0/24", "description": "GGEN East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "EPIN", "name": "Enterprise PIN", "description": "Enterprise PIN processing zone",
-     "risk_level": "Critical", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.76.1.0/24", "description": "EPIN East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "LPAA", "name": "Lightweight PAA", "description": "Lightweight PAA zone",
-     "risk_level": "High", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.77.1.0/24", "description": "LPAA East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "USPP", "name": "US Pre-Production", "description": "US Pre-Production zone",
-     "risk_level": "Low", "pci_scope": False, "ip_ranges": [
-        {"cidr": "10.90.0.0/16", "description": "USPP East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "EXEN", "name": "External Enterprise", "description": "External enterprise partner zone",
-     "risk_level": "High", "pci_scope": False, "ip_ranges": [
-        {"cidr": "10.78.1.0/24", "description": "EXEN East", "dc": "EAST_NGDC"},
-     ]},
     {"code": "EXT", "name": "External Partners", "description": "External partner connectivity zone",
-     "risk_level": "High", "pci_scope": False, "ip_ranges": [
+     "risk_level": "High", "pci_scope": False, "zone_type": "External", "ip_ranges": [
         {"cidr": "10.79.1.0/24", "description": "EXT East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "CPN", "name": "Critical Payment Network", "description": "Critical Payment Network zone",
-     "risk_level": "Critical", "pci_scope": True, "ip_ranges": [
-        {"cidr": "10.73.2.0/24", "description": "CPN East", "dc": "EAST_NGDC"},
-     ]},
-    {"code": "SPN", "name": "Special Zone", "description": "Special-purpose security zone",
-     "risk_level": "High", "pci_scope": False, "ip_ranges": [
-        {"cidr": "10.79.10.0/24", "description": "SPN East", "dc": "EAST_NGDC"},
      ]},
 ]
 
@@ -363,19 +463,163 @@ SEED_NAMING_STANDARDS = {
     ],
 }
 
+# =====================================================================
+# THREE-PART POLICY MATRIX (from NGDC reference)
+# "Blocked" means a new Firewall Request is required to open the flow
+# =====================================================================
+
+# --- 1) Heritage Data Center Matrix ---
+# Legacy zone-to-NGDC zone migration rules
+SEED_HERITAGE_DC_MATRIX = [
+    {"heritage_dc": "Any", "heritage_zone": "Default", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "Standard", "action": "Permitted",
+     "reason": "Default heritage zone maps to Standard in prod NGDC"},
+    {"heritage_dc": "Any", "heritage_zone": "Default", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "Standard", "action": "Permitted (Exception)",
+     "reason": "Default heritage zone to Non-Prod Standard requires exception approval"},
+    {"heritage_dc": "Any", "heritage_zone": "PAA", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "reason": "PAA to PAA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "PAA", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "reason": "PAA to Non-Prod PAA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "PCI CAN", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "reason": "PCI CAN to CDE is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "PCI CAN", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "reason": "PCI CAN to Non-Prod CDE is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to CPA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to Non-Prod CPA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "3PY", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to 3PY is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "3PY", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to Non-Prod 3PY is blocked by default; submit a firewall request to open"},
+]
+
+# --- 2) NGDC Prod Rules Matrix ---
+# DC / Neighbourhood / Security Zone based permit/block rules
+SEED_NGDC_PROD_MATRIX = [
+    {"src_dc": "Any", "src_nh": "Any", "src_sz": "GEN", "dst_dc": "Any", "dst_nh": "Any", "dst_sz": "GEN",
+     "action": "Permitted", "reason": "GEN-to-GEN traffic is permitted across all DCs and NHs"},
+    {"src_dc": "Same", "src_nh": "Same", "src_sz": "Same", "dst_dc": "Same", "dst_nh": "Same", "dst_sz": "Same",
+     "action": "Permitted", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"src_dc": "Different", "src_nh": "Same", "src_sz": "Same", "dst_dc": "Different", "dst_nh": "Same", "dst_sz": "Same",
+     "action": "Permitted", "reason": "Different DC + Same NH + Same SZ = Permitted (cross-DC HA)"},
+    {"src_dc": "Same", "src_nh": "Same", "src_sz": "Different", "dst_dc": "Same", "dst_nh": "Same", "dst_sz": "Different",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Same DC + Same NH + Different SZ = Blocked; submit a firewall request to open"},
+    {"src_dc": "Same", "src_nh": "Different", "src_sz": "Same", "dst_dc": "Same", "dst_nh": "Different", "dst_sz": "Same",
+     "action": "Permitted", "reason": "Same DC + Different NH + Same SZ = Permitted"},
+    {"src_dc": "Different", "src_nh": "Different", "src_sz": "Same", "dst_dc": "Different", "dst_nh": "Different", "dst_sz": "Same",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Different DC + Different NH + Same SZ = Blocked; submit a firewall request to open"},
+    {"src_dc": "Same", "src_nh": "Non-Prod to PROD", "src_sz": "Any", "dst_dc": "Same", "dst_nh": "Non-Prod to PROD", "dst_sz": "Any",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod to PROD traffic is blocked; submit a firewall request to open"},
+]
+
+# --- 3) Non-Prod Rules Matrix ---
+# Source zone to destination zone rules for non-production
+SEED_NONPROD_MATRIX = [
+    {"dc": "Any", "source_zone": "UGEN/USTD", "dest_zone": "UGEN/USTD",
+     "action": "Permitted", "reason": "Non-Prod UGEN/USTD to Pre-Prod UGEN/USTD = Permitted"},
+    {"dc": "Any", "source_zone": "UGEN/USTD", "dest_zone": "PAA/CCS/CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN/USTD to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "PAA/CCS/CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCCS to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "PAA/CCS/CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UPAA to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "PAA/CCS/CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCPA to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "PAA/CCS/CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCDE to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
+]
+
+# Combined policy matrix for backward compatibility (flat list used by API)
 SEED_POLICY_MATRIX = [
-    {"source_zone": "DMZ", "dest_zone": "RST", "action": "Blocked", "reason": "DMZ to Restricted is denied"},
-    {"source_zone": "EXT", "dest_zone": "RST", "action": "Blocked", "reason": "External to Restricted is denied"},
-    {"source_zone": "EXT", "dest_zone": "CDE", "action": "Blocked", "reason": "External to CDE is denied"},
-    {"source_zone": "DMZ", "dest_zone": "CDE", "action": "Blocked", "reason": "DMZ to CDE is denied"},
-    {"source_zone": "GEN", "dest_zone": "RST", "action": "Exception Required", "reason": "GEN to Restricted requires exception"},
-    {"source_zone": "GEN", "dest_zone": "CDE", "action": "Exception Required", "reason": "GEN to CDE requires exception"},
-    {"source_zone": "DMZ", "dest_zone": "GEN", "action": "Exception Required", "reason": "DMZ to GEN requires exception"},
-    {"source_zone": "CDE", "dest_zone": "CDE", "action": "Permitted", "reason": "Same zone traffic permitted"},
-    {"source_zone": "GEN", "dest_zone": "GEN", "action": "Permitted", "reason": "Same zone traffic permitted"},
-    {"source_zone": "DMZ", "dest_zone": "DMZ", "action": "Permitted", "reason": "Same zone traffic permitted"},
-    {"source_zone": "CDE", "dest_zone": "GEN", "action": "Permitted", "reason": "CDE to GEN is permitted"},
-    {"source_zone": "RST", "dest_zone": "CDE", "action": "Permitted", "reason": "Restricted to CDE is permitted"},
+    # Heritage DC rules (flattened)
+    {"source_zone": "Default", "dest_zone": "Standard", "action": "Permitted",
+     "matrix_type": "Heritage DC", "reason": "Heritage Default to NGDC Standard = Permitted"},
+    {"source_zone": "PAA", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage PAA to NGDC PAA = Blocked; submit firewall request to open"},
+    {"source_zone": "PCI_CAN", "dest_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage PCI CAN to NGDC CDE = Blocked; submit firewall request to open"},
+    {"source_zone": "CAN", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage CAN to NGDC CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "CAN", "dest_zone": "3PY", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage CAN to NGDC 3PY = Blocked; submit firewall request to open"},
+    # NGDC Prod rules (flattened)
+    {"source_zone": "GEN", "dest_zone": "GEN", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "GEN-to-GEN across all DCs/NHs = Permitted"},
+    {"source_zone": "CCS", "dest_zone": "CCS", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"source_zone": "CDE", "dest_zone": "CDE", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"source_zone": "CPA", "dest_zone": "CPA", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"source_zone": "CCS", "dest_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CCS", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CDE", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CDE", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CPA", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CPA", "dest_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    # Non-Prod rules (flattened)
+    {"source_zone": "UGEN", "dest_zone": "UGEN", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "USTD", "dest_zone": "USTD", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "UGEN", "dest_zone": "USTD", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "USTD", "dest_zone": "UGEN", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "UGEN", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UGEN to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UGEN", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UGEN to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UGEN", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UGEN to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCCS", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCCS to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCCS", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCCS to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCCS", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCCS to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UPAA", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UPAA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UPAA", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UPAA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UPAA", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UPAA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCPA", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCPA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCPA", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCPA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCPA", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCPA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCDE", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCDE to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCDE", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCDE to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCDE", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCDE to PAA/CCS/CPA = Blocked; submit firewall request to open"},
 ]
 
 SEED_ORG_CONFIG = {
@@ -917,6 +1161,9 @@ async def seed_database() -> None:
     _save("predefined_destinations", deepcopy(SEED_PREDEFINED_DESTINATIONS))
     _save("naming_standards", deepcopy(SEED_NAMING_STANDARDS))
     _save("policy_matrix", deepcopy(SEED_POLICY_MATRIX))
+    _save("heritage_dc_matrix", deepcopy(SEED_HERITAGE_DC_MATRIX))
+    _save("ngdc_prod_matrix", deepcopy(SEED_NGDC_PROD_MATRIX))
+    _save("nonprod_matrix", deepcopy(SEED_NONPROD_MATRIX))
     _save("org_config", deepcopy(SEED_ORG_CONFIG))
     _save("firewall_rules", _build_seed_rules())
     _save("rule_history", [])
@@ -964,6 +1211,18 @@ async def get_naming_standards() -> dict[str, Any] | None:
 
 async def get_policy_matrix() -> list[dict[str, Any]]:
     return _load("policy_matrix") or []
+
+
+async def get_heritage_dc_matrix() -> list[dict[str, Any]]:
+    return _load("heritage_dc_matrix") or []
+
+
+async def get_ngdc_prod_matrix() -> list[dict[str, Any]]:
+    return _load("ngdc_prod_matrix") or []
+
+
+async def get_nonprod_matrix() -> list[dict[str, Any]]:
+    return _load("nonprod_matrix") or []
 
 
 async def get_org_config() -> dict[str, Any] | None:
@@ -1216,16 +1475,24 @@ async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
     naming_compliant = bool(group_name and group_name.startswith("grp-")) if group_name else True
 
     policy = None
+    matched_matrix = ""
     for p in policy_matrix:
         if p.get("source_zone") == source_zone and p.get("dest_zone") == dest_zone:
             policy = p
+            matched_matrix = p.get("matrix_type", "")
             break
 
     details: list[str] = []
+    firewall_request_required = False
     if policy:
         result = policy.get("action", "Permitted")
-        requires_exception = result == "Exception Required"
+        requires_exception = "Exception" in result
+        firewall_request_required = "Firewall Request Required" in result
+        if matched_matrix:
+            details.append(f"Matrix: {matched_matrix}")
         details.append(f"Policy: {source_zone} -> {dest_zone} = {result}")
+        if firewall_request_required:
+            details.append("Action: Submit a new Firewall Request to open this traffic flow")
     else:
         result = "Permitted"
         requires_exception = False
@@ -1240,8 +1507,10 @@ async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
         "result": result,
         "message": f"Traffic from {source_zone} to {dest_zone}: {result}",
         "details": details,
+        "matrix_type": matched_matrix,
         "ngdc_zone_check": True,
-        "birthright_compliant": not requires_exception,
+        "birthright_compliant": not requires_exception and not firewall_request_required,
+        "firewall_request_required": firewall_request_required,
         "naming_compliant": naming_compliant,
         "group_to_group_compliant": is_group_to_group,
     }

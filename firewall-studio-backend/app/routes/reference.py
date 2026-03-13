@@ -3,7 +3,8 @@ from app.database import (
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
-    get_policy_matrix, get_rules,
+    get_policy_matrix, get_heritage_dc_matrix, get_ngdc_prod_matrix, get_nonprod_matrix,
+    get_rules,
     create_neighbourhood, update_neighbourhood, delete_neighbourhood,
     create_security_zone, update_security_zone, delete_security_zone,
     create_application, update_application, delete_application,
@@ -57,7 +58,7 @@ async def list_ngdc_datacenters():
                     resolved_nhs.append({
                         "name": f"{nh_id} - {nh_data.get('name', '')}",
                         "nh_id": nh_id,
-                        "zone": nh_data.get("zone", ""),
+                        "security_zones": nh_data.get("security_zones", []),
                         "subnets": subnets,
                     })
                     # Also build ip_groups entries
@@ -140,6 +141,31 @@ async def get_org_config_endpoint():
 @router.get("/policy-matrix")
 async def list_policy_matrix():
     return await get_policy_matrix()
+
+
+@router.get("/policy-matrix/heritage-dc")
+async def list_heritage_dc_matrix():
+    return await get_heritage_dc_matrix()
+
+
+@router.get("/policy-matrix/ngdc-prod")
+async def list_ngdc_prod_matrix():
+    return await get_ngdc_prod_matrix()
+
+
+@router.get("/policy-matrix/nonprod")
+async def list_nonprod_matrix():
+    return await get_nonprod_matrix()
+
+
+@router.get("/policy-matrix/all")
+async def list_all_policy_matrices():
+    return {
+        "heritage_dc": await get_heritage_dc_matrix(),
+        "ngdc_prod": await get_ngdc_prod_matrix(),
+        "nonprod": await get_nonprod_matrix(),
+        "combined": await get_policy_matrix(),
+    }
 
 
 @router.get("/naming-standards")
