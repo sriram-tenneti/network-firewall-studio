@@ -232,7 +232,6 @@ export interface FirewallGroup {
   updated_at?: string;
 }
 
-// Compiled firewall rule in deployable format
 export interface CompiledRule {
   rule_id: string;
   vendor_format: 'generic' | 'palo_alto' | 'checkpoint' | 'cisco_asa';
@@ -245,7 +244,6 @@ export interface CompiledRule {
   comment: string;
 }
 
-// Review/Approval workflow
 export interface ReviewRequest {
   id: string;
   rule_id: string;
@@ -267,7 +265,6 @@ export interface ReviewRequest {
   };
 }
 
-// Legacy non-standard rule for migration
 export interface LegacyRule {
   id: string;
   app_id: string;
@@ -286,4 +283,85 @@ export interface LegacyRule {
   is_standard: boolean;
   migration_status: 'Not Started' | 'In Progress' | 'Mapped' | 'Needs Review' | 'Completed';
   suggested_standard_name?: string;
+}
+
+// AD User Integration
+export interface ADUserGroup {
+  id: string;
+  group_name: string;
+  access_type: 'Admin' | 'Approver' | 'Operator' | 'Viewer' | 'Auditor';
+  description: string;
+  member_count: number;
+  applications: string[];
+}
+
+export interface ADUser {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string;
+  groups: string[];
+  access_type: string;
+  last_login: string | null;
+  is_active: boolean;
+}
+
+export interface ADConfig {
+  server_url: string;
+  base_dn: string;
+  bind_user: string;
+  search_filter: string;
+  group_mapping: Record<string, string>;
+  sync_interval_minutes: number;
+  is_connected: boolean;
+  last_sync: string | null;
+}
+
+// Data Source Import
+export interface DataImportJob {
+  id: string;
+  source_type: 'json' | 'csv' | 'xlsx' | 'mongodb';
+  source_name: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  total_records: number;
+  imported_records: number;
+  failed_records: number;
+  target: 'legacy_rules' | 'firewall_rules' | 'groups';
+  created_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}
+
+// Firewall Management (as-is rules)
+export interface AsIsRule {
+  id: string;
+  app_id: string;
+  app_name: string;
+  rule_name: string;
+  source: string;
+  source_zone: string;
+  destination: string;
+  destination_zone: string;
+  port: string;
+  protocol: string;
+  action: string;
+  is_standard: boolean;
+  compliance_status: 'Compliant' | 'Non-Compliant' | 'Pending Review';
+  last_reviewed: string | null;
+  request_type: 'existing' | 'new' | 'modification';
+  output_generated: boolean;
+}
+
+// Exception request for individual IPs/subnets
+export interface ExceptionRequest {
+  id: string;
+  rule_id: string;
+  exception_type: 'ip' | 'subnet';
+  value: string;
+  justification: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  requested_by: string;
+  requested_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
 }

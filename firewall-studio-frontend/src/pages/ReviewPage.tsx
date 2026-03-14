@@ -6,7 +6,7 @@ import { Notification } from '@/components/shared/Notification';
 import { ApprovalModal } from '@/components/review/ApprovalModal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import { getReviewRequests, approveReview, rejectReview } from '@/lib/api';
+import { getReviewRequests, approveReview, rejectReview, compileRule } from '@/lib/api';
 import type { ReviewRequest } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -63,8 +63,7 @@ export default function ReviewPage() {
   };
 
   const columns: Column<ReviewRequest>[] = [
-    { key: 'id', header: 'Review ID', sortable: true, width: '120px' },
-    { key: 'rule_id', header: 'Rule ID', sortable: true, width: '100px' },
+    { key: 'rule_id', header: 'Rule ID', sortable: true, width: '120px' },
     {
       key: 'request_type', header: 'Type', sortable: true, width: '120px',
       render: (_, row) => (
@@ -130,10 +129,10 @@ export default function ReviewPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Reviews', value: counts.All, color: 'bg-gray-100 text-gray-800' },
-          { label: 'Pending', value: counts.Pending, color: 'bg-amber-100 text-amber-800' },
-          { label: 'Approved', value: counts.Approved, color: 'bg-green-100 text-green-800' },
-          { label: 'Rejected', value: counts.Rejected, color: 'bg-red-100 text-red-800' },
+          { label: 'Total Reviews', value: counts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
+          { label: 'Pending', value: counts.Pending, color: 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800' },
+          { label: 'Approved', value: counts.Approved, color: 'bg-gradient-to-br from-green-100 to-green-200 text-green-800' },
+          { label: 'Rejected', value: counts.Rejected, color: 'bg-gradient-to-br from-red-100 to-red-200 text-red-800' },
         ].map(card => (
           <div key={card.label} className={`p-4 rounded-lg ${card.color}`}>
             <div className="text-2xl font-bold">{card.value}</div>
@@ -172,6 +171,7 @@ export default function ReviewPage() {
         review={approvalModal.data}
         onApprove={handleApprove}
         onReject={handleReject}
+        onCompileRule={compileRule}
       />
     </div>
   );

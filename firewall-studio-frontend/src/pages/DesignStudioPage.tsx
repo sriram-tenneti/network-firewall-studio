@@ -8,6 +8,7 @@ import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
 import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
+import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
@@ -20,6 +21,7 @@ export function DesignStudioPage() {
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
+  const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
 
   const createModal = useModal();
   const editModal = useModal<FirewallRule>();
@@ -194,7 +196,7 @@ export function DesignStudioPage() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Design Studio</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Firewall Studio</h1>
           <p className="text-sm text-gray-500 mt-1">Create, manage, and compile firewall rules with NGDC compliance</p>
         </div>
         <div className="flex items-center gap-3">
@@ -208,6 +210,14 @@ export function DesignStudioPage() {
               <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
             ))}
           </select>
+          <div className="flex rounded-md border border-gray-300 overflow-hidden">
+            <button onClick={() => setViewMode('table')} className={'px-3 py-2 text-xs font-medium ' + (viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}>
+              Table View
+            </button>
+            <button onClick={() => setViewMode('builder')} className={'px-3 py-2 text-xs font-medium ' + (viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}>
+              Visual Builder
+            </button>
+          </div>
           <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
             Manage Groups
           </button>
@@ -220,21 +230,26 @@ export function DesignStudioPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-6 gap-3 mb-6">
         {[
-          { label: 'Total', value: statusCounts.All, color: 'bg-gray-100 text-gray-800' },
-          { label: 'Draft', value: statusCounts.Draft, color: 'bg-slate-100 text-slate-800' },
-          { label: 'Pending', value: statusCounts['Pending Review'], color: 'bg-amber-100 text-amber-800' },
-          { label: 'Approved', value: statusCounts.Approved, color: 'bg-green-100 text-green-800' },
-          { label: 'Deployed', value: statusCounts.Deployed, color: 'bg-blue-100 text-blue-800' },
-          { label: 'Certified', value: statusCounts.Certified, color: 'bg-purple-100 text-purple-800' },
+          { label: 'Total', value: statusCounts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
+          { label: 'Draft', value: statusCounts.Draft, color: 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-800' },
+          { label: 'Pending', value: statusCounts['Pending Review'], color: 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800' },
+          { label: 'Approved', value: statusCounts.Approved, color: 'bg-gradient-to-br from-green-100 to-green-200 text-green-800' },
+          { label: 'Deployed', value: statusCounts.Deployed, color: 'bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800' },
+          { label: 'Certified', value: statusCounts.Certified, color: 'bg-gradient-to-br from-purple-100 to-purple-200 text-purple-800' },
         ].map(card => (
-          <div key={card.label} className={`p-3 rounded-lg ${card.color}`}>
+          <div key={card.label} className={`p-3 rounded-lg shadow-sm ${card.color}`}>
             <div className="text-xl font-bold">{card.value}</div>
             <div className="text-xs font-medium mt-0.5">{card.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Main table */}
+      {viewMode === 'builder' ? (
+        <DragDropRuleBuilder
+          applications={applications}
+          onRuleCreated={() => { loadData(); showNotification('Rule created via builder', 'success'); }}
+        />
+      ) : (
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -257,6 +272,7 @@ export function DesignStudioPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Modals */}
       <RuleFormModal isOpen={createModal.isOpen} onClose={createModal.close} onSave={handleCreate} applications={applications} mode="create" />

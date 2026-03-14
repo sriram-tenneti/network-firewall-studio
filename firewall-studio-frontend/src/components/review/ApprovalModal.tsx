@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
-import type { ReviewRequest } from '@/types';
+import type { ReviewRequest, CompiledRule } from '@/types';
 
 interface ApprovalModalProps {
   isOpen: boolean;
@@ -9,11 +9,29 @@ interface ApprovalModalProps {
   review: ReviewRequest | null;
   onApprove: (reviewId: string, notes: string) => void;
   onReject: (reviewId: string, notes: string) => void;
+  onCompileRule?: (ruleId: string, vendor?: string) => Promise<CompiledRule>;
 }
 
-export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject }: ApprovalModalProps) {
+export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, onCompileRule }: ApprovalModalProps) {
   const [notes, setNotes] = useState('');
   const [action, setAction] = useState<'approve' | 'reject' | null>(null);
+  const [compiledRule, setCompiledRule] = useState<CompiledRule | null>(null);
+  const [compileVendor, setCompileVendor] = useState('generic');
+  const [compiling, setCompiling] = useState(false);
+  const [showPolicy, setShowPolicy] = useState(false);
+
+  const handleCompile = async () => {
+    if (!review || !onCompileRule) return;
+    setCompiling(true);
+    try {
+      const result = await onCompileRule(review.rule_id, compileVendor);
+      setCompiledRule(result);
+      setShowPolicy(true);
+    } catch {
+      setCompiledRule(null);
+    }
+    setCompiling(false);
+  };
 
   if (!review) return null;
 
@@ -52,6 +70,62 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject }: 
             <div className="text-sm text-gray-900 flex-1">{value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Deployable Policy / Rule View */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={() => setShowPolicy(!showPolicy)}
+            className="text-sm font-semibold text-indigo-700 hover:text-indigo-800 flex items-center gap-1"
+          >
+            {showPolicy ? '▼' : '▶'} Deployable Rule / Policy
+          </button>
+          {showPolicy && onCompileRule && (
+            <div className="flex items-center gap-2">
+              <select
+                value={compileVendor}
+                onChange={e => setCompileVendor(e.target.value)}
+                className="px-2 py-1 text-xs border border-gray-300 rounded-md"
+              >
+                <option value="generic">Generic</option>
+                <option value="palo_alto">Palo Alto</option>
+                <option value="checkpoint">Check Point</option>
+                <option value="cisco_asa">Cisco ASA</option>
+              </select>
+              <button
+                onClick={handleCompile}
+                disabled={compiling}
+                className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {compiling ? 'Compiling...' : 'Compile'}
+              </button>
+            </div>
+          )}
+        </div>
+        {showPolicy && compiledRule && (
+          <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400 font-medium">Format: {compiledRule.vendor_format}</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(compiledRule.compiled_text)}
+                className="text-xs text-blue-400 hover:text-blue-300"
+              >
+                Copy
+              </button>
+            </div>
+            <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div><span className="text-gray-500">Source Objects:</span> <span className="text-gray-300">{compiledRule.source_objects?.join(', ') || 'N/A'}</span></div>
+              <div><span className="text-gray-500">Dest Objects:</span> <span className="text-gray-300">{compiledRule.destination_objects?.join(', ') || 'N/A'}</span></div>
+              <div><span className="text-gray-500">Services:</span> <span className="text-gray-300">{compiledRule.services?.join(', ') || 'N/A'}</span></div>
+              <div><span className="text-gray-500">Action:</span> <span className="text-gray-300">{compiledRule.action}</span></div>
+            </div>
+          </div>
+        )}
+        {showPolicy && !compiledRule && !compiling && (
+          <p className="text-xs text-gray-500 italic">Click "Compile" to generate the deployable rule in vendor-specific format.</p>
+        )}
       </div>
 
       {review.comments && (
