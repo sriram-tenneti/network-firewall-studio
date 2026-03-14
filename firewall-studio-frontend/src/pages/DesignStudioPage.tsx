@@ -8,6 +8,8 @@ import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
 import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
+import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
+import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
@@ -26,6 +28,7 @@ export function DesignStudioPage() {
   const createModal = useModal();
   const editModal = useModal<FirewallRule>();
   const detailModal = useModal<FirewallRule>();
+  const modifyModal = useModal<FirewallRule>();
   const compilerModal = useModal<string>();
   const groupModal = useModal();
   const deleteConfirm = useModal<string>();
@@ -82,6 +85,21 @@ export function DesignStudioPage() {
       loadData();
     } catch {
       showNotification('Failed to update rule', 'error');
+    }
+  };
+
+  const handleModify = async (ruleId: string, changes: RuleModification) => {
+    try {
+      const srcValue = changes.source_entries.map(e => e.value).join(',');
+      const dstValue = changes.destination_entries.map(e => e.value).join(',');
+      await api.updateRule(ruleId, {
+        source: { source_type: 'Group', ip_address: null, cidr: null, group_name: srcValue, ports: changes.ports, neighbourhood: null, security_zone: '' },
+        destination: { name: dstValue, security_zone: '', dest_ip: null, ports: changes.ports, is_predefined: false },
+      });
+      showNotification('Rule modified successfully', 'success');
+      loadData();
+    } catch {
+      showNotification('Failed to modify rule', 'error');
     }
   };
 
@@ -164,6 +182,7 @@ export function DesignStudioPage() {
           {row.status === 'Draft' && (
             <>
               <button onClick={() => editModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
+              <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100">Modify</button>
               <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
             </>
           )}
@@ -276,8 +295,8 @@ export function DesignStudioPage() {
       )}
 
       {/* Modals */}
-      <RuleFormModal isOpen={createModal.isOpen} onClose={createModal.close} onSave={handleCreate} applications={applications} mode="create" />
-      <RuleFormModal isOpen={editModal.isOpen} onClose={editModal.close} onSave={handleEdit} rule={editModal.data} applications={applications} mode="edit" />
+      <RuleFormModal isOpen={createModal.isOpen} onClose={createModal.close} onSave={handleCreate} applications={applications} mode="create" existingRules={rules} />
+      <RuleFormModal isOpen={editModal.isOpen} onClose={editModal.close} onSave={handleEdit} rule={editModal.data} applications={applications} mode="edit" existingRules={rules} />
 
       <RuleDetailModal
         isOpen={detailModal.isOpen}
@@ -288,8 +307,9 @@ export function DesignStudioPage() {
         onSubmitReview={() => { if (detailModal.data) { handleSubmitReview(detailModal.data.rule_id); } }}
       />
 
+      <RuleModifyModal isOpen={modifyModal.isOpen} onClose={modifyModal.close} rule={modifyModal.data} onSave={handleModify} />
       <RuleCompilerView isOpen={compilerModal.isOpen} onClose={compilerModal.close} ruleId={compilerModal.data} />
-      <GroupManagerModal isOpen={groupModal.isOpen} onClose={groupModal.close} appId={selectedApp || undefined} />
+      <GroupManagerModal isOpen={groupModal.isOpen} onClose={groupModal.close} appId={selectedApp || undefined} applications={applications.map(a => ({ app_id: a.app_id, name: a.name }))} />
 
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}

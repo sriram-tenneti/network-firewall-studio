@@ -47,6 +47,7 @@ export default function SettingsPage() {
   const { notification, showNotification, clearNotification } = useNotification();
   const groupModal = useModal<ADUserGroup>();
   const [editGroup, setEditGroup] = useState<Partial<ADUserGroup>>({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleTestConnection = () => {
     showNotification('Testing AD connection...', 'info');
@@ -95,6 +96,19 @@ export default function SettingsPage() {
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
+      {/* Search bar */}
+      {(activeTab === 'ad_groups' || activeTab === 'ad_users') && (
+        <div className="mt-4">
+          <input
+            type="text"
+            placeholder={activeTab === 'ad_groups' ? 'Search groups by name, access type, description...' : 'Search users by name, email, username, group...'}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+          />
+        </div>
+      )}
+
       <div className="mt-6">
         {/* AD Groups */}
         {activeTab === 'ad_groups' && (
@@ -108,7 +122,11 @@ export default function SettingsPage() {
               </button>
             </div>
             <div className="space-y-3">
-              {groups.map(group => (
+              {groups.filter(group => {
+                if (!searchQuery.trim()) return true;
+                const q = searchQuery.toLowerCase();
+                return group.group_name.toLowerCase().includes(q) || group.access_type.toLowerCase().includes(q) || group.description.toLowerCase().includes(q) || group.applications.some(a => a.toLowerCase().includes(q));
+              }).map(group => (
                 <div key={group.id} className="p-4 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -143,7 +161,11 @@ export default function SettingsPage() {
         {/* AD Users */}
         {activeTab === 'ad_users' && (
           <div className="space-y-3">
-            {users.map(user => (
+            {users.filter(user => {
+              if (!searchQuery.trim()) return true;
+              const q = searchQuery.toLowerCase();
+              return user.display_name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q) || user.username.toLowerCase().includes(q) || user.access_type.toLowerCase().includes(q) || user.groups.some(g => g.toLowerCase().includes(q));
+            }).map(user => (
               <div key={user.id} className="p-4 bg-white border border-gray-200 rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>

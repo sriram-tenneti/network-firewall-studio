@@ -28,6 +28,7 @@ export default function DataImportPage() {
   const [mongoUri, setMongoUri] = useState('');
   const [mongoCollection, setMongoCollection] = useState('');
   const [previewData, setPreviewData] = useState<string[][]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const { notification, showNotification, clearNotification } = useNotification();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,9 +111,24 @@ export default function DataImportPage() {
       </div>
 
       {/* Import history */}
-      <h2 className="text-lg font-semibold text-gray-800 mb-3">Import History</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-gray-800">Import History</h2>
+      </div>
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search by file name, source type, target, status..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+        />
+      </div>
       <div className="space-y-3">
-        {jobs.map(job => (
+        {jobs.filter(job => {
+          if (!searchQuery.trim()) return true;
+          const q = searchQuery.toLowerCase();
+          return job.source_name.toLowerCase().includes(q) || job.source_type.toLowerCase().includes(q) || job.target.toLowerCase().includes(q) || job.status.toLowerCase().includes(q) || job.id.toLowerCase().includes(q);
+        }).map(job => (
           <div key={job.id} className="p-4 bg-white border border-gray-200 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">

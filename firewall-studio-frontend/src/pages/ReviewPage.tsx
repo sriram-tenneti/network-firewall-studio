@@ -156,7 +156,8 @@ export default function ReviewPage() {
               data={filteredReviews}
               columns={columns}
               keyField="id"
-              searchFields={['id', 'rule_id', 'rule_summary.application', 'requestor']}
+              searchPlaceholder="Search by rule ID, app, source, destination, requestor..."
+              searchFields={['id', 'rule_id', 'rule_summary.application', 'rule_summary.source', 'rule_summary.destination', 'requestor']}
               onRowClick={(row) => approvalModal.open(row)}
               emptyMessage="No review requests found"
               defaultPageSize={25}
