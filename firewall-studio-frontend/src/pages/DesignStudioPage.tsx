@@ -1,299 +1,288 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X } from 'lucide-react';
-import { ActionBar } from '@/components/layout/ActionBar';
-import { PolicyFlowCanvas } from '@/components/design-studio/PolicyFlowCanvas';
-import { RuleLifecycleTable } from '@/components/design-studio/RuleLifecycleTable';
-import { HistoryModal } from '@/components/design-studio/HistoryModal';
-import { GroupManagementPanel } from '@/components/design-studio/GroupManagementPanel';
-import type { SourceConfig, DestinationConfig, FirewallRule, PolicyValidationResult, PredefinedDestination, RuleHistoryEntry, NeighbourhoodRegistry, Application, NamingStandardsInfo, SecurityZone, FirewallGroup } from '@/types';
+import { DataTable } from '@/components/shared/DataTable';
+import { StatusBadge } from '@/components/shared/StatusBadge';
+import { Tabs } from '@/components/shared/Tabs';
+import { Notification } from '@/components/shared/Notification';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
+import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
+import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
+import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
+import { useModal } from '@/hooks/useModal';
+import { useNotification } from '@/hooks/useNotification';
+import type { FirewallRule, Application } from '@/types';
+import type { Column } from '@/components/shared/DataTable';
 import * as api from '@/lib/api';
 
 export function DesignStudioPage() {
   const [rules, setRules] = useState<FirewallRule[]>([]);
-  const [predefinedDests, setPredefinedDests] = useState<PredefinedDestination[]>([]);
-  const [neighbourhoods, setNeighbourhoods] = useState<NeighbourhoodRegistry[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
-  const [namingStandards, setNamingStandards] = useState<NamingStandardsInfo | null>(null);
-  const [securityZones, setSecurityZones] = useState<SecurityZone[]>([]);
-  const [groups, setGroups] = useState<FirewallGroup[]>([]);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [selectedAppFilter, setSelectedAppFilter] = useState<string>('');
-  const [selectedRule, setSelectedRule] = useState<FirewallRule | null>(null);
-  const [historyModal, setHistoryModal] = useState<{ ruleId: string; history: RuleHistoryEntry[] } | null>(null);
-  const [showRuleForm, setShowRuleForm] = useState(false);
-  const [showGroupPanel, setShowGroupPanel] = useState(false);
-  const [policyResult, setPolicyResult] = useState<PolicyValidationResult | null>(null);
-  const [sourceType, setSourceType] = useState<'group' | 'ip' | 'cidr'>('group');
-  const [sourceGroup, setSourceGroup] = useState('');
-  const [sourceIp, setSourceIp] = useState('');
-  const [sourceCidr, setSourceCidr] = useState('');
-  const [sourceZone, setSourceZone] = useState('GEN');
-  const [destType, setDestType] = useState<'predefined' | 'group' | 'custom'>('predefined');
-  const [destPredefined, setDestPredefined] = useState('');
-  const [destGroup, setDestGroup] = useState('');
-  const [destCustomIp, setDestCustomIp] = useState('');
-  const [destZone, setDestZone] = useState('CDE');
-  const [destPorts, setDestPorts] = useState('TCP 8443');
-  const [ruleApp, setRuleApp] = useState('');
-  const [ruleEnv, setRuleEnv] = useState('Production');
+  const [loading, setLoading] = useState(true);
+  const [selectedApp, setSelectedApp] = useState<string>('');
+  const [activeTab, setActiveTab] = useState('All');
 
-  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
-  };
+  const createModal = useModal();
+  const editModal = useModal<FirewallRule>();
+  const detailModal = useModal<FirewallRule>();
+  const compilerModal = useModal<string>();
+  const groupModal = useModal();
+  const deleteConfirm = useModal<string>();
+  const { notification, showNotification } = useNotification();
 
   const loadData = useCallback(async () => {
+    setLoading(true);
     try {
-      const [rulesData, destsData, nhData, appsData, nsData, szData, grpData] = await Promise.all([
-        api.getRules(), api.getPredefinedDestinations(), api.getNeighbourhoods(),
-        api.getApplications(), api.getNamingStandards(), api.getSecurityZones(), api.getGroups(),
+      const [rulesData, appsData] = await Promise.all([
+        api.getRules(),
+        api.getApplications(),
       ]);
-      setRules(rulesData); setPredefinedDests(destsData); setNeighbourhoods(nhData);
-      setApplications(appsData); setNamingStandards(nsData); setSecurityZones(szData); setGroups(grpData);
-    } catch (err) {
-      console.error('Failed to load data:', err);
+      setRules(rulesData);
+      setApplications(appsData);
+    } catch {
+      showNotification('Failed to load data', 'error');
     }
-  }, []);
+    setLoading(false);
+  }, [showNotification]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filteredRules = selectedAppFilter
-    ? rules.filter(r => r.application === selectedAppFilter && r.status !== 'Deleted')
-    : rules.filter(r => r.status !== 'Deleted');
+  const filteredRules = rules.filter(r => {
+    if (r.status === 'Deleted') return false;
+    if (selectedApp && r.application !== selectedApp) return false;
+    if (activeTab === 'All') return true;
+    return r.status === activeTab;
+  });
 
-  const filteredGroups = selectedAppFilter
-    ? groups.filter(g => g.app_id === selectedAppFilter || !g.app_id)
-    : groups;
-
-  const buildSourceConfig = (): SourceConfig => {
-    if (sourceType === 'group') return { source_type: 'Group', ip_address: null, cidr: null, group_name: sourceGroup, ports: destPorts, neighbourhood: null, security_zone: sourceZone };
-    if (sourceType === 'cidr') return { source_type: 'Subnet', ip_address: null, cidr: sourceCidr, group_name: null, ports: destPorts, neighbourhood: null, security_zone: sourceZone };
-    return { source_type: 'Single IP', ip_address: sourceIp, cidr: null, group_name: null, ports: destPorts, neighbourhood: null, security_zone: sourceZone };
+  const statusCounts = {
+    All: rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp)).length,
+    Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp)).length,
+    'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp)).length,
+    Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp)).length,
+    Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp)).length,
+    Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp)).length,
   };
 
-  const buildDestConfig = (): DestinationConfig => {
-    if (destType === 'predefined') {
-      const pd = predefinedDests.find(d => d.name === destPredefined);
-      return { name: destPredefined, security_zone: pd?.security_zone || destZone, dest_ip: null, ports: destPorts, is_predefined: true };
-    }
-    if (destType === 'group') return { name: destGroup, security_zone: destZone, dest_ip: null, ports: destPorts, is_predefined: false };
-    return { name: destCustomIp || 'Custom', security_zone: destZone, dest_ip: destCustomIp, ports: destPorts, is_predefined: false };
-  };
-
-  const handleValidate = async () => {
+  const handleCreate = async (data: Record<string, string | boolean>) => {
     try {
-      const result = await api.validatePolicy({ source: buildSourceConfig(), destination: buildDestConfig(), application: ruleApp || selectedAppFilter || 'ORD', environment: ruleEnv });
-      setPolicyResult(result);
-    } catch (err) {
-      console.error('Validation failed:', err);
-    }
-  };
-
-  const handleCreateRule = async () => {
-    try {
-      await api.createRule({ application: ruleApp || selectedAppFilter || 'ORD', environment: ruleEnv, datacenter: 'ALPHA_NGDC', source: buildSourceConfig(), destination: buildDestConfig(), owner: 'System' });
-      showNotification('Rule created successfully'); setShowRuleForm(false); loadData();
+      await api.createRule(data);
+      showNotification('Rule created successfully', 'success');
+      loadData();
     } catch {
       showNotification('Failed to create rule', 'error');
     }
   };
 
-  const handleModifyRule = (rule: FirewallRule) => {
-    if (rule.source.group_name) { setSourceType('group'); setSourceGroup(rule.source.group_name); }
-    else if (rule.source.cidr) { setSourceType('cidr'); setSourceCidr(rule.source.cidr); }
-    else { setSourceType('ip'); setSourceIp(rule.source.ip_address || ''); }
-    setSourceZone(rule.source.security_zone || 'GEN');
-    if (rule.destination.is_predefined) { setDestType('predefined'); setDestPredefined(rule.destination.name); }
-    else if (rule.destination.name.startsWith('grp-')) { setDestType('group'); setDestGroup(rule.destination.name); }
-    else { setDestType('custom'); setDestCustomIp(rule.destination.dest_ip || ''); }
-    setDestZone(rule.destination.security_zone || 'CDE');
-    setDestPorts(rule.destination.ports || 'TCP 8443');
-    setRuleApp(rule.application || '');
-    setSelectedRule(rule); setShowRuleForm(true); setPolicyResult(null);
-    showNotification(`Loaded rule ${rule.rule_id} for editing`, 'info');
-  };
-
-  const handleCertify = async (ruleId: string) => {
+  const handleEdit = async (data: Record<string, string | boolean>) => {
+    if (!editModal.data) return;
     try {
-      await api.certifyRule(ruleId);
-      showNotification(`Rule ${ruleId} certified`);
+      await api.updateRule(editModal.data.rule_id, data);
+      showNotification('Rule updated successfully', 'success');
       loadData();
     } catch {
-      showNotification('Failed to certify rule', 'error');
+      showNotification('Failed to update rule', 'error');
     }
   };
 
-  const handleDelete = async (ruleId: string) => {
+  const handleDelete = async () => {
+    if (!deleteConfirm.data) return;
     try {
-      await api.deleteRule(ruleId);
-      showNotification(`Rule ${ruleId} deleted`);
-      setSelectedRule(null);
+      await api.deleteRule(deleteConfirm.data);
+      showNotification('Rule deleted', 'success');
+      deleteConfirm.close();
       loadData();
     } catch {
       showNotification('Failed to delete rule', 'error');
     }
   };
 
-  const handleSubmit = async (ruleId: string) => {
+  const handleSubmitReview = async (ruleId: string) => {
     try {
-      await api.submitRule(ruleId);
-      showNotification(`Rule ${ruleId} submitted for review`);
-      setSelectedRule(null);
+      await api.submitForReview(ruleId, 'Submitted for SNS review');
+      showNotification('Rule submitted for review', 'success');
+      detailModal.close();
       loadData();
     } catch {
-      showNotification('Failed to submit rule', 'error');
+      showNotification('Failed to submit for review', 'error');
     }
   };
 
-  const handleSaveDraft = async (ruleId: string) => {
+  const handleCertify = async (ruleId: string) => {
     try {
-      await api.saveDraft(ruleId, { source: buildSourceConfig(), destination: buildDestConfig() });
-      showNotification(`Rule ${ruleId} draft saved`);
+      await api.certifyRule(ruleId);
+      showNotification('Rule certified', 'success');
       loadData();
     } catch {
-      showNotification('Failed to save draft', 'error');
+      showNotification('Failed to certify rule', 'error');
     }
   };
 
-  const handleViewHistory = async (ruleId: string) => {
-    try {
-      const history = await api.getRuleHistory(ruleId);
-      setHistoryModal({ ruleId, history });
-    } catch {
-      showNotification('Failed to load history', 'error');
+  function getSourceDisplay(rule: FirewallRule): string {
+    if (typeof rule.source === 'string') return rule.source;
+    if (rule.source && typeof rule.source === 'object') {
+      const s = rule.source as unknown as Record<string, string>;
+      return s.group_name || s.ip_address || s.cidr || '';
     }
-  };
+    return '';
+  }
 
-  const handleRequestReview = async (ruleId: string) => {
-    showNotification(`Review requested for rule ${ruleId}`, 'info');
-  };
+  function getDestDisplay(rule: FirewallRule): string {
+    if (typeof rule.destination === 'string') return rule.destination;
+    if (rule.destination && typeof rule.destination === 'object') {
+      const d = rule.destination as unknown as Record<string, string>;
+      return d.name || d.dest_ip || '';
+    }
+    return '';
+  }
 
-  // Keep references alive for future use
-  void neighbourhoods; void namingStandards; void securityZones;
+  const columns: Column<FirewallRule>[] = [
+    { key: 'rule_id', header: 'Rule ID', sortable: true, width: '100px' },
+    { key: 'application', header: 'App ID', sortable: true, width: '90px' },
+    {
+      key: 'source', header: 'Source', sortable: false, width: '180px',
+      render: (_, row) => <span className="font-mono text-xs truncate block">{getSourceDisplay(row)}</span>,
+    },
+    {
+      key: 'destination', header: 'Destination', sortable: false, width: '180px',
+      render: (_, row) => <span className="font-mono text-xs truncate block">{getDestDisplay(row)}</span>,
+    },
+    { key: 'environment', header: 'Environment', sortable: true, width: '110px' },
+    {
+      key: 'policy_result', header: 'Policy', sortable: true, width: '120px',
+      render: (_, row) => row.policy_result ? <StatusBadge status={row.policy_result} /> : <span className="text-gray-400 text-xs">N/A</span>,
+    },
+    {
+      key: 'status', header: 'Status', sortable: true, width: '120px',
+      render: (_, row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: '_actions', header: 'Actions', sortable: false, width: '220px',
+      render: (_, row) => (
+        <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
+          <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
+          {row.status === 'Draft' && (
+            <>
+              <button onClick={() => editModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
+              <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
+            </>
+          )}
+          {(row.status === 'Approved' || row.status === 'Deployed') && (
+            <button onClick={() => handleCertify(row.rule_id)} className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded hover:bg-purple-100">Certify</button>
+          )}
+          {(row.status === 'Approved' || row.status === 'Deployed' || row.status === 'Certified') && (
+            <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
+          )}
+          {row.status === 'Draft' && (
+            <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  const tabs = [
+    { id: 'All', label: 'All', count: statusCounts.All },
+    { id: 'Draft', label: 'Draft', count: statusCounts.Draft },
+    { id: 'Pending Review', label: 'Pending Review', count: statusCounts['Pending Review'] },
+    { id: 'Approved', label: 'Approved', count: statusCounts.Approved },
+    { id: 'Deployed', label: 'Deployed', count: statusCounts.Deployed },
+    { id: 'Certified', label: 'Certified', count: statusCounts.Certified },
+  ];
 
   return (
-    <div className="flex flex-col h-full">
-      <ActionBar mode="design" />
+    <div className="p-6 max-w-[1600px] mx-auto">
+      {notification && <Notification message={notification.message} type={notification.type} />}
 
-      {notification && (
-        <div className={`mx-6 mt-3 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm ${
-          notification.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-          notification.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
-          'bg-blue-50 text-blue-700 border border-blue-200'
-        }`}>{notification.message}</div>
-      )}
-
-      {/* Top toolbar */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Design Studio</h1>
+          <p className="text-sm text-gray-500 mt-1">Create, manage, and compile firewall rules with NGDC compliance</p>
+        </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => { setShowRuleForm(!showRuleForm); setSelectedRule(null); }}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" />
-            {showRuleForm ? 'Close Rule Form' : 'Create New Rule'}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedApp}
+            onChange={e => setSelectedApp(e.target.value)}
+          >
+            <option value="">All Applications</option>
+            {applications.map(app => (
+              <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+            ))}
+          </select>
+          <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
+            Manage Groups
           </button>
-          <button onClick={() => setShowGroupPanel(!showGroupPanel)}
-            className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors">
-            {showGroupPanel ? 'Hide Groups' : 'Manage Groups'}
+          <button onClick={() => createModal.open()} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
+            + New Rule
           </button>
         </div>
-        <div className="text-xs text-slate-500">{filteredRules.length} rule(s) {selectedAppFilter ? `for ${selectedAppFilter}` : 'total'}</div>
       </div>
 
-      {/* Rule Creation Form */}
-      {showRuleForm && (
-        <div className="mx-6 mt-4 rounded-xl border border-blue-200 bg-blue-50/30 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-slate-800">{selectedRule ? `Edit Rule: ${selectedRule.rule_id}` : 'New Firewall Rule'}</h3>
-            <button onClick={() => { setShowRuleForm(false); setSelectedRule(null); }} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+      {/* Summary cards */}
+      <div className="grid grid-cols-6 gap-3 mb-6">
+        {[
+          { label: 'Total', value: statusCounts.All, color: 'bg-gray-100 text-gray-800' },
+          { label: 'Draft', value: statusCounts.Draft, color: 'bg-slate-100 text-slate-800' },
+          { label: 'Pending', value: statusCounts['Pending Review'], color: 'bg-amber-100 text-amber-800' },
+          { label: 'Approved', value: statusCounts.Approved, color: 'bg-green-100 text-green-800' },
+          { label: 'Deployed', value: statusCounts.Deployed, color: 'bg-blue-100 text-blue-800' },
+          { label: 'Certified', value: statusCounts.Certified, color: 'bg-purple-100 text-purple-800' },
+        ].map(card => (
+          <div key={card.label} className={`p-3 rounded-lg ${card.color}`}>
+            <div className="text-xl font-bold">{card.value}</div>
+            <div className="text-xs font-medium mt-0.5">{card.label}</div>
           </div>
-          <div className="grid grid-cols-3 gap-6">
-            {/* SOURCE */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-blue-700 uppercase tracking-wide">Source</h4>
-              <div><label className="block text-xs font-medium text-slate-600 mb-1">Source Type</label>
-                <select value={sourceType} onChange={(e) => setSourceType(e.target.value as 'group' | 'ip' | 'cidr')} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="group">Group</option><option value="ip">Single IP</option><option value="cidr">Subnet (CIDR)</option>
-                </select></div>
-              {sourceType === 'group' && (<div><label className="block text-xs font-medium text-slate-600 mb-1">Source Group</label>
-                <select value={sourceGroup} onChange={(e) => setSourceGroup(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="">Select a group...</option>
-                  {filteredGroups.map(g => (<option key={g.name} value={g.name}>{g.name}</option>))}
-                  {predefinedDests.map(pd => (<option key={`src-${pd.name}`} value={pd.name}>{pd.name}</option>))}
-                </select></div>)}
-              {sourceType === 'ip' && (<div><label className="block text-xs font-medium text-slate-600 mb-1">IP Address</label>
-                <input type="text" value={sourceIp} onChange={(e) => setSourceIp(e.target.value)} placeholder="192.168.1.10" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" /></div>)}
-              {sourceType === 'cidr' && (<div><label className="block text-xs font-medium text-slate-600 mb-1">Subnet (CIDR)</label>
-                <input type="text" value={sourceCidr} onChange={(e) => setSourceCidr(e.target.value)} placeholder="10.1.0.0/24" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" /></div>)}
-              <div><label className="block text-xs font-medium text-slate-600 mb-1">Source Security Zone</label>
-                <select value={sourceZone} onChange={(e) => setSourceZone(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="GEN">GEN - General</option><option value="CDE">CDE - Card Holder Data</option><option value="CCS">CCS - Critical Core Services</option>
-                  <option value="CPA">CPA - Critical Payment Apps</option><option value="DMZ">DMZ - Demilitarized Zone</option><option value="RST">RST - Restricted</option><option value="PSE">PSE - Prod Simulation</option>
-                </select></div>
-            </div>
-            {/* DESTINATION */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-orange-700 uppercase tracking-wide">Destination</h4>
-              <div><label className="block text-xs font-medium text-slate-600 mb-1">Destination Type</label>
-                <select value={destType} onChange={(e) => setDestType(e.target.value as 'predefined' | 'group' | 'custom')} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="predefined">Predefined Destination</option><option value="group">Group</option><option value="custom">Custom IP</option>
-                </select></div>
-              {destType === 'predefined' && (<div><label className="block text-xs font-medium text-slate-600 mb-1">Predefined Destination</label>
-                <select value={destPredefined} onChange={(e) => setDestPredefined(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="">Select destination...</option>
-                  {predefinedDests.map(pd => (<option key={pd.name} value={pd.name}>{pd.friendly_name || pd.name} ({pd.security_zone})</option>))}
-                </select></div>)}
-              {destType === 'group' && (<div><label className="block text-xs font-medium text-slate-600 mb-1">Destination Group</label>
-                <select value={destGroup} onChange={(e) => setDestGroup(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="">Select a group...</option>
-                  {filteredGroups.map(g => (<option key={g.name} value={g.name}>{g.name}</option>))}
-                </select></div>)}
-              {destType === 'custom' && (<div><label className="block text-xs font-medium text-slate-600 mb-1">Destination IP</label>
-                <input type="text" value={destCustomIp} onChange={(e) => setDestCustomIp(e.target.value)} placeholder="10.1.2.50" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" /></div>)}
-              <div><label className="block text-xs font-medium text-slate-600 mb-1">Destination Security Zone</label>
-                <select value={destZone} onChange={(e) => setDestZone(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="GEN">GEN - General</option><option value="CDE">CDE - Card Holder Data</option><option value="CCS">CCS - Critical Core Services</option>
-                  <option value="CPA">CPA - Critical Payment Apps</option><option value="DMZ">DMZ - Demilitarized Zone</option><option value="RST">RST - Restricted</option><option value="PSE">PSE - Prod Simulation</option>
-                </select></div>
-            </div>
-            {/* PORTS & CONTEXT */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-green-700 uppercase tracking-wide">Ports &amp; Context</h4>
-              <div><label className="block text-xs font-medium text-slate-600 mb-1">Port / Protocol</label>
-                <select value={destPorts} onChange={(e) => setDestPorts(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option>TCP 8443</option><option>TCP 443</option><option>TCP 1521</option><option>TCP 8080</option><option>TCP 22</option>
-                  <option>TCP 3306</option><option>TCP 5432</option><option>TCP 3270</option><option>UDP 53</option><option>ANY</option>
-                </select></div>
-              <div><label className="block text-xs font-medium text-slate-600 mb-1">Application</label>
-                <select value={ruleApp} onChange={(e) => setRuleApp(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option value="">Select application...</option>
-                  {applications.map(app => (<option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>))}
-                </select></div>
-              <div><label className="block text-xs font-medium text-slate-600 mb-1">Environment</label>
-                <select value={ruleEnv} onChange={(e) => setRuleEnv(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
-                  <option>Production</option><option>Non-Production</option><option>Pre-Production</option><option>Development</option><option>DR</option>
-                </select></div>
-              <div className="flex items-center gap-2 pt-2">
-                <button onClick={handleValidate} className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 transition-colors">Validate Policy</button>
-                <button onClick={handleCreateRule} className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors">{selectedRule ? 'Update Rule' : 'Create Rule'}</button>
-                {selectedRule && (<button onClick={() => { setSelectedRule(null); setShowRuleForm(false); }} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Cancel</button>)}
-              </div>
-            </div>
-          </div>
-          {policyResult && (<div className="mt-4"><PolicyFlowCanvas source={buildSourceConfig()} destination={buildDestConfig()} policyResult={policyResult} onValidate={handleValidate} onDrop={() => {}} /></div>)}
+        ))}
+      </div>
+
+      {/* Main table */}
+      <div className="bg-white border rounded-lg shadow-sm">
+        <div className="px-4 pt-4">
+          <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
         </div>
-      )}
-
-      {/* Group Management Panel */}
-      {showGroupPanel && (<div className="mx-6 mt-4"><GroupManagementPanel appFilter={selectedAppFilter} onNotification={showNotification} /></div>)}
-
-      {/* Rule Lifecycle Table with checkbox selection */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <RuleLifecycleTable rules={filteredRules} applications={applications} selectedAppFilter={selectedAppFilter} onAppFilterChange={setSelectedAppFilter}
-          onModify={handleModifyRule} onCertify={handleCertify} onDelete={handleDelete} onSubmit={handleSubmit}
-          onViewHistory={handleViewHistory} onSaveDraft={handleSaveDraft} onRequestReview={handleRequestReview} />
+        <div className="p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+          ) : (
+            <DataTable
+              data={filteredRules}
+              columns={columns}
+              keyField="rule_id"
+              searchFields={['rule_id', 'application', 'environment']}
+              onRowClick={(row) => detailModal.open(row)}
+              emptyMessage="No firewall rules found"
+              defaultPageSize={50}
+            />
+          )}
+        </div>
       </div>
 
-      {historyModal && (<HistoryModal ruleId={historyModal.ruleId} history={historyModal.history} onClose={() => setHistoryModal(null)} />)}
+      {/* Modals */}
+      <RuleFormModal isOpen={createModal.isOpen} onClose={createModal.close} onSave={handleCreate} applications={applications} mode="create" />
+      <RuleFormModal isOpen={editModal.isOpen} onClose={editModal.close} onSave={handleEdit} rule={editModal.data} applications={applications} mode="edit" />
+
+      <RuleDetailModal
+        isOpen={detailModal.isOpen}
+        onClose={detailModal.close}
+        rule={detailModal.data}
+        onEdit={() => { if (detailModal.data) { detailModal.close(); editModal.open(detailModal.data); } }}
+        onCompile={() => { if (detailModal.data) { detailModal.close(); compilerModal.open(detailModal.data.rule_id); } }}
+        onSubmitReview={() => { if (detailModal.data) { handleSubmitReview(detailModal.data.rule_id); } }}
+      />
+
+      <RuleCompilerView isOpen={compilerModal.isOpen} onClose={compilerModal.close} ruleId={compilerModal.data} />
+      <GroupManagerModal isOpen={groupModal.isOpen} onClose={groupModal.close} appId={selectedApp || undefined} />
+
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={deleteConfirm.close}
+        onConfirm={handleDelete}
+        title="Delete Rule"
+        message={`Are you sure you want to delete rule ${deleteConfirm.data}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmVariant="danger"
+      />
     </div>
   );
 }

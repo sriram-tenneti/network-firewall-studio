@@ -1,0 +1,98 @@
+import { Modal } from '../shared/Modal';
+import { StatusBadge } from '../shared/StatusBadge';
+import type { FirewallRule } from '@/types';
+
+interface RuleDetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  rule: FirewallRule | null;
+  onEdit?: () => void;
+  onCompile?: () => void;
+  onSubmitReview?: () => void;
+}
+
+function getVal(obj: unknown, key: string): string {
+  if (!obj) return '';
+  if (typeof obj === 'string') return obj;
+  if (typeof obj === 'object' && obj !== null) return (obj as Record<string, string>)[key] || '';
+  return '';
+}
+
+export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSubmitReview }: RuleDetailModalProps) {
+  if (!rule) return null;
+
+  const srcGroup = getVal(rule.source, 'group_name') || getVal(rule.source, 'ip_address') || (typeof rule.source === 'string' ? rule.source : '');
+  const srcZone = getVal(rule.source, 'security_zone');
+  const srcPorts = getVal(rule.source, 'ports');
+  const dstName = getVal(rule.destination, 'name') || (typeof rule.destination === 'string' ? rule.destination : '');
+  const dstZone = getVal(rule.destination, 'security_zone');
+  const dstPorts = getVal(rule.destination, 'ports');
+
+  const rows: [string, string | React.ReactNode][] = [
+    ['Rule ID', rule.rule_id],
+    ['Application', `${rule.application}${rule.application_name ? ` - ${rule.application_name}` : ''}`],
+    ['Status', <StatusBadge key="s" status={rule.status} />],
+    ['Environment', rule.environment],
+    ['Datacenter', rule.datacenter],
+    ['Source', srcGroup],
+    ['Source Zone', srcZone],
+    ['Source Ports', srcPorts],
+    ['Destination', dstName],
+    ['Destination Zone', dstZone],
+    ['Destination Ports', dstPorts],
+    ['Policy Result', rule.policy_result ? <StatusBadge key="p" status={rule.policy_result} /> : 'N/A'],
+    ['Owner', rule.owner || 'N/A'],
+    ['Created', rule.created_at ? new Date(rule.created_at).toLocaleString() : 'N/A'],
+    ['Updated', rule.updated_at ? new Date(rule.updated_at).toLocaleString() : 'N/A'],
+    ['Certified', rule.certified_at ? new Date(rule.certified_at).toLocaleString() : 'Not Certified'],
+    ['Expiry', rule.expiry || 'N/A'],
+  ];
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Rule Details: ${rule.rule_id}`} size="lg">
+      <div className="divide-y divide-gray-100">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex py-2.5 px-1">
+            <div className="w-40 text-sm font-medium text-gray-500 flex-shrink-0">{label}</div>
+            <div className="text-sm text-gray-900 flex-1">{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {rule.compliance && (
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <h4 className="text-sm font-semibold text-gray-700 mb-2">Compliance</h4>
+          <div className="flex gap-4 text-xs">
+            <span className={rule.compliance.naming_valid ? 'text-green-600' : 'text-red-600'}>
+              Naming: {rule.compliance.naming_valid ? 'Valid' : 'Invalid'}
+            </span>
+            <span className={rule.compliance.group_to_group ? 'text-green-600' : 'text-amber-600'}>
+              Group-to-Group: {rule.compliance.group_to_group ? 'Yes' : 'No'}
+            </span>
+            {rule.compliance.requires_exception && (
+              <span className="text-red-600">Exception Required</span>
+            )}
+          </div>
+          {rule.compliance.naming_errors && rule.compliance.naming_errors.length > 0 && (
+            <ul className="mt-2 text-xs text-red-600 list-disc list-inside">
+              {rule.compliance.naming_errors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+        {onEdit && rule.status === 'Draft' && (
+          <button onClick={onEdit} className="px-4 py-2 text-sm font-medium text-white bg-amber-500 rounded-md hover:bg-amber-600">Edit</button>
+        )}
+        {onCompile && (rule.status === 'Approved' || rule.status === 'Deployed' || rule.status === 'Certified') && (
+          <button onClick={onCompile} className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700">Compile</button>
+        )}
+        {onSubmitReview && rule.status === 'Draft' && (
+          <button onClick={onSubmitReview} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Submit for Review</button>
+        )}
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Close</button>
+      </div>
+    </Modal>
+  );
+}

@@ -1,78 +1,46 @@
-import { Shield, Menu, ChevronDown, User } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 
-interface HeaderProps {
-  currentPage: 'design' | 'migration' | 'admin';
-  onNavigate: (page: 'design' | 'migration' | 'admin') => void;
-  application?: string;
-  environment?: string;
-  datacenter?: string;
-}
+const navItems = [
+  { path: '/', label: 'Design Studio' },
+  { path: '/migration', label: 'Migration Studio' },
+  { path: '/review', label: 'Review & Approval' },
+];
 
-export function Header({ currentPage, onNavigate, application, environment, datacenter }: HeaderProps) {
+export function Header() {
+  const location = useLocation();
+
   return (
-    <header className="bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-lg">
-      <div className="flex items-center justify-between px-6 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Shield className="h-7 w-7 text-blue-400" />
-            <h1 className="text-lg font-bold tracking-tight">
-              {currentPage === 'design' ? 'Network Firewall Design Studio' : currentPage === 'migration' ? 'Network Firewall Migration Studio' : 'Org Administration'}
-            </h1>
+    <header className="bg-white border-b border-gray-200 shadow-sm">
+      <div className="max-w-[1600px] mx-auto px-6">
+        <div className="flex items-center justify-between h-14">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                <span className="text-white font-bold text-sm">NF</span>
+              </div>
+              <span className="text-lg font-bold text-gray-900">Network Firewall Studio</span>
+            </Link>
+            <nav className="flex items-center gap-1">
+              {navItems.map(item => {
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={'px-3 py-2 rounded-md text-sm font-medium transition-colors ' + (
+                      isActive
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
-
-          {application && (
-            <div className="ml-6 flex items-center gap-4 text-sm text-slate-300">
-              <span>Application: <strong className="text-white">{application}</strong></span>
-              {environment && (
-                <span>Environment: <strong className="text-amber-300">{environment}</strong></span>
-              )}
-              {datacenter && (
-                <span>Datacenter: <strong className="text-white">{datacenter}</strong></span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => onNavigate('design')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              currentPage === 'design'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-300 hover:bg-slate-600 hover:text-white'
-            }`}
-          >
-            Design Studio
-          </button>
-          <button
-            onClick={() => onNavigate('migration')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              currentPage === 'migration'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-300 hover:bg-slate-600 hover:text-white'
-            }`}
-          >
-            Migration Studio
-          </button>
-          <button
-            onClick={() => onNavigate('admin')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              currentPage === 'admin'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-300 hover:bg-slate-600 hover:text-white'
-            }`}
-          >
-            Org Admin
-          </button>
-
-          <button className="ml-2 rounded-md p-1.5 hover:bg-slate-600 transition-colors">
-            <Menu className="h-5 w-5" />
-          </button>
-
-          <div className="flex items-center gap-2 ml-2 rounded-full bg-slate-600 px-3 py-1">
-            <User className="h-4 w-4" />
-            <span className="text-sm font-medium">Jon</span>
-            <ChevronDown className="h-3 w-3" />
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Enterprise Firewall Management</span>
           </div>
         </div>
       </div>

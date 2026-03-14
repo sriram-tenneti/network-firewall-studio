@@ -3,6 +3,7 @@ from typing import Optional
 from app.database import (
     get_rules, get_rule, create_rule, update_rule,
     delete_rule, update_rule_status, get_rule_history,
+    compile_rule,
 )
 
 router = APIRouter(prefix="/api/rules", tags=["Firewall Rules"])
@@ -68,3 +69,11 @@ async def submit_existing_rule(rule_id: str):
 @router.get("/{rule_id}/history")
 async def get_history(rule_id: str):
     return await get_rule_history(rule_id)
+
+
+@router.post("/{rule_id}/compile")
+async def compile_rule_endpoint(rule_id: str, vendor: str = Query("generic")):
+    result = await compile_rule(rule_id, vendor)
+    if not result:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return result

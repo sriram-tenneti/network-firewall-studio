@@ -1,4 +1,4 @@
-export type RuleStatus = 'Draft' | 'Deployed' | 'Pending Review' | 'Certified' | 'Expired' | 'Deleted';
+export type RuleStatus = 'Draft' | 'Pending Review' | 'Approved' | 'Rejected' | 'Deployed' | 'Certified' | 'Expired' | 'Deleted';
 export type PolicyResult = 'Permitted' | 'Blocked' | 'Exception Required' | 'Needs Review';
 export type MigrationStatus = 'Auto-Mapped' | 'Needs Review' | 'New Group' | 'Conflict' | 'Blocked' | 'Draft' | 'Policy Review';
 export type MappingStatus = 'Automapped' | 'Needs Review' | 'Blocked';
@@ -230,6 +230,41 @@ export interface FirewallGroup {
   members: GroupMember[];
   created_at?: string;
   updated_at?: string;
+}
+
+// Compiled firewall rule in deployable format
+export interface CompiledRule {
+  rule_id: string;
+  vendor_format: 'generic' | 'palo_alto' | 'checkpoint' | 'cisco_asa';
+  compiled_text: string;
+  source_objects: string[];
+  destination_objects: string[];
+  services: string[];
+  action: string;
+  logging: boolean;
+  comment: string;
+}
+
+// Review/Approval workflow
+export interface ReviewRequest {
+  id: string;
+  rule_id: string;
+  rule_name: string;
+  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification';
+  requestor: string;
+  reviewer: string | null;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Withdrawn';
+  submitted_at: string;
+  reviewed_at: string | null;
+  comments: string;
+  review_notes: string | null;
+  rule_summary: {
+    application: string;
+    source: string;
+    destination: string;
+    ports: string;
+    environment: string;
+  };
 }
 
 // Legacy non-standard rule for migration

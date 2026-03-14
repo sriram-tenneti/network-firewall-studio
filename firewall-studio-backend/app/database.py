@@ -1867,3 +1867,164 @@ async def remove_group_member(group_name: str, member_value: str) -> dict[str, A
             _save("groups", groups)
             return g
     return None
+
+
+# ============================================================
+# Rule Compiler
+# ============================================================
+
+async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] | None:
+    rule = await get_rule(rule_id)
+    if not rule:
+        return None
+    src = rule.get("source", "")
+    dst = rule.get("destination", "")
+    port = rule.get("port", "any")
+    proto = rule.get("protocol", "TCP")
+    action = rule.get("action", "Allow")
+    desc = rule.get("description", "")
+
+    src_objs = [src] if src else ["any"]
+    dst_objs = [dst] if dst else ["any"]
+    svc_list = [f"{proto}/{port}"] if port and port != "any" else ["any"]
+
+    if vendor == "palo_alto":
+        compiled = (
+            f"set rulebase security rules \"{rule_id}\" from {rule.get('source_zone', 'any')}\n"
+            f"set rulebase security rules \"{rule_id}\" to {rule.get('destination_zone', 'any')}\n"
+            f"set rulebase security rules \"{rule_id}\" source [{src}]\n"
+            f"set rulebase security rules \"{rule_id}\" destination [{dst}]\n"
+            f"set rulebase security rules \"{rule_id}\" service [{proto.lower()}-{port}]\n"
+            f"set rulebase security rules \"{rule_id}\" action {'allow' if action == 'Allow' else 'deny'}\n"
+            f"set rulebase security rules \"{rule_id}\" log-start yes\n"
+            f"set rulebase security rules \"{rule_id}\" description \"{desc}\""
+        )
+    elif vendor == "checkpoint":
+        compiled = (
+            f"mgmt_cli add access-rule layer \"Network\" position top \\\n"
+            f"  name \"{rule_id}\" \\\n"
+            f"  source \"{src}\" \\\n"
+            f"  destination \"{dst}\" \\\n"
+            f"  service \"{proto}_{port}\" \\\n"
+            f"  action \"{'Accept' if action == 'Allow' else 'Drop'}\" \\\n"
+            f"  track \"Log\" \\\n"
+            f"  comments \"{desc}\""
+        )
+    elif vendor == "cisco_asa":
+        compiled = (
+            f"access-list ACL_{'IN' if action == 'Allow' else 'OUT'} extended "
+            f"{'permit' if action == 'Allow' else 'deny'} "
+            f"{proto.lower()} object-group {src} object-group {dst} eq {port}\n"
+            f"! {desc}"
+        )
+    else:
+        compiled = (
+            f"# Firewall Rule: {rule_id}\n"
+            f"# Description: {desc}\n"
+            f"# Application: {rule.get('application', 'N/A')}\n"
+            f"# Environment: {rule.get('environment', 'N/A')}\n"
+            f"---\n"
+            f"rule:\n"
+            f"  id: {rule_id}\n"
+            f"  action: {action.lower()}\n"
+            f"  source:\n"
+            f"    objects: [{src}]\n"
+            f"    zone: {rule.get('source_zone', 'any')}\n"
+            f"  destination:\n"
+            f"    objects: [{dst}]\n"
+            f"    zone: {rule.get('destination_zone', 'any')}\n"
+            f"  service:\n"
+            f"    protocol: {proto.lower()}\n"
+            f"    port: {port}\n"
+            f"  logging: true\n"
+            f"  enabled: true"
+        )
+
+    return {
+        "rule_id": rule_id,
+        "vendor_format": vendor,
+        "compiled_text": compiled,
+        "source_objects": src_objs,
+        "destination_objects": dst_objs,
+        "services": svc_list,
+        "action": action.lower(),
+        "logging": True,
+        "comment": desc,
+    }
+
+
+# ============================================================
+# Review & Approval Workflow
+# ============================================================
+
+async def get_reviews(status: str | None = None) -> list[dict[str, Any]]:
+    reviews = _load("reviews") or []
+    if status:
+        reviews = [r for r in reviews if r.get("status") == status]
+    return reviews
+
+
+async def create_review(rule_id: str, comments: str = "") -> dict[str, Any]:
+    reviews = _load("reviews") or []
+    rule = await get_rule(rule_id)
+    now = _now()
+    review_id = f"REV-{_id()}"
+    review = {
+        "id": review_id,
+        "rule_id": rule_id,
+        "rule_name": rule.get("description", rule_id) if rule else rule_id,
+        "request_type": "new_rule",
+        "requestor": "system",
+        "reviewer": None,
+        "status": "Pending",
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments,
+        "review_notes": None,
+        "rule_summary": {
+            "application": rule.get("application", "") if rule else "",
+            "source": rule.get("source", "") if rule else "",
+            "destination": rule.get("destination", "") if rule else "",
+            "ports": rule.get("port", "") if rule else "",
+            "environment": rule.get("environment", "") if rule else "",
+        },
+    }
+    reviews.append(review)
+    _save("reviews", reviews)
+    if rule:
+        await update_rule_status(rule_id, "Pending Review")
+    return review
+
+
+async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | None:
+    reviews = _load("reviews") or []
+    now = _now()
+    for r in reviews:
+        if r.get("id") == review_id:
+            r["status"] = "Approved"
+            r["reviewed_at"] = now
+            r["review_notes"] = notes
+            r["reviewer"] = "sns_user"
+            _save("reviews", reviews)
+            rule_id = r.get("rule_id")
+            if rule_id:
+                await update_rule_status(rule_id, "Approved")
+            return r
+    return None
+
+
+async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
+    reviews = _load("reviews") or []
+    now = _now()
+    for r in reviews:
+        if r.get("id") == review_id:
+            r["status"] = "Rejected"
+            r["reviewed_at"] = now
+            r["review_notes"] = notes
+            r["reviewer"] = "sns_user"
+            _save("reviews", reviews)
+            rule_id = r.get("rule_id")
+            if rule_id:
+                await update_rule_status(rule_id, "Rejected")
+            return r
+    return None
