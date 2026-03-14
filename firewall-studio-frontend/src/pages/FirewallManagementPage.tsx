@@ -201,7 +201,7 @@ export default function FirewallManagementPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
           </div>
         ) : (
-          <DataTable columns={columns} data={filteredRules} keyField="rule_id" defaultPageSize={15} emptyMessage="No rules found" />
+          <DataTable columns={columns} data={filteredRules} keyField="rule_id" defaultPageSize={15} emptyMessage="No rules found" searchPlaceholder="Search by IP, group, app, rule ID..." searchFields={['rule_id', 'application', 'source', 'destination']} />
         )}
       </div>
 

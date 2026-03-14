@@ -264,7 +264,8 @@ export function DesignStudioPage() {
               data={filteredRules}
               columns={columns}
               keyField="rule_id"
-              searchFields={['rule_id', 'application', 'environment']}
+              searchPlaceholder="Search by IP, group, app, rule ID..."
+              searchFields={['rule_id', 'application', 'environment', 'source', 'destination']}
               onRowClick={(row) => detailModal.open(row)}
               emptyMessage="No firewall rules found"
               defaultPageSize={50}

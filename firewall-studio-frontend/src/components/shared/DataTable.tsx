@@ -40,6 +40,22 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   }, obj);
 }
 
+/** Recursively extract all string/number leaf values from an object */
+function getAllLeafValues(obj: unknown): string[] {
+  const values: string[] = [];
+  if (obj === null || obj === undefined) return values;
+  if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
+    values.push(String(obj));
+  } else if (Array.isArray(obj)) {
+    for (const item of obj) values.push(...getAllLeafValues(item));
+  } else if (typeof obj === 'object') {
+    for (const val of Object.values(obj as Record<string, unknown>)) {
+      values.push(...getAllLeafValues(val));
+    }
+  }
+  return values;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DataTable<T extends Record<string, any>>({
   data, columns, keyField, searchPlaceholder = 'Search...', searchFields,
@@ -62,7 +78,12 @@ export function DataTable<T extends Record<string, any>>({
       result = result.filter(item =>
         fields.some(f => {
           const val = getNestedValue(item, f);
-          return val !== undefined && String(val).toLowerCase().includes(q);
+          if (val === undefined) return false;
+          // Deep search: if value is an object, search all nested leaf values
+          if (typeof val === 'object' && val !== null) {
+            return getAllLeafValues(val).some(leaf => leaf.toLowerCase().includes(q));
+          }
+          return String(val).toLowerCase().includes(q);
         })
       );
     }

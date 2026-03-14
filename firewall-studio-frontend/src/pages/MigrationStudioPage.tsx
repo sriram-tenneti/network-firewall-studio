@@ -239,7 +239,8 @@ export function MigrationStudioPage() {
               data={filteredRules}
               columns={columns}
               keyField="id"
-              searchFields={['app_id', 'app_distributed_id', 'rule_name', 'source_zone']}
+              searchPlaceholder="Search by IP, group, app, rule ID, zone..."
+              searchFields={['app_id', 'app_distributed_id', 'rule_name', 'source_zone', 'source_entries', 'source_expanded', 'destination_entries', 'destination_expanded']}
               onRowClick={(row) => detailModal.open(row)}
               emptyMessage="No legacy rules found"
               defaultPageSize={50}
