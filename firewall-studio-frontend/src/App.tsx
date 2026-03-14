@@ -1,34 +1,24 @@
-import { useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { DesignStudioPage } from '@/pages/DesignStudioPage';
 import { MigrationStudioPage } from '@/pages/MigrationStudioPage';
-import { OrgAdminPage } from '@/pages/OrgAdminPage';
+import ReviewPage from '@/pages/ReviewPage';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'design' | 'migration' | 'admin'>('design');
-
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'design': return <DesignStudioPage />;
-      case 'migration': return <MigrationStudioPage />;
-      case 'admin': return <OrgAdminPage />;
-    }
-  };
-
   return (
-    <div className="flex h-screen flex-col bg-slate-100">
-      <Header
-        currentPage={currentPage}
-        onNavigate={setCurrentPage}
-        application={currentPage === 'design' ? 'Ordering System' : undefined}
-        environment={currentPage === 'design' ? 'Production' : undefined}
-        datacenter={currentPage === 'design' ? 'DC1' : undefined}
-      />
-      <main className="flex-1 overflow-hidden">
-        {renderPage()}
-      </main>
-    </div>
+    <BrowserRouter>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main>
+          <Routes>
+            <Route path="/" element={<DesignStudioPage />} />
+            <Route path="/migration" element={<MigrationStudioPage />} />
+            <Route path="/review" element={<ReviewPage />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
   );
 }
 
-export default App
+export default App;

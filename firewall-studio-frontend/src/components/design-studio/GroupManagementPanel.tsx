@@ -13,7 +13,7 @@ export function GroupManagementPanel({ appFilter, onNotification }: GroupManagem
   const [selectedGroup, setSelectedGroup] = useState<FirewallGroup | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newMemberValue, setNewMemberValue] = useState('');
-  const [newMemberType, setNewMemberType] = useState<'ip' | 'cidr'>('ip');
+  const [newMemberType, setNewMemberType] = useState<'ip' | 'cidr' | 'group' | 'range'>('ip');
   const [newMemberDesc, setNewMemberDesc] = useState('');
   const [newGroupAppId, setNewGroupAppId] = useState(appFilter || '');
   const [newGroupNh, setNewGroupNh] = useState('NH01');
@@ -208,7 +208,10 @@ export function GroupManagementPanel({ appFilter, onNotification }: GroupManagem
               <div key={m.value} className="flex items-center justify-between rounded bg-white px-2 py-1 border border-slate-200">
                 <div className="flex items-center gap-1.5">
                   <span className={`rounded px-1 text-xs font-bold ${
-                    m.type === 'ip' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                    m.type === 'ip' ? 'bg-blue-100 text-blue-700' :
+                    m.type === 'cidr' ? 'bg-purple-100 text-purple-700' :
+                    m.type === 'range' ? 'bg-amber-100 text-amber-700' :
+                    'bg-green-100 text-green-700'
                   }`}>{m.type.toUpperCase()}</span>
                   <span className="text-xs font-mono text-slate-700">{m.value}</span>
                 </div>
@@ -221,13 +224,15 @@ export function GroupManagementPanel({ appFilter, onNotification }: GroupManagem
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5">
-              <select value={newMemberType} onChange={(e) => setNewMemberType(e.target.value as 'ip' | 'cidr')}
+              <select value={newMemberType} onChange={(e) => setNewMemberType(e.target.value as 'ip' | 'cidr' | 'group' | 'range')}
                 className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs">
                 <option value="ip">IP</option>
                 <option value="cidr">CIDR</option>
+                <option value="range">IP Range</option>
+                <option value="group">Nested Group</option>
               </select>
               <input value={newMemberValue} onChange={(e) => setNewMemberValue(e.target.value)}
-                placeholder={newMemberType === 'ip' ? '10.1.1.5' : '10.1.1.0/24'}
+                placeholder={newMemberType === 'ip' ? '10.1.1.5' : newMemberType === 'cidr' ? '10.1.1.0/24' : newMemberType === 'range' ? '10.1.1.1-10.1.1.254' : 'grp-APP-NH01-GEN-WEB'}
                 className="flex-1 rounded border border-slate-300 px-2 py-1 text-xs font-mono" />
             </div>
             <div className="flex items-center gap-1.5">

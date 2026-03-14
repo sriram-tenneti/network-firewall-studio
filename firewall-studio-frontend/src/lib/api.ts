@@ -1,5 +1,8 @@
 import type {
   FirewallRule,
+  LegacyRule,
+  CompiledRule,
+  ReviewRequest,
   MigrationDetails,
   MigrationMapping,
   MigrationRuleLifecycle,
@@ -140,14 +143,8 @@ export const getRules = async (application?: string, status?: string): Promise<F
 
 export const getRule = (ruleId: string) => fetchJSON<FirewallRule>(`/api/rules/${ruleId}`);
 
-export const createRule = (data: {
-  application: string;
-  environment: string;
-  datacenter: string;
-  source: SourceConfig;
-  destination: DestinationConfig;
-  owner: string;
-}) =>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createRule = (data: Record<string, any>) =>
   fetchJSON<FirewallRule>('/api/rules', { method: 'POST', body: JSON.stringify(data) });
 
 export const updateRule = (ruleId: string, data: Partial<{
@@ -359,3 +356,31 @@ export const addGroupMember = (groupName: string, member: GroupMember) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members`, { method: 'POST', body: JSON.stringify(member) });
 export const removeGroupMember = (groupName: string, memberValue: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
+
+// Legacy Rules (for Migration Studio)
+export const getLegacyRules = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<LegacyRule[]>(`/api/reference/legacy-rules${qs ? `?${qs}` : ''}`);
+};
+export const updateLegacyRule = (ruleId: string, data: Partial<LegacyRule>) =>
+  fetchJSON<LegacyRule>(`/api/reference/legacy-rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) });
+
+// Rule Compiler
+export const compileRule = (ruleId: string, vendor: string = 'generic') =>
+  fetchJSON<CompiledRule>(`/api/rules/${ruleId}/compile?vendor=${vendor}`, { method: 'POST' });
+
+// Review & Approval
+export const getReviewRequests = (status?: string) => {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  const qs = params.toString();
+  return fetchJSON<ReviewRequest[]>(`/api/reviews${qs ? `?${qs}` : ''}`);
+};
+export const submitForReview = (ruleId: string, comments: string = '') =>
+  fetchJSON<ReviewRequest>('/api/reviews', { method: 'POST', body: JSON.stringify({ rule_id: ruleId, comments }) });
+export const approveReview = (reviewId: string, notes: string = '') =>
+  fetchJSON<ReviewRequest>(`/api/reviews/${reviewId}/approve`, { method: 'POST', body: JSON.stringify({ notes }) });
+export const rejectReview = (reviewId: string, notes: string) =>
+  fetchJSON<ReviewRequest>(`/api/reviews/${reviewId}/reject`, { method: 'POST', body: JSON.stringify({ notes }) });

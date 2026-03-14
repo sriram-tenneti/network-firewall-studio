@@ -4,7 +4,7 @@ from app.database import (
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
     get_policy_matrix, get_heritage_dc_matrix, get_ngdc_prod_matrix, get_nonprod_matrix,
-    get_rules,
+    get_rules, get_legacy_rules, update_legacy_rule,
     create_neighbourhood, update_neighbourhood, delete_neighbourhood,
     create_security_zone, update_security_zone, delete_security_zone,
     create_application, update_application, delete_application,
@@ -453,4 +453,22 @@ async def remove_member_from_group(name: str, member_value: str):
     result = await remove_group_member(name, member_value)
     if not result:
         raise HTTPException(status_code=404, detail="Group or member not found")
+    return result
+
+
+# ---- Legacy Rules (for Migration Studio) ----
+
+@router.get("/legacy-rules")
+async def list_legacy_rules(app_id: str | None = None):
+    rules = await get_legacy_rules()
+    if app_id:
+        rules = [r for r in rules if r.get("app_id") == app_id]
+    return rules
+
+
+@router.put("/legacy-rules/{rule_id}")
+async def update_legacy_rule_endpoint(rule_id: str, data: dict):
+    result = await update_legacy_rule(rule_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Legacy rule not found")
     return result
