@@ -7,28 +7,47 @@ interface GroupManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   appId?: string;
+  applications?: { app_id: string; name: string }[];
 }
 
-export function GroupManagerModal({ isOpen, onClose, appId }: GroupManagerModalProps) {
+export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }: GroupManagerModalProps) {
   const [groups, setGroups] = useState<FirewallGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<FirewallGroup | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [newGroup, setNewGroup] = useState({ name: '', app_id: '', nh: '', sz: 'Standard', subtype: 'src', description: '' });
+  const [filterAppId, setFilterAppId] = useState(appId || '');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', nh: '', sz: 'Standard', subtype: 'src', description: '' });
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
 
   useEffect(() => {
-    if (isOpen) loadGroups();
+    if (isOpen) {
+      setFilterAppId(appId || '');
+      loadGroups(appId || '');
+    }
   }, [isOpen, appId]);
 
-  const loadGroups = async () => {
+  const loadGroups = async (forAppId?: string) => {
     setLoading(true);
     try {
-      const data = await getGroups(appId);
+      const data = await getGroups(forAppId || undefined);
       setGroups(data);
     } catch { /* ignore */ }
     setLoading(false);
   };
+
+  const handleAppFilterChange = (newAppId: string) => {
+    setFilterAppId(newAppId);
+    setSelectedGroup(null);
+    loadGroups(newAppId);
+    setNewGroup(prev => ({ ...prev, app_id: newAppId }));
+  };
+
+  const filteredGroups = groups.filter(g => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return g.name.toLowerCase().includes(q) || g.app_id.toLowerCase().includes(q) || g.description.toLowerCase().includes(q) || (g.members || []).some(m => m.value.toLowerCase().includes(q));
+  });
 
   const handleCreateGroup = async () => {
     try {
@@ -61,12 +80,35 @@ export function GroupManagerModal({ isOpen, onClose, appId }: GroupManagerModalP
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Group Management" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Group Management" subtitle={filterAppId ? `Filtered by ${filterAppId}` : 'All Applications'} size="xl">
       <div className="flex gap-4 min-h-[400px]">
         {/* Left panel - Group list */}
         <div className="w-1/3 border-r pr-4">
+          {/* App ID filter */}
+          <div className="mb-3">
+            <select
+              value={filterAppId}
+              onChange={e => handleAppFilterChange(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Applications</option>
+              {applications.map(app => (
+                <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+              ))}
+            </select>
+          </div>
+          {/* Search within groups */}
+          <div className="mb-3">
+            <input
+              type="text"
+              placeholder="Search groups, IPs, subnets..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-700">Groups {appId && `(${appId})`}</h3>
+            <h3 className="text-sm font-semibold text-gray-700">Groups ({filteredGroups.length})</h3>
             <button onClick={() => setShowCreate(!showCreate)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
               {showCreate ? 'Cancel' : '+ New'}
             </button>
@@ -102,8 +144,8 @@ export function GroupManagerModal({ isOpen, onClose, appId }: GroupManagerModalP
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
             </div>
           ) : (
-            <div className="space-y-1 max-h-[350px] overflow-y-auto">
-              {groups.map(g => (
+            <div className="space-y-1 max-h-[280px] overflow-y-auto">
+              {filteredGroups.map(g => (
                 <button
                   key={g.name}
                   onClick={() => setSelectedGroup(g)}

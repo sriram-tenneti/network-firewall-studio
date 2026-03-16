@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
 import type { LegacyRule } from '@/types';
@@ -7,10 +8,30 @@ interface LegacyRuleDetailModalProps {
   onClose: () => void;
   rule: LegacyRule | null;
   onStartMigration?: () => void;
+  onSaveCustomization?: (ruleId: string, data: Partial<LegacyRule>) => void;
 }
 
-export function LegacyRuleDetailModal({ isOpen, onClose, rule, onStartMigration }: LegacyRuleDetailModalProps) {
+export function LegacyRuleDetailModal({ isOpen, onClose, rule, onStartMigration, onSaveCustomization }: LegacyRuleDetailModalProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<Partial<LegacyRule>>({});
+
   if (!rule) return null;
+
+  const startEditing = () => {
+    setEditData({
+      suggested_standard_name: rule.suggested_standard_name || '',
+      source_zone: rule.source_zone,
+      rule_action: rule.rule_action,
+    });
+    setIsEditing(true);
+  };
+
+  const saveCustomization = () => {
+    if (onSaveCustomization) {
+      onSaveCustomization(rule.id, editData);
+    }
+    setIsEditing(false);
+  };
 
   const rows: [string, string | React.ReactNode][] = [
     ['Rule ID', rule.id],
@@ -64,8 +85,57 @@ export function LegacyRuleDetailModal({ isOpen, onClose, rule, onStartMigration 
         ))}
       </div>
 
+      {/* Customization Editor */}
+      {isEditing && (
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="text-sm font-semibold text-blue-800 mb-3">Customize Migration Mapping</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Suggested Standard Name</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                value={editData.suggested_standard_name || ''}
+                onChange={e => setEditData({ ...editData, suggested_standard_name: e.target.value })}
+                placeholder="grp-AppID-NH-SZ-subtype"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Source Zone</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                value={editData.source_zone || ''}
+                onChange={e => setEditData({ ...editData, source_zone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Rule Action</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                value={editData.rule_action || ''}
+                onChange={e => setEditData({ ...editData, rule_action: e.target.value })}
+              >
+                <option value="Allow">Allow</option>
+                <option value="Deny">Deny</option>
+                <option value="Monitor">Monitor</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+            <button onClick={saveCustomization} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Save Changes</button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-        <h4 className="text-sm font-semibold text-gray-700 mb-2">Migration Recommendations</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-gray-700">Migration Recommendations</h4>
+          {onSaveCustomization && !isEditing && (
+            <button onClick={startEditing} className="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100">Customize</button>
+          )}
+        </div>
         <ul className="text-xs text-gray-600 space-y-1.5">
           {isNonStandard ? (
             <>

@@ -1,6 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../shared/Modal';
 import type { FirewallRule, Application } from '@/types';
+
+interface RuleConflict {
+  type: 'exact_duplicate' | 'birthright_ngdc' | 'legacy_passthrough' | 'port_overlap';
+  severity: 'error' | 'warning';
+  message: string;
+  conflicting_rule_id?: string;
+}
 
 interface RuleFormModalProps {
   isOpen: boolean;
@@ -9,9 +16,88 @@ interface RuleFormModalProps {
   rule?: FirewallRule | null;
   applications: Application[];
   mode: 'create' | 'edit';
+  existingRules?: FirewallRule[];
 }
 
-export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mode }: RuleFormModalProps) {
+function expandPorts(portStr: string): number[] {
+  if (!portStr || portStr.trim() === '' || portStr.toLowerCase() === 'any') return [];
+  const ports: number[] = [];
+  for (const part of portStr.split(',')) {
+    const trimmed = part.trim();
+    if (trimmed.includes('-')) {
+      const [start, end] = trimmed.split('-').map(Number);
+      if (!isNaN(start) && !isNaN(end)) {
+        for (let p = start; p <= end && p < start + 1000; p++) ports.push(p);
+      }
+    } else {
+      const n = Number(trimmed);
+      if (!isNaN(n)) ports.push(n);
+    }
+  }
+  return ports;
+}
+
+function portsOverlap(ports1: string, ports2: string): boolean {
+  const set1 = expandPorts(ports1);
+  const set2 = expandPorts(ports2);
+  if (set1.length === 0 || set2.length === 0) return false;
+  const s2 = new Set(set2);
+  return set1.some(p => s2.has(p));
+}
+
+function getSourceId(rule: FirewallRule): string {
+  if (!rule.source) return '';
+  const s = rule.source;
+  return (s.group_name || s.ip_address || s.cidr || '').toLowerCase();
+}
+
+function getDestId(rule: FirewallRule): string {
+  if (!rule.destination) return '';
+  const d = rule.destination;
+  return (d.name || d.dest_ip || '').toLowerCase();
+}
+
+function getRulePorts(rule: FirewallRule): string {
+  if (rule.source && rule.source.ports) return rule.source.ports;
+  if (rule.destination && rule.destination.ports) return rule.destination.ports;
+  return '';
+}
+
+function validateRuleConflicts(
+  form: { source: string; destination: string; port: string; protocol: string; datacenter: string; environment: string },
+  existingRules: FirewallRule[],
+  editingRuleId?: string,
+): RuleConflict[] {
+  const conflicts: RuleConflict[] = [];
+  const formSrc = form.source.toLowerCase().trim();
+  const formDst = form.destination.toLowerCase().trim();
+  const formPort = form.port.trim();
+  if (!formSrc && !formDst && !formPort) return conflicts;
+
+  for (const rule of existingRules) {
+    if (rule.status === 'Deleted') continue;
+    if (editingRuleId && rule.rule_id === editingRuleId) continue;
+    const ruleSrc = getSourceId(rule);
+    const ruleDst = getDestId(rule);
+    const rulePorts = getRulePorts(rule);
+
+    if (formSrc && formDst && formPort && ruleSrc === formSrc && ruleDst === formDst && formPort === rulePorts) {
+      conflicts.push({ type: 'exact_duplicate', severity: 'error', message: `Exact duplicate of rule ${rule.rule_id} (${rule.application}) — same source, destination, and ports`, conflicting_rule_id: rule.rule_id });
+      continue;
+    }
+    if (form.datacenter.includes('NGDC') && rule.datacenter?.includes('NGDC') && ruleSrc === formSrc && ruleDst === formDst && rule.policy_result === 'Permitted') {
+      conflicts.push({ type: 'birthright_ngdc', severity: 'warning', message: `Birthright rule ${rule.rule_id} already permits this traffic in NGDC — no new rule needed`, conflicting_rule_id: rule.rule_id });
+      continue;
+    }
+    if (ruleSrc === formSrc && ruleDst === formDst && formPort && rulePorts && portsOverlap(formPort, rulePorts)) {
+      const isLegacy = !rule.datacenter?.includes('NGDC');
+      conflicts.push({ type: isLegacy ? 'legacy_passthrough' : 'port_overlap', severity: 'warning', message: isLegacy ? `Legacy rule ${rule.rule_id} already has pass-through on overlapping ports (${rulePorts})` : `Rule ${rule.rule_id} has overlapping ports (${rulePorts}) on same source/destination`, conflicting_rule_id: rule.rule_id });
+    }
+  }
+  return conflicts;
+}
+
+export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mode, existingRules = [] }: RuleFormModalProps) {
   const [form, setForm] = useState({
     application: '',
     source: '',
@@ -26,6 +112,8 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
     datacenter: 'ALPHA_NGDC',
     is_group_to_group: true,
   });
+
+  const [showConflicts, setShowConflicts] = useState(false);
 
   useEffect(() => {
     if (rule && mode === 'edit') {
@@ -59,9 +147,22 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
         is_group_to_group: true,
       });
     }
+    setShowConflicts(false);
   }, [rule, mode, isOpen]);
 
+  const conflicts = useMemo(() => {
+    if (existingRules.length === 0) return [];
+    return validateRuleConflicts(form, existingRules, rule?.rule_id);
+  }, [form.source, form.destination, form.port, form.protocol, form.datacenter, form.environment, existingRules, rule?.rule_id]);
+
+  const hasErrors = conflicts.some(c => c.severity === 'error');
+
   const handleSubmit = () => {
+    if (conflicts.length > 0 && !showConflicts) {
+      setShowConflicts(true);
+      return;
+    }
+    if (hasErrors) return;
     onSave(form);
     onClose();
   };
@@ -72,6 +173,31 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={mode === 'create' ? 'Create New Firewall Rule' : 'Edit Firewall Rule'} size="lg">
       <div className="space-y-4 p-1">
+        {/* Conflict alerts */}
+        {showConflicts && conflicts.length > 0 && (
+          <div className="space-y-2">
+            {conflicts.map((c, i) => (
+              <div key={i} className={`p-3 rounded-lg border text-sm ${c.severity === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-xs mt-0.5 shrink-0">{c.severity === 'error' ? 'CONFLICT' : 'WARNING'}</span>
+                  <span>{c.message}</span>
+                </div>
+              </div>
+            ))}
+            {!hasErrors && (
+              <p className="text-xs text-gray-500 italic">Warnings found but you can still proceed. Click the button again to confirm.</p>
+            )}
+            {hasErrors && (
+              <p className="text-xs text-red-600 font-medium">Cannot create rule — exact duplicate detected. Please modify source, destination, or ports.</p>
+            )}
+          </div>
+        )}
+        {!showConflicts && conflicts.length > 0 && (
+          <div className={`px-3 py-2 rounded-lg text-xs font-medium ${hasErrors ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+            {conflicts.length} potential conflict{conflicts.length > 1 ? 's' : ''} detected — will be shown on submit
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Application</label>
@@ -176,7 +302,13 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
 
       <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
-        <button onClick={handleSubmit} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">{mode === 'create' ? 'Create Rule' : 'Update Rule'}</button>
+        <button
+          onClick={handleSubmit}
+          disabled={showConflicts && hasErrors}
+          className={`px-4 py-2 text-sm font-medium rounded-md ${showConflicts && hasErrors ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-white bg-blue-600 hover:bg-blue-700'}`}
+        >
+          {showConflicts && conflicts.length > 0 && !hasErrors ? `Confirm ${mode === 'create' ? 'Create' : 'Update'}` : mode === 'create' ? 'Create Rule' : 'Update Rule'}
+        </button>
       </div>
     </Modal>
   );

@@ -82,6 +82,17 @@ export function MigrationStudioPage() {
     if (rule) detailModal.open(rule);
   };
 
+  const handleSaveCustomization = async (ruleId: string, data: Partial<LegacyRule>) => {
+    try {
+      await updateLegacyRule(ruleId, data);
+      showNotification('Customization saved successfully', 'success');
+      detailModal.close();
+      loadData();
+    } catch {
+      showNotification('Failed to save customization', 'error');
+    }
+  };
+
   const handleBulkAnalyze = () => {
     const nonStandard = legacyRules.filter(r => !r.is_standard && r.migration_status === 'Not Started');
     setMappingRules(nonStandard.slice(0, 10));
@@ -156,7 +167,7 @@ export function MigrationStudioPage() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Migration Studio</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Migration to NGDC</h1>
           <p className="text-sm text-gray-500 mt-1">Analyze legacy rules, map to NGDC standards, and migrate with review workflow</p>
         </div>
         <div className="flex items-center gap-3">
@@ -181,14 +192,14 @@ export function MigrationStudioPage() {
 
       <div className="grid grid-cols-6 gap-3 mb-6">
         {[
-          { label: 'Total Rules', value: counts.All, color: 'bg-gray-100 text-gray-800' },
-          { label: 'Non-Standard', value: counts['Non-Standard'], color: 'bg-red-100 text-red-800' },
-          { label: 'Standard', value: counts.Standard, color: 'bg-green-100 text-green-800' },
-          { label: 'Not Started', value: counts['Not Started'], color: 'bg-slate-100 text-slate-800' },
-          { label: 'In Progress', value: counts['In Progress'], color: 'bg-amber-100 text-amber-800' },
-          { label: 'Completed', value: counts.Completed, color: 'bg-blue-100 text-blue-800' },
+          { label: 'Total Rules', value: counts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
+          { label: 'Non-Standard', value: counts['Non-Standard'], color: 'bg-gradient-to-br from-red-100 to-red-200 text-red-800' },
+          { label: 'Standard', value: counts.Standard, color: 'bg-gradient-to-br from-green-100 to-green-200 text-green-800' },
+          { label: 'Not Started', value: counts['Not Started'], color: 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-800' },
+          { label: 'In Progress', value: counts['In Progress'], color: 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800' },
+          { label: 'Completed', value: counts.Completed, color: 'bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800' },
         ].map(card => (
-          <div key={card.label} className={'p-3 rounded-lg ' + card.color}>
+          <div key={card.label} className={'p-3 rounded-lg shadow-sm ' + card.color}>
             <div className="text-xl font-bold">{card.value}</div>
             <div className="text-xs font-medium mt-0.5">{card.label}</div>
           </div>
@@ -228,7 +239,8 @@ export function MigrationStudioPage() {
               data={filteredRules}
               columns={columns}
               keyField="id"
-              searchFields={['app_id', 'app_distributed_id', 'rule_name', 'source_zone']}
+              searchPlaceholder="Search by IP, group, app, rule ID, zone..."
+              searchFields={['app_id', 'app_distributed_id', 'rule_name', 'source_zone', 'source_entries', 'source_expanded', 'destination_entries', 'destination_expanded']}
               onRowClick={(row) => detailModal.open(row)}
               emptyMessage="No legacy rules found"
               defaultPageSize={50}
@@ -242,6 +254,7 @@ export function MigrationStudioPage() {
         onClose={detailModal.close}
         rule={detailModal.data}
         onStartMigration={() => { if (detailModal.data) handleStartMigration(detailModal.data.id); }}
+        onSaveCustomization={handleSaveCustomization}
       />
     </div>
   );
