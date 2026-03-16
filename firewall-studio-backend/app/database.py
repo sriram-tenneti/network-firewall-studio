@@ -412,85 +412,73 @@ SEED_APPLICATIONS = [
 ]
 
 # =====================================================================
-# LEGACY NON-STANDARD RULES (for Migration Studio)
-# These represent legacy rules that need to be migrated to standard naming
+# LEGACY / EXISTING FIREWALL RULES (from imported spreadsheet)
+# Format mirrors the Excel columns: App ID, App Current Distributed ID, App Name,
+# Inventory Item, Policy Name, Rule Global, Rule Action, Rule Source, Rule Source Expanded,
+# Rule Source Zone, Rule Destination, Rule Destination Expanded, Rule Destination Zone,
+# Rule Service, Rule Service Expanded, RN, RC
 # =====================================================================
 SEED_LEGACY_RULES = [
-    {"id": "LR-001", "app_id": "CRM", "app_distributed_id": "SEA3", "rule_name": "OGDC-PROD-allow-CRM",
-     "inventory": "Legacy DC Alpha", "policy_row": "Row-14", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "GEN", "source_entries": ["grp-OGDC-PROD"], "source_expanded": ["10.25.1.0/24", "10.25.2.0/24"],
-     "destination_entries": ["grp-BRAS-Rollem"], "destination_expanded": ["10.50.1.10", "10.50.1.11"],
-     "ports": ["TCP 8443", "TCP 443"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-CRM-NH02-CDE-APP"},
-    {"id": "LR-002", "app_id": "CRM", "app_distributed_id": "SEA3", "rule_name": "Legacy-CRM-DB-Access",
-     "inventory": "Legacy DC Alpha", "policy_row": "Row-15", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "CDE", "source_entries": ["CRM-AppServers"], "source_expanded": ["10.25.3.100", "10.25.3.101"],
-     "destination_entries": ["CRM-Database-Cluster"], "destination_expanded": ["10.50.2.0/24"],
-     "ports": ["TCP 1521"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-CRM-NH02-CDE-DB"},
-    {"id": "LR-003", "app_id": "ORD", "app_distributed_id": "LOGIN", "rule_name": "OLD-LoginSvc-Inbound",
-     "inventory": "Legacy DC Beta", "policy_row": "Row-22", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "DMZ", "source_entries": ["External-LB-Pool"], "source_expanded": ["10.26.1.0/24"],
-     "destination_entries": ["Login-WebFarm"], "destination_expanded": ["10.26.5.10", "10.26.5.11", "10.26.5.12"],
-     "ports": ["TCP 443", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-ORD-NH03-CDE-WEB"},
-    {"id": "LR-004", "app_id": "ORD", "app_distributed_id": "LOGIN", "rule_name": "LoginSvc-to-AuthDB",
-     "inventory": "Legacy DC Beta", "policy_row": "Row-23", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "CDE", "source_entries": ["Login-WebFarm"], "source_expanded": ["10.26.5.10", "10.26.5.11"],
-     "destination_entries": ["Auth-DB-Primary", "Auth-DB-Secondary"],
-     "destination_expanded": ["10.26.8.20", "10.26.8.21"],
-     "ports": ["TCP 1521", "TCP 5432"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-ORD-NH03-CDE-DB"},
-    {"id": "LR-005", "app_id": "PAY", "app_distributed_id": "PAY01", "rule_name": "PayEngine-PCI-Flow",
-     "inventory": "Legacy DC Gamma", "policy_row": "Row-31", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "CDE", "source_entries": ["PayGW-Servers"], "source_expanded": ["10.27.10.0/24"],
-     "destination_entries": ["HSM-Cluster", "TokenVault"], "destination_expanded": ["10.27.20.5", "10.27.20.6"],
-     "ports": ["TCP 9443", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-PAY-NH07-CDE-APP"},
-    {"id": "LR-006", "app_id": "DIG", "app_distributed_id": "DIG01", "rule_name": "DigitalChannel-WebTier",
-     "inventory": "Legacy DC Alpha", "policy_row": "Row-40", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "DMZ", "source_entries": ["CDN-Endpoints"], "source_expanded": ["10.25.50.0/24"],
-     "destination_entries": ["Digital-WebServers"], "destination_expanded": ["10.25.60.0/24"],
-     "ports": ["TCP 443", "TCP 80"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-DIG-NH03-CDE-WEB"},
-    {"id": "LR-007", "app_id": "ENT", "app_distributed_id": "ENT01", "rule_name": "EntSvc-SharedDB",
-     "inventory": "Legacy DC Delta", "policy_row": "Row-51", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "GEN", "source_entries": ["ENT-AppPool"], "source_expanded": ["10.28.1.0/24"],
-     "destination_entries": ["SharedDB-Cluster"], "destination_expanded": ["10.28.10.0/24"],
-     "ports": ["TCP 1521", "TCP 3306"], "is_standard": False, "migration_status": "Needs Review",
-     "suggested_standard_name": "grp-ENT-NH05-GEN-DB"},
-    {"id": "LR-008", "app_id": "WHL", "app_distributed_id": "WHL01", "rule_name": "WholesaleBnk-API",
-     "inventory": "Legacy DC Gamma", "policy_row": "Row-55", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "CDE", "source_entries": ["WHL-Partners"], "source_expanded": ["10.27.30.0/24"],
-     "destination_entries": ["WHL-API-Gateway"], "destination_expanded": ["10.27.40.10", "10.27.40.11"],
-     "ports": ["TCP 8443", "TCP 443"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-WHL-NH06-CDE-API"},
-    {"id": "LR-009", "app_id": "CBK", "app_distributed_id": "CBK01", "rule_name": "CoreBanking-MF-Link",
-     "inventory": "Legacy DC Alpha", "policy_row": "Row-60", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "CDE", "source_entries": ["CBK-Middleware"], "source_expanded": ["10.25.70.0/24"],
-     "destination_entries": ["Mainframe-CICS", "Mainframe-IMS"],
-     "destination_expanded": ["10.25.80.10", "10.25.80.11"],
-     "ports": ["TCP 3270", "TCP 8080"], "is_standard": False, "migration_status": "In Progress",
-     "suggested_standard_name": "grp-CBK-NH02-CDE-MFR"},
-    {"id": "LR-010", "app_id": "AML", "app_distributed_id": "AML01", "rule_name": "AML-ScreeningEngine",
-     "inventory": "Legacy DC Epsilon", "policy_row": "Row-72", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "CDE", "source_entries": ["AML-BatchServers"], "source_expanded": ["10.29.5.0/24"],
-     "destination_entries": ["AML-DB", "AML-Analytics"],
-     "destination_expanded": ["10.29.10.20", "10.29.10.21"],
-     "ports": ["TCP 1521", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-AML-NH07-CDE-BAT"},
-    {"id": "LR-011", "app_id": "AGW", "app_distributed_id": "AGW01", "rule_name": "APIGateway-External",
-     "inventory": "Legacy DC Zeta", "policy_row": "Row-80", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "DMZ", "source_entries": ["Internet-Facing-LB"], "source_expanded": ["10.30.1.0/24"],
-     "destination_entries": ["API-Backend-Pool"], "destination_expanded": ["10.30.10.0/24"],
-     "ports": ["TCP 443", "TCP 8443"], "is_standard": False, "migration_status": "Not Started",
-     "suggested_standard_name": "grp-AGW-NH14-DMZ-API"},
-    {"id": "LR-012", "app_id": "TRD", "app_distributed_id": "TRD01", "rule_name": "TradingPlatform-FIX",
-     "inventory": "Legacy DC Gamma", "policy_row": "Row-85", "rule_status": "Active", "rule_action": "Allow",
-     "source_zone": "CDE", "source_entries": ["FIX-Engine-Cluster"], "source_expanded": ["10.27.50.0/24"],
-     "destination_entries": ["Exchange-Connectors"], "destination_expanded": ["10.27.60.0/24"],
-     "ports": ["TCP 9878", "TCP 9879"], "is_standard": False, "migration_status": "Mapped",
-     "suggested_standard_name": "grp-TRD-NH06-CDE-APP"},
+    {"id": "LR-001", "app_id": 1316, "app_distributed_id": "App1", "app_name": "Application1",
+     "inventory_item": "OL-SVOC-FCZ001", "policy_name": "Traditional", "rule_global": True,
+     "rule_action": "Accept",
+     "rule_source": "gapigr-rpm-dev\ngrp-app2-SVOC\nsvr-100.123.123.196",
+     "rule_source_expanded": "gapigr-rpm-dev\n  grp-app1-OCSV\n    rng-110.123.123.139-150\n\tsvr-100.124.124.139\n  rng-112.130.135.167-178\n  rng-234.45.67.34-44\ngrp-app2-SVOC\n  rng-111.145.10.57-59\n  svr-10.123.45.67\n  svr-10.123.45.78\nsvr-100.123.123.196",
+     "rule_source_zone": "do-lbw-server",
+     "rule_destination": "svr-101.123.123.296\nsvr-101.123.3.137",
+     "rule_destination_expanded": "svr-101.123.123.296\nsvr-101.123.3.137",
+     "rule_destination_zone": "default",
+     "rule_service": "tcp-1896\ntcp-1006", "rule_service_expanded": "tcp-1896\ntcp-1006",
+     "rn": 1, "rc": 104,
+     "is_standard": False, "migration_status": "Not Started"},
+    {"id": "LR-002", "app_id": 1316, "app_distributed_id": "App1", "app_name": "Application1",
+     "inventory_item": "OL-SVOC-FCZ001", "policy_name": "Traditional", "rule_global": True,
+     "rule_action": "DROP",
+     "rule_source": "rng-235.45.67.36-54\nsvr-225.4.78.94",
+     "rule_source_expanded": "rng-235.45.67.36-54\nsvr-225.4.78.94",
+     "rule_source_zone": "do-nb-server",
+     "rule_destination": "svr-101.123.123.29\nsvr-101.123.23.13",
+     "rule_destination_expanded": "svr-101.123.123.29\nsvr-101.123.23.13",
+     "rule_destination_zone": "default",
+     "rule_service": "Application Default", "rule_service_expanded": "Application Default",
+     "rn": 2, "rc": 104,
+     "is_standard": False, "migration_status": "Not Started"},
+    {"id": "LR-003", "app_id": 3721, "app_distributed_id": "App2", "app_name": "Application2",
+     "inventory_item": "OZ-SOVC-FCZ002", "policy_name": "Access", "rule_global": False,
+     "rule_action": "Accept",
+     "rule_source": "grp-app1-SOVC",
+     "rule_source_expanded": "grp-app1-SOVC\n  svr-201.123.3.337\n  svr-201.123.3.339\n  svr-201.123.3.343",
+     "rule_source_zone": "do-lbw-server",
+     "rule_destination": "grp-app2-VC",
+     "rule_destination_expanded": "grp-app2-VC\n  svr-201.123.3.37\n  svr-201.123.3.39\n  svr-201.123.3.43",
+     "rule_destination_zone": "do-lb-default",
+     "rule_service": "Application Default", "rule_service_expanded": "Application Default",
+     "rn": 3, "rc": 104,
+     "is_standard": False, "migration_status": "Not Started"},
+    {"id": "LR-004", "app_id": 3721, "app_distributed_id": "App2", "app_name": "Application2",
+     "inventory_item": "OZ-SOVC-FCZ002", "policy_name": "Access", "rule_global": False,
+     "rule_action": "Accept",
+     "rule_source": "grp-app1-SOVC",
+     "rule_source_expanded": "grp-app1-SOVC\n  svr-201.123.3.337\n  svr-201.123.3.339\n  svr-201.123.3.343",
+     "rule_source_zone": "do-lbw-server",
+     "rule_destination": "svr-117.23.38.58",
+     "rule_destination_expanded": "svr-117.23.38.58",
+     "rule_destination_zone": "do-lb-default",
+     "rule_service": "Application Default", "rule_service_expanded": "Application Default",
+     "rn": 4, "rc": 104,
+     "is_standard": False, "migration_status": "Not Started"},
+    {"id": "LR-005", "app_id": 4754, "app_distributed_id": "App3", "app_name": "Application3",
+     "inventory_item": "SO-OZVC-FCZ004", "policy_name": "Access", "rule_global": True,
+     "rule_action": "Accept",
+     "rule_source": "svr-11.78.98.732",
+     "rule_source_expanded": "svr-11.78.98.732",
+     "rule_source_zone": "default",
+     "rule_destination": "svr-11.123.3.58",
+     "rule_destination_expanded": "svr-11.123.3.58",
+     "rule_destination_zone": "default",
+     "rule_service": "tcp-1096", "rule_service_expanded": "tcp-1096",
+     "rn": 5, "rc": 104,
+     "is_standard": False, "migration_status": "Not Started"},
 ]
 
 SEED_ENVIRONMENTS = [
@@ -1328,6 +1316,132 @@ async def update_legacy_rule(rule_id: str, data: dict[str, Any]) -> dict[str, An
             _save("legacy_rules", rules)
             return r
     return None
+
+
+async def delete_legacy_rule(rule_id: str) -> bool:
+    rules = _load("legacy_rules") or []
+    new_rules = [r for r in rules if r["id"] != rule_id]
+    if len(new_rules) < len(rules):
+        _save("legacy_rules", new_rules)
+        return True
+    return False
+
+
+async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:
+    """Import legacy rules from Excel, dedup against existing rules."""
+    existing = _load("legacy_rules") or []
+    existing_keys: set[str] = set()
+    for r in existing:
+        key = f"{r.get('app_id')}|{r.get('app_distributed_id')}|{r.get('rule_source')}|{r.get('rule_destination')}|{r.get('rule_service')}"
+        existing_keys.add(key)
+
+    max_num = 0
+    for r in existing:
+        try:
+            num = int(r["id"].split("-")[1])
+            if num > max_num:
+                max_num = num
+        except (ValueError, IndexError):
+            pass
+
+    added = 0
+    duplicates = 0
+    for rule in new_rules:
+        key = f"{rule.get('app_id')}|{rule.get('app_distributed_id')}|{rule.get('rule_source')}|{rule.get('rule_destination')}|{rule.get('rule_service')}"
+        if key in existing_keys:
+            duplicates += 1
+            continue
+        max_num += 1
+        rule["id"] = f"LR-{max_num:03d}"
+        rule.setdefault("is_standard", False)
+        rule.setdefault("migration_status", "Not Started")
+        existing.append(rule)
+        existing_keys.add(key)
+        added += 1
+
+    _save("legacy_rules", existing)
+    return {"added": added, "duplicates": duplicates, "total": len(existing)}
+
+
+async def get_migration_history() -> list[dict[str, Any]]:
+    return _load("migration_history") or []
+
+
+async def log_migration(rule_id: str, action: str, from_status: str, to_status: str, details: str = "") -> dict[str, Any]:
+    history = _load("migration_history") or []
+    entry = {
+        "id": f"MH-{_id()}",
+        "rule_id": rule_id,
+        "action": action,
+        "from_status": from_status,
+        "to_status": to_status,
+        "details": details,
+        "timestamp": _now(),
+        "user": "system",
+    }
+    history.append(entry)
+    _save("migration_history", history)
+    return entry
+
+
+async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
+    """Mark rule as migrated: move to Firewall Studio, remove from legacy views."""
+    rules = _load("legacy_rules") or []
+    for r in rules:
+        if r["id"] == rule_id:
+            old_status = r.get("migration_status", "Not Started")
+            r["migration_status"] = "Completed"
+            r["migrated_at"] = _now()
+            _save("legacy_rules", rules)
+            await log_migration(rule_id, "migrate_to_ngdc", old_status, "Completed",
+                                f"Rule {rule_id} migrated to NGDC standards")
+            return r
+    return None
+
+
+async def create_migration_review(rule_ids: list[str], comments: str = "") -> list[dict[str, Any]]:
+    """Create review requests for migration rules."""
+    reviews = _load("reviews") or []
+    legacy_rules = _load("legacy_rules") or []
+    created: list[dict[str, Any]] = []
+    now = _now()
+    for rid in rule_ids:
+        rule = next((r for r in legacy_rules if r["id"] == rid), None)
+        if not rule:
+            continue
+        review_id = f"REV-{_id()}"
+        src_entries = (rule.get("rule_source") or "").split("\n")
+        dst_entries = (rule.get("rule_destination") or "").split("\n")
+        review = {
+            "id": review_id,
+            "rule_id": rid,
+            "rule_name": f"{rule.get('app_name', '')} - {rule.get('inventory_item', rid)}",
+            "request_type": "migration",
+            "requestor": "system",
+            "reviewer": None,
+            "status": "Pending",
+            "submitted_at": now,
+            "reviewed_at": None,
+            "comments": comments or f"Migration review for {rid}",
+            "review_notes": None,
+            "rule_summary": {
+                "application": f"{rule.get('app_id', '')} - {rule.get('app_name', '')}",
+                "source": ", ".join(src_entries[:3]),
+                "destination": ", ".join(dst_entries[:3]),
+                "ports": rule.get("rule_service", ""),
+                "environment": rule.get("policy_name", ""),
+            },
+        }
+        reviews.append(review)
+        created.append(review)
+        # Update rule status to In Progress
+        for lr in legacy_rules:
+            if lr["id"] == rid:
+                lr["migration_status"] = "In Progress"
+                break
+    _save("reviews", reviews)
+    _save("legacy_rules", legacy_rules)
+    return created
 
 
 async def get_rules() -> list[dict[str, Any]]:

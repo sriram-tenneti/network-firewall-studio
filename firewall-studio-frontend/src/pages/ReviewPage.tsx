@@ -71,7 +71,8 @@ export default function ReviewPage() {
       ),
     },
     {
-      key: 'rule_summary.application', header: 'Application', sortable: true, width: '120px',
+      key: 'rule_summary', header: 'Application', sortable: false, width: '120px',
+      render: (_, row) => <span className="text-xs">{row.rule_summary?.application || 'N/A'}</span>,
     },
     {
       key: 'rule_summary.source', header: 'Source', sortable: false, width: '150px',
@@ -123,10 +124,9 @@ export default function ReviewPage() {
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Review & Approval</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage firewall rule review requests and approvals for SNS users</p>
+        <p className="text-sm text-gray-500 mt-1">Review migration and firewall rule requests submitted from Migration to NGDC page</p>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Reviews', value: counts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
@@ -157,9 +157,9 @@ export default function ReviewPage() {
               columns={columns}
               keyField="id"
               searchPlaceholder="Search by rule ID, app, source, destination, requestor..."
-              searchFields={['id', 'rule_id', 'rule_summary.application', 'rule_summary.source', 'rule_summary.destination', 'requestor']}
+              searchFields={['id', 'rule_id', 'request_type', 'requestor']}
               onRowClick={(row) => approvalModal.open(row)}
-              emptyMessage="No review requests found"
+              emptyMessage="No review requests found. Select rules for migration in the Migration to NGDC page and submit for review."
               defaultPageSize={25}
             />
           )}

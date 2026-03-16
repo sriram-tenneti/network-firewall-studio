@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from app.database import (
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
     get_policy_matrix, get_heritage_dc_matrix, get_ngdc_prod_matrix, get_nonprod_matrix,
-    get_rules, get_legacy_rules, update_legacy_rule,
+    get_rules, get_legacy_rules, update_legacy_rule, delete_legacy_rule,
+    import_legacy_rules, get_migration_history, migrate_rule_to_ngdc,
+    create_migration_review,
     create_neighbourhood, update_neighbourhood, delete_neighbourhood,
     create_security_zone, update_security_zone, delete_security_zone,
     create_application, update_application, delete_application,
@@ -17,6 +19,8 @@ from app.database import (
     get_groups, get_group, create_group, update_group, delete_group,
     add_group_member, remove_group_member,
 )
+import io
+import openpyxl
 from app.services.naming_standards import (
     validate_name, generate_group_name, generate_server_name,
     generate_subnet_name, suggest_standard_name, determine_security_zone,
@@ -456,14 +460,25 @@ async def remove_member_from_group(name: str, member_value: str):
     return result
 
 
-# ---- Legacy Rules (for Migration Studio) ----
+# ---- Legacy Rules (for Migration Studio & Firewall Management) ----
 
 @router.get("/legacy-rules")
-async def list_legacy_rules(app_id: str | None = None):
+async def list_legacy_rules(app_id: str | None = None, exclude_migrated: bool = False):
     rules = await get_legacy_rules()
     if app_id:
-        rules = [r for r in rules if r.get("app_id") == app_id]
+        rules = [r for r in rules if str(r.get("app_id")) == str(app_id) or r.get("app_distributed_id") == app_id]
+    if exclude_migrated:
+        rules = [r for r in rules if r.get("migration_status") != "Completed"]
     return rules
+
+
+@router.get("/legacy-rules/{rule_id}")
+async def get_legacy_rule_detail(rule_id: str):
+    rules = await get_legacy_rules()
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Legacy rule not found")
+    return rule
 
 
 @router.put("/legacy-rules/{rule_id}")
@@ -472,3 +487,88 @@ async def update_legacy_rule_endpoint(rule_id: str, data: dict):
     if not result:
         raise HTTPException(status_code=404, detail="Legacy rule not found")
     return result
+
+
+@router.delete("/legacy-rules/{rule_id}")
+async def delete_legacy_rule_endpoint(rule_id: str):
+    ok = await delete_legacy_rule(rule_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Legacy rule not found")
+    return {"message": "Deleted"}
+
+
+@router.post("/legacy-rules/import")
+async def import_legacy_rules_excel(file: UploadFile = File(...)):
+    """Import legacy rules from an Excel (.xlsx) file with deduplication."""
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    ws = wb.active
+    if ws is None:
+        raise HTTPException(status_code=400, detail="Empty workbook")
+    headers = [cell.value for cell in ws[1]]
+    col_map = {
+        "App ID": "app_id", "App Current Distributed ID": "app_distributed_id",
+        "App Name": "app_name", "Inventory Item": "inventory_item",
+        "Policy Name": "policy_name", "Rule Global": "rule_global",
+        "Rule Action": "rule_action", "Rule Source": "rule_source",
+        "Rule Source Expanded": "rule_source_expanded", "Rule Source Zone": "rule_source_zone",
+        "Rule Destination": "rule_destination",
+        "Rule Destination Expanded": "rule_destination_expanded",
+        "Rule Destination Zone": "rule_destination_zone",
+        "Rule Service": "rule_service", "Rule Service Expanded": "rule_service_expanded",
+        "RN": "rn", "RC": "rc",
+    }
+    parsed_rules = []
+    for row_idx in range(2, ws.max_row + 1):
+        row_vals = [cell.value for cell in ws[row_idx]]
+        if not any(row_vals):
+            continue
+        rule: dict = {}
+        for i, h in enumerate(headers):
+            if h in col_map and i < len(row_vals):
+                val = row_vals[i]
+                rule[col_map[h]] = val if val is not None else ""
+        rule["is_standard"] = False
+        rule["migration_status"] = "Not Started"
+        parsed_rules.append(rule)
+    result = await import_legacy_rules(parsed_rules)
+    return result
+
+
+@router.post("/legacy-rules/migrate")
+async def migrate_rules_to_ngdc(data: dict):
+    """Migrate selected rules to NGDC standards."""
+    rule_ids = data.get("rule_ids", [])
+    if not rule_ids:
+        raise HTTPException(status_code=400, detail="rule_ids required")
+    migrated = []
+    for rid in rule_ids:
+        result = await migrate_rule_to_ngdc(rid)
+        if result:
+            migrated.append(result)
+    return {"migrated": len(migrated), "rules": migrated}
+
+
+@router.post("/legacy-rules/submit-for-review")
+async def submit_legacy_rules_for_review(data: dict):
+    """Submit selected legacy rules for migration review."""
+    rule_ids = data.get("rule_ids", [])
+    comments = data.get("comments", "")
+    if not rule_ids:
+        raise HTTPException(status_code=400, detail="rule_ids required")
+    reviews = await create_migration_review(rule_ids, comments)
+    return {"submitted": len(reviews), "reviews": reviews}
+
+
+@router.get("/migration-history")
+async def list_migration_history():
+    return await get_migration_history()
+
+
+@router.get("/legacy-rules/migrated")
+async def list_migrated_rules():
+    """Return only rules that have been migrated to NGDC (for Firewall Studio)."""
+    rules = await get_legacy_rules()
+    return [r for r in rules if r.get("migration_status") == "Completed"]

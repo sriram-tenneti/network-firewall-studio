@@ -6,81 +6,77 @@ import { Modal } from '@/components/shared/Modal';
 import { ExceptionHandler } from '@/components/design-studio/ExceptionHandler';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getRules, getApplications, compileRule } from '@/lib/api';
-import type { FirewallRule, Application, CompiledRule } from '@/types';
+import { getLegacyRules } from '@/lib/api';
+import type { LegacyRule } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 export default function FirewallManagementPage() {
-  const [rules, setRules] = useState<FirewallRule[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
+  const [rules, setRules] = useState<LegacyRule[]>([]);
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const { notification, showNotification, clearNotification } = useNotification();
-  const detailModal = useModal<FirewallRule>();
-  const outputModal = useModal<{ app: string; rules: FirewallRule[]; compiled: CompiledRule[] }>();
+  const detailModal = useModal<LegacyRule>();
   const [exceptions, setExceptions] = useState<Array<{id: string; type: 'ip' | 'subnet'; value: string; justification: string; status: 'Pending' | 'Approved' | 'Rejected'; requested_by: string; requested_at: string}>>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [rulesData, appsData] = await Promise.all([getRules(selectedApp || undefined), getApplications()]);
+      const rulesData = await getLegacyRules(selectedApp || undefined, true);
       setRules(rulesData);
-      setApplications(appsData);
     } catch {
       showNotification('Failed to load data', 'error');
     }
     setLoading(false);
-  }, [selectedApp]);
+  }, [selectedApp, showNotification]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const filteredRules = rules.filter(r => {
-    if (activeTab === 'non_standard') return r.compliance && !r.compliance.naming_valid;
-    if (activeTab === 'standard') return r.compliance && r.compliance.naming_valid;
+    if (activeTab === 'non_standard') return !r.is_standard;
+    if (activeTab === 'standard') return r.is_standard;
     return true;
   });
 
-  const generateOutput = async () => {
+  const standardCount = rules.filter(r => r.is_standard).length;
+  const nonStandardCount = rules.filter(r => !r.is_standard).length;
+
+  const appOptions = Array.from(new Set(rules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
+    const [appId, distId, appName] = key.split('|');
+    return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
+  });
+
+  const parseExpandedTree = (text: string): string[] => {
+    if (!text) return [];
+    return text.split('\n').map(line => line.replace(/\t/g, '  '));
+  };
+
+  const downloadSpreadsheet = () => {
     if (!selectedApp) {
       showNotification('Please select an application first', 'error');
       return;
     }
-    const appRules = rules.filter(r => r.application === selectedApp);
+    const appRules = rules.filter(r => String(r.app_id) === selectedApp);
     if (appRules.length === 0) {
       showNotification('No rules found for selected application', 'error');
       return;
     }
-    try {
-      const compiledResults = await Promise.all(
-        appRules.slice(0, 10).map(r => compileRule(r.rule_id, 'generic').catch(() => null))
-      );
-      const validCompiled = compiledResults.filter((c): c is CompiledRule => c !== null);
-      outputModal.open({ app: selectedApp, rules: appRules, compiled: validCompiled });
-    } catch {
-      showNotification('Failed to compile rules', 'error');
-    }
-  };
-
-  const downloadOutput = (data: { app: string; rules: FirewallRule[]; compiled: CompiledRule[] }) => {
-    const lines = [
-      `# Firewall Rules Output - ${data.app}`,
-      `# Generated: ${new Date().toISOString()}`,
-      `# Total Rules: ${data.rules.length}`,
-      '',
-      '## Rules Summary',
-      ...data.rules.map(r => `${r.rule_id} | ${r.source.group_name || r.source.ip_address || r.source.cidr || 'N/A'} -> ${r.destination.name} | ${r.status}`),
-      '',
-      '## Compiled Policies',
-      ...data.compiled.map(c => `\n--- ${c.rule_id} (${c.vendor_format}) ---\n${c.compiled_text}`),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const headers = ['App ID', 'App Current Distributed ID', 'App Name', 'Inventory Item', 'Policy Name', 'Rule Global', 'Rule Action', 'Rule Source', 'Rule Source Expanded', 'Rule Source Zone', 'Rule Destination', 'Rule Destination Expanded', 'Rule Destination Zone', 'Rule Service', 'Rule Service Expanded', 'RN', 'RC'];
+    const rows = appRules.map(r => [
+      r.app_id, r.app_distributed_id, r.app_name, r.inventory_item, r.policy_name,
+      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action, r.rule_source, r.rule_source_expanded,
+      r.rule_source_zone, r.rule_destination, r.rule_destination_expanded,
+      r.rule_destination_zone, r.rule_service, r.rule_service_expanded, r.rn, r.rc
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `firewall-rules-${data.app}-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `firewall-rules-${selectedApp}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    showNotification('Spreadsheet downloaded', 'success');
   };
 
   const handleAddException = (data: { type: string; value: string; justification: string }) => {
@@ -107,37 +103,54 @@ export default function FirewallManagementPage() {
     showNotification('Exception rejected', 'info');
   };
 
-  const standardCount = rules.filter(r => r.compliance?.naming_valid).length;
-  const nonStandardCount = rules.filter(r => r.compliance && !r.compliance.naming_valid).length;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const columns: Column<any>[] = [
-    { key: 'rule_id', header: 'Rule ID', sortable: true, width: '100px' },
-    { key: 'application', header: 'Application', sortable: true, width: '120px' },
-    {
-      key: 'source', header: 'Source', width: '180px',
-      render: (_, row) => <span className="text-xs font-mono">{row.source.group_name || row.source.ip_address || row.source.cidr || 'N/A'}</span>,
+  const columns: Column<LegacyRule>[] = [
+    { key: 'id', header: 'Rule ID', sortable: true, width: '80px' },
+    { key: 'app_id', header: 'App ID', sortable: true, width: '70px',
+      render: (_, row) => <span className="text-xs">{String(row.app_id)}</span>,
     },
-    {
-      key: 'destination', header: 'Destination', width: '180px',
-      render: (_, row) => <span className="text-xs font-mono">{row.destination.name}</span>,
-    },
-    {
-      key: 'compliance', header: 'Compliance', width: '120px',
+    { key: 'app_distributed_id', header: 'Dist ID', sortable: true, width: '70px' },
+    { key: 'app_name', header: 'App Name', sortable: true, width: '110px' },
+    { key: 'inventory_item', header: 'Inventory', sortable: true, width: '120px' },
+    { key: 'policy_name', header: 'Policy', sortable: true, width: '90px' },
+    { key: 'rule_action', header: 'Action', sortable: true, width: '70px',
       render: (_, row) => (
-        <span className={`px-2 py-0.5 text-xs font-medium rounded ${row.compliance?.naming_valid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {row.compliance?.naming_valid ? 'Standard' : 'Non-Standard'}
+        <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${row.rule_action === 'Accept' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          {row.rule_action}
         </span>
       ),
     },
     {
-      key: 'status', header: 'Status', sortable: true, width: '100px',
-      render: (_, row) => <span className="text-xs capitalize">{row.status}</span>,
+      key: 'rule_source', header: 'Source', sortable: false, width: '150px',
+      render: (_, row) => {
+        const entries = (row.rule_source || '').split('\n').filter(Boolean);
+        return <span className="font-mono text-xs">{entries.slice(0, 2).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}</span>;
+      },
+    },
+    { key: 'rule_source_zone', header: 'Src Zone', sortable: true, width: '100px' },
+    {
+      key: 'rule_destination', header: 'Destination', sortable: false, width: '150px',
+      render: (_, row) => {
+        const entries = (row.rule_destination || '').split('\n').filter(Boolean);
+        return <span className="font-mono text-xs">{entries.slice(0, 2).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}</span>;
+      },
+    },
+    { key: 'rule_destination_zone', header: 'Dst Zone', sortable: true, width: '90px' },
+    {
+      key: 'rule_service', header: 'Service', sortable: false, width: '100px',
+      render: (_, row) => <span className="text-xs">{row.rule_service || 'N/A'}</span>,
     },
     {
-      key: 'actions', header: 'Actions', width: '80px',
+      key: 'is_standard', header: 'Standard', sortable: true, width: '90px',
       render: (_, row) => (
-        <button onClick={() => detailModal.open(row)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
+        <span className={`px-2 py-0.5 text-xs font-medium rounded ${row.is_standard ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          {row.is_standard ? 'Yes' : 'No'}
+        </span>
+      ),
+    },
+    {
+      key: '_actions', header: 'Actions', width: '80px', sortable: false,
+      render: (_, row) => (
+        <button onClick={(e) => { e.stopPropagation(); detailModal.open(row); }} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
       ),
     },
   ];
@@ -149,13 +162,13 @@ export default function FirewallManagementPage() {
   ];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-[1800px] mx-auto">
       {notification && <Notification message={notification.message} type={notification.type} onClose={clearNotification} />}
 
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Firewall Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage as-is rules, generate output per application, handle exceptions</p>
+          <p className="text-sm text-gray-500 mt-1">Manage legacy/existing firewall rules, generate output per application, handle exceptions</p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -164,21 +177,20 @@ export default function FirewallManagementPage() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">All Applications</option>
-            {applications.map(app => (
-              <option key={app.app_id} value={app.app_id}>{app.name} ({app.app_id})</option>
+            {appOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
           <button
-            onClick={generateOutput}
+            onClick={downloadSpreadsheet}
             disabled={!selectedApp}
             className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-700 hover:to-blue-700 disabled:opacity-40 shadow-sm"
           >
-            Generate Output
+            Export Spreadsheet
           </button>
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Rules', value: rules.length, color: 'from-slate-100 to-slate-200 text-slate-800' },
@@ -201,14 +213,23 @@ export default function FirewallManagementPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
           </div>
         ) : (
-          <DataTable columns={columns} data={filteredRules} keyField="rule_id" defaultPageSize={15} emptyMessage="No rules found" searchPlaceholder="Search by IP, group, app, rule ID..." searchFields={['rule_id', 'application', 'source', 'destination']} />
+          <DataTable
+            columns={columns}
+            data={filteredRules}
+            keyField="id"
+            defaultPageSize={15}
+            emptyMessage="No rules found"
+            searchPlaceholder="Search by IP, group, app, rule ID, zone, service..."
+            searchFields={['id', 'app_id', 'app_distributed_id', 'app_name', 'rule_source', 'rule_source_expanded', 'rule_destination', 'rule_destination_expanded', 'rule_source_zone', 'rule_destination_zone', 'rule_service', 'inventory_item']}
+            onRowClick={(row) => detailModal.open(row)}
+          />
         )}
       </div>
 
       {/* Exceptions Section */}
       <div className="mt-8 p-4 bg-white border border-gray-200 rounded-lg">
         <ExceptionHandler
-          ruleId={detailModal.data?.rule_id || ''}
+          ruleId={detailModal.data?.id || ''}
           appId={selectedApp || 'all'}
           exceptions={exceptions}
           onAddException={handleAddException}
@@ -217,54 +238,75 @@ export default function FirewallManagementPage() {
         />
       </div>
 
-      {/* Rule Detail Modal */}
-      <Modal isOpen={detailModal.isOpen} onClose={detailModal.close} title={`Rule: ${detailModal.data?.rule_id || ''}`} size="lg">
+      {/* Rule Detail Modal with Expanded IPs */}
+      <Modal isOpen={detailModal.isOpen} onClose={detailModal.close} title={`Rule: ${detailModal.data?.id || ''}`} size="xl">
         {detailModal.data && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                ['Application', detailModal.data.application],
-                ['Environment', detailModal.data.environment],
-                ['Source', detailModal.data.source.group_name || detailModal.data.source.ip_address || detailModal.data.source.cidr || 'N/A'],
-                ['Destination', detailModal.data.destination.name],
-                ['Status', detailModal.data.status],
-                ['Compliance', detailModal.data.compliance?.naming_valid ? 'Standard' : 'Non-Standard'],
-              ].map(([label, val]) => (
-                <div key={String(label)} className="p-2 bg-gray-50 rounded">
+            <div className="grid grid-cols-4 gap-3">
+              {([
+                ['Rule ID', detailModal.data.id],
+                ['App ID', String(detailModal.data.app_id)],
+                ['App Distributed ID', detailModal.data.app_distributed_id],
+                ['App Name', detailModal.data.app_name],
+                ['Inventory Item', detailModal.data.inventory_item],
+                ['Policy Name', detailModal.data.policy_name],
+                ['Rule Global', detailModal.data.rule_global ? 'Yes' : 'No'],
+                ['Rule Action', detailModal.data.rule_action],
+                ['Source Zone', detailModal.data.rule_source_zone],
+                ['Destination Zone', detailModal.data.rule_destination_zone],
+                ['Service', detailModal.data.rule_service],
+                ['Standard', detailModal.data.is_standard ? 'Yes' : 'No'],
+                ['RN', String(detailModal.data.rn)],
+                ['RC', String(detailModal.data.rc)],
+              ] as [string, string][]).map(([label, val]) => (
+                <div key={label} className="p-2 bg-gray-50 rounded">
                   <span className="text-xs text-gray-500">{label}</span>
-                  <p className="text-sm font-medium text-gray-800">{String(val)}</p>
+                  <p className="text-sm font-medium text-gray-800 break-all">{val}</p>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-      </Modal>
 
-      {/* Output Modal */}
-      <Modal isOpen={outputModal.isOpen} onClose={outputModal.close} title={`Generated Output - ${outputModal.data?.app || ''}`} size="xl">
-        {outputModal.data && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-600">
-                <strong>{outputModal.data.rules.length}</strong> rules | <strong>{outputModal.data.compiled.length}</strong> compiled policies
-              </p>
-              <button
-                onClick={() => outputModal.data && downloadOutput(outputModal.data)}
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
-              >
-                Download Output
-              </button>
+            <div className="border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-blue-50 border-b">
+                <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
+              </div>
+              <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
+                {parseExpandedTree(detailModal.data.rule_source_expanded).map((line, i) => {
+                  const indent = line.length - line.trimStart().length;
+                  return (
+                    <div key={i} className="font-mono text-xs text-green-400" style={{ paddingLeft: `${indent * 8}px` }}>
+                      {line.trim()}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="max-h-96 overflow-y-auto">
-              {outputModal.data.compiled.map(c => (
-                <div key={c.rule_id} className="mb-3 p-3 bg-gray-900 rounded-lg">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-400 font-medium">{c.rule_id} ({c.vendor_format})</span>
-                    <button onClick={() => navigator.clipboard.writeText(c.compiled_text)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
-                  </div>
-                  <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{c.compiled_text}</pre>
-                </div>
-              ))}
+
+            <div className="border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-purple-50 border-b">
+                <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
+              </div>
+              <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
+                {parseExpandedTree(detailModal.data.rule_destination_expanded).map((line, i) => {
+                  const indent = line.length - line.trimStart().length;
+                  return (
+                    <div key={i} className="font-mono text-xs text-purple-400" style={{ paddingLeft: `${indent * 8}px` }}>
+                      {line.trim()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-amber-50 border-b">
+                <h3 className="text-sm font-semibold text-amber-800">Service (Expanded)</h3>
+              </div>
+              <div className="p-3 bg-gray-900">
+                {(detailModal.data.rule_service_expanded || '').split('\n').map((line, i) => (
+                  <div key={i} className="font-mono text-xs text-amber-400">{line}</div>
+                ))}
+              </div>
             </div>
           </div>
         )}
