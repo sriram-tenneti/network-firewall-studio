@@ -18,6 +18,10 @@ from app.database import (
     create_chg_request,
     get_groups, get_group, create_group, update_group, delete_group,
     add_group_member, remove_group_member,
+    create_rule_modification, get_rule_modifications, approve_rule_modification, reject_rule_modification,
+    compile_legacy_rule, validate_birthright,
+    get_birthright_matrix, update_birthright_matrix, add_birthright_entry, delete_birthright_entry,
+    get_ngdc_recommendations,
 )
 import io
 import openpyxl
@@ -572,3 +576,94 @@ async def list_migrated_rules():
     """Return only rules that have been migrated to NGDC (for Firewall Studio)."""
     rules = await get_legacy_rules()
     return [r for r in rules if r.get("migration_status") == "Completed"]
+
+
+# ---- Rule Modification with Delta Tracking ----
+
+@router.post("/legacy-rules/{rule_id}/modify")
+async def modify_legacy_rule(rule_id: str, data: dict):
+    """Create a rule modification request with delta tracking."""
+    modifications = data.get("modifications", {})
+    comments = data.get("comments", "")
+    result = await create_rule_modification(rule_id, modifications, comments)
+    if not result:
+        raise HTTPException(status_code=404, detail="Legacy rule not found")
+    return result
+
+
+@router.get("/rule-modifications")
+async def list_rule_modifications(rule_id: str | None = None):
+    return await get_rule_modifications(rule_id)
+
+
+@router.post("/rule-modifications/{mod_id}/approve")
+async def approve_mod(mod_id: str, data: dict):
+    notes = data.get("notes", "")
+    result = await approve_rule_modification(mod_id, notes)
+    if not result:
+        raise HTTPException(status_code=404, detail="Modification not found")
+    return result
+
+
+@router.post("/rule-modifications/{mod_id}/reject")
+async def reject_mod(mod_id: str, data: dict):
+    notes = data.get("notes", "")
+    if not notes:
+        raise HTTPException(status_code=400, detail="Rejection notes required")
+    result = await reject_rule_modification(mod_id, notes)
+    if not result:
+        raise HTTPException(status_code=404, detail="Modification not found")
+    return result
+
+
+# ---- Legacy Rule Compiler ----
+
+@router.post("/legacy-rules/{rule_id}/compile")
+async def compile_legacy(rule_id: str, vendor: str = "generic"):
+    result = await compile_legacy_rule(rule_id, vendor)
+    if not result:
+        raise HTTPException(status_code=404, detail="Legacy rule not found")
+    return result
+
+
+# ---- NGDC Recommendations ----
+
+@router.get("/legacy-rules/{rule_id}/ngdc-recommendations")
+async def get_recommendations(rule_id: str):
+    result = await get_ngdc_recommendations(rule_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Legacy rule not found")
+    return result
+
+
+# ---- Birthright Validation ----
+
+@router.post("/birthright/validate")
+async def validate_birthright_rule(data: dict):
+    return await validate_birthright(data)
+
+
+@router.get("/birthright/matrix")
+async def get_birthright_matrices():
+    return await get_birthright_matrix()
+
+
+@router.put("/birthright/matrix/{matrix_type}")
+async def update_matrix(matrix_type: str, data: dict):
+    entries = data.get("entries", [])
+    result = await update_birthright_matrix(matrix_type, entries)
+    if not result and result != []:
+        raise HTTPException(status_code=400, detail="Invalid matrix type")
+    return result
+
+
+@router.post("/birthright/matrix/{matrix_type}")
+async def add_matrix_entry(matrix_type: str, data: dict):
+    return await add_birthright_entry(matrix_type, data)
+
+
+@router.delete("/birthright/matrix/{matrix_type}/{index}")
+async def delete_matrix_entry(matrix_type: str, index: int):
+    if not await delete_birthright_entry(matrix_type, index):
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted"}

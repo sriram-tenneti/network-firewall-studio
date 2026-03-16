@@ -20,6 +20,9 @@ import type {
   FirewallGroup,
   GroupMember,
   MigrationHistoryEntry,
+  RuleModification,
+  NGDCRecommendation,
+  BirthrightValidation,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -398,6 +401,56 @@ export const getMigrationHistory = () =>
 // Rule Compiler
 export const compileRule = (ruleId: string, vendor: string = 'generic') =>
   fetchJSON<CompiledRule>(`/api/rules/${ruleId}/compile?vendor=${vendor}`, { method: 'POST' });
+
+// Legacy Rule Compiler
+export const compileLegacyRule = (ruleId: string, vendor: string = 'generic') =>
+  fetchJSON<CompiledRule>(`/api/reference/legacy-rules/${ruleId}/compile?vendor=${vendor}`, { method: 'POST' });
+
+// Rule Modification with Delta Tracking
+export const createRuleModification = (ruleId: string, modifications: Record<string, string>, comments: string = '') =>
+  fetchJSON<RuleModification>(`/api/reference/legacy-rules/${ruleId}/modify`, {
+    method: 'POST', body: JSON.stringify({ modifications, comments })
+  });
+
+export const getRuleModifications = (ruleId?: string) => {
+  const params = new URLSearchParams();
+  if (ruleId) params.set('rule_id', ruleId);
+  const qs = params.toString();
+  return fetchJSON<RuleModification[]>(`/api/reference/rule-modifications${qs ? `?${qs}` : ''}`);
+};
+
+export const approveRuleModification = (modId: string, notes: string = '') =>
+  fetchJSON<RuleModification>(`/api/reference/rule-modifications/${modId}/approve`, {
+    method: 'POST', body: JSON.stringify({ notes })
+  });
+
+export const rejectRuleModification = (modId: string, notes: string) =>
+  fetchJSON<RuleModification>(`/api/reference/rule-modifications/${modId}/reject`, {
+    method: 'POST', body: JSON.stringify({ notes })
+  });
+
+// NGDC Recommendations
+export const getNGDCRecommendations = (ruleId: string) =>
+  fetchJSON<NGDCRecommendation>(`/api/reference/legacy-rules/${ruleId}/ngdc-recommendations`);
+
+// Birthright Validation
+export const validateBirthright = (data: Record<string, unknown>) =>
+  fetchJSON<BirthrightValidation>('/api/reference/birthright/validate', {
+    method: 'POST', body: JSON.stringify(data)
+  });
+
+export const getBirthrightMatrix = () =>
+  fetchJSON<Record<string, unknown[]>>('/api/reference/birthright/matrix');
+
+export const updateBirthrightMatrix = (matrixType: string, entries: unknown[]) =>
+  fetchJSON<unknown[]>(`/api/reference/birthright/matrix/${matrixType}`, {
+    method: 'PUT', body: JSON.stringify({ entries })
+  });
+
+export const addBirthrightEntry = (matrixType: string, entry: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/birthright/matrix/${matrixType}`, {
+    method: 'POST', body: JSON.stringify(entry)
+  });
 
 // Review & Approval
 export const getReviewRequests = (status?: string) => {
