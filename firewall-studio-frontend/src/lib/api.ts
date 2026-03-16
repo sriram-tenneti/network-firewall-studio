@@ -19,6 +19,7 @@ import type {
   NamingStandardsInfo,
   FirewallGroup,
   GroupMember,
+  MigrationHistoryEntry,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -357,15 +358,42 @@ export const addGroupMember = (groupName: string, member: GroupMember) =>
 export const removeGroupMember = (groupName: string, memberValue: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
 
-// Legacy Rules (for Migration Studio)
-export const getLegacyRules = (appId?: string) => {
+// Legacy Rules (for Migration Studio & Firewall Management)
+export const getLegacyRules = (appId?: string, excludeMigrated?: boolean) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
+  if (excludeMigrated) params.set('exclude_migrated', 'true');
   const qs = params.toString();
   return fetchJSON<LegacyRule[]>(`/api/reference/legacy-rules${qs ? `?${qs}` : ''}`);
 };
+export const getLegacyRule = (ruleId: string) =>
+  fetchJSON<LegacyRule>(`/api/reference/legacy-rules/${ruleId}`);
 export const updateLegacyRule = (ruleId: string, data: Partial<LegacyRule>) =>
   fetchJSON<LegacyRule>(`/api/reference/legacy-rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteLegacyRule = (ruleId: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/legacy-rules/${ruleId}`, { method: 'DELETE' });
+
+// Excel import for legacy rules
+export const importLegacyRulesExcel = async (file: File): Promise<{ added: number; duplicates: number; total: number }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/api/reference/legacy-rules/import`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+  return res.json();
+};
+
+// Migration operations
+export const migrateRulesToNGDC = (ruleIds: string[]) =>
+  fetchJSON<{ migrated: number; rules: LegacyRule[] }>('/api/reference/legacy-rules/migrate', { method: 'POST', body: JSON.stringify({ rule_ids: ruleIds }) });
+export const submitLegacyRulesForReview = (ruleIds: string[], comments?: string) =>
+  fetchJSON<{ submitted: number; reviews: ReviewRequest[] }>('/api/reference/legacy-rules/submit-for-review', { method: 'POST', body: JSON.stringify({ rule_ids: ruleIds, comments }) });
+export const getMigratedRules = () =>
+  fetchJSON<LegacyRule[]>('/api/reference/legacy-rules/migrated');
+export const getMigrationHistory = () =>
+  fetchJSON<MigrationHistoryEntry[]>('/api/reference/migration-history');
 
 // Rule Compiler
 export const compileRule = (ruleId: string, vendor: string = 'generic') =>

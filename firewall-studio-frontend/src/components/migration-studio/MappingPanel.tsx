@@ -14,7 +14,7 @@ export function MappingPanel({ rule, onAcceptMapping, onCustomize }: MappingPane
     <div className="border rounded-lg p-4 bg-white">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h4 className="text-sm font-semibold text-gray-800">{rule.rule_name}</h4>
+          <h4 className="text-sm font-semibold text-gray-800">{rule.id} - {rule.app_name}</h4>
           <p className="text-xs text-gray-500 mt-0.5">{rule.app_id} - {rule.app_distributed_id}</p>
         </div>
         <StatusBadge status={rule.migration_status} />
@@ -25,10 +25,10 @@ export function MappingPanel({ rule, onAcceptMapping, onCustomize }: MappingPane
         <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
           <h5 className="text-xs font-semibold text-red-700 mb-2 uppercase tracking-wider">Current (Legacy)</h5>
           <div className="space-y-1.5 text-xs">
-            <div><span className="text-gray-500">Source:</span> <span className="font-mono text-gray-800">{rule.source_entries?.join(', ') || 'N/A'}</span></div>
-            <div><span className="text-gray-500">Destination:</span> <span className="font-mono text-gray-800">{rule.destination_entries?.join(', ') || 'N/A'}</span></div>
-            <div><span className="text-gray-500">Ports:</span> <span className="font-mono text-gray-800">{rule.ports?.join(', ') || 'N/A'}</span></div>
-            <div><span className="text-gray-500">Zone:</span> <span className="text-gray-800">{rule.source_zone}</span></div>
+            <div><span className="text-gray-500">Source:</span> <span className="font-mono text-gray-800">{rule.rule_source || 'N/A'}</span></div>
+            <div><span className="text-gray-500">Destination:</span> <span className="font-mono text-gray-800">{rule.rule_destination || 'N/A'}</span></div>
+            <div><span className="text-gray-500">Service:</span> <span className="font-mono text-gray-800">{rule.rule_service || 'N/A'}</span></div>
+            <div><span className="text-gray-500">Zone:</span> <span className="text-gray-800">{rule.rule_source_zone}</span></div>
             <div><span className="text-gray-500">Standard:</span> <StatusBadge status={isStandard ? 'Yes' : 'No'} /></div>
           </div>
         </div>
@@ -37,9 +37,9 @@ export function MappingPanel({ rule, onAcceptMapping, onCustomize }: MappingPane
         <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
           <h5 className="text-xs font-semibold text-green-700 mb-2 uppercase tracking-wider">Recommended (NGDC)</h5>
           <div className="space-y-1.5 text-xs">
-            <div><span className="text-gray-500">Group Name:</span> <span className="font-mono text-gray-800">{rule.suggested_standard_name || 'Auto-generated'}</span></div>
+            <div><span className="text-gray-500">Group Name:</span> <span className="font-mono text-gray-800">Auto-generated</span></div>
             <div><span className="text-gray-500">Naming:</span> <span className="text-gray-800">grp-{rule.app_id}-NH-SZ-subtype</span></div>
-            <div><span className="text-gray-500">Ports:</span> <span className="font-mono text-gray-800">{rule.ports?.join(', ') || 'Same'}</span></div>
+            <div><span className="text-gray-500">Service:</span> <span className="font-mono text-gray-800">{rule.rule_service || 'Same'}</span></div>
             <div><span className="text-gray-500">Compliance:</span> <span className="text-green-700">Group-to-Group Enforced</span></div>
             <div><span className="text-gray-500">Policy:</span> <span className="text-green-700">NGDC Matrix Validated</span></div>
           </div>

@@ -267,22 +267,37 @@ export interface ReviewRequest {
 
 export interface LegacyRule {
   id: string;
-  app_id: string;
+  app_id: number | string;
   app_distributed_id: string;
-  rule_name: string;
-  inventory: string;
-  policy_row: string;
-  rule_status: string;
+  app_name: string;
+  inventory_item: string;
+  policy_name: string;
+  rule_global: boolean;
   rule_action: string;
-  source_zone: string;
-  source_entries: string[];
-  source_expanded: string[];
-  destination_entries: string[];
-  destination_expanded: string[];
-  ports: string[];
+  rule_source: string;
+  rule_source_expanded: string;
+  rule_source_zone: string;
+  rule_destination: string;
+  rule_destination_expanded: string;
+  rule_destination_zone: string;
+  rule_service: string;
+  rule_service_expanded: string;
+  rn: number;
+  rc: number;
   is_standard: boolean;
   migration_status: 'Not Started' | 'In Progress' | 'Mapped' | 'Needs Review' | 'Completed';
-  suggested_standard_name?: string;
+  migrated_at?: string;
+}
+
+export interface MigrationHistoryEntry {
+  id: string;
+  rule_id: string;
+  action: string;
+  from_status: string;
+  to_status: string;
+  details: string;
+  timestamp: string;
+  user: string;
 }
 
 // AD User Integration
