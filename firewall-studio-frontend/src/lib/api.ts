@@ -465,3 +465,54 @@ export const approveReview = (reviewId: string, notes: string = '') =>
   fetchJSON<ReviewRequest>(`/api/reviews/${reviewId}/approve`, { method: 'POST', body: JSON.stringify({ notes }) });
 export const rejectReview = (reviewId: string, notes: string) =>
   fetchJSON<ReviewRequest>(`/api/reviews/${reviewId}/reject`, { method: 'POST', body: JSON.stringify({ notes }) });
+
+// NGDC Organization Mappings
+export const getNGDCMappings = () => fetchJSON<Record<string, unknown>[]>('/api/reference/ngdc-mappings');
+export const createNGDCMapping = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/ngdc-mappings', { method: 'POST', body: JSON.stringify(data) });
+export const updateNGDCMapping = (id: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/ngdc-mappings/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteNGDCMapping = (id: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/ngdc-mappings/${id}`, { method: 'DELETE' });
+export const importNGDCMappingsExcel = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/api/reference/ngdc-mappings/import`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+};
+export const bulkSaveNGDCMappings = (mappings: Record<string, unknown>[]) =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/ngdc-mappings/bulk', { method: 'POST', body: JSON.stringify({ mappings }) });
+
+// Group Provisioning to Firewall Device
+export const provisionGroups = (appId: string, deviceType = 'palo_alto') =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/groups/provision/${appId}`, { method: 'POST', body: JSON.stringify({ device_type: deviceType }) });
+export const getProvisioningHistory = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/provisioning-history${qs ? `?${qs}` : ''}`);
+};
+
+// Enhanced Compile with Group Expansion
+export const compileRuleExpanded = (ruleId: string, vendor = 'generic', expandGroups = true) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/rules/${ruleId}/compile-expanded`, {
+    method: 'POST', body: JSON.stringify({ vendor, expand_groups: expandGroups })
+  });
+
+// App-to-DC/NH/SZ Organization Mappings
+export const getAppDCMappings = () => fetchJSON<Record<string, unknown>[]>('/api/reference/app-dc-mappings');
+export const getAppDCMapping = (appId: string) => fetchJSON<Record<string, unknown>>(`/api/reference/app-dc-mappings/${appId}`);
+export const createAppDCMapping = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/app-dc-mappings', { method: 'POST', body: JSON.stringify(data) });
+export const updateAppDCMapping = (id: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/app-dc-mappings/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteAppDCMapping = (id: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/app-dc-mappings/${id}`, { method: 'DELETE' });
+export const importAppDCMappingsExcel = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/api/reference/app-dc-mappings/import`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+};

@@ -2534,3 +2534,319 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
         "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
     }
+
+
+# ============================================================
+# Organization Legacy-to-NGDC Mappings
+# ============================================================
+
+async def get_ngdc_mappings() -> list[dict[str, Any]]:
+    """Get all org-provided legacy-to-NGDC mappings."""
+    return _load("ngdc_mappings") or []
+
+
+async def save_ngdc_mappings(mappings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Save/replace all legacy-to-NGDC mappings."""
+    _save("ngdc_mappings", mappings)
+    return mappings
+
+
+async def add_ngdc_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Add a single legacy-to-NGDC mapping."""
+    mappings = _load("ngdc_mappings") or []
+    mapping["id"] = mapping.get("id", _id())
+    mapping["created_at"] = _now()
+    mappings.append(mapping)
+    _save("ngdc_mappings", mappings)
+    return mapping
+
+
+async def update_ngdc_mapping(mapping_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    mappings = _load("ngdc_mappings") or []
+    for m in mappings:
+        if m.get("id") == mapping_id:
+            m.update(data)
+            m["updated_at"] = _now()
+            _save("ngdc_mappings", mappings)
+            return m
+    return None
+
+
+async def delete_ngdc_mapping(mapping_id: str) -> bool:
+    mappings = _load("ngdc_mappings") or []
+    filtered = [m for m in mappings if m.get("id") != mapping_id]
+    if len(filtered) == len(mappings):
+        return False
+    _save("ngdc_mappings", filtered)
+    return True
+
+
+async def import_ngdc_mappings(new_mappings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Bulk import mappings from organization (e.g., Excel/CSV upload)."""
+    existing = _load("ngdc_mappings") or []
+    existing_keys = {(m.get("legacy_name", ""), m.get("legacy_dc", "")) for m in existing}
+    added = 0
+    skipped = 0
+    for nm in new_mappings:
+        key = (nm.get("legacy_name", ""), nm.get("legacy_dc", ""))
+        if key in existing_keys:
+            skipped += 1
+            continue
+        nm["id"] = _id()
+        nm["created_at"] = _now()
+        existing.append(nm)
+        existing_keys.add(key)
+        added += 1
+    _save("ngdc_mappings", existing)
+    return {"added": added, "skipped": skipped, "total": len(existing)}
+
+
+# ============================================================
+# Group Provisioning to Firewall Device
+# ============================================================
+
+async def provision_groups_to_device(app_id: str, device_type: str = "palo_alto") -> dict[str, Any]:
+    """Provision app groups directly to firewall device with NGDC standards enforcement."""
+    groups = _load("groups") or []
+    app_groups = [g for g in groups if g.get("app_id") == app_id]
+    if not app_groups:
+        return {"status": "error", "message": "No groups found for app"}
+
+    nstd = _load("naming_standards") or {}
+    violations: list[str] = []
+    provisioned: list[dict[str, Any]] = []
+
+    for g in app_groups:
+        name = g.get("name", "")
+        # Enforce NGDC naming: must start with grp-, svr-, or rng-
+        if not any(name.startswith(p) for p in ["grp-", "svr-", "rng-"]):
+            violations.append(f"Group '{name}' does not follow NGDC naming standard")
+            continue
+        # Enforce non-empty members
+        if not g.get("members"):
+            violations.append(f"Group '{name}' has no members")
+            continue
+
+        if device_type == "palo_alto":
+            provisioned.append({
+                "name": name,
+                "type": "address-group" if g.get("type") == "network" else "address-group",
+                "members": [m.get("value", "") for m in g.get("members", [])],
+                "description": g.get("description", ""),
+                "device_command": f"set address-group {name} static [{' '.join(m.get('value', '') for m in g.get('members', []))}]",
+            })
+        elif device_type == "checkpoint":
+            provisioned.append({
+                "name": name,
+                "type": "network-group",
+                "members": [m.get("value", "") for m in g.get("members", [])],
+                "device_command": f"mgmt_cli add group name {name} members.1 {g['members'][0]['value'] if g.get('members') else ''}",
+            })
+        else:
+            provisioned.append({
+                "name": name,
+                "members": [m.get("value", "") for m in g.get("members", [])],
+                "device_command": f"object-group network {name}",
+            })
+
+        # Mark group as provisioned
+        g["provisioned"] = True
+        g["provisioned_at"] = _now()
+        g["device_type"] = device_type
+
+    _save("groups", groups)
+
+    # Log provisioning
+    history = _load("provisioning_history") or []
+    entry = {
+        "id": _id(),
+        "app_id": app_id,
+        "device_type": device_type,
+        "groups_provisioned": len(provisioned),
+        "violations": violations,
+        "provisioned_at": _now(),
+        "status": "Completed" if not violations else "Partial",
+        "details": provisioned,
+    }
+    history.append(entry)
+    _save("provisioning_history", history)
+
+    return {
+        "status": "success" if not violations else "partial",
+        "provisioned": provisioned,
+        "violations": violations,
+        "total_groups": len(app_groups),
+        "provisioned_count": len(provisioned),
+    }
+
+
+async def get_provisioning_history(app_id: str | None = None) -> list[dict[str, Any]]:
+    history = _load("provisioning_history") or []
+    if app_id:
+        history = [h for h in history if h.get("app_id") == app_id]
+    return history
+
+
+# ============================================================
+# Enhanced Compile with Group Expansion
+# ============================================================
+
+async def compile_rule_with_expansion(rule_id: str, vendor: str = "generic", expand_groups: bool = True) -> dict[str, Any] | None:
+    """Compile a rule showing groups AND underlying expansion per device standards."""
+    rules = _load("rules") or []
+    rule = next((r for r in rules if r.get("rule_id") == rule_id), None)
+    if not rule:
+        # Try legacy rules
+        legacy = _load("legacy_rules") or []
+        rule = next((r for r in legacy if r.get("id") == rule_id), None)
+        if not rule:
+            return None
+
+    groups_data = _load("groups") or []
+    group_lookup = {g["name"]: g for g in groups_data}
+
+    # Get source/destination
+    src = rule.get("source", rule.get("rule_source", ""))
+    dst = rule.get("destination", rule.get("rule_destination", ""))
+    svc = rule.get("port", rule.get("rule_service", ""))
+
+    src_entries = [s.strip() for s in str(src).split("\n") if s.strip()]
+    dst_entries = [d.strip() for d in str(dst).split("\n") if d.strip()]
+
+    # Expand groups
+    expanded_sources: list[dict[str, Any]] = []
+    for s in src_entries:
+        grp = group_lookup.get(s)
+        if grp and expand_groups:
+            expanded_sources.append({
+                "group_name": s,
+                "type": "group",
+                "members": [m.get("value", "") for m in grp.get("members", [])],
+                "member_count": len(grp.get("members", [])),
+            })
+        else:
+            expanded_sources.append({"value": s, "type": "direct", "members": [s], "member_count": 1})
+
+    expanded_destinations: list[dict[str, Any]] = []
+    for d in dst_entries:
+        grp = group_lookup.get(d)
+        if grp and expand_groups:
+            expanded_destinations.append({
+                "group_name": d,
+                "type": "group",
+                "members": [m.get("value", "") for m in grp.get("members", [])],
+                "member_count": len(grp.get("members", [])),
+            })
+        else:
+            expanded_destinations.append({"value": d, "type": "direct", "members": [d], "member_count": 1})
+
+    # Generate vendor-specific output
+    compiled_lines: list[str] = []
+    if vendor == "palo_alto":
+        for se in expanded_sources:
+            for de in expanded_destinations:
+                src_name = se.get("group_name", se.get("value", ""))
+                dst_name = de.get("group_name", de.get("value", ""))
+                compiled_lines.append(f"set rulebase security rules \"{rule.get('rule_id', rule.get('id', ''))}\""
+                    f" from [{rule.get('source_zone', 'any')}] to [{rule.get('destination_zone', 'any')}]"
+                    f" source [{src_name}] destination [{dst_name}]"
+                    f" service [{svc}] action {rule.get('action', 'allow')}")
+    elif vendor == "checkpoint":
+        compiled_lines.append(f"mgmt_cli add access-rule layer Network"
+            f" name \"{rule.get('rule_id', rule.get('id', ''))}\""
+            f" source \"{src}\" destination \"{dst}\" service \"{svc}\""
+            f" action {rule.get('action', 'Accept')}")
+    else:
+        compiled_lines.append(f"# Rule: {rule.get('rule_id', rule.get('id', ''))}")
+        for se in expanded_sources:
+            src_name = se.get("group_name", se.get("value", ""))
+            for de in expanded_destinations:
+                dst_name = de.get("group_name", de.get("value", ""))
+                compiled_lines.append(f"permit {svc} {src_name} -> {dst_name}")
+
+    return {
+        "rule_id": rule.get("rule_id", rule.get("id", "")),
+        "vendor": vendor,
+        "compiled_output": "\n".join(compiled_lines),
+        "sources": expanded_sources,
+        "destinations": expanded_destinations,
+        "services": svc,
+        "total_source_ips": sum(s.get("member_count", 1) for s in expanded_sources),
+        "total_dest_ips": sum(d.get("member_count", 1) for d in expanded_destinations),
+        "expand_groups": expand_groups,
+        "group_view": not expand_groups,
+    }
+
+# ============================================================
+# App-to-DC/NH/SZ Mapping (Organization Reference)
+# ============================================================
+
+async def get_app_dc_mappings() -> list[dict[str, Any]]:
+    """Get all App-to-DC/NH/SZ mappings used for validations."""
+    return _load("app_dc_mappings") or []
+
+
+async def save_app_dc_mappings(mappings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    _save("app_dc_mappings", mappings)
+    return mappings
+
+
+async def add_app_dc_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
+    mappings = _load("app_dc_mappings") or []
+    mapping["id"] = mapping.get("id", _id())
+    mapping["created_at"] = _now()
+    mappings.append(mapping)
+    _save("app_dc_mappings", mappings)
+    return mapping
+
+
+async def update_app_dc_mapping(mapping_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    mappings = _load("app_dc_mappings") or []
+    for m in mappings:
+        if m.get("id") == mapping_id:
+            m.update(data)
+            m["updated_at"] = _now()
+            _save("app_dc_mappings", mappings)
+            return m
+    return None
+
+
+async def delete_app_dc_mapping(mapping_id: str) -> bool:
+    mappings = _load("app_dc_mappings") or []
+    filtered = [m for m in mappings if m.get("id") != mapping_id]
+    if len(filtered) == len(mappings):
+        return False
+    _save("app_dc_mappings", filtered)
+    return True
+
+
+async def get_app_dc_mapping_by_app(app_id: str) -> dict[str, Any] | None:
+    """Lookup the DC/NH/SZ mapping for a specific app."""
+    mappings = _load("app_dc_mappings") or []
+    return next((m for m in mappings if str(m.get("app_id", "")) == str(app_id)), None)
+
+
+async def import_app_dc_mappings(new_mappings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Bulk import app-dc mappings with dedup."""
+    existing = _load("app_dc_mappings") or []
+    existing_keys = {str(m.get("app_id", "")) for m in existing}
+    added = 0
+    updated = 0
+    for nm in new_mappings:
+        aid = str(nm.get("app_id", ""))
+        if aid in existing_keys:
+            # Update existing
+            for m in existing:
+                if str(m.get("app_id", "")) == aid:
+                    m.update(nm)
+                    m["updated_at"] = _now()
+                    break
+            updated += 1
+        else:
+            nm["id"] = _id()
+            nm["created_at"] = _now()
+            existing.append(nm)
+            existing_keys.add(aid)
+            added += 1
+    _save("app_dc_mappings", existing)
+    return {"added": added, "updated": updated, "total": len(existing)}

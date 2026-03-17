@@ -667,3 +667,173 @@ async def delete_matrix_entry(matrix_type: str, index: int):
     if not await delete_birthright_entry(matrix_type, index):
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"message": "Entry deleted"}
+
+
+# ---- Legacy-to-NGDC Organization Mappings ----
+
+@router.get("/ngdc-mappings")
+async def list_ngdc_mappings():
+    from app.database import get_ngdc_mappings
+    return await get_ngdc_mappings()
+
+
+@router.post("/ngdc-mappings")
+async def create_ngdc_mapping(data: dict):
+    from app.database import add_ngdc_mapping
+    return await add_ngdc_mapping(data)
+
+
+@router.put("/ngdc-mappings/{mapping_id}")
+async def update_ngdc_mapping_endpoint(mapping_id: str, data: dict):
+    from app.database import update_ngdc_mapping
+    result = await update_ngdc_mapping(mapping_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    return result
+
+
+@router.delete("/ngdc-mappings/{mapping_id}")
+async def delete_ngdc_mapping_endpoint(mapping_id: str):
+    from app.database import delete_ngdc_mapping
+    ok = await delete_ngdc_mapping(mapping_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    return {"message": "Mapping deleted"}
+
+
+@router.post("/ngdc-mappings/import")
+async def import_ngdc_mappings_excel(file: UploadFile = File(...)):
+    """Import legacy-to-NGDC mappings from Excel."""
+    from app.database import import_ngdc_mappings
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    ws = wb.active
+    if ws is None:
+        raise HTTPException(status_code=400, detail="Empty workbook")
+    headers = [cell.value for cell in ws[1]]
+    mappings = []
+    for row_idx in range(2, ws.max_row + 1):
+        row_vals = [cell.value for cell in ws[row_idx]]
+        if not any(row_vals):
+            continue
+        m: dict = {}
+        for i, h in enumerate(headers):
+            if i < len(row_vals) and h:
+                m[str(h).lower().replace(" ", "_")] = row_vals[i] if row_vals[i] is not None else ""
+        mappings.append(m)
+    result = await import_ngdc_mappings(mappings)
+    return result
+
+
+@router.post("/ngdc-mappings/bulk")
+async def bulk_save_ngdc_mappings(data: dict):
+    """Save all mappings at once (from org admin)."""
+    from app.database import save_ngdc_mappings
+    mappings = data.get("mappings", [])
+    return await save_ngdc_mappings(mappings)
+
+
+# ---- Group Provisioning to Firewall Device ----
+
+@router.post("/groups/provision/{app_id}")
+async def provision_groups(app_id: str, data: dict):
+    """Provision groups for an app to the firewall device (NGDC standards enforced)."""
+    from app.database import provision_groups_to_device
+    device_type = data.get("device_type", "palo_alto")
+    return await provision_groups_to_device(app_id, device_type)
+
+
+@router.get("/provisioning-history")
+async def list_provisioning_history(app_id: str | None = None):
+    from app.database import get_provisioning_history
+    return await get_provisioning_history(app_id)
+
+
+# ---- Enhanced Compile with Group Expansion ----
+
+@router.post("/rules/{rule_id}/compile-expanded")
+async def compile_rule_expanded(rule_id: str, data: dict):
+    from app.database import compile_rule_with_expansion
+    vendor = data.get("vendor", "generic")
+    expand = data.get("expand_groups", True)
+    result = await compile_rule_with_expansion(rule_id, vendor, expand)
+    if not result:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return result
+
+
+# ---- App-to-DC/NH/SZ Mapping (Organization Reference) ----
+
+@router.get("/app-dc-mappings")
+async def list_app_dc_mappings():
+    from app.database import get_app_dc_mappings
+    return await get_app_dc_mappings()
+
+
+@router.get("/app-dc-mappings/{app_id}")
+async def get_app_dc_mapping(app_id: str):
+    from app.database import get_app_dc_mapping_by_app
+    result = await get_app_dc_mapping_by_app(app_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="App DC mapping not found")
+    return result
+
+
+@router.post("/app-dc-mappings")
+async def create_app_dc_mapping(data: dict):
+    from app.database import add_app_dc_mapping
+    return await add_app_dc_mapping(data)
+
+
+@router.put("/app-dc-mappings/{mapping_id}")
+async def update_app_dc_mapping_endpoint(mapping_id: str, data: dict):
+    from app.database import update_app_dc_mapping
+    result = await update_app_dc_mapping(mapping_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    return result
+
+
+@router.delete("/app-dc-mappings/{mapping_id}")
+async def delete_app_dc_mapping_endpoint(mapping_id: str):
+    from app.database import delete_app_dc_mapping
+    ok = await delete_app_dc_mapping(mapping_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    return {"message": "Mapping deleted"}
+
+
+@router.post("/app-dc-mappings/import")
+async def import_app_dc_mappings_excel(file: UploadFile = File(...)):
+    """Import App-to-DC/NH/SZ mappings from Excel."""
+    from app.database import import_app_dc_mappings
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    ws = wb.active
+    if ws is None:
+        raise HTTPException(status_code=400, detail="Empty workbook")
+    headers = [cell.value for cell in ws[1]]
+    mappings = []
+    for row_idx in range(2, ws.max_row + 1):
+        row_vals = [cell.value for cell in ws[row_idx]]
+        if not any(row_vals):
+            continue
+        m: dict = {}
+        for i, h in enumerate(headers):
+            if i < len(row_vals) and h:
+                key = str(h).lower().replace(" ", "_")
+                m[key] = row_vals[i] if row_vals[i] is not None else ""
+        mappings.append(m)
+    result = await import_app_dc_mappings(mappings)
+    return result
+
+
+@router.post("/app-dc-mappings/bulk")
+async def bulk_save_app_dc_mappings(data: dict):
+    from app.database import save_app_dc_mappings
+    mappings = data.get("mappings", [])
+    return await save_app_dc_mappings(mappings)

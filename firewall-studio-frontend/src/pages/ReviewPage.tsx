@@ -10,7 +10,8 @@ import { getReviewRequests, approveReview, rejectReview, compileRule } from '@/l
 import type { ReviewRequest } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
-export default function ReviewPage() {
+export default function ReviewPage(props: { context?: string }) {
+  void props;
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Pending');
