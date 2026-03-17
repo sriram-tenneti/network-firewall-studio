@@ -1994,7 +1994,13 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
             f"  enabled: true"
         )
 
-    return {
+    # --- Group provisioning as part of compile ---
+    app_id = rule.get("app_id", rule.get("application", ""))
+    group_provisioning = None
+    if app_id:
+        group_provisioning = await provision_groups_to_device(str(app_id), vendor if vendor in ("palo_alto", "checkpoint") else "palo_alto")
+
+    result: dict[str, Any] = {
         "rule_id": rule_id,
         "vendor_format": vendor,
         "compiled_text": compiled,
@@ -2005,6 +2011,9 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
         "logging": True,
         "comment": desc,
     }
+    if group_provisioning:
+        result["group_provisioning"] = group_provisioning
+    return result
 
 
 # ============================================================
@@ -2301,7 +2310,13 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
             f"  enabled: true"
         )
 
-    return {
+    # --- Group provisioning as part of compile ---
+    app_id_val = rule.get("app_id", "")
+    group_provisioning = None
+    if app_id_val:
+        group_provisioning = await provision_groups_to_device(str(app_id_val), vendor if vendor in ("palo_alto", "checkpoint") else "palo_alto")
+
+    result: dict[str, Any] = {
         "rule_id": rule_id,
         "vendor_format": vendor,
         "compiled_text": compiled,
@@ -2312,6 +2327,9 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
         "logging": True,
         "comment": f"{app_name} - {policy}",
     }
+    if group_provisioning:
+        result["group_provisioning"] = group_provisioning
+    return result
 
 
 # ============================================================

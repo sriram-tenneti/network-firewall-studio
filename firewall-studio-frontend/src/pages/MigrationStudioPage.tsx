@@ -61,6 +61,50 @@ function BirthrightPanel({ validation }: { validation: BirthrightValidation | nu
   );
 }
 
+interface GroupProvisioningSectionProps {
+  compiledRule: CompiledRule | null;
+}
+
+function GroupProvisioningSection({ compiledRule }: GroupProvisioningSectionProps) {
+  if (!compiledRule) return null;
+  const raw = compiledRule as unknown as Record<string, unknown>;
+  if (!raw.group_provisioning) return null;
+  const gp = raw.group_provisioning as {
+    status: string; provisioned_count: number; total_groups: number;
+    provisioned: { name: string; members: string[]; device_command: string }[];
+    violations: string[];
+  };
+  return (
+    <div className="border-t border-gray-700 mt-3 pt-3">
+      <h4 className="text-xs font-semibold text-blue-300 mb-2">Group Submission to Firewall Device</h4>
+      <div className="flex items-center gap-3 text-xs mb-2">
+        <span className={`px-2 py-0.5 rounded-full font-medium ${
+          gp.status === 'success' ? 'bg-green-900 text-green-300' :
+          gp.status === 'partial' ? 'bg-amber-900 text-amber-300' : 'bg-red-900 text-red-300'
+        }`}>
+          {gp.status === 'success' ? 'All Groups Submitted' : gp.status === 'partial' ? 'Partial' : 'Failed'}
+        </span>
+        <span className="text-gray-400">{gp.provisioned_count}/{gp.total_groups} groups</span>
+      </div>
+      {gp.provisioned.map((g, i) => (
+        <div key={i} className="bg-gray-800 rounded p-2 mb-1 text-xs">
+          <span className="text-gray-300 font-medium">{g.name}</span>
+          <span className="text-gray-500 ml-2">({g.members.length} members)</span>
+          <pre className="text-blue-400 font-mono mt-1 text-[10px]">{g.device_command}</pre>
+        </div>
+      ))}
+      {gp.violations.length > 0 && (
+        <div className="bg-red-900/30 rounded p-2 mt-1">
+          <span className="text-xs text-red-400 font-medium">NGDC Violations:</span>
+          {gp.violations.map((v, i) => (
+            <div key={i} className="text-xs text-red-300 ml-2">- {v}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MigrationStudioPage() {
   const [legacyRules, setLegacyRules] = useState<LegacyRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -670,8 +714,12 @@ export function MigrationStudioPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Group Submission to Firewall Device (inline with compile) */}
+                      <GroupProvisioningSection compiledRule={compiledRule} />
+
                       {!compiledRule && !compiling && (
-                        <p className="text-xs text-gray-500 italic">Click &quot;Compile Rule&quot; to generate vendor-specific output.</p>
+                        <p className="text-xs text-gray-500 italic">Click &quot;Compile Rule&quot; to generate vendor-specific output and submit groups to firewall device.</p>
                       )}
                     </div>
 
