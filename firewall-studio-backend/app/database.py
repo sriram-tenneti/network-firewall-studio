@@ -2480,7 +2480,8 @@ async def delete_birthright_entry(matrix_type: str, index: int) -> bool:
 # ============================================================
 
 async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
-    """Generate NGDC recommendations for a legacy rule based on standards."""
+    """Generate NGDC recommendations for a legacy rule based on backend mapping tables,
+    App-DC mappings, and service/port analysis."""
     rules = _load("legacy_rules") or []
     rule = next((r for r in rules if r["id"] == rule_id), None)
     if not rule:
@@ -2490,53 +2491,149 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     szs = _load("security_zones") or []
     apps = _load("applications") or []
     groups = _load("groups") or []
+    ngdc_mappings = _load("ngdc_mappings") or []
+    app_dc_mappings = _load("app_dc_mappings") or []
 
     app_id = str(rule.get("app_id", ""))
     app_dist = rule.get("app_distributed_id", "")
+    app_name = rule.get("app_name", "")
     app_info = next((a for a in apps if str(a.get("app_id")) == app_id or a.get("app_distributed_id") == app_dist), None)
 
-    recommended_nh = app_info.get("nh", "NH01") if app_info else "NH01"
-    recommended_sz = app_info.get("sz", "GEN") if app_info else "GEN"
+    # --- Step 1: Determine NH/SZ from App-DC mapping table first, then app info ---
+    app_dc = next((m for m in app_dc_mappings if
+                   str(m.get("app_id", "")).upper() == app_id.upper() or
+                   str(m.get("app_name", "")).lower() == app_name.lower()), None)
+    if app_dc:
+        recommended_nh = app_dc.get("neighbourhood", "NH01")
+        recommended_sz = app_dc.get("security_zone", "GEN")
+        recommended_dc = app_dc.get("datacenter", "")
+        nh_sz_source = "app_dc_mapping"
+    elif app_info:
+        recommended_nh = app_info.get("nh", "NH01")
+        recommended_sz = app_info.get("sz", "GEN")
+        recommended_dc = ""
+        nh_sz_source = "application_config"
+    else:
+        recommended_nh = "NH01"
+        recommended_sz = "GEN"
+        recommended_dc = ""
+        nh_sz_source = "default"
 
-    # Build one-to-one IP mappings
+    # --- Step 2: Build IP mappings using NGDC mapping table lookups ---
     src_entries = [s.strip() for s in (rule.get("rule_source", "") or "").split("\n") if s.strip()]
     dst_entries = [d.strip() for d in (rule.get("rule_destination", "") or "").split("\n") if d.strip()]
     svc_entries = [s.strip() for s in (rule.get("rule_service", "") or "").split("\n") if s.strip()]
 
-    def suggest_ngdc_name(legacy_name: str, entry_type: str) -> str:
+    def _lookup_ngdc_mapping(legacy_name: str) -> dict[str, Any] | None:
+        """Look up NGDC mapping table for an exact or partial match on legacy name."""
+        for m in ngdc_mappings:
+            if m.get("legacy_name", "").lower() == legacy_name.lower():
+                return m
+        # Partial match: check if legacy_name is contained in mapping's legacy_name
+        for m in ngdc_mappings:
+            if legacy_name.lower() in m.get("legacy_name", "").lower() or \
+               m.get("legacy_name", "").lower() in legacy_name.lower():
+                return m
+        return None
+
+    def _suggest_ngdc_name(legacy_name: str, entry_type: str) -> str:
         prefix = "grp" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
                  "svr" if legacy_name.startswith("svr") else \
                  "rng" if legacy_name.startswith("rng") else "grp"
         short_app = (app_dist or app_id)[:6].upper()
         return f"{prefix}-{short_app}-{recommended_nh}-{recommended_sz}-{entry_type}"
 
-    source_mappings = []
-    for i, src in enumerate(src_entries):
-        ngdc_name = suggest_ngdc_name(src, f"SRC{i+1:02d}")
-        existing_group = next((g for g in groups if any(m.get("value", "") in src for m in g.get("members", []))), None)
-        source_mappings.append({
-            "legacy": src,
-            "ngdc_recommended": existing_group["name"] if existing_group else ngdc_name,
-            "type": "group" if src.startswith("grp") or src.startswith("gapigr") else "server" if src.startswith("svr") else "range" if src.startswith("rng") else "other",
-            "existing_group": existing_group["name"] if existing_group else None,
-            "customizable": True,
-        })
+    def _build_mapping(legacy_name: str, entry_type: str, idx: int) -> dict[str, Any]:
+        obj_type = "group" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
+                   "server" if legacy_name.startswith("svr") else \
+                   "range" if legacy_name.startswith("rng") else "other"
 
-    destination_mappings = []
-    for i, dst in enumerate(dst_entries):
-        ngdc_name = suggest_ngdc_name(dst, f"DST{i+1:02d}")
-        existing_group = next((g for g in groups if any(m.get("value", "") in dst for m in g.get("members", []))), None)
-        destination_mappings.append({
-            "legacy": dst,
-            "ngdc_recommended": existing_group["name"] if existing_group else ngdc_name,
-            "type": "group" if dst.startswith("grp") else "server" if dst.startswith("svr") else "range" if dst.startswith("rng") else "other",
-            "existing_group": existing_group["name"] if existing_group else None,
+        # Priority 1: Look up NGDC mapping table
+        table_match = _lookup_ngdc_mapping(legacy_name)
+        if table_match:
+            return {
+                "legacy": legacy_name,
+                "ngdc_recommended": table_match["ngdc_name"],
+                "type": table_match.get("type", obj_type),
+                "mapping_source": "ngdc_mapping_table",
+                "mapping_id": table_match.get("id"),
+                "mapping_status": table_match.get("status", ""),
+                "ngdc_nh": table_match.get("ngdc_nh", ""),
+                "ngdc_sz": table_match.get("ngdc_sz", ""),
+                "existing_group": None,
+                "customizable": True,
+            }
+
+        # Priority 2: Match against existing groups
+        existing_group = next((g for g in groups if any(
+            m.get("value", "") in legacy_name for m in g.get("members", []))), None)
+        if existing_group:
+            return {
+                "legacy": legacy_name,
+                "ngdc_recommended": existing_group["name"],
+                "type": obj_type,
+                "mapping_source": "existing_group",
+                "mapping_id": None,
+                "mapping_status": "",
+                "ngdc_nh": "",
+                "ngdc_sz": "",
+                "existing_group": existing_group["name"],
+                "customizable": True,
+            }
+
+        # Priority 3: Generate based on naming convention
+        return {
+            "legacy": legacy_name,
+            "ngdc_recommended": _suggest_ngdc_name(legacy_name, f"{entry_type}{idx+1:02d}"),
+            "type": obj_type,
+            "mapping_source": "auto_generated",
+            "mapping_id": None,
+            "mapping_status": "",
+            "ngdc_nh": recommended_nh,
+            "ngdc_sz": recommended_sz,
+            "existing_group": None,
             "customizable": True,
+        }
+
+    source_mappings = [_build_mapping(src, "SRC", i) for i, src in enumerate(src_entries)]
+    destination_mappings = [_build_mapping(dst, "DST", i) for i, dst in enumerate(dst_entries)]
+
+    # --- Step 3: Service/port recommendations ---
+    standard_ports: dict[str, str] = {
+        "tcp-80": "HTTP", "tcp-443": "HTTPS", "tcp-22": "SSH", "tcp-21": "FTP",
+        "tcp-25": "SMTP", "tcp-53": "DNS", "udp-53": "DNS", "tcp-110": "POP3",
+        "tcp-143": "IMAP", "tcp-993": "IMAPS", "tcp-995": "POP3S",
+        "tcp-3306": "MySQL", "tcp-5432": "PostgreSQL", "tcp-1521": "Oracle",
+        "tcp-1433": "MSSQL", "tcp-27017": "MongoDB", "tcp-6379": "Redis",
+        "tcp-8080": "HTTP-Alt", "tcp-8443": "HTTPS-Alt",
+        "tcp-389": "LDAP", "tcp-636": "LDAPS", "tcp-88": "Kerberos",
+        "tcp-3389": "RDP", "tcp-5900": "VNC",
+    }
+    service_recommendations = []
+    for svc in svc_entries:
+        svc_lower = svc.strip().lower()
+        desc = standard_ports.get(svc_lower, "")
+        # Determine risk level based on service
+        risk = "low"
+        if any(p in svc_lower for p in ["22", "3389", "5900", "21"]):
+            risk = "high"
+        elif any(p in svc_lower for p in ["1521", "3306", "5432", "1433", "27017", "6379"]):
+            risk = "medium"
+        service_recommendations.append({
+            "service": svc.strip(),
+            "description": desc,
+            "risk_level": risk,
+            "recommendation": f"Ensure {desc or svc} access is restricted to authorized sources" if risk != "low" else "Standard service",
         })
 
     # Find recommended NH and SZ details
     nh_info = next((n for n in nhs if n.get("nh_id") == recommended_nh), None)
     sz_info = next((s for s in szs if s.get("code") == recommended_sz), None)
+
+    # Count mapping sources
+    table_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "ngdc_mapping_table")
+    group_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "existing_group")
+    auto_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "auto_generated")
 
     return {
         "rule_id": rule_id,
@@ -2545,9 +2642,18 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         "recommended_nh_name": nh_info.get("name", "") if nh_info else "",
         "recommended_sz": recommended_sz,
         "recommended_sz_name": sz_info.get("name", "") if sz_info else "",
+        "recommended_dc": recommended_dc,
+        "nh_sz_source": nh_sz_source,
         "source_mappings": source_mappings,
         "destination_mappings": destination_mappings,
         "service_entries": svc_entries,
+        "service_recommendations": service_recommendations,
+        "mapping_summary": {
+            "total": len(source_mappings) + len(destination_mappings),
+            "from_mapping_table": table_count,
+            "from_existing_groups": group_count,
+            "auto_generated": auto_count,
+        },
         "naming_standard": f"grp-{(app_dist or app_id)[:6].upper()}-{recommended_nh}-{recommended_sz}-{{SUBTYPE}}",
         "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
         "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],

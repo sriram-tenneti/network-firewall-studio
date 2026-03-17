@@ -287,6 +287,20 @@ export interface RuleModification {
   review_notes: string | null;
 }
 
+export interface ServiceRecommendation {
+  service: string;
+  description: string;
+  risk_level: 'low' | 'medium' | 'high';
+  recommendation: string;
+}
+
+export interface MappingSummary {
+  total: number;
+  from_mapping_table: number;
+  from_existing_groups: number;
+  auto_generated: number;
+}
+
 export interface NGDCRecommendation {
   rule_id: string;
   rule: LegacyRule;
@@ -294,9 +308,13 @@ export interface NGDCRecommendation {
   recommended_nh_name: string;
   recommended_sz: string;
   recommended_sz_name: string;
+  recommended_dc?: string;
+  nh_sz_source?: 'app_dc_mapping' | 'application_config' | 'default';
   source_mappings: IPMapping[];
   destination_mappings: IPMapping[];
   service_entries: string[];
+  service_recommendations?: ServiceRecommendation[];
+  mapping_summary?: MappingSummary;
   naming_standard: string;
   available_nhs: { nh_id: string; name: string }[];
   available_szs: { code: string; name: string }[];
@@ -308,6 +326,11 @@ export interface IPMapping {
   type: 'group' | 'server' | 'range' | 'other';
   existing_group: string | null;
   customizable: boolean;
+  mapping_source?: 'ngdc_mapping_table' | 'existing_group' | 'auto_generated';
+  mapping_id?: string | null;
+  mapping_status?: string;
+  ngdc_nh?: string;
+  ngdc_sz?: string;
 }
 
 export interface BirthrightValidation {

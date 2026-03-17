@@ -529,6 +529,21 @@ export function MigrationStudioPage() {
                   <div className="space-y-4">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <h3 className="text-sm font-semibold text-blue-800 mb-2">NGDC Recommendations</h3>
+                      {recommendation.nh_sz_source && (
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 text-[10px] rounded font-medium ${
+                            recommendation.nh_sz_source === 'app_dc_mapping' ? 'bg-green-100 text-green-700' :
+                            recommendation.nh_sz_source === 'application_config' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {recommendation.nh_sz_source === 'app_dc_mapping' ? 'From App-DC Mapping Table' :
+                             recommendation.nh_sz_source === 'application_config' ? 'From App Config' : 'Default'}
+                          </span>
+                          {recommendation.recommended_dc && (
+                            <span className="text-[10px] text-gray-500">DC: {recommendation.recommended_dc}</span>
+                          )}
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs text-gray-500">Recommended Neighbourhood</label>
@@ -552,6 +567,15 @@ export function MigrationStudioPage() {
                       <div className="mt-2 text-xs text-gray-600">
                         <span className="font-medium">Naming Standard:</span> {recommendation.naming_standard}
                       </div>
+                      {/* Mapping Summary */}
+                      {recommendation.mapping_summary && (
+                        <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-500">
+                          <span>Mappings: {recommendation.mapping_summary.total} total</span>
+                          {recommendation.mapping_summary.from_mapping_table > 0 && <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded">{recommendation.mapping_summary.from_mapping_table} from table</span>}
+                          {recommendation.mapping_summary.from_existing_groups > 0 && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">{recommendation.mapping_summary.from_existing_groups} from groups</span>}
+                          {recommendation.mapping_summary.auto_generated > 0 && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">{recommendation.mapping_summary.auto_generated} auto-generated</span>}
+                        </div>
+                      )}
                     </div>
 
                     {appGroups.length > 0 && (
@@ -569,11 +593,25 @@ export function MigrationStudioPage() {
                     )}
 
                     <div className="border rounded-lg p-3">
-                      <h4 className="text-xs font-semibold text-gray-700 mb-1">Service Entries</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {recommendation.service_entries.map((svc, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-mono">{svc}</span>
-                        ))}
+                      <h4 className="text-xs font-semibold text-gray-700 mb-1">Service/Port Analysis</h4>
+                      <div className="space-y-1">
+                        {(recommendation.service_recommendations?.length ?? 0) > 0
+                          ? recommendation.service_recommendations!.map((sr, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                              <span className="font-mono px-2 py-0.5 bg-gray-100 rounded min-w-[80px]">{sr.service}</span>
+                              {sr.description && <span className="text-gray-600">{sr.description}</span>}
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                sr.risk_level === 'high' ? 'bg-red-100 text-red-700' :
+                                sr.risk_level === 'medium' ? 'bg-amber-100 text-amber-700' :
+                                'bg-green-100 text-green-700'
+                              }`}>{sr.risk_level}</span>
+                              {sr.risk_level !== 'low' && <span className="text-[10px] text-gray-400 italic">{sr.recommendation}</span>}
+                            </div>
+                          ))
+                          : recommendation.service_entries.map((svc, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-mono">{svc}</span>
+                          ))
+                        }
                       </div>
                     </div>
 
@@ -615,13 +653,23 @@ export function MigrationStudioPage() {
                               disabled={!mapping.customizable}
                               className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-gray-300 disabled:bg-gray-100" />
                           </div>
-                          <div>
+                          <div className="flex flex-col items-end gap-0.5">
                             <span className={`px-1.5 py-0.5 text-xs rounded ${
                               mapping.type === 'group' ? 'bg-blue-100 text-blue-700' :
                               mapping.type === 'server' ? 'bg-purple-100 text-purple-700' :
                               mapping.type === 'range' ? 'bg-amber-100 text-amber-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>{mapping.type}</span>
+                            {mapping.mapping_source && (
+                              <span className={`px-1 py-0.5 text-[9px] rounded ${
+                                mapping.mapping_source === 'ngdc_mapping_table' ? 'bg-green-50 text-green-600' :
+                                mapping.mapping_source === 'existing_group' ? 'bg-blue-50 text-blue-600' :
+                                'bg-gray-50 text-gray-400'
+                              }`}>
+                                {mapping.mapping_source === 'ngdc_mapping_table' ? 'table' :
+                                 mapping.mapping_source === 'existing_group' ? 'group' : 'auto'}
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -648,12 +696,22 @@ export function MigrationStudioPage() {
                               disabled={!mapping.customizable}
                               className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-gray-300 disabled:bg-gray-100" />
                           </div>
-                          <div>
+                          <div className="flex flex-col items-end gap-0.5">
                             <span className={`px-1.5 py-0.5 text-xs rounded ${
                               mapping.type === 'group' ? 'bg-blue-100 text-blue-700' :
                               mapping.type === 'server' ? 'bg-purple-100 text-purple-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>{mapping.type}</span>
+                            {mapping.mapping_source && (
+                              <span className={`px-1 py-0.5 text-[9px] rounded ${
+                                mapping.mapping_source === 'ngdc_mapping_table' ? 'bg-green-50 text-green-600' :
+                                mapping.mapping_source === 'existing_group' ? 'bg-blue-50 text-blue-600' :
+                                'bg-gray-50 text-gray-400'
+                              }`}>
+                                {mapping.mapping_source === 'ngdc_mapping_table' ? 'table' :
+                                 mapping.mapping_source === 'existing_group' ? 'group' : 'auto'}
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}
