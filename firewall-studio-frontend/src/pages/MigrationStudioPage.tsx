@@ -70,9 +70,9 @@ function GroupProvisioningSection({ compiledRule }: GroupProvisioningSectionProp
   const raw = compiledRule as unknown as Record<string, unknown>;
   if (!raw.group_provisioning) return null;
   const gp = raw.group_provisioning as {
-    status: string; provisioned_count: number; total_groups: number;
-    provisioned: { name: string; members: string[]; device_command: string }[];
-    violations: string[];
+    status: string; message?: string; provisioned_count?: number; total_groups?: number;
+    provisioned?: { name: string; members: string[]; device_command: string }[];
+    violations?: string[];
   };
   return (
     <div className="border-t border-gray-700 mt-3 pt-3">
@@ -84,19 +84,22 @@ function GroupProvisioningSection({ compiledRule }: GroupProvisioningSectionProp
         }`}>
           {gp.status === 'success' ? 'All Groups Submitted' : gp.status === 'partial' ? 'Partial' : 'Failed'}
         </span>
-        <span className="text-gray-400">{gp.provisioned_count}/{gp.total_groups} groups</span>
+        <span className="text-gray-400">{gp.provisioned_count ?? 0}/{gp.total_groups ?? 0} groups</span>
       </div>
-      {gp.provisioned.map((g, i) => (
+      {gp.message && (
+        <p className="text-xs text-gray-400 italic mb-2">{gp.message}</p>
+      )}
+      {(gp.provisioned ?? []).map((g, i) => (
         <div key={i} className="bg-gray-800 rounded p-2 mb-1 text-xs">
           <span className="text-gray-300 font-medium">{g.name}</span>
           <span className="text-gray-500 ml-2">({g.members.length} members)</span>
           <pre className="text-blue-400 font-mono mt-1 text-[10px]">{g.device_command}</pre>
         </div>
       ))}
-      {gp.violations.length > 0 && (
+      {(gp.violations?.length ?? 0) > 0 && (
         <div className="bg-red-900/30 rounded p-2 mt-1">
           <span className="text-xs text-red-400 font-medium">NGDC Violations:</span>
-          {gp.violations.map((v, i) => (
+          {(gp.violations ?? []).map((v, i) => (
             <div key={i} className="text-xs text-red-300 ml-2">- {v}</div>
           ))}
         </div>

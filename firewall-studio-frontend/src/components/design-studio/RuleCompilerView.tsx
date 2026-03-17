@@ -5,10 +5,11 @@ import type { CompiledRule } from '@/types';
 
 interface GroupProvisioningResult {
   status: string;
-  provisioned: { name: string; type: string; members: string[]; device_command: string }[];
-  violations: string[];
-  total_groups: number;
-  provisioned_count: number;
+  message?: string;
+  provisioned?: { name: string; type: string; members: string[]; device_command: string }[];
+  violations?: string[];
+  total_groups?: number;
+  provisioned_count?: number;
 }
 
 interface CompiledRuleWithGroups extends CompiledRule {
@@ -162,15 +163,19 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
                        'Submission Failed'}
                     </span>
                     <span className="text-gray-500">
-                      {gp.provisioned_count} of {gp.total_groups} groups submitted
+                      {gp.provisioned_count ?? 0} of {gp.total_groups ?? 0} groups submitted
                     </span>
                   </div>
 
-                  {gp.provisioned.length > 0 && (
+                  {gp.message && (
+                    <p className="text-xs text-gray-500 italic">{gp.message}</p>
+                  )}
+
+                  {(gp.provisioned?.length ?? 0) > 0 && (
                     <div className="bg-gray-50 rounded-lg p-3">
                       <h4 className="text-xs font-medium text-gray-600 mb-2">Provisioned Groups</h4>
                       <div className="space-y-2">
-                        {gp.provisioned.map((g, i) => (
+                        {(gp.provisioned ?? []).map((g, i) => (
                           <div key={i} className="bg-white border border-gray-200 rounded p-2">
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-medium text-gray-800">{g.name}</span>
@@ -189,11 +194,11 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
                     </div>
                   )}
 
-                  {gp.violations.length > 0 && (
+                  {(gp.violations?.length ?? 0) > 0 && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                       <h4 className="text-xs font-medium text-red-700 mb-1">NGDC Standards Violations</h4>
                       <ul className="space-y-1">
-                        {gp.violations.map((v, i) => (
+                        {(gp.violations ?? []).map((v, i) => (
                           <li key={i} className="text-xs text-red-600 flex items-start gap-1">
                             <span className="mt-0.5 text-red-400">&#x2022;</span> {v}
                           </li>
