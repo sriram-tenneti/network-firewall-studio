@@ -21,11 +21,7 @@ function App() {
             <DesignStudioPage />
           </ModuleLayout>
         } />
-        <Route path="/firewall-studio/import" element={
-          <ModuleLayout module="firewall-studio" title="Firewall Studio">
-            <DataImportPage context="firewall-studio" />
-          </ModuleLayout>
-        } />
+        {/* Import removed from Firewall Studio - auto-imports from NFR */}
         <Route path="/firewall-studio/review" element={
           <ModuleLayout module="firewall-studio" title="Firewall Studio">
             <ReviewPage context="firewall-studio" />
@@ -38,11 +34,7 @@ function App() {
             <MigrationStudioPage />
           </ModuleLayout>
         } />
-        <Route path="/ngdc-standardization/import" element={
-          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
-            <DataImportPage context="ngdc-standardization" />
-          </ModuleLayout>
-        } />
+        {/* Import removed from NGDC Standardization - imports from NFR by App ID */}
         <Route path="/ngdc-standardization/review" element={
           <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
             <ReviewPage context="ngdc-standardization" />

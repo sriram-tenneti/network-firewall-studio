@@ -2974,3 +2974,301 @@ async def import_app_dc_mappings(new_mappings: list[dict[str, Any]]) -> dict[str
             added += 1
     _save("app_dc_mappings", existing)
     return {"added": added, "updated": updated, "total": len(existing)}
+
+
+# ============================================================
+# NGDC Compliance Check (for auto-import to Firewall Studio)
+# ============================================================
+
+async def check_ngdc_compliance(rule: dict[str, Any]) -> dict[str, Any]:
+    """Check if a legacy rule is fully NGDC compliant for both source and destination.
+    Returns compliance status with details."""
+    groups = _load("groups") or []
+    naming_stds = _load("naming_standards") or {}
+    nhs = _load("neighbourhoods") or []
+    szs = _load("security_zones") or []
+    policy_matrix = _load("policy_matrix") or []
+
+    nh_ids = {nh.get("nh_id", "") for nh in nhs}
+    sz_codes = {sz.get("code", "") for sz in szs}
+
+    issues: list[str] = []
+
+    src = rule.get("rule_source", "")
+    dst = rule.get("rule_destination", "")
+    src_zone = rule.get("rule_source_zone", "")
+    dst_zone = rule.get("rule_destination_zone", "")
+    svc = rule.get("rule_service", "")
+
+    # Check source naming standard
+    prefixes = naming_stds.get("prefixes", {"group": "grp-", "server": "svr-", "range": "rng-", "subnet": "sub-"})
+    src_entries = [s.strip() for s in src.split("\n") if s.strip()] if src else []
+    dst_entries = [d.strip() for d in dst.split("\n") if d.strip()] if dst else []
+
+    for entry in src_entries:
+        is_named = any(entry.startswith(p) for p in prefixes.values())
+        if not is_named and not entry.replace(".", "").replace("/", "").replace(":", "").isdigit():
+            # Not an IP and not following naming standard
+            if not any(entry.startswith(p) for p in ["grp-", "svr-", "rng-", "sub-"]):
+                issues.append(f"Source '{entry}' does not follow NGDC naming standards")
+
+    for entry in dst_entries:
+        is_named = any(entry.startswith(p) for p in prefixes.values())
+        if not is_named and not entry.replace(".", "").replace("/", "").replace(":", "").isdigit():
+            if not any(entry.startswith(p) for p in ["grp-", "svr-", "rng-", "sub-"]):
+                issues.append(f"Destination '{entry}' does not follow NGDC naming standards")
+
+    # Check zones exist
+    if src_zone and src_zone not in sz_codes and src_zone != "Any":
+        issues.append(f"Source zone '{src_zone}' not found in NGDC security zones")
+    if dst_zone and dst_zone not in sz_codes and dst_zone != "Any":
+        issues.append(f"Destination zone '{dst_zone}' not found in NGDC security zones")
+
+    # Check policy matrix allows this flow
+    if src_zone and dst_zone and policy_matrix:
+        allowed = False
+        for pm in policy_matrix:
+            if (pm.get("source_zone") == src_zone or pm.get("source_zone") == "Any") and \
+               (pm.get("destination_zone") == dst_zone or pm.get("destination_zone") == "Any"):
+                if pm.get("action", "").lower() in ("allow", "permit", "allowed"):
+                    allowed = True
+                    break
+        if not allowed and policy_matrix:
+            issues.append(f"Policy matrix does not permit flow from {src_zone} to {dst_zone}")
+
+    is_compliant = len(issues) == 0
+    return {
+        "compliant": is_compliant,
+        "issues": issues,
+        "rule_id": rule.get("id", ""),
+    }
+
+
+async def check_duplicates(source: str, destination: str, service: str,
+                           exclude_id: str = "") -> list[dict[str, Any]]:
+    """Check for duplicate rules based on source+destination+service(port/protocol).
+    Checks across both legacy_rules and rules collections."""
+    legacy = _load("legacy_rules") or []
+    studio_rules = _load("rules") or []
+
+    src_norm = source.strip().lower()
+    dst_norm = destination.strip().lower()
+    svc_norm = service.strip().lower()
+
+    duplicates: list[dict[str, Any]] = []
+
+    for r in legacy:
+        if exclude_id and r.get("id") == exclude_id:
+            continue
+        r_src = str(r.get("rule_source", "")).strip().lower()
+        r_dst = str(r.get("rule_destination", "")).strip().lower()
+        r_svc = str(r.get("rule_service", "")).strip().lower()
+        if r_src == src_norm and r_dst == dst_norm and r_svc == svc_norm:
+            duplicates.append({
+                "id": r.get("id"),
+                "type": "legacy",
+                "app_id": r.get("app_id"),
+                "source": r.get("rule_source"),
+                "destination": r.get("rule_destination"),
+                "service": r.get("rule_service"),
+            })
+
+    for r in studio_rules:
+        if exclude_id and r.get("rule_id") == exclude_id:
+            continue
+        r_src = str(r.get("source", "")).strip().lower()
+        r_dst = str(r.get("destination", "")).strip().lower()
+        r_svc = f"{r.get('port', '')}:{r.get('protocol', '')}".strip().lower()
+        if r_src == src_norm and r_dst == dst_norm and (r_svc == svc_norm or not svc_norm):
+            duplicates.append({
+                "id": r.get("rule_id"),
+                "type": "studio",
+                "app_id": r.get("application"),
+                "source": r.get("source"),
+                "destination": r.get("destination"),
+                "service": r_svc,
+            })
+
+    return duplicates
+
+
+async def import_rules_to_ngdc_standardization(app_ids: list[str]) -> dict[str, Any]:
+    """Import rules from Network Firewall Request (legacy_rules) into NGDC Standardization
+    by App ID. Returns the imported rules for the selected apps."""
+    legacy = _load("legacy_rules") or []
+    imported: list[dict[str, Any]] = []
+    for r in legacy:
+        if str(r.get("app_id", "")) in [str(a) for a in app_ids]:
+            # Mark as imported to NGDC standardization
+            r["ngdc_imported"] = True
+            r["ngdc_import_date"] = _now()
+            imported.append(r)
+    _save("legacy_rules", legacy)
+    return {"imported": len(imported), "rules": imported}
+
+
+async def auto_import_compliant_rules_to_studio() -> dict[str, Any]:
+    """Auto-import NGDC-compliant rules from Network Firewall Request into Firewall Studio.
+    Only imports rules that pass all NGDC compliance checks for both source and destination."""
+    legacy = _load("legacy_rules") or []
+    studio_rules = _load("rules") or []
+
+    # Build existing studio rule keys for dedup
+    existing_keys: set[str] = set()
+    for r in studio_rules:
+        key = f"{r.get('source', '')}|{r.get('destination', '')}|{r.get('port', '')}:{r.get('protocol', '')}"
+        existing_keys.add(key.lower())
+
+    max_num = 0
+    for r in studio_rules:
+        try:
+            num = int(r.get("rule_id", "FW-000").split("-")[1])
+            if num > max_num:
+                max_num = num
+        except (ValueError, IndexError):
+            pass
+
+    imported = 0
+    skipped = 0
+    already_imported = 0
+
+    for rule in legacy:
+        if rule.get("studio_imported"):
+            already_imported += 1
+            continue
+
+        # Check compliance
+        compliance = await check_ngdc_compliance(rule)
+        if not compliance["compliant"]:
+            skipped += 1
+            continue
+
+        # Check for duplicates
+        key = f"{rule.get('rule_source', '')}|{rule.get('rule_destination', '')}|{rule.get('rule_service', '')}"
+        if key.lower() in existing_keys:
+            already_imported += 1
+            rule["studio_imported"] = True
+            continue
+
+        # Import to studio
+        max_num += 1
+        studio_rule = {
+            "rule_id": f"FW-{max_num:03d}",
+            "source": rule.get("rule_source", ""),
+            "source_zone": rule.get("rule_source_zone", ""),
+            "destination": rule.get("rule_destination", ""),
+            "destination_zone": rule.get("rule_destination_zone", ""),
+            "port": rule.get("rule_service", "").split("/")[0] if "/" in rule.get("rule_service", "") else rule.get("rule_service", ""),
+            "protocol": rule.get("rule_service", "").split("/")[1] if "/" in rule.get("rule_service", "") else "tcp",
+            "action": rule.get("rule_action", "Accept"),
+            "description": f"Auto-imported from NFR - App {rule.get('app_id', '')}",
+            "application": str(rule.get("app_id", "")),
+            "status": "Draft",
+            "is_group_to_group": bool(rule.get("rule_source", "").startswith("grp-") and rule.get("rule_destination", "").startswith("grp-")),
+            "environment": "Production",
+            "datacenter": "",
+            "created_at": _now(),
+            "updated_at": _now(),
+            "certified_date": None,
+            "expiry_date": None,
+            "source_expanded": rule.get("rule_source_expanded", ""),
+            "destination_expanded": rule.get("rule_destination_expanded", ""),
+            "service_expanded": rule.get("rule_service_expanded", ""),
+            "origin": "auto-import-nfr",
+            "origin_rule_id": rule.get("id", ""),
+        }
+        studio_rules.append(studio_rule)
+        existing_keys.add(key.lower())
+        rule["studio_imported"] = True
+        rule["studio_rule_id"] = studio_rule["rule_id"]
+        imported += 1
+
+    _save("rules", studio_rules)
+    _save("legacy_rules", legacy)
+    return {
+        "imported": imported,
+        "skipped_non_compliant": skipped,
+        "already_imported": already_imported,
+        "total_studio_rules": len(studio_rules),
+    }
+
+
+async def expand_groups_in_rule(rule: dict[str, Any]) -> dict[str, Any]:
+    """Expand group references in a rule's source/destination to show all IPs/ranges.
+    Returns the rule with expanded fields populated."""
+    groups = _load("groups") or []
+    group_lookup: dict[str, list[dict[str, str]]] = {}
+    for g in groups:
+        group_lookup[g.get("name", "")] = g.get("members", [])
+
+    def expand_field(field_value: str) -> str:
+        if not field_value:
+            return ""
+        lines = [l.strip() for l in field_value.split("\n") if l.strip()]
+        expanded_lines: list[str] = []
+        for line in lines:
+            if line in group_lookup:
+                expanded_lines.append(f"[Group] {line}")
+                for member in group_lookup[line]:
+                    mtype = member.get("type", "ip")
+                    mval = member.get("value", "")
+                    expanded_lines.append(f"  {mtype}: {mval}")
+            else:
+                # Check if it's a group by prefix
+                matching = [g for g in groups if g.get("name") == line]
+                if matching:
+                    expanded_lines.append(f"[Group] {line}")
+                    for member in matching[0].get("members", []):
+                        mtype = member.get("type", "ip")
+                        mval = member.get("value", "")
+                        expanded_lines.append(f"  {mtype}: {mval}")
+                else:
+                    expanded_lines.append(line)
+        return "\n".join(expanded_lines)
+
+    rule["rule_source_expanded"] = expand_field(rule.get("rule_source", ""))
+    rule["rule_destination_expanded"] = expand_field(rule.get("rule_destination", ""))
+
+    # Expand service
+    svc = rule.get("rule_service", "")
+    if svc:
+        svc_lines = [s.strip() for s in svc.split("\n") if s.strip()]
+        expanded_svc: list[str] = []
+        for s in svc_lines:
+            if "/" in s:
+                port, proto = s.split("/", 1)
+                expanded_svc.append(f"Port: {port}, Protocol: {proto}")
+            else:
+                expanded_svc.append(f"Service: {s}")
+        rule["rule_service_expanded"] = "\n".join(expanded_svc)
+
+    return rule
+
+
+async def create_migration_group(name: str, app_id: str, members: list[dict[str, str]],
+                                  nh: str = "", sz: str = "") -> dict[str, Any]:
+    """Create a new group during migration with NGDC naming standards."""
+    groups = _load("groups") or []
+
+    # Check if group already exists
+    existing = next((g for g in groups if g.get("name") == name), None)
+    if existing:
+        # Update members
+        existing["members"] = members
+        existing["updated_at"] = _now()
+        _save("groups", groups)
+        return existing
+
+    new_group = {
+        "name": name,
+        "app_id": app_id,
+        "members": members,
+        "nh": nh,
+        "sz": sz,
+        "type": "migration",
+        "created_at": _now(),
+        "updated_at": _now(),
+    }
+    groups.append(new_group)
+    _save("groups", groups)
+    return new_group
