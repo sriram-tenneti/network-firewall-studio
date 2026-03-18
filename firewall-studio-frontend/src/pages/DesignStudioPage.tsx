@@ -184,23 +184,6 @@ export function DesignStudioPage() {
     setValidatingBirthright(false);
   };
 
-  // Duplicate detection (Req 10)
-  const handleCheckDuplicates = async (rule: FirewallRule) => {
-    const src = getSourceDisplay(rule);
-    const dst = getDestDisplay(rule);
-    const svc = typeof rule.source === 'object' ? (rule.source as unknown as Record<string, string>).ports || '' : '';
-    try {
-      const result = await api.checkDuplicates(src, dst, svc, rule.rule_id);
-      if (result.count > 0) {
-        showNotification(`Found ${result.count} duplicate(s) on source+destination+service`, 'error');
-      } else {
-        showNotification('No duplicates found', 'success');
-      }
-    } catch {
-      showNotification('Failed to check duplicates', 'error');
-    }
-  };
-
   function getSourceDisplay(rule: FirewallRule): string {
     if (typeof rule.source === 'string') return rule.source;
     if (rule.source && typeof rule.source === 'object') {
@@ -258,7 +241,6 @@ export function DesignStudioPage() {
             <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
           )}
           <button onClick={() => handleBirthrightValidation(row)} className="px-2 py-1 text-xs font-medium text-cyan-700 bg-cyan-50 rounded hover:bg-cyan-100">BR</button>
-          <button onClick={() => handleCheckDuplicates(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Dup?</button>
           {row.status === 'Draft' && (
             <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
           )}

@@ -9,7 +9,7 @@ import { useNotification } from '@/hooks/useNotification';
 import {
   getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
-  validateBirthright, getGroups, importRulesToNGDC, checkDuplicates,
+  validateBirthright, getGroups, importRulesToNGDC,
   createMigrationGroup,
 } from '@/lib/api';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
@@ -338,18 +338,6 @@ export function MigrationStudioPage() {
     } catch { showNotification('Failed to create migration group', 'error'); }
   };
 
-  // Check duplicates for a rule
-  const handleCheckDuplicates = async (rule: LegacyRule) => {
-    try {
-      const result = await checkDuplicates(rule.rule_source, rule.rule_destination, rule.rule_service, rule.id);
-      if (result.count > 0) {
-        showNotification(`Found ${result.count} duplicate(s) on source+destination+service`, 'error');
-      } else {
-        showNotification('No duplicates found', 'success');
-      }
-    } catch { showNotification('Failed to check duplicates', 'error'); }
-  };
-
   const columns: Column<LegacyRule>[] = [
     {
       key: '_select', header: '', sortable: false, width: '40px',
@@ -403,7 +391,6 @@ export function MigrationStudioPage() {
         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
           <button onClick={() => openMigratePopup(row)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Migrate</button>
-          <button onClick={() => handleCheckDuplicates(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Dup?</button>
         </div>
       ),
     },

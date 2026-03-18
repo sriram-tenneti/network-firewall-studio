@@ -63,12 +63,47 @@ export default function ReviewPage(props: { context?: string }) {
     }
   };
 
+  const exportableTypes = new Set(['new_rule', 'modify_rule', 'delete_rule']);
+
+  const handleExportRequest = (review: ReviewRequest) => {
+    const headers = ['Request ID', 'Rule ID', 'Request Type', 'Application', 'Source', 'Destination', 'Ports', 'Environment', 'Status', 'Requestor', 'Submitted At', 'Reviewer', 'Comments'];
+    const row = [
+      review.id, review.rule_id, review.request_type.replace(/_/g, ' '),
+      review.rule_summary?.application || '', review.rule_summary?.source || '',
+      review.rule_summary?.destination || '', review.rule_summary?.ports || '',
+      review.rule_summary?.environment || '', review.status, review.requestor,
+      review.submitted_at || '', review.reviewer || '', review.comments || '',
+    ];
+    if (review.delta) {
+      headers.push('Added', 'Removed', 'Changed');
+      row.push(
+        Object.entries(review.delta.added).map(([k, v]) => `${k}: ${v.join(', ')}`).join('; '),
+        Object.entries(review.delta.removed).map(([k, v]) => `${k}: ${v.join(', ')}`).join('; '),
+        Object.entries(review.delta.changed).map(([k, v]) => `${k}: ${v.from} -> ${v.to}`).join('; '),
+      );
+    }
+    const csvContent = [headers, row].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `request-${review.request_type}-${review.rule_id}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification('Request exported successfully', 'success');
+  };
+
   const columns: Column<ReviewRequest>[] = [
     { key: 'rule_id', header: 'Rule ID', sortable: true, width: '120px' },
     {
       key: 'request_type', header: 'Type', sortable: true, width: '120px',
       render: (_, row) => (
-        <span className="text-xs capitalize">{row.request_type.replace(/_/g, ' ')}</span>
+        <span className={`text-xs capitalize px-1.5 py-0.5 rounded ${
+          row.request_type === 'new_rule' ? 'bg-green-50 text-green-700' :
+          row.request_type === 'modify_rule' ? 'bg-amber-50 text-amber-700' :
+          row.request_type === 'delete_rule' ? 'bg-red-50 text-red-700' :
+          'bg-gray-50 text-gray-700'
+        }`}>{row.request_type.replace(/_/g, ' ')}</span>
       ),
     },
     {
@@ -96,18 +131,28 @@ export default function ReviewPage(props: { context?: string }) {
       render: (_, row) => row.reviewer || 'Unassigned',
     },
     {
-      key: '_actions', header: 'Actions', sortable: false, width: '100px',
+      key: '_actions', header: 'Actions', sortable: false, width: '140px',
       render: (_, row) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); approvalModal.open(row); }}
-          className={`px-2 py-1 text-xs font-medium rounded ${
-            row.status === 'Pending'
-              ? 'text-blue-700 bg-blue-50 hover:bg-blue-100'
-              : 'text-gray-600 bg-gray-50 hover:bg-gray-100'
-          }`}
-        >
-          {row.status === 'Pending' ? 'Review' : 'View'}
-        </button>
+        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => approvalModal.open(row)}
+            className={`px-2 py-1 text-xs font-medium rounded ${
+              row.status === 'Pending'
+                ? 'text-blue-700 bg-blue-50 hover:bg-blue-100'
+                : 'text-gray-600 bg-gray-50 hover:bg-gray-100'
+            }`}
+          >
+            {row.status === 'Pending' ? 'Review' : 'View'}
+          </button>
+          {exportableTypes.has(row.request_type) && (
+            <button
+              onClick={() => handleExportRequest(row)}
+              className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100"
+            >
+              Export
+            </button>
+          )}
+        </div>
       ),
     },
   ];
@@ -123,9 +168,14 @@ export default function ReviewPage(props: { context?: string }) {
     <div className="p-6 max-w-[1600px] mx-auto">
       {notification && <Notification message={notification.message} type={notification.type} />}
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Review & Approval</h1>
-        <p className="text-sm text-gray-500 mt-1">Review migration and firewall rule requests submitted from Migration to NGDC page</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Review & Approval</h1>
+          <p className="text-sm text-gray-500 mt-1">Review migration and firewall rule requests. Export new/modify/remove requests from the table below.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Export is available for Add / Modify / Remove requests</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
