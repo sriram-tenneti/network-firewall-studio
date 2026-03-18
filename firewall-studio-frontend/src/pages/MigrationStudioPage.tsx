@@ -429,7 +429,7 @@ export function MigrationStudioPage() {
             ))}
           </select>
           <button onClick={handleLoadNfrApps} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
-            Import from NFR
+            Import Rules
           </button>
           {selectedRuleIds.size > 0 && (
             <>
@@ -445,7 +445,7 @@ export function MigrationStudioPage() {
         </div>
       </div>
 
-      {/* Import from Network Firewall Request Panel */}
+      {/* Import Rules Panel */}
       {showImportPanel && (
         <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">

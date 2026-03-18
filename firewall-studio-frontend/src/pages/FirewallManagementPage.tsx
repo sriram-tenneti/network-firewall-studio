@@ -496,28 +496,6 @@ export default function FirewallManagementPage() {
     return text.split('\n').map(line => line.replace(/\t/g, '  '));
   };
 
-  const downloadSpreadsheet = () => {
-    if (!selectedApp) { showNotification('Please select an application first', 'error'); return; }
-    const appRules = rules.filter(r => String(r.app_id) === selectedApp);
-    if (appRules.length === 0) { showNotification('No rules found for selected application', 'error'); return; }
-    const headers = ['App ID', 'App Current Distributed ID', 'App Name', 'Inventory Item', 'Policy Name', 'Rule Global', 'Rule Action', 'Rule Source', 'Rule Source Expanded', 'Rule Source Zone', 'Rule Destination', 'Rule Destination Expanded', 'Rule Destination Zone', 'Rule Service', 'Rule Service Expanded', 'RN', 'RC'];
-    const rows = appRules.map(r => [
-      r.app_id, r.app_distributed_id, r.app_name, r.inventory_item, r.policy_name,
-      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action, r.rule_source, r.rule_source_expanded,
-      r.rule_source_zone, r.rule_destination, r.rule_destination_expanded,
-      r.rule_destination_zone, r.rule_service, r.rule_service_expanded, r.rn, r.rc
-    ]);
-    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `firewall-rules-${selectedApp}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showNotification('Spreadsheet downloaded', 'success');
-  };
-
   const openModifyModal = async (rule: LegacyRule) => {
     const state: ModifyState = {
       rule_source: rule.rule_source || '',
@@ -747,11 +725,8 @@ export default function FirewallManagementPage() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <button onClick={() => setShowExportModal(true)} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
-            Export (Multi-App)
-          </button>
-          <button onClick={downloadSpreadsheet} disabled={!selectedApp} className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-700 hover:to-blue-700 disabled:opacity-40 shadow-sm">
-            Export Spreadsheet
+          <button onClick={() => { setSelectedExportApps(selectedApp ? new Set([selectedApp]) : new Set()); setShowExportModal(true); }} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
+            Export Rules
           </button>
         </div>
       </div>
@@ -802,10 +777,10 @@ export default function FirewallManagementPage() {
         />
       </div>
 
-      {/* Multi-App Export Modal */}
-      <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Rules - Select Applications" size="lg">
+      {/* Export Rules Modal */}
+      <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Rules" size="lg">
         <div className="space-y-4">
-          <p className="text-xs text-gray-600">Select single, multiple, or all applications to export their rules as a spreadsheet with expanded groups.</p>
+          <p className="text-xs text-gray-600">Select a single app, multiple apps, or all apps to export their rules as a CSV spreadsheet with expanded groups. Use <strong>Select All</strong> to export everything at once.</p>
           <div className="flex items-center justify-between">
             <button onClick={() => {
               if (selectedExportApps.size === appOptions.length) setSelectedExportApps(new Set());
