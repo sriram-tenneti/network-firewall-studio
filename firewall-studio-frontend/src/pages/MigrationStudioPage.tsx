@@ -137,7 +137,6 @@ export function MigrationStudioPage() {
   const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit'>('review');
 
   // Import from NFR state
-  const [showImportPanel, setShowImportPanel] = useState(false);
   const [nfrApps, setNfrApps] = useState<{ value: string; label: string }[]>([]);
   const [selectedImportApps, setSelectedImportApps] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
@@ -285,7 +284,6 @@ export function MigrationStudioPage() {
         return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
       });
       setNfrApps(apps);
-      setShowImportPanel(true);
     } catch { showNotification('Failed to load NFR applications', 'error'); }
   };
 
@@ -295,7 +293,6 @@ export function MigrationStudioPage() {
     try {
       const result = await importRulesToNGDC(Array.from(selectedImportApps));
       showNotification(`Imported ${result.imported} rules from Network Firewall Request`, 'success');
-      setShowImportPanel(false);
       setSelectedImportApps(new Set());
       loadData();
     } catch { showNotification('Failed to import rules from NFR', 'error'); }
@@ -428,9 +425,6 @@ export function MigrationStudioPage() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <button onClick={handleLoadNfrApps} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
-            Import Rules
-          </button>
           {selectedRuleIds.size > 0 && (
             <>
               <span className="text-sm text-gray-600 font-medium">{selectedRuleIds.size} selected</span>
@@ -445,37 +439,43 @@ export function MigrationStudioPage() {
         </div>
       </div>
 
-      {/* Import Rules Panel */}
-      {showImportPanel && (
-        <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-indigo-800">Import Rules from Network Firewall Request</h3>
-            <div className="flex gap-2">
+      {/* Import Rules - Always visible at top */}
+      <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-indigo-800">Import Rules</h3>
+          <div className="flex gap-2">
+            {nfrApps.length === 0 ? (
+              <button onClick={handleLoadNfrApps} className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                Load Available Apps
+              </button>
+            ) : (
               <button onClick={selectAllImportApps} className="px-3 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800">
                 {selectedImportApps.size === nfrApps.length ? 'Deselect All' : 'Select All'}
               </button>
-              <button onClick={() => setShowImportPanel(false)} className="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-700">Close</button>
-            </div>
-          </div>
-          <p className="text-xs text-indigo-600 mb-3">Select applications from Network Firewall Request to import their rules for NGDC standardization and migration.</p>
-          <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto mb-3">
-            {nfrApps.map(app => (
-              <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
-                <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600" />
-                {app.label}
-              </label>
-            ))}
-            {nfrApps.length === 0 && <p className="col-span-4 text-xs text-gray-400 italic py-4 text-center">No applications found in Network Firewall Request</p>}
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-indigo-600">{selectedImportApps.size} application(s) selected</span>
-            <button onClick={handleImportFromNFR} disabled={importing || selectedImportApps.size === 0}
-              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
-              {importing ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
-            </button>
+            )}
           </div>
         </div>
-      )}
+        <p className="text-xs text-indigo-600 mb-3">Select applications from Network Firewall Request to import their rules for NGDC standardization and migration.</p>
+        {nfrApps.length > 0 && (
+          <>
+            <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto mb-3">
+              {nfrApps.map(app => (
+                <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600" />
+                  {app.label}
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-indigo-600">{selectedImportApps.size} application(s) selected</span>
+              <button onClick={handleImportFromNFR} disabled={importing || selectedImportApps.size === 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
+                {importing ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="grid grid-cols-5 gap-3 mb-6">
         {[

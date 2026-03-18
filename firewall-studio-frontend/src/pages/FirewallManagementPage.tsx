@@ -3,7 +3,6 @@ import { DataTable } from '@/components/shared/DataTable';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
-import { ExceptionHandler } from '@/components/design-studio/ExceptionHandler';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups } from '@/lib/api';
@@ -456,7 +455,6 @@ export default function FirewallManagementPage() {
   const [compileVendor, setCompileVendor] = useState('generic');
   const [compiling, setCompiling] = useState(false);
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
-  const [exceptions, setExceptions] = useState<Array<{id: string; type: 'ip' | 'subnet'; value: string; justification: string; status: 'Pending' | 'Approved' | 'Rejected'; requested_by: string; requested_at: string}>>([]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedExportApps, setSelectedExportApps] = useState<Set<string>>(new Set());
   // Resource-based modify state
@@ -591,29 +589,6 @@ export default function FirewallManagementPage() {
     setCompiling(false);
   };
 
-  const handleAddException = (data: { type: string; value: string; justification: string }) => {
-    const newException = {
-      id: `exc-${Date.now()}`,
-      type: data.type as 'ip' | 'subnet',
-      value: data.value,
-      justification: data.justification,
-      status: 'Pending' as const,
-      requested_by: 'Current User',
-      requested_at: new Date().toISOString(),
-    };
-    setExceptions(prev => [...prev, newException]);
-    showNotification('Exception submitted for approval', 'success');
-  };
-
-  const handleApproveException = (id: string) => {
-    setExceptions(prev => prev.map(e => e.id === id ? { ...e, status: 'Approved' as const } : e));
-    showNotification('Exception approved', 'success');
-  };
-
-  const handleRejectException = (id: string) => {
-    setExceptions(prev => prev.map(e => e.id === id ? { ...e, status: 'Rejected' as const } : e));
-    showNotification('Exception rejected', 'info');
-  };
 
   // Sync resource entries back to modifyState when entries change
   useEffect(() => {
@@ -736,7 +711,7 @@ export default function FirewallManagementPage() {
           { label: 'Total Rules', value: rules.length, color: 'from-slate-100 to-slate-200 text-slate-800' },
           { label: 'Standard', value: standardCount, color: 'from-green-100 to-green-200 text-green-800' },
           { label: 'Non-Standard', value: nonStandardCount, color: 'from-red-100 to-red-200 text-red-800' },
-          { label: 'Exceptions', value: exceptions.length, color: 'from-amber-100 to-amber-200 text-amber-800' },
+          { label: 'Modifications', value: rules.filter(r => r.rule_action === 'Modify').length, color: 'from-amber-100 to-amber-200 text-amber-800' },
         ].map(card => (
           <div key={card.label} className={`p-4 rounded-lg bg-gradient-to-br ${card.color}`}>
             <div className="text-2xl font-bold">{card.value}</div>
@@ -766,16 +741,6 @@ export default function FirewallManagementPage() {
         )}
       </div>
 
-      <div className="mt-8 p-4 bg-white border border-gray-200 rounded-lg">
-        <ExceptionHandler
-          ruleId={detailModal.data?.id || ''}
-          appId={selectedApp || 'all'}
-          exceptions={exceptions}
-          onAddException={handleAddException}
-          onApproveException={handleApproveException}
-          onRejectException={handleRejectException}
-        />
-      </div>
 
       {/* Export Rules Modal */}
       <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Rules" size="lg">

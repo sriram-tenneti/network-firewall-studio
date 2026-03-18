@@ -35,8 +35,7 @@ export function DesignStudioPage() {
   const deleteConfirm = useModal<string>();
   const { notification, showNotification } = useNotification();
 
-  // Auto-import and birthright state
-  const [autoImporting, setAutoImporting] = useState(false);
+  // Auto-import result and birthright state
   const [autoImportResult, setAutoImportResult] = useState<{ imported: number; skipped_non_compliant: number } | null>(null);
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [showBirthrightModal, setShowBirthrightModal] = useState(false);
@@ -58,6 +57,22 @@ export function DesignStudioPage() {
   }, [showNotification]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Auto-import non-standard legacy rules from NFR on page load (silent)
+  useEffect(() => {
+    let mounted = true;
+    const doAutoImport = async () => {
+      try {
+        const result = await api.autoImportCompliantToStudio();
+        if (mounted && result.imported > 0) {
+          setAutoImportResult({ imported: result.imported, skipped_non_compliant: result.skipped_non_compliant });
+          loadData();
+        }
+      } catch { /* silent */ }
+    };
+    doAutoImport();
+    return () => { mounted = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredRules = rules.filter(r => {
     if (r.status === 'Deleted') return false;
@@ -144,23 +159,6 @@ export function DesignStudioPage() {
     }
   };
 
-  // Auto-import NGDC-compliant rules from Network Firewall Request (Req 6)
-  const handleAutoImport = async () => {
-    setAutoImporting(true);
-    try {
-      const result = await api.autoImportCompliantToStudio();
-      setAutoImportResult({ imported: result.imported, skipped_non_compliant: result.skipped_non_compliant });
-      if (result.imported > 0) {
-        showNotification(`Auto-imported ${result.imported} NGDC-compliant rules from Network Firewall Request`, 'success');
-        loadData();
-      } else {
-        showNotification(`No new compliant rules to import (${result.skipped_non_compliant} non-compliant skipped)`, 'info');
-      }
-    } catch {
-      showNotification('Failed to auto-import compliant rules', 'error');
-    }
-    setAutoImporting(false);
-  };
 
   // Birthright validation for new rules (Req 9)
   const handleBirthrightValidation = async (rule: FirewallRule) => {
@@ -297,9 +295,6 @@ export function DesignStudioPage() {
               Visual Builder
             </button>
           </div>
-          <button onClick={handleAutoImport} disabled={autoImporting} className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 disabled:opacity-50">
-            {autoImporting ? 'Importing...' : 'Auto-Import from NFR'}
-          </button>
           <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
             Manage Groups
           </button>
