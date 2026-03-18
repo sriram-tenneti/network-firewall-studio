@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
+import HomePage from '@/pages/HomePage';
+import { ModuleLayout } from '@/components/layout/ModuleLayout';
 import { DesignStudioPage } from '@/pages/DesignStudioPage';
 import { MigrationStudioPage } from '@/pages/MigrationStudioPage';
 import ReviewPage from '@/pages/ReviewPage';
@@ -10,19 +11,95 @@ import SettingsPage from '@/pages/SettingsPage';
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <main>
-          <Routes>
-            <Route path="/" element={<DesignStudioPage />} />
-            <Route path="/migration" element={<MigrationStudioPage />} />
-            <Route path="/review" element={<ReviewPage />} />
-            <Route path="/management" element={<FirewallManagementPage />} />
-            <Route path="/import" element={<DataImportPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        {/* Home Screen - no header */}
+        <Route path="/" element={<HomePage />} />
+
+        {/* Firewall Studio Module */}
+        <Route path="/firewall-studio" element={
+          <ModuleLayout module="firewall-studio" title="Firewall Studio">
+            <DesignStudioPage />
+          </ModuleLayout>
+        } />
+        <Route path="/firewall-studio/import" element={
+          <ModuleLayout module="firewall-studio" title="Firewall Studio">
+            <DataImportPage context="firewall-studio" />
+          </ModuleLayout>
+        } />
+        <Route path="/firewall-studio/review" element={
+          <ModuleLayout module="firewall-studio" title="Firewall Studio">
+            <ReviewPage context="firewall-studio" />
+          </ModuleLayout>
+        } />
+
+        {/* NGDC Standardization Module */}
+        <Route path="/ngdc-standardization" element={
+          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
+            <MigrationStudioPage />
+          </ModuleLayout>
+        } />
+        <Route path="/ngdc-standardization/import" element={
+          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
+            <DataImportPage context="ngdc-standardization" />
+          </ModuleLayout>
+        } />
+        <Route path="/ngdc-standardization/review" element={
+          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
+            <ReviewPage context="ngdc-standardization" />
+          </ModuleLayout>
+        } />
+        <Route path="/ngdc-standardization/mappings" element={
+          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
+            <DataImportPage context="ngdc-mappings" />
+          </ModuleLayout>
+        } />
+
+        {/* Network Firewall Request Module */}
+        <Route path="/firewall-management" element={
+          <ModuleLayout module="firewall-management" title="Network Firewall Request">
+            <FirewallManagementPage />
+          </ModuleLayout>
+        } />
+        <Route path="/firewall-management/import" element={
+          <ModuleLayout module="firewall-management" title="Network Firewall Request">
+            <DataImportPage context="firewall-management" />
+          </ModuleLayout>
+        } />
+        <Route path="/firewall-management/review" element={
+          <ModuleLayout module="firewall-management" title="Network Firewall Request">
+            <ReviewPage context="firewall-management" />
+          </ModuleLayout>
+        } />
+
+        {/* Shared */}
+        <Route path="/settings" element={
+          <ModuleLayout module="settings" title="Settings">
+            <SettingsPage />
+          </ModuleLayout>
+        } />
+
+        {/* Legacy routes redirect */}
+        <Route path="/migration" element={
+          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
+            <MigrationStudioPage />
+          </ModuleLayout>
+        } />
+        <Route path="/review" element={
+          <ModuleLayout module="firewall-studio" title="Review & Approval">
+            <ReviewPage />
+          </ModuleLayout>
+        } />
+        <Route path="/management" element={
+          <ModuleLayout module="firewall-management" title="Network Firewall Request">
+            <FirewallManagementPage />
+          </ModuleLayout>
+        } />
+        <Route path="/import" element={
+          <ModuleLayout module="firewall-studio" title="Data Import">
+            <DataImportPage />
+          </ModuleLayout>
+        } />
+      </Routes>
     </BrowserRouter>
   );
 }

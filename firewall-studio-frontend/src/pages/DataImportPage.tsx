@@ -1,164 +1,190 @@
-import { useState, useRef } from 'react';
-import { Notification } from '@/components/shared/Notification';
-import { useNotification } from '@/hooks/useNotification';
-import { importLegacyRulesExcel } from '@/lib/api';
+import { useState, useCallback } from 'react';
+import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping } from '@/lib/api';
 
-interface ImportJob {
-  id: string;
-  fileName: string;
-  status: 'processing' | 'completed' | 'failed';
-  added: number;
-  duplicates: number;
-  total: number;
-  createdAt: string;
-  error?: string;
+interface DataImportPageProps {
+  context?: string;
 }
 
-export default function DataImportPage() {
-  const [jobs, setJobs] = useState<ImportJob[]>([]);
+export default function DataImportPage({ context }: DataImportPageProps) {
+  const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { notification, showNotification, clearNotification } = useNotification();
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState('');
+  const [mappings, setMappings] = useState<Record<string, unknown>[]>([]);
+  const [showMappings, setShowMappings] = useState(false);
+  const [newMapping, setNewMapping] = useState({ legacy_name: '', legacy_dc: '', ngdc_name: '', ngdc_dc: '', ngdc_nh: '', ngdc_sz: '', type: 'group' });
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      showNotification('Only .xlsx files are supported', 'error');
-      return;
-    }
+  const isNGDCMappings = context === 'ngdc-mappings';
+  const pageTitle = isNGDCMappings ? 'NGDC Organization Mappings' :
+    context === 'ngdc-standardization' ? 'Import Legacy Rules for Migration' :
+    context === 'firewall-management' ? 'Import Firewall Rules' :
+    context === 'firewall-studio' ? 'Import Rules for Firewall Studio' :
+    'Data Import';
 
-    const jobId = `imp-${Date.now()}`;
-    const newJob: ImportJob = {
-      id: jobId,
-      fileName: file.name,
-      status: 'processing',
-      added: 0,
-      duplicates: 0,
-      total: 0,
-      createdAt: new Date().toISOString(),
-    };
-    setJobs(prev => [newJob, ...prev]);
-    setImporting(true);
-
+  const loadMappings = useCallback(async () => {
     try {
-      const result = await importLegacyRulesExcel(file);
-      setJobs(prev => prev.map(j => j.id === jobId ? {
-        ...j,
-        status: 'completed' as const,
-        added: result.added,
-        duplicates: result.duplicates,
-        total: result.total,
-      } : j));
-      showNotification(`Import complete: ${result.added} added, ${result.duplicates} duplicates skipped (${result.total} total)`, 'success');
+      const data = await getNGDCMappings();
+      setMappings(data);
+      setShowMappings(true);
+    } catch { setError('Failed to load mappings'); }
+  }, []);
+
+  const handleImport = async () => {
+    if (!file) return;
+    setImporting(true);
+    setError('');
+    setResult(null);
+    try {
+      const res = isNGDCMappings
+        ? await importNGDCMappingsExcel(file)
+        : await importLegacyRulesExcel(file);
+      setResult(res);
+      if (isNGDCMappings) loadMappings();
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Import failed';
-      setJobs(prev => prev.map(j => j.id === jobId ? {
-        ...j,
-        status: 'failed' as const,
-        error: errorMsg,
-      } : j));
-      showNotification(errorMsg, 'error');
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
     }
-    setImporting(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const statusColors: Record<string, string> = {
-    processing: 'bg-blue-100 text-blue-700',
-    completed: 'bg-green-100 text-green-700',
-    failed: 'bg-red-100 text-red-700',
+  const handleDeleteMapping = async (id: string) => {
+    try {
+      await deleteNGDCMapping(id);
+      setMappings(prev => prev.filter(m => (m as Record<string, unknown>).id !== id));
+    } catch { setError('Failed to delete mapping'); }
   };
 
-  const filteredJobs = jobs.filter(job => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return job.fileName.toLowerCase().includes(q) || job.status.toLowerCase().includes(q) || job.id.toLowerCase().includes(q);
-  });
+  const handleAddMapping = async () => {
+    try {
+      const created = await createNGDCMapping(newMapping);
+      setMappings(prev => [...prev, created]);
+      setNewMapping({ legacy_name: '', legacy_dc: '', ngdc_name: '', ngdc_dc: '', ngdc_nh: '', ngdc_sz: '', type: 'group' });
+    } catch { setError('Failed to add mapping'); }
+  };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {notification && <Notification message={notification.message} type={notification.type} onClose={clearNotification} />}
-
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Data Import</h1>
-          <p className="text-sm text-gray-500 mt-1">Import legacy firewall rules from Excel spreadsheets with automatic deduplication</p>
-        </div>
+    <div className="max-w-[1800px] mx-auto p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {isNGDCMappings
+            ? 'Manage organization-provided legacy-to-NGDC name mappings used during migration'
+            : 'Upload Excel (.xlsx) files to import rules into the system'}
+        </p>
       </div>
 
-      {/* Import Card */}
-      <div className="mb-8 p-6 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 transition-colors">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-xl font-bold">
-            XLS
-          </div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-1">Import Legacy Firewall Rules</h3>
-          <p className="text-sm text-gray-500 mb-4">Upload an Excel (.xlsx) file with legacy rules. Duplicates will be automatically detected and skipped.</p>
-          <p className="text-xs text-gray-400 mb-4">Expected columns: App ID, App Current Distributed ID, App Name, Inventory Item, Policy Name, Rule Global, Rule Action, Rule Source, Rule Source Expanded, Rule Source Zone, Rule Destination, Rule Destination Expanded, Rule Destination Zone, Rule Service, Rule Service Expanded, RN, RC</p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileSelect}
-            className="hidden"
-            id="excel-upload"
-            disabled={importing}
-          />
-          <label htmlFor="excel-upload" className={`inline-block px-6 py-3 text-sm font-medium text-white rounded-lg shadow-sm cursor-pointer ${importing ? 'bg-gray-400' : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700'}`}>
-            {importing ? 'Importing...' : 'Choose Excel File'}
+      {/* Import Section */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">
+          {isNGDCMappings ? 'Import Mappings from Excel' : 'Import from Excel'}
+        </h2>
+        <div className="flex items-center gap-4">
+          <label className="flex-1">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all">
+              <input
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={e => setFile(e.target.files?.[0] || null)}
+              />
+              <svg className="w-10 h-10 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <p className="text-sm text-gray-600">{file ? file.name : 'Click to select .xlsx file'}</p>
+            </div>
           </label>
+          <button
+            onClick={handleImport}
+            disabled={!file || importing}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {importing ? 'Importing...' : 'Import'}
+          </button>
         </div>
+
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
+        )}
+        {result && (
+          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+            Import successful: {JSON.stringify(result)}
+          </div>
+        )}
       </div>
 
-      {/* Import History */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-gray-800">Import History</h2>
-      </div>
-      {jobs.length > 0 && (
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Search by file name, status..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-          />
-        </div>
-      )}
-      <div className="space-y-3">
-        {filteredJobs.map(job => (
-          <div key={job.id} className="p-4 bg-white border border-gray-200 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">
-                  XLS
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{job.fileName}</p>
-                  <p className="text-xs text-gray-500">{new Date(job.createdAt).toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {job.status === 'completed' && (
-                  <span className="text-xs text-gray-600">{job.added} added, {job.duplicates} duplicates ({job.total} total)</span>
-                )}
-                {job.status === 'processing' && (
-                  <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }} />
-                  </div>
-                )}
-                {job.status === 'failed' && job.error && (
-                  <span className="text-xs text-red-600">{job.error}</span>
-                )}
-                <span className={`px-2 py-0.5 text-xs font-medium rounded capitalize ${statusColors[job.status]}`}>{job.status}</span>
-              </div>
+      {/* NGDC Mappings Table */}
+      {isNGDCMappings && (
+        <>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Add Manual Mapping</h2>
+            </div>
+            <div className="grid grid-cols-7 gap-3 mb-3">
+              <input placeholder="Legacy Name" value={newMapping.legacy_name} onChange={e => setNewMapping(p => ({ ...p, legacy_name: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
+              <input placeholder="Legacy DC" value={newMapping.legacy_dc} onChange={e => setNewMapping(p => ({ ...p, legacy_dc: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
+              <input placeholder="NGDC Name" value={newMapping.ngdc_name} onChange={e => setNewMapping(p => ({ ...p, ngdc_name: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
+              <input placeholder="NGDC DC" value={newMapping.ngdc_dc} onChange={e => setNewMapping(p => ({ ...p, ngdc_dc: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
+              <input placeholder="NH" value={newMapping.ngdc_nh} onChange={e => setNewMapping(p => ({ ...p, ngdc_nh: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
+              <input placeholder="SZ" value={newMapping.ngdc_sz} onChange={e => setNewMapping(p => ({ ...p, ngdc_sz: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
+              <button onClick={handleAddMapping} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Add</button>
             </div>
           </div>
-        ))}
-        {jobs.length === 0 && <p className="text-sm text-gray-500 italic text-center py-8">No import jobs yet. Upload an Excel file to get started.</p>}
-      </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Organization NGDC Mappings</h2>
+              <button onClick={loadMappings} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                {showMappings ? 'Refresh' : 'Load Mappings'}
+              </button>
+            </div>
+            {showMappings && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left">
+                      <th className="px-3 py-2 font-medium text-gray-600">Legacy Name</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">Legacy DC</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">NGDC Name</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">NGDC DC</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">NH</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">SZ</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">Type</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">Status</th>
+                      <th className="px-3 py-2 font-medium text-gray-600">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mappings.map((m, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 font-mono text-xs">{String(m.legacy_name || '')}</td>
+                        <td className="px-3 py-2">{String(m.legacy_dc || '')}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-blue-700">{String(m.ngdc_name || '')}</td>
+                        <td className="px-3 py-2">{String(m.ngdc_dc || '')}</td>
+                        <td className="px-3 py-2">{String(m.ngdc_nh || '')}</td>
+                        <td className="px-3 py-2">{String(m.ngdc_sz || '')}</td>
+                        <td className="px-3 py-2">
+                          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs">{String(m.type || '')}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs ${m.status === 'Verified' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                            {String(m.status || 'Pending')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <button onClick={() => handleDeleteMapping(String(m.id))} className="text-red-500 hover:text-red-700 text-xs">Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {mappings.length === 0 && (
+                      <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-400">No mappings loaded. Click "Load Mappings" or import from Excel.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

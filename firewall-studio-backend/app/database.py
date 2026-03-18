@@ -418,68 +418,8 @@ SEED_APPLICATIONS = [
 # Rule Source Zone, Rule Destination, Rule Destination Expanded, Rule Destination Zone,
 # Rule Service, Rule Service Expanded, RN, RC
 # =====================================================================
-SEED_LEGACY_RULES = [
-    {"id": "LR-001", "app_id": 1316, "app_distributed_id": "App1", "app_name": "Application1",
-     "inventory_item": "OL-SVOC-FCZ001", "policy_name": "Traditional", "rule_global": True,
-     "rule_action": "Accept",
-     "rule_source": "gapigr-rpm-dev\ngrp-app2-SVOC\nsvr-100.123.123.196",
-     "rule_source_expanded": "gapigr-rpm-dev\n  grp-app1-OCSV\n    rng-110.123.123.139-150\n\tsvr-100.124.124.139\n  rng-112.130.135.167-178\n  rng-234.45.67.34-44\ngrp-app2-SVOC\n  rng-111.145.10.57-59\n  svr-10.123.45.67\n  svr-10.123.45.78\nsvr-100.123.123.196",
-     "rule_source_zone": "do-lbw-server",
-     "rule_destination": "svr-101.123.123.296\nsvr-101.123.3.137",
-     "rule_destination_expanded": "svr-101.123.123.296\nsvr-101.123.3.137",
-     "rule_destination_zone": "default",
-     "rule_service": "tcp-1896\ntcp-1006", "rule_service_expanded": "tcp-1896\ntcp-1006",
-     "rn": 1, "rc": 104,
-     "is_standard": False, "migration_status": "Not Started"},
-    {"id": "LR-002", "app_id": 1316, "app_distributed_id": "App1", "app_name": "Application1",
-     "inventory_item": "OL-SVOC-FCZ001", "policy_name": "Traditional", "rule_global": True,
-     "rule_action": "DROP",
-     "rule_source": "rng-235.45.67.36-54\nsvr-225.4.78.94",
-     "rule_source_expanded": "rng-235.45.67.36-54\nsvr-225.4.78.94",
-     "rule_source_zone": "do-nb-server",
-     "rule_destination": "svr-101.123.123.29\nsvr-101.123.23.13",
-     "rule_destination_expanded": "svr-101.123.123.29\nsvr-101.123.23.13",
-     "rule_destination_zone": "default",
-     "rule_service": "Application Default", "rule_service_expanded": "Application Default",
-     "rn": 2, "rc": 104,
-     "is_standard": False, "migration_status": "Not Started"},
-    {"id": "LR-003", "app_id": 3721, "app_distributed_id": "App2", "app_name": "Application2",
-     "inventory_item": "OZ-SOVC-FCZ002", "policy_name": "Access", "rule_global": False,
-     "rule_action": "Accept",
-     "rule_source": "grp-app1-SOVC",
-     "rule_source_expanded": "grp-app1-SOVC\n  svr-201.123.3.337\n  svr-201.123.3.339\n  svr-201.123.3.343",
-     "rule_source_zone": "do-lbw-server",
-     "rule_destination": "grp-app2-VC",
-     "rule_destination_expanded": "grp-app2-VC\n  svr-201.123.3.37\n  svr-201.123.3.39\n  svr-201.123.3.43",
-     "rule_destination_zone": "do-lb-default",
-     "rule_service": "Application Default", "rule_service_expanded": "Application Default",
-     "rn": 3, "rc": 104,
-     "is_standard": False, "migration_status": "Not Started"},
-    {"id": "LR-004", "app_id": 3721, "app_distributed_id": "App2", "app_name": "Application2",
-     "inventory_item": "OZ-SOVC-FCZ002", "policy_name": "Access", "rule_global": False,
-     "rule_action": "Accept",
-     "rule_source": "grp-app1-SOVC",
-     "rule_source_expanded": "grp-app1-SOVC\n  svr-201.123.3.337\n  svr-201.123.3.339\n  svr-201.123.3.343",
-     "rule_source_zone": "do-lbw-server",
-     "rule_destination": "svr-117.23.38.58",
-     "rule_destination_expanded": "svr-117.23.38.58",
-     "rule_destination_zone": "do-lb-default",
-     "rule_service": "Application Default", "rule_service_expanded": "Application Default",
-     "rn": 4, "rc": 104,
-     "is_standard": False, "migration_status": "Not Started"},
-    {"id": "LR-005", "app_id": 4754, "app_distributed_id": "App3", "app_name": "Application3",
-     "inventory_item": "SO-OZVC-FCZ004", "policy_name": "Access", "rule_global": True,
-     "rule_action": "Accept",
-     "rule_source": "svr-11.78.98.732",
-     "rule_source_expanded": "svr-11.78.98.732",
-     "rule_source_zone": "default",
-     "rule_destination": "svr-11.123.3.58",
-     "rule_destination_expanded": "svr-11.123.3.58",
-     "rule_destination_zone": "default",
-     "rule_service": "tcp-1096", "rule_service_expanded": "tcp-1096",
-     "rn": 5, "rc": 104,
-     "is_standard": False, "migration_status": "Not Started"},
-]
+# Legacy rules are now ONLY populated via Excel import - no dummy/seed data
+SEED_LEGACY_RULES: list[dict[str, Any]] = []
 
 SEED_ENVIRONMENTS = [
     {"name": "Production", "code": "PROD", "description": "Live production environment"},
@@ -2054,7 +1994,13 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
             f"  enabled: true"
         )
 
-    return {
+    # --- Group provisioning as part of compile ---
+    app_id = rule.get("app_id", rule.get("application", ""))
+    group_provisioning = None
+    if app_id:
+        group_provisioning = await provision_groups_to_device(str(app_id), vendor if vendor in ("palo_alto", "checkpoint") else "palo_alto")
+
+    result: dict[str, Any] = {
         "rule_id": rule_id,
         "vendor_format": vendor,
         "compiled_text": compiled,
@@ -2065,6 +2011,9 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
         "logging": True,
         "comment": desc,
     }
+    if group_provisioning:
+        result["group_provisioning"] = group_provisioning
+    return result
 
 
 # ============================================================
@@ -2142,3 +2091,886 @@ async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
                 await update_rule_status(rule_id, "Rejected")
             return r
     return None
+
+
+# ============================================================
+# Rule Modification with Delta Tracking
+# ============================================================
+
+def _compute_delta(original: dict[str, Any], modified: dict[str, Any]) -> dict[str, Any]:
+    """Compute delta between original and modified rule fields."""
+    delta: dict[str, Any] = {"added": {}, "removed": {}, "changed": {}}
+    track_fields = ["rule_source", "rule_destination", "rule_service",
+                    "rule_source_expanded", "rule_destination_expanded", "rule_service_expanded",
+                    "rule_source_zone", "rule_destination_zone", "rule_action"]
+    for field in track_fields:
+        orig_val = str(original.get(field, ""))
+        mod_val = str(modified.get(field, ""))
+        if orig_val != mod_val:
+            # For multiline fields, compute line-level diff
+            if "\n" in orig_val or "\n" in mod_val:
+                orig_lines = set(orig_val.split("\n")) if orig_val else set()
+                mod_lines = set(mod_val.split("\n")) if mod_val else set()
+                added = mod_lines - orig_lines
+                removed = orig_lines - mod_lines
+                if added:
+                    delta["added"][field] = sorted(added)
+                if removed:
+                    delta["removed"][field] = sorted(removed)
+            else:
+                delta["changed"][field] = {"from": orig_val, "to": mod_val}
+    return delta
+
+
+async def create_rule_modification(rule_id: str, modifications: dict[str, Any], comments: str = "") -> dict[str, Any] | None:
+    """Create a rule modification request with delta tracking."""
+    rules = _load("legacy_rules") or []
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        return None
+
+    delta = _compute_delta(rule, modifications)
+    now = _now()
+    mod_id = f"MOD-{_id()}"
+
+    modification = {
+        "id": mod_id,
+        "rule_id": rule_id,
+        "original": {k: rule.get(k, "") for k in ["rule_source", "rule_destination", "rule_service",
+                      "rule_source_expanded", "rule_destination_expanded", "rule_service_expanded",
+                      "rule_source_zone", "rule_destination_zone", "rule_action"]},
+        "modified": {k: modifications.get(k, rule.get(k, "")) for k in ["rule_source", "rule_destination", "rule_service",
+                      "rule_source_expanded", "rule_destination_expanded", "rule_service_expanded",
+                      "rule_source_zone", "rule_destination_zone", "rule_action"]},
+        "delta": delta,
+        "comments": comments,
+        "status": "Pending",
+        "created_at": now,
+        "reviewed_at": None,
+        "reviewer": None,
+        "review_notes": None,
+    }
+
+    mods = _load("rule_modifications") or []
+    mods.append(modification)
+    _save("rule_modifications", mods)
+
+    # Also create a review request
+    reviews = _load("reviews") or []
+    src_entries = (modifications.get("rule_source", rule.get("rule_source", "")) or "").split("\n")
+    dst_entries = (modifications.get("rule_destination", rule.get("rule_destination", "")) or "").split("\n")
+    review = {
+        "id": f"REV-{_id()}",
+        "rule_id": rule_id,
+        "rule_name": f"{rule.get('app_name', '')} - {rule.get('inventory_item', rule_id)}",
+        "request_type": "modify_rule",
+        "requestor": "system",
+        "reviewer": None,
+        "status": "Pending",
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments or f"Rule modification for {rule_id}",
+        "review_notes": None,
+        "modification_id": mod_id,
+        "delta": delta,
+        "rule_summary": {
+            "application": f"{rule.get('app_id', '')} - {rule.get('app_name', '')}",
+            "source": ", ".join(src_entries[:3]),
+            "destination": ", ".join(dst_entries[:3]),
+            "ports": modifications.get("rule_service", rule.get("rule_service", "")),
+            "environment": rule.get("policy_name", ""),
+        },
+    }
+    reviews.append(review)
+    _save("reviews", reviews)
+
+    return modification
+
+
+async def get_rule_modifications(rule_id: str | None = None) -> list[dict[str, Any]]:
+    mods = _load("rule_modifications") or []
+    if rule_id:
+        mods = [m for m in mods if m.get("rule_id") == rule_id]
+    return mods
+
+
+async def approve_rule_modification(mod_id: str, notes: str = "") -> dict[str, Any] | None:
+    """Approve a modification and apply changes to the rule."""
+    mods = _load("rule_modifications") or []
+    now = _now()
+    for m in mods:
+        if m.get("id") == mod_id:
+            m["status"] = "Approved"
+            m["reviewed_at"] = now
+            m["reviewer"] = "sns_user"
+            m["review_notes"] = notes
+            _save("rule_modifications", mods)
+            # Apply modification to rule
+            rule_id = m.get("rule_id")
+            if rule_id:
+                modified = m.get("modified", {})
+                await update_legacy_rule(rule_id, modified)
+            return m
+    return None
+
+
+async def reject_rule_modification(mod_id: str, notes: str) -> dict[str, Any] | None:
+    mods = _load("rule_modifications") or []
+    now = _now()
+    for m in mods:
+        if m.get("id") == mod_id:
+            m["status"] = "Rejected"
+            m["reviewed_at"] = now
+            m["reviewer"] = "sns_user"
+            m["review_notes"] = notes
+            _save("rule_modifications", mods)
+            return m
+    return None
+
+
+# ============================================================
+# Legacy Rule Compiler (for Firewall Management export)
+# ============================================================
+
+async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] | None:
+    """Compile a legacy rule into vendor-specific format."""
+    rules = _load("legacy_rules") or []
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        return None
+
+    src = rule.get("rule_source", "")
+    dst = rule.get("rule_destination", "")
+    svc = rule.get("rule_service", "any")
+    action = rule.get("rule_action", "Accept")
+    src_zone = rule.get("rule_source_zone", "any")
+    dst_zone = rule.get("rule_destination_zone", "any")
+    app_name = rule.get("app_name", "N/A")
+    policy = rule.get("policy_name", "N/A")
+
+    src_objs = [s.strip() for s in src.split("\n") if s.strip()] or ["any"]
+    dst_objs = [d.strip() for d in dst.split("\n") if d.strip()] or ["any"]
+    svc_list = [s.strip() for s in svc.split("\n") if s.strip()] or ["any"]
+
+    if vendor == "palo_alto":
+        compiled = (
+            f"# Palo Alto - {app_name} - {rule_id}\n"
+            + "\n".join(
+                f"set rulebase security rules \"{rule_id}\" from {src_zone}\n"
+                f"set rulebase security rules \"{rule_id}\" to {dst_zone}\n"
+                f"set rulebase security rules \"{rule_id}\" source [{s}]\n"
+                f"set rulebase security rules \"{rule_id}\" destination [{d}]\n"
+                f"set rulebase security rules \"{rule_id}\" service [{sv}]\n"
+                f"set rulebase security rules \"{rule_id}\" action {'allow' if action == 'Accept' else 'deny'}\n"
+                f"set rulebase security rules \"{rule_id}\" log-start yes"
+                for s in src_objs for d in dst_objs for sv in svc_list
+            )
+        )
+    elif vendor == "checkpoint":
+        compiled = (
+            f"# Check Point - {app_name} - {rule_id}\n"
+            + "\n".join(
+                f"mgmt_cli add access-rule layer \"Network\" position top \\\n"
+                f"  name \"{rule_id}\" \\\n"
+                f"  source \"{s}\" \\\n"
+                f"  destination \"{d}\" \\\n"
+                f"  service \"{sv}\" \\\n"
+                f"  action \"{'Accept' if action == 'Accept' else 'Drop'}\" \\\n"
+                f"  track \"Log\""
+                for s in src_objs for d in dst_objs for sv in svc_list
+            )
+        )
+    elif vendor == "cisco_asa":
+        compiled = (
+            f"! Cisco ASA - {app_name} - {rule_id}\n"
+            + "\n".join(
+                f"access-list ACL_{'IN' if action == 'Accept' else 'OUT'} extended "
+                f"{'permit' if action == 'Accept' else 'deny'} "
+                f"tcp object-group {s} object-group {d} eq {sv}"
+                for s in src_objs for d in dst_objs for sv in svc_list
+            )
+        )
+    else:
+        compiled = (
+            f"# Firewall Rule: {rule_id}\n"
+            f"# Application: {app_name}\n"
+            f"# Policy: {policy}\n"
+            f"---\n"
+            f"rule:\n"
+            f"  id: {rule_id}\n"
+            f"  action: {action.lower()}\n"
+            f"  source:\n"
+            f"    objects: [{', '.join(src_objs)}]\n"
+            f"    zone: {src_zone}\n"
+            f"  destination:\n"
+            f"    objects: [{', '.join(dst_objs)}]\n"
+            f"    zone: {dst_zone}\n"
+            f"  service: [{', '.join(svc_list)}]\n"
+            f"  logging: true\n"
+            f"  enabled: true"
+        )
+
+    # --- Group provisioning as part of compile ---
+    app_id_val = rule.get("app_id", "")
+    group_provisioning = None
+    if app_id_val:
+        group_provisioning = await provision_groups_to_device(str(app_id_val), vendor if vendor in ("palo_alto", "checkpoint") else "palo_alto")
+
+    result: dict[str, Any] = {
+        "rule_id": rule_id,
+        "vendor_format": vendor,
+        "compiled_text": compiled,
+        "source_objects": src_objs,
+        "destination_objects": dst_objs,
+        "services": svc_list,
+        "action": action.lower(),
+        "logging": True,
+        "comment": f"{app_name} - {policy}",
+    }
+    if group_provisioning:
+        result["group_provisioning"] = group_provisioning
+    return result
+
+
+# ============================================================
+# Birthright Rule Validation (for Migration to NGDC & Design Studio)
+# ============================================================
+
+async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
+    """Validate a rule against birthright rules using NH/SZ/DC matrix."""
+    heritage = _load("heritage_dc_matrix") or []
+    ngdc_prod = _load("ngdc_prod_matrix") or []
+    nonprod = _load("nonprod_matrix") or []
+
+    src_zone = rule_data.get("source_zone", "")
+    dst_zone = rule_data.get("destination_zone", "")
+    src_nh = rule_data.get("source_nh", "")
+    dst_nh = rule_data.get("destination_nh", "")
+    src_dc = rule_data.get("source_dc", "")
+    dst_dc = rule_data.get("destination_dc", "")
+    src_sz = rule_data.get("source_sz", "")
+    dst_sz = rule_data.get("destination_sz", "")
+    is_prod = rule_data.get("is_prod", True)
+
+    violations: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+    permitted: list[dict[str, str]] = []
+
+    # Check heritage DC matrix
+    for entry in heritage:
+        h_zone = entry.get("heritage_zone", "")
+        new_zone = entry.get("new_dc_zone", "")
+        action = entry.get("action", "")
+        reason = entry.get("reason", "")
+        prod_nonprod = entry.get("prod_nonprod", "")
+        if (h_zone.lower() in src_zone.lower() or h_zone == "Default") and \
+           (new_zone.lower() in dst_sz.lower() or new_zone == dst_sz):
+            if "Blocked" in action:
+                violations.append({"matrix": "Heritage DC", "rule": f"{h_zone} -> {new_zone}",
+                                   "action": action, "reason": reason})
+            elif "Exception" in action:
+                warnings.append({"matrix": "Heritage DC", "rule": f"{h_zone} -> {new_zone}",
+                                 "action": action, "reason": reason})
+            else:
+                permitted.append({"matrix": "Heritage DC", "rule": f"{h_zone} -> {new_zone}",
+                                  "action": action, "reason": reason})
+
+    # Check NGDC prod matrix
+    matrix = ngdc_prod if is_prod else nonprod
+    for entry in matrix:
+        e_src_sz = entry.get("src_sz", "")
+        e_dst_sz = entry.get("dst_sz", "")
+        e_src_nh = entry.get("src_nh", "")
+        e_dst_nh = entry.get("dst_nh", "")
+        e_src_dc = entry.get("src_dc", "")
+        e_dst_dc = entry.get("dst_dc", "")
+        action = entry.get("action", "")
+        reason = entry.get("reason", "")
+
+        sz_match = (e_src_sz == src_sz or e_src_sz in ("Any", "Same")) and \
+                   (e_dst_sz == dst_sz or e_dst_sz in ("Any", "Same"))
+        nh_match = (e_src_nh in ("Any", "Same", src_nh)) and (e_dst_nh in ("Any", "Same", dst_nh))
+        dc_match = (e_src_dc in ("Any", "Same", "Different", src_dc)) and \
+                   (e_dst_dc in ("Any", "Same", "Different", dst_dc))
+
+        if sz_match and nh_match and dc_match:
+            label = f"NGDC {'Prod' if is_prod else 'NonProd'}"
+            rule_desc = f"{e_src_dc}/{e_src_nh}/{e_src_sz} -> {e_dst_dc}/{e_dst_nh}/{e_dst_sz}"
+            if "Blocked" in action:
+                violations.append({"matrix": label, "rule": rule_desc,
+                                   "action": action, "reason": reason})
+            elif "Exception" in action:
+                warnings.append({"matrix": label, "rule": rule_desc,
+                                 "action": action, "reason": reason})
+            else:
+                permitted.append({"matrix": label, "rule": rule_desc,
+                                  "action": action, "reason": reason})
+
+    is_compliant = len(violations) == 0
+    return {
+        "compliant": is_compliant,
+        "violations": violations,
+        "warnings": warnings,
+        "permitted": permitted,
+        "summary": f"{'Compliant' if is_compliant else 'Non-Compliant'} - {len(violations)} violations, {len(warnings)} warnings",
+    }
+
+
+# ============================================================
+# Birthright Matrix CRUD
+# ============================================================
+
+async def get_birthright_matrix() -> dict[str, Any]:
+    """Return all three birthright matrices."""
+    return {
+        "heritage_dc": _load("heritage_dc_matrix") or [],
+        "ngdc_prod": _load("ngdc_prod_matrix") or [],
+        "nonprod": _load("nonprod_matrix") or [],
+    }
+
+
+async def update_birthright_matrix(matrix_type: str, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Update a specific birthright matrix."""
+    key_map = {
+        "heritage_dc": "heritage_dc_matrix",
+        "ngdc_prod": "ngdc_prod_matrix",
+        "nonprod": "nonprod_matrix",
+    }
+    key = key_map.get(matrix_type)
+    if not key:
+        return []
+    _save(key, entries)
+    return entries
+
+
+async def add_birthright_entry(matrix_type: str, entry: dict[str, Any]) -> dict[str, Any]:
+    key_map = {
+        "heritage_dc": "heritage_dc_matrix",
+        "ngdc_prod": "ngdc_prod_matrix",
+        "nonprod": "nonprod_matrix",
+    }
+    key = key_map.get(matrix_type)
+    if not key:
+        return {}
+    data = _load(key) or []
+    data.append(entry)
+    _save(key, data)
+    return entry
+
+
+async def delete_birthright_entry(matrix_type: str, index: int) -> bool:
+    key_map = {
+        "heritage_dc": "heritage_dc_matrix",
+        "ngdc_prod": "ngdc_prod_matrix",
+        "nonprod": "nonprod_matrix",
+    }
+    key = key_map.get(matrix_type)
+    if not key:
+        return False
+    data = _load(key) or []
+    if 0 <= index < len(data):
+        data.pop(index)
+        _save(key, data)
+        return True
+    return False
+
+
+# ============================================================
+# NGDC Migration Recommendations
+# ============================================================
+
+async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
+    """Generate NGDC recommendations for a legacy rule based on backend mapping tables,
+    App-DC mappings, and service/port analysis."""
+    rules = _load("legacy_rules") or []
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        return None
+
+    nhs = _load("neighbourhoods") or []
+    szs = _load("security_zones") or []
+    apps = _load("applications") or []
+    groups = _load("groups") or []
+    ngdc_mappings = _load("ngdc_mappings") or []
+    app_dc_mappings = _load("app_dc_mappings") or []
+
+    app_id = str(rule.get("app_id", ""))
+    app_dist = rule.get("app_distributed_id", "")
+    app_name = rule.get("app_name", "")
+    app_info = next((a for a in apps if str(a.get("app_id")) == app_id or a.get("app_distributed_id") == app_dist), None)
+
+    # --- Step 1: Determine NH/SZ from App-DC mapping table first, then app info ---
+    app_dc = next((m for m in app_dc_mappings if
+                   str(m.get("app_id", "")).upper() == app_id.upper() or
+                   str(m.get("app_name", "")).lower() == app_name.lower()), None)
+    if app_dc:
+        recommended_nh = app_dc.get("neighbourhood", "NH01")
+        recommended_sz = app_dc.get("security_zone", "GEN")
+        recommended_dc = app_dc.get("datacenter", "")
+        nh_sz_source = "app_dc_mapping"
+    elif app_info:
+        recommended_nh = app_info.get("nh", "NH01")
+        recommended_sz = app_info.get("sz", "GEN")
+        recommended_dc = ""
+        nh_sz_source = "application_config"
+    else:
+        recommended_nh = "NH01"
+        recommended_sz = "GEN"
+        recommended_dc = ""
+        nh_sz_source = "default"
+
+    # --- Step 2: Build IP mappings using NGDC mapping table lookups ---
+    src_entries = [s.strip() for s in (rule.get("rule_source", "") or "").split("\n") if s.strip()]
+    dst_entries = [d.strip() for d in (rule.get("rule_destination", "") or "").split("\n") if d.strip()]
+    svc_entries = [s.strip() for s in (rule.get("rule_service", "") or "").split("\n") if s.strip()]
+
+    def _lookup_ngdc_mapping(legacy_name: str) -> dict[str, Any] | None:
+        """Look up NGDC mapping table for an exact or partial match on legacy name."""
+        for m in ngdc_mappings:
+            if m.get("legacy_name", "").lower() == legacy_name.lower():
+                return m
+        # Partial match: check if legacy_name is contained in mapping's legacy_name
+        for m in ngdc_mappings:
+            if legacy_name.lower() in m.get("legacy_name", "").lower() or \
+               m.get("legacy_name", "").lower() in legacy_name.lower():
+                return m
+        return None
+
+    def _suggest_ngdc_name(legacy_name: str, entry_type: str) -> str:
+        prefix = "grp" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
+                 "svr" if legacy_name.startswith("svr") else \
+                 "rng" if legacy_name.startswith("rng") else "grp"
+        short_app = (app_dist or app_id)[:6].upper()
+        return f"{prefix}-{short_app}-{recommended_nh}-{recommended_sz}-{entry_type}"
+
+    def _build_mapping(legacy_name: str, entry_type: str, idx: int) -> dict[str, Any]:
+        obj_type = "group" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
+                   "server" if legacy_name.startswith("svr") else \
+                   "range" if legacy_name.startswith("rng") else "other"
+
+        # Priority 1: Look up NGDC mapping table
+        table_match = _lookup_ngdc_mapping(legacy_name)
+        if table_match:
+            return {
+                "legacy": legacy_name,
+                "ngdc_recommended": table_match["ngdc_name"],
+                "type": table_match.get("type", obj_type),
+                "mapping_source": "ngdc_mapping_table",
+                "mapping_id": table_match.get("id"),
+                "mapping_status": table_match.get("status", ""),
+                "ngdc_nh": table_match.get("ngdc_nh", ""),
+                "ngdc_sz": table_match.get("ngdc_sz", ""),
+                "existing_group": None,
+                "customizable": True,
+            }
+
+        # Priority 2: Match against existing groups
+        existing_group = next((g for g in groups if any(
+            m.get("value", "") in legacy_name for m in g.get("members", []))), None)
+        if existing_group:
+            return {
+                "legacy": legacy_name,
+                "ngdc_recommended": existing_group["name"],
+                "type": obj_type,
+                "mapping_source": "existing_group",
+                "mapping_id": None,
+                "mapping_status": "",
+                "ngdc_nh": "",
+                "ngdc_sz": "",
+                "existing_group": existing_group["name"],
+                "customizable": True,
+            }
+
+        # Priority 3: Generate based on naming convention
+        return {
+            "legacy": legacy_name,
+            "ngdc_recommended": _suggest_ngdc_name(legacy_name, f"{entry_type}{idx+1:02d}"),
+            "type": obj_type,
+            "mapping_source": "auto_generated",
+            "mapping_id": None,
+            "mapping_status": "",
+            "ngdc_nh": recommended_nh,
+            "ngdc_sz": recommended_sz,
+            "existing_group": None,
+            "customizable": True,
+        }
+
+    source_mappings = [_build_mapping(src, "SRC", i) for i, src in enumerate(src_entries)]
+    destination_mappings = [_build_mapping(dst, "DST", i) for i, dst in enumerate(dst_entries)]
+
+    # --- Step 3: Service/port recommendations ---
+    standard_ports: dict[str, str] = {
+        "tcp-80": "HTTP", "tcp-443": "HTTPS", "tcp-22": "SSH", "tcp-21": "FTP",
+        "tcp-25": "SMTP", "tcp-53": "DNS", "udp-53": "DNS", "tcp-110": "POP3",
+        "tcp-143": "IMAP", "tcp-993": "IMAPS", "tcp-995": "POP3S",
+        "tcp-3306": "MySQL", "tcp-5432": "PostgreSQL", "tcp-1521": "Oracle",
+        "tcp-1433": "MSSQL", "tcp-27017": "MongoDB", "tcp-6379": "Redis",
+        "tcp-8080": "HTTP-Alt", "tcp-8443": "HTTPS-Alt",
+        "tcp-389": "LDAP", "tcp-636": "LDAPS", "tcp-88": "Kerberos",
+        "tcp-3389": "RDP", "tcp-5900": "VNC",
+    }
+    service_recommendations = []
+    for svc in svc_entries:
+        svc_lower = svc.strip().lower()
+        desc = standard_ports.get(svc_lower, "")
+        # Determine risk level based on service
+        risk = "low"
+        if any(p in svc_lower for p in ["22", "3389", "5900", "21"]):
+            risk = "high"
+        elif any(p in svc_lower for p in ["1521", "3306", "5432", "1433", "27017", "6379"]):
+            risk = "medium"
+        service_recommendations.append({
+            "service": svc.strip(),
+            "description": desc,
+            "risk_level": risk,
+            "recommendation": f"Ensure {desc or svc} access is restricted to authorized sources" if risk != "low" else "Standard service",
+        })
+
+    # Find recommended NH and SZ details
+    nh_info = next((n for n in nhs if n.get("nh_id") == recommended_nh), None)
+    sz_info = next((s for s in szs if s.get("code") == recommended_sz), None)
+
+    # Count mapping sources
+    table_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "ngdc_mapping_table")
+    group_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "existing_group")
+    auto_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "auto_generated")
+
+    return {
+        "rule_id": rule_id,
+        "rule": rule,
+        "recommended_nh": recommended_nh,
+        "recommended_nh_name": nh_info.get("name", "") if nh_info else "",
+        "recommended_sz": recommended_sz,
+        "recommended_sz_name": sz_info.get("name", "") if sz_info else "",
+        "recommended_dc": recommended_dc,
+        "nh_sz_source": nh_sz_source,
+        "source_mappings": source_mappings,
+        "destination_mappings": destination_mappings,
+        "service_entries": svc_entries,
+        "service_recommendations": service_recommendations,
+        "mapping_summary": {
+            "total": len(source_mappings) + len(destination_mappings),
+            "from_mapping_table": table_count,
+            "from_existing_groups": group_count,
+            "auto_generated": auto_count,
+        },
+        "naming_standard": f"grp-{(app_dist or app_id)[:6].upper()}-{recommended_nh}-{recommended_sz}-{{SUBTYPE}}",
+        "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
+        "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
+    }
+
+
+# ============================================================
+# Organization Legacy-to-NGDC Mappings
+# ============================================================
+
+async def get_ngdc_mappings() -> list[dict[str, Any]]:
+    """Get all org-provided legacy-to-NGDC mappings."""
+    return _load("ngdc_mappings") or []
+
+
+async def save_ngdc_mappings(mappings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Save/replace all legacy-to-NGDC mappings."""
+    _save("ngdc_mappings", mappings)
+    return mappings
+
+
+async def add_ngdc_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Add a single legacy-to-NGDC mapping."""
+    mappings = _load("ngdc_mappings") or []
+    mapping["id"] = mapping.get("id", _id())
+    mapping["created_at"] = _now()
+    mappings.append(mapping)
+    _save("ngdc_mappings", mappings)
+    return mapping
+
+
+async def update_ngdc_mapping(mapping_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    mappings = _load("ngdc_mappings") or []
+    for m in mappings:
+        if m.get("id") == mapping_id:
+            m.update(data)
+            m["updated_at"] = _now()
+            _save("ngdc_mappings", mappings)
+            return m
+    return None
+
+
+async def delete_ngdc_mapping(mapping_id: str) -> bool:
+    mappings = _load("ngdc_mappings") or []
+    filtered = [m for m in mappings if m.get("id") != mapping_id]
+    if len(filtered) == len(mappings):
+        return False
+    _save("ngdc_mappings", filtered)
+    return True
+
+
+async def import_ngdc_mappings(new_mappings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Bulk import mappings from organization (e.g., Excel/CSV upload)."""
+    existing = _load("ngdc_mappings") or []
+    existing_keys = {(m.get("legacy_name", ""), m.get("legacy_dc", "")) for m in existing}
+    added = 0
+    skipped = 0
+    for nm in new_mappings:
+        key = (nm.get("legacy_name", ""), nm.get("legacy_dc", ""))
+        if key in existing_keys:
+            skipped += 1
+            continue
+        nm["id"] = _id()
+        nm["created_at"] = _now()
+        existing.append(nm)
+        existing_keys.add(key)
+        added += 1
+    _save("ngdc_mappings", existing)
+    return {"added": added, "skipped": skipped, "total": len(existing)}
+
+
+# ============================================================
+# Group Provisioning to Firewall Device
+# ============================================================
+
+async def provision_groups_to_device(app_id: str, device_type: str = "palo_alto") -> dict[str, Any]:
+    """Provision app groups directly to firewall device with NGDC standards enforcement."""
+    groups = _load("groups") or []
+    app_groups = [g for g in groups if g.get("app_id") == app_id]
+    if not app_groups:
+        return {"status": "error", "message": "No groups found for app"}
+
+    nstd = _load("naming_standards") or {}
+    violations: list[str] = []
+    provisioned: list[dict[str, Any]] = []
+
+    for g in app_groups:
+        name = g.get("name", "")
+        # Enforce NGDC naming: must start with grp-, svr-, or rng-
+        if not any(name.startswith(p) for p in ["grp-", "svr-", "rng-"]):
+            violations.append(f"Group '{name}' does not follow NGDC naming standard")
+            continue
+        # Enforce non-empty members
+        if not g.get("members"):
+            violations.append(f"Group '{name}' has no members")
+            continue
+
+        if device_type == "palo_alto":
+            provisioned.append({
+                "name": name,
+                "type": "address-group" if g.get("type") == "network" else "address-group",
+                "members": [m.get("value", "") for m in g.get("members", [])],
+                "description": g.get("description", ""),
+                "device_command": f"set address-group {name} static [{' '.join(m.get('value', '') for m in g.get('members', []))}]",
+            })
+        elif device_type == "checkpoint":
+            provisioned.append({
+                "name": name,
+                "type": "network-group",
+                "members": [m.get("value", "") for m in g.get("members", [])],
+                "device_command": f"mgmt_cli add group name {name} members.1 {g['members'][0]['value'] if g.get('members') else ''}",
+            })
+        else:
+            provisioned.append({
+                "name": name,
+                "members": [m.get("value", "") for m in g.get("members", [])],
+                "device_command": f"object-group network {name}",
+            })
+
+        # Mark group as provisioned
+        g["provisioned"] = True
+        g["provisioned_at"] = _now()
+        g["device_type"] = device_type
+
+    _save("groups", groups)
+
+    # Log provisioning
+    history = _load("provisioning_history") or []
+    entry = {
+        "id": _id(),
+        "app_id": app_id,
+        "device_type": device_type,
+        "groups_provisioned": len(provisioned),
+        "violations": violations,
+        "provisioned_at": _now(),
+        "status": "Completed" if not violations else "Partial",
+        "details": provisioned,
+    }
+    history.append(entry)
+    _save("provisioning_history", history)
+
+    return {
+        "status": "success" if not violations else "partial",
+        "provisioned": provisioned,
+        "violations": violations,
+        "total_groups": len(app_groups),
+        "provisioned_count": len(provisioned),
+    }
+
+
+async def get_provisioning_history(app_id: str | None = None) -> list[dict[str, Any]]:
+    history = _load("provisioning_history") or []
+    if app_id:
+        history = [h for h in history if h.get("app_id") == app_id]
+    return history
+
+
+# ============================================================
+# Enhanced Compile with Group Expansion
+# ============================================================
+
+async def compile_rule_with_expansion(rule_id: str, vendor: str = "generic", expand_groups: bool = True) -> dict[str, Any] | None:
+    """Compile a rule showing groups AND underlying expansion per device standards."""
+    rules = _load("rules") or []
+    rule = next((r for r in rules if r.get("rule_id") == rule_id), None)
+    if not rule:
+        # Try legacy rules
+        legacy = _load("legacy_rules") or []
+        rule = next((r for r in legacy if r.get("id") == rule_id), None)
+        if not rule:
+            return None
+
+    groups_data = _load("groups") or []
+    group_lookup = {g["name"]: g for g in groups_data}
+
+    # Get source/destination
+    src = rule.get("source", rule.get("rule_source", ""))
+    dst = rule.get("destination", rule.get("rule_destination", ""))
+    svc = rule.get("port", rule.get("rule_service", ""))
+
+    src_entries = [s.strip() for s in str(src).split("\n") if s.strip()]
+    dst_entries = [d.strip() for d in str(dst).split("\n") if d.strip()]
+
+    # Expand groups
+    expanded_sources: list[dict[str, Any]] = []
+    for s in src_entries:
+        grp = group_lookup.get(s)
+        if grp and expand_groups:
+            expanded_sources.append({
+                "group_name": s,
+                "type": "group",
+                "members": [m.get("value", "") for m in grp.get("members", [])],
+                "member_count": len(grp.get("members", [])),
+            })
+        else:
+            expanded_sources.append({"value": s, "type": "direct", "members": [s], "member_count": 1})
+
+    expanded_destinations: list[dict[str, Any]] = []
+    for d in dst_entries:
+        grp = group_lookup.get(d)
+        if grp and expand_groups:
+            expanded_destinations.append({
+                "group_name": d,
+                "type": "group",
+                "members": [m.get("value", "") for m in grp.get("members", [])],
+                "member_count": len(grp.get("members", [])),
+            })
+        else:
+            expanded_destinations.append({"value": d, "type": "direct", "members": [d], "member_count": 1})
+
+    # Generate vendor-specific output
+    compiled_lines: list[str] = []
+    if vendor == "palo_alto":
+        for se in expanded_sources:
+            for de in expanded_destinations:
+                src_name = se.get("group_name", se.get("value", ""))
+                dst_name = de.get("group_name", de.get("value", ""))
+                compiled_lines.append(f"set rulebase security rules \"{rule.get('rule_id', rule.get('id', ''))}\""
+                    f" from [{rule.get('source_zone', 'any')}] to [{rule.get('destination_zone', 'any')}]"
+                    f" source [{src_name}] destination [{dst_name}]"
+                    f" service [{svc}] action {rule.get('action', 'allow')}")
+    elif vendor == "checkpoint":
+        compiled_lines.append(f"mgmt_cli add access-rule layer Network"
+            f" name \"{rule.get('rule_id', rule.get('id', ''))}\""
+            f" source \"{src}\" destination \"{dst}\" service \"{svc}\""
+            f" action {rule.get('action', 'Accept')}")
+    else:
+        compiled_lines.append(f"# Rule: {rule.get('rule_id', rule.get('id', ''))}")
+        for se in expanded_sources:
+            src_name = se.get("group_name", se.get("value", ""))
+            for de in expanded_destinations:
+                dst_name = de.get("group_name", de.get("value", ""))
+                compiled_lines.append(f"permit {svc} {src_name} -> {dst_name}")
+
+    return {
+        "rule_id": rule.get("rule_id", rule.get("id", "")),
+        "vendor": vendor,
+        "compiled_output": "\n".join(compiled_lines),
+        "sources": expanded_sources,
+        "destinations": expanded_destinations,
+        "services": svc,
+        "total_source_ips": sum(s.get("member_count", 1) for s in expanded_sources),
+        "total_dest_ips": sum(d.get("member_count", 1) for d in expanded_destinations),
+        "expand_groups": expand_groups,
+        "group_view": not expand_groups,
+    }
+
+# ============================================================
+# App-to-DC/NH/SZ Mapping (Organization Reference)
+# ============================================================
+
+async def get_app_dc_mappings() -> list[dict[str, Any]]:
+    """Get all App-to-DC/NH/SZ mappings used for validations."""
+    return _load("app_dc_mappings") or []
+
+
+async def save_app_dc_mappings(mappings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    _save("app_dc_mappings", mappings)
+    return mappings
+
+
+async def add_app_dc_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
+    mappings = _load("app_dc_mappings") or []
+    mapping["id"] = mapping.get("id", _id())
+    mapping["created_at"] = _now()
+    mappings.append(mapping)
+    _save("app_dc_mappings", mappings)
+    return mapping
+
+
+async def update_app_dc_mapping(mapping_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    mappings = _load("app_dc_mappings") or []
+    for m in mappings:
+        if m.get("id") == mapping_id:
+            m.update(data)
+            m["updated_at"] = _now()
+            _save("app_dc_mappings", mappings)
+            return m
+    return None
+
+
+async def delete_app_dc_mapping(mapping_id: str) -> bool:
+    mappings = _load("app_dc_mappings") or []
+    filtered = [m for m in mappings if m.get("id") != mapping_id]
+    if len(filtered) == len(mappings):
+        return False
+    _save("app_dc_mappings", filtered)
+    return True
+
+
+async def get_app_dc_mapping_by_app(app_id: str) -> dict[str, Any] | None:
+    """Lookup the DC/NH/SZ mapping for a specific app."""
+    mappings = _load("app_dc_mappings") or []
+    return next((m for m in mappings if str(m.get("app_id", "")) == str(app_id)), None)
+
+
+async def import_app_dc_mappings(new_mappings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Bulk import app-dc mappings with dedup."""
+    existing = _load("app_dc_mappings") or []
+    existing_keys = {str(m.get("app_id", "")) for m in existing}
+    added = 0
+    updated = 0
+    for nm in new_mappings:
+        aid = str(nm.get("app_id", ""))
+        if aid in existing_keys:
+            # Update existing
+            for m in existing:
+                if str(m.get("app_id", "")) == aid:
+                    m.update(nm)
+                    m["updated_at"] = _now()
+                    break
+            updated += 1
+        else:
+            nm["id"] = _id()
+            nm["created_at"] = _now()
+            existing.append(nm)
+            existing_keys.add(aid)
+            added += 1
+    _save("app_dc_mappings", existing)
+    return {"added": added, "updated": updated, "total": len(existing)}

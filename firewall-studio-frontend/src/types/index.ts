@@ -256,6 +256,8 @@ export interface ReviewRequest {
   reviewed_at: string | null;
   comments: string;
   review_notes: string | null;
+  modification_id?: string;
+  delta?: RuleDelta;
   rule_summary: {
     application: string;
     source: string;
@@ -263,6 +265,87 @@ export interface ReviewRequest {
     ports: string;
     environment: string;
   };
+}
+
+export interface RuleDelta {
+  added: Record<string, string[]>;
+  removed: Record<string, string[]>;
+  changed: Record<string, { from: string; to: string }>;
+}
+
+export interface RuleModification {
+  id: string;
+  rule_id: string;
+  original: Record<string, string>;
+  modified: Record<string, string>;
+  delta: RuleDelta;
+  comments: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  created_at: string;
+  reviewed_at: string | null;
+  reviewer: string | null;
+  review_notes: string | null;
+}
+
+export interface ServiceRecommendation {
+  service: string;
+  description: string;
+  risk_level: 'low' | 'medium' | 'high';
+  recommendation: string;
+}
+
+export interface MappingSummary {
+  total: number;
+  from_mapping_table: number;
+  from_existing_groups: number;
+  auto_generated: number;
+}
+
+export interface NGDCRecommendation {
+  rule_id: string;
+  rule: LegacyRule;
+  recommended_nh: string;
+  recommended_nh_name: string;
+  recommended_sz: string;
+  recommended_sz_name: string;
+  recommended_dc?: string;
+  nh_sz_source?: 'app_dc_mapping' | 'application_config' | 'default';
+  source_mappings: IPMapping[];
+  destination_mappings: IPMapping[];
+  service_entries: string[];
+  service_recommendations?: ServiceRecommendation[];
+  mapping_summary?: MappingSummary;
+  naming_standard: string;
+  available_nhs: { nh_id: string; name: string }[];
+  available_szs: { code: string; name: string }[];
+}
+
+export interface IPMapping {
+  legacy: string;
+  ngdc_recommended: string;
+  type: 'group' | 'server' | 'range' | 'other';
+  existing_group: string | null;
+  customizable: boolean;
+  mapping_source?: 'ngdc_mapping_table' | 'existing_group' | 'auto_generated';
+  mapping_id?: string | null;
+  mapping_status?: string;
+  ngdc_nh?: string;
+  ngdc_sz?: string;
+}
+
+export interface BirthrightValidation {
+  compliant: boolean;
+  violations: BirthrightEntry[];
+  warnings: BirthrightEntry[];
+  permitted: BirthrightEntry[];
+  summary: string;
+}
+
+export interface BirthrightEntry {
+  matrix: string;
+  rule: string;
+  action: string;
+  reason: string;
 }
 
 export interface LegacyRule {
