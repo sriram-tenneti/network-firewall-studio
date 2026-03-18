@@ -9,7 +9,8 @@ import { useNotification } from '@/hooks/useNotification';
 import {
   getLegacyRules, updateLegacyRule, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
-  validateBirthright, getGroups,
+  validateBirthright, getGroups, importRulesToNGDC, checkDuplicates,
+  createMigrationGroup,
 } from '@/lib/api';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
@@ -134,6 +135,16 @@ export function MigrationStudioPage() {
   const [submittingMigration, setSubmittingMigration] = useState(false);
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
   const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit'>('review');
+
+  // Import from NFR state
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [nfrApps, setNfrApps] = useState<{ value: string; label: string }[]>([]);
+  const [selectedImportApps, setSelectedImportApps] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
+  // New group creation during migration
+  const [showNewGroupModal, setShowNewGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState<{ type: string; value: string }[]>([{ type: 'ip', value: '' }]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -272,6 +283,80 @@ export function MigrationStudioPage() {
     return text.split('\n').map(line => line.replace(/\t/g, '  '));
   };
 
+  // Import from Network Firewall Request
+  const handleLoadNfrApps = async () => {
+    try {
+      const allRules = await getLegacyRules(undefined, true);
+      const apps = Array.from(new Set(allRules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
+        const [appId, distId, appName] = key.split('|');
+        return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
+      });
+      setNfrApps(apps);
+      setShowImportPanel(true);
+    } catch { showNotification('Failed to load NFR applications', 'error'); }
+  };
+
+  const handleImportFromNFR = async () => {
+    if (selectedImportApps.size === 0) { showNotification('Select at least one application to import', 'error'); return; }
+    setImporting(true);
+    try {
+      const result = await importRulesToNGDC(Array.from(selectedImportApps));
+      showNotification(`Imported ${result.imported} rules from Network Firewall Request`, 'success');
+      setShowImportPanel(false);
+      setSelectedImportApps(new Set());
+      loadData();
+    } catch { showNotification('Failed to import rules from NFR', 'error'); }
+    setImporting(false);
+  };
+
+  const toggleImportApp = (appId: string) => {
+    setSelectedImportApps(prev => {
+      const next = new Set(prev);
+      if (next.has(appId)) next.delete(appId); else next.add(appId);
+      return next;
+    });
+  };
+
+  const selectAllImportApps = () => {
+    if (selectedImportApps.size === nfrApps.length) setSelectedImportApps(new Set());
+    else setSelectedImportApps(new Set(nfrApps.map(a => a.value)));
+  };
+
+  // Create new group during migration
+  const handleCreateMigrationGroup = async () => {
+    if (!newGroupName.trim() || !migrateRule) { showNotification('Group name is required', 'error'); return; }
+    const validMembers = newGroupMembers.filter(m => m.value.trim());
+    if (validMembers.length === 0) { showNotification('Add at least one member', 'error'); return; }
+    try {
+      await createMigrationGroup({
+        name: newGroupName,
+        app_id: String(migrateRule.app_id),
+        members: validMembers,
+        nh: selectedNh,
+        sz: selectedSz,
+      });
+      showNotification(`Group "${newGroupName}" created successfully`, 'success');
+      setShowNewGroupModal(false);
+      setNewGroupName('');
+      setNewGroupMembers([{ type: 'ip', value: '' }]);
+      // Refresh groups
+      const groups = await getGroups(String(migrateRule.app_id));
+      setAppGroups(groups);
+    } catch { showNotification('Failed to create migration group', 'error'); }
+  };
+
+  // Check duplicates for a rule
+  const handleCheckDuplicates = async (rule: LegacyRule) => {
+    try {
+      const result = await checkDuplicates(rule.rule_source, rule.rule_destination, rule.rule_service, rule.id);
+      if (result.count > 0) {
+        showNotification(`Found ${result.count} duplicate(s) on source+destination+service`, 'error');
+      } else {
+        showNotification('No duplicates found', 'success');
+      }
+    } catch { showNotification('Failed to check duplicates', 'error'); }
+  };
+
   const columns: Column<LegacyRule>[] = [
     {
       key: '_select', header: '', sortable: false, width: '40px',
@@ -325,6 +410,7 @@ export function MigrationStudioPage() {
         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
           <button onClick={() => openMigratePopup(row)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Migrate</button>
+          <button onClick={() => handleCheckDuplicates(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Dup?</button>
         </div>
       ),
     },
@@ -362,6 +448,9 @@ export function MigrationStudioPage() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+          <button onClick={handleLoadNfrApps} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
+            Import from NFR
+          </button>
           {selectedRuleIds.size > 0 && (
             <>
               <span className="text-sm text-gray-600 font-medium">{selectedRuleIds.size} selected</span>
@@ -375,6 +464,38 @@ export function MigrationStudioPage() {
           )}
         </div>
       </div>
+
+      {/* Import from Network Firewall Request Panel */}
+      {showImportPanel && (
+        <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-indigo-800">Import Rules from Network Firewall Request</h3>
+            <div className="flex gap-2">
+              <button onClick={selectAllImportApps} className="px-3 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                {selectedImportApps.size === nfrApps.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button onClick={() => setShowImportPanel(false)} className="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-700">Close</button>
+            </div>
+          </div>
+          <p className="text-xs text-indigo-600 mb-3">Select applications from Network Firewall Request to import their rules for NGDC standardization and migration.</p>
+          <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto mb-3">
+            {nfrApps.map(app => (
+              <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
+                <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600" />
+                {app.label}
+              </label>
+            ))}
+            {nfrApps.length === 0 && <p className="col-span-4 text-xs text-gray-400 italic py-4 text-center">No applications found in Network Firewall Request</p>}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-indigo-600">{selectedImportApps.size} application(s) selected</span>
+            <button onClick={handleImportFromNFR} disabled={importing || selectedImportApps.size === 0}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
+              {importing ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-5 gap-3 mb-6">
         {[
@@ -720,17 +841,24 @@ export function MigrationStudioPage() {
                       )}
                     </div>
 
-                    {appGroups.length > 0 && (
-                      <div className="border rounded-lg p-3">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-1">Use App Group for mapping</h4>
+                    <div className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-semibold text-gray-700">Groups for App {migrateRule.app_id}</h4>
+                        <button onClick={() => setShowNewGroupModal(true)} className="px-3 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100">
+                          + Create New Group
+                        </button>
+                      </div>
+                      {appGroups.length > 0 ? (
                         <select className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md" defaultValue="">
-                          <option value="">Select a group to use...</option>
+                          <option value="">Select a group to use in mapping...</option>
                           {appGroups.map(g => (
                             <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
                           ))}
                         </select>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">No groups exist. Create one to organize IPs during migration.</p>
+                      )}
+                    </div>
 
                     <div className="flex justify-between">
                       <button onClick={() => setMigrationStep('review')} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
@@ -834,6 +962,52 @@ export function MigrationStudioPage() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Create New Group During Migration Modal */}
+      <Modal isOpen={showNewGroupModal} onClose={() => setShowNewGroupModal(false)} title="Create New Group for Migration" size="lg">
+        <div className="space-y-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+            <p className="text-xs text-emerald-700">Create a new NGDC-compliant group to organize IPs during migration. The group will follow NGDC naming standards.</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Group Name (NGDC Standard)</label>
+            <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+              placeholder="e.g., grp-NH01-UGEN-app-servers" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-gray-700">Members</label>
+              <button onClick={() => setNewGroupMembers(prev => [...prev, { type: 'ip', value: '' }])}
+                className="text-xs text-blue-600 hover:text-blue-800">+ Add Member</button>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {newGroupMembers.map((member, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <select value={member.type} onChange={e => setNewGroupMembers(prev => prev.map((m, j) => j === i ? { ...m, type: e.target.value } : m))}
+                    className="px-2 py-1 text-xs border border-gray-300 rounded-md w-24">
+                    <option value="ip">IP</option>
+                    <option value="cidr">CIDR/Subnet</option>
+                    <option value="range">Range</option>
+                  </select>
+                  <input type="text" value={member.value} onChange={e => setNewGroupMembers(prev => prev.map((m, j) => j === i ? { ...m, value: e.target.value } : m))}
+                    placeholder={member.type === 'ip' ? '10.0.0.1' : member.type === 'cidr' ? '10.0.0.0/24' : '10.0.0.1-10.0.0.10'}
+                    className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded-md" />
+                  {newGroupMembers.length > 1 && (
+                    <button onClick={() => setNewGroupMembers(prev => prev.filter((_, j) => j !== i))}
+                      className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <button onClick={() => setShowNewGroupModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+            <button onClick={handleCreateMigrationGroup} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700">
+              Create Group
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

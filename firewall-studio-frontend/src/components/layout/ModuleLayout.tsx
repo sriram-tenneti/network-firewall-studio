@@ -10,12 +10,10 @@ interface ModuleLayoutProps {
 const moduleNav: Record<string, { path: string; label: string }[]> = {
   'firewall-studio': [
     { path: '/firewall-studio', label: 'Rule Designer' },
-    { path: '/firewall-studio/import', label: 'Import' },
     { path: '/firewall-studio/review', label: 'Review & Approval' },
   ],
   'ngdc-standardization': [
     { path: '/ngdc-standardization', label: 'Migration Studio' },
-    { path: '/ngdc-standardization/import', label: 'Import Legacy Rules' },
     { path: '/ngdc-standardization/mappings', label: 'NGDC Mappings' },
     { path: '/ngdc-standardization/review', label: 'Review & Approval' },
   ],

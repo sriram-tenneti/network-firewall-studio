@@ -516,3 +516,39 @@ export const importAppDCMappingsExcel = async (file: File) => {
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 };
+
+// NGDC Compliance Check
+export const checkNGDCCompliance = (ruleIds: string[]) =>
+  fetchJSON<{ compliant: boolean; issues: string[]; rule_id: string }[]>(
+    '/api/reference/legacy-rules/check-compliance',
+    { method: 'POST', body: JSON.stringify({ rule_ids: ruleIds }) }
+  );
+
+// Duplicate Detection
+export const checkDuplicates = (source: string, destination: string, service: string, excludeId = '') =>
+  fetchJSON<{ duplicates: { id: string; type: string; app_id: string; source: string; destination: string; service: string }[]; count: number }>(
+    '/api/reference/check-duplicates',
+    { method: 'POST', body: JSON.stringify({ source, destination, service, exclude_id: excludeId }) }
+  );
+
+// Import Rules to NGDC Standardization from Network Firewall Request
+export const importRulesToNGDC = (appIds: string[]) =>
+  fetchJSON<{ imported: number; rules: LegacyRule[] }>(
+    '/api/reference/legacy-rules/import-to-ngdc',
+    { method: 'POST', body: JSON.stringify({ app_ids: appIds }) }
+  );
+
+// Auto-Import Compliant Rules to Firewall Studio
+export const autoImportCompliantToStudio = () =>
+  fetchJSON<{ imported: number; skipped_non_compliant: number; already_imported: number; total_studio_rules: number }>(
+    '/api/reference/legacy-rules/auto-import-to-studio',
+    { method: 'POST' }
+  );
+
+// Get Expanded Rule (groups expanded to IPs/ranges)
+export const getExpandedRule = (ruleId: string) =>
+  fetchJSON<LegacyRule>(`/api/reference/legacy-rules/${ruleId}/expanded`);
+
+// Create Migration Group
+export const createMigrationGroup = (data: { name: string; app_id: string; members: { type: string; value: string }[]; nh?: string; sz?: string }) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/migration-groups', { method: 'POST', body: JSON.stringify(data) });

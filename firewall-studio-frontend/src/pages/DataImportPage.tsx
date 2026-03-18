@@ -106,8 +106,15 @@ export default function DataImportPage({ context }: DataImportPageProps) {
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
         )}
         {result && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-            Import successful: {JSON.stringify(result)}
+          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <h3 className="text-sm font-semibold text-green-800 mb-2">Import Successful</h3>
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              {result.imported !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Rules Imported:</span> <span className="font-bold text-green-700">{String(result.imported)}</span></div>}
+              {result.total_rules !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Total Rules:</span> <span className="font-bold">{String(result.total_rules)}</span></div>}
+              {result.groups_expanded !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Groups Expanded:</span> <span className="font-bold text-blue-700">{String(result.groups_expanded)}</span></div>}
+              {result.duplicates_skipped !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Duplicates Skipped:</span> <span className="font-bold text-amber-700">{String(result.duplicates_skipped)}</span></div>}
+            </div>
+            <p className="text-xs text-green-600 mt-2">Source/destination groups have been expanded to show associated IPs, ranges, and subnets.</p>
           </div>
         )}
       </div>

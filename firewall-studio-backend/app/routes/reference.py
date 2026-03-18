@@ -837,3 +837,86 @@ async def bulk_save_app_dc_mappings(data: dict):
     from app.database import save_app_dc_mappings
     mappings = data.get("mappings", [])
     return await save_app_dc_mappings(mappings)
+
+
+# ---- NGDC Compliance Check ----
+
+@router.post("/legacy-rules/check-compliance")
+async def check_compliance(data: dict):
+    """Check NGDC compliance for a single rule or batch of rules."""
+    from app.database import check_ngdc_compliance, get_legacy_rules
+    rule_ids = data.get("rule_ids", [])
+    if not rule_ids:
+        raise HTTPException(status_code=400, detail="rule_ids required")
+    rules = await get_legacy_rules()
+    results = []
+    for rid in rule_ids:
+        rule = next((r for r in rules if r["id"] == rid), None)
+        if rule:
+            result = await check_ngdc_compliance(rule)
+            results.append(result)
+    return results
+
+
+# ---- Duplicate Detection ----
+
+@router.post("/check-duplicates")
+async def check_dups(data: dict):
+    """Check for duplicate rules based on source+destination+service."""
+    from app.database import check_duplicates
+    source = data.get("source", "")
+    destination = data.get("destination", "")
+    service = data.get("service", "")
+    exclude_id = data.get("exclude_id", "")
+    duplicates = await check_duplicates(source, destination, service, exclude_id)
+    return {"duplicates": duplicates, "count": len(duplicates)}
+
+
+# ---- Import Rules to NGDC Standardization (from Network Firewall Request) ----
+
+@router.post("/legacy-rules/import-to-ngdc")
+async def import_to_ngdc(data: dict):
+    """Import rules from Network Firewall Request to NGDC Standardization by app IDs."""
+    from app.database import import_rules_to_ngdc_standardization
+    app_ids = data.get("app_ids", [])
+    if not app_ids:
+        raise HTTPException(status_code=400, detail="app_ids required")
+    return await import_rules_to_ngdc_standardization(app_ids)
+
+
+# ---- Auto-Import Compliant Rules to Firewall Studio ----
+
+@router.post("/legacy-rules/auto-import-to-studio")
+async def auto_import_to_studio():
+    """Auto-import NGDC-compliant rules from Network Firewall Request into Firewall Studio."""
+    from app.database import auto_import_compliant_rules_to_studio
+    return await auto_import_compliant_rules_to_studio()
+
+
+# ---- Expand Groups in Rule ----
+
+@router.get("/legacy-rules/{rule_id}/expanded")
+async def get_expanded_rule(rule_id: str):
+    """Get a legacy rule with groups expanded to show all IPs/ranges."""
+    from app.database import expand_groups_in_rule, get_legacy_rules
+    rules = await get_legacy_rules()
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Legacy rule not found")
+    return await expand_groups_in_rule(rule)
+
+
+# ---- Create Migration Group ----
+
+@router.post("/migration-groups")
+async def create_mig_group(data: dict):
+    """Create a new group during migration with NGDC naming standards."""
+    from app.database import create_migration_group
+    name = data.get("name", "")
+    app_id = data.get("app_id", "")
+    members = data.get("members", [])
+    nh = data.get("nh", "")
+    sz = data.get("sz", "")
+    if not name:
+        raise HTTPException(status_code=400, detail="Group name required")
+    return await create_migration_group(name, app_id, members, nh, sz)

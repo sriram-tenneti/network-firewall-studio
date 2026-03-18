@@ -6,7 +6,7 @@ import { Modal } from '@/components/shared/Modal';
 import { ExceptionHandler } from '@/components/design-studio/ExceptionHandler';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups } from '@/lib/api';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, checkDuplicates } from '@/lib/api';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -151,6 +151,8 @@ export default function FirewallManagementPage() {
   const [compiling, setCompiling] = useState(false);
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
   const [exceptions, setExceptions] = useState<Array<{id: string; type: 'ip' | 'subnet'; value: string; justification: string; status: 'Pending' | 'Approved' | 'Rejected'; requested_by: string; requested_at: string}>>([]);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedExportApps, setSelectedExportApps] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -311,6 +313,52 @@ export default function FirewallManagementPage() {
     showNotification('Exception rejected', 'info');
   };
 
+  // Duplicate detection (Req 10)
+  const handleCheckDuplicates = async (rule: LegacyRule) => {
+    try {
+      const result = await checkDuplicates(rule.rule_source, rule.rule_destination, rule.rule_service, rule.id);
+      if (result.count > 0) {
+        showNotification(`Found ${result.count} duplicate(s) on source+destination+service`, 'error');
+      } else {
+        showNotification('No duplicates found', 'success');
+      }
+    } catch { showNotification('Failed to check duplicates', 'error'); }
+  };
+
+  // Per-rule export: export the rule + all rules under that App ID
+  const handleExportRuleApp = (rule: LegacyRule) => {
+    const appRules = rules.filter(r => String(r.app_id) === String(rule.app_id));
+    if (appRules.length === 0) { showNotification('No rules found for this app', 'error'); return; }
+    exportRulesToCSV(appRules, String(rule.app_id));
+  };
+
+  // Multi-app export with selection
+  const handleMultiAppExport = () => {
+    if (selectedExportApps.size === 0) { showNotification('Select at least one app to export', 'error'); return; }
+    const exportRules = rules.filter(r => selectedExportApps.has(String(r.app_id)));
+    exportRulesToCSV(exportRules, Array.from(selectedExportApps).join('-'));
+    setShowExportModal(false);
+  };
+
+  const exportRulesToCSV = (exportRules: LegacyRule[], fileLabel: string) => {
+    const headers = ['App ID', 'App Current Distributed ID', 'App Name', 'Inventory Item', 'Policy Name', 'Rule Global', 'Rule Action', 'Rule Source', 'Rule Source Expanded', 'Rule Source Zone', 'Rule Destination', 'Rule Destination Expanded', 'Rule Destination Zone', 'Rule Service', 'Rule Service Expanded', 'RN', 'RC'];
+    const rows = exportRules.map(r => [
+      r.app_id, r.app_distributed_id, r.app_name, r.inventory_item, r.policy_name,
+      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action, r.rule_source, r.rule_source_expanded,
+      r.rule_source_zone, r.rule_destination, r.rule_destination_expanded,
+      r.rule_destination_zone, r.rule_service, r.rule_service_expanded, r.rn, r.rc
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `firewall-rules-${fileLabel}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification('Spreadsheet exported', 'success');
+  };
+
   const columns: Column<LegacyRule>[] = [
     { key: 'id', header: 'Rule ID', sortable: true, width: '80px' },
     { key: 'app_id', header: 'App ID', sortable: true, width: '70px',
@@ -356,6 +404,8 @@ export default function FirewallManagementPage() {
         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={() => detailModal.open(row)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
           <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">Modify</button>
+          <button onClick={() => handleCheckDuplicates(row)} className="text-xs text-amber-600 hover:text-amber-800 font-medium">Dup?</button>
+          <button onClick={() => handleExportRuleApp(row)} className="text-xs text-teal-600 hover:text-teal-800 font-medium">Export</button>
         </div>
       ),
     },
@@ -383,6 +433,9 @@ export default function FirewallManagementPage() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+          <button onClick={() => setShowExportModal(true)} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
+            Export (Multi-App)
+          </button>
           <button onClick={downloadSpreadsheet} disabled={!selectedApp} className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-700 hover:to-blue-700 disabled:opacity-40 shadow-sm">
             Export Spreadsheet
           </button>
@@ -434,6 +487,38 @@ export default function FirewallManagementPage() {
           onRejectException={handleRejectException}
         />
       </div>
+
+      {/* Multi-App Export Modal */}
+      <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Rules - Select Applications" size="lg">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-600">Select single, multiple, or all applications to export their rules as a spreadsheet with expanded groups.</p>
+          <div className="flex items-center justify-between">
+            <button onClick={() => {
+              if (selectedExportApps.size === appOptions.length) setSelectedExportApps(new Set());
+              else setSelectedExportApps(new Set(appOptions.map(a => a.value)));
+            }} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+              {selectedExportApps.size === appOptions.length ? 'Deselect All' : 'Select All'}
+            </button>
+            <span className="text-xs text-gray-500">{selectedExportApps.size} selected</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto">
+            {appOptions.map(app => (
+              <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedExportApps.has(app.value) ? 'bg-teal-100 border border-teal-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
+                <input type="checkbox" checked={selectedExportApps.has(app.value)} onChange={() => {
+                  setSelectedExportApps(prev => { const n = new Set(prev); if (n.has(app.value)) n.delete(app.value); else n.add(app.value); return n; });
+                }} className="rounded border-gray-300 text-teal-600" />
+                {app.label}
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <button onClick={() => setShowExportModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+            <button onClick={handleMultiAppExport} disabled={selectedExportApps.size === 0} className="px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">
+              Export {selectedExportApps.size} App(s)
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* View Detail Modal */}
       <Modal isOpen={detailModal.isOpen} onClose={detailModal.close} title={`Rule: ${detailModal.data?.id || ''}`} size="xl">
