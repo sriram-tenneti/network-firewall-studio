@@ -113,7 +113,7 @@ export function MigrationStudioPage() {
   const [legacyRules, setLegacyRules] = useState<LegacyRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
-  const [activeTab, setActiveTab] = useState('All');
+  const [activeTab, setActiveTab] = useState('Import');
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
   const { notification, showNotification } = useNotification();
@@ -394,6 +394,7 @@ export function MigrationStudioPage() {
   ];
 
   const tabs = [
+    { id: 'Import', label: 'Import Rules' },
     { id: 'All', label: 'All Rules', count: counts.All },
     { id: 'Non-Standard', label: 'Non-Standard', count: counts['Non-Standard'] },
     { id: 'Standard', label: 'Standard', count: counts.Standard },
@@ -439,44 +440,6 @@ export function MigrationStudioPage() {
         </div>
       </div>
 
-      {/* Import Rules - Always visible at top */}
-      <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-indigo-800">Import Rules</h3>
-          <div className="flex gap-2">
-            {nfrApps.length === 0 ? (
-              <button onClick={handleLoadNfrApps} className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
-                Load Available Apps
-              </button>
-            ) : (
-              <button onClick={selectAllImportApps} className="px-3 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800">
-                {selectedImportApps.size === nfrApps.length ? 'Deselect All' : 'Select All'}
-              </button>
-            )}
-          </div>
-        </div>
-        <p className="text-xs text-indigo-600 mb-3">Select applications from Network Firewall Request to import their rules for NGDC standardization and migration.</p>
-        {nfrApps.length > 0 && (
-          <>
-            <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto mb-3">
-              {nfrApps.map(app => (
-                <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
-                  <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600" />
-                  {app.label}
-                </label>
-              ))}
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-indigo-600">{selectedImportApps.size} application(s) selected</span>
-              <button onClick={handleImportFromNFR} disabled={importing || selectedImportApps.size === 0}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
-                {importing ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
       <div className="grid grid-cols-5 gap-3 mb-6">
         {[
           { label: 'Total Rules', value: counts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
@@ -495,13 +458,59 @@ export function MigrationStudioPage() {
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4 flex items-center justify-between">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-          <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
-            <input type="checkbox" checked={selectedRuleIds.size === filteredRules.length && filteredRules.length > 0} onChange={toggleSelectAll} className="rounded border-gray-300 text-blue-600" />
-            Select All
-          </label>
+          {activeTab !== 'Import' && (
+            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={selectedRuleIds.size === filteredRules.length && filteredRules.length > 0} onChange={toggleSelectAll} className="rounded border-gray-300 text-blue-600" />
+              Select All
+            </label>
+          )}
         </div>
         <div className="p-4">
-          {loading ? (
+          {activeTab === 'Import' ? (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-indigo-800">Import Rules from Network Firewall Request</h3>
+                  <p className="text-xs text-indigo-600 mt-1">Select applications from Network Firewall Request to import their legacy rules for NGDC standardization and migration.</p>
+                </div>
+                <div className="flex gap-2">
+                  {nfrApps.length === 0 ? (
+                    <button onClick={handleLoadNfrApps} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm">
+                      Load Available Apps
+                    </button>
+                  ) : (
+                    <button onClick={selectAllImportApps} className="px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-300 rounded-md hover:bg-indigo-100">
+                      {selectedImportApps.size === nfrApps.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {nfrApps.length > 0 && (
+                <>
+                  <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto mb-4">
+                    {nfrApps.map(app => (
+                      <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
+                        <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600" />
+                        {app.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between pt-3 border-t border-indigo-200">
+                    <span className="text-sm text-indigo-700 font-medium">{selectedImportApps.size} application(s) selected</span>
+                    <button onClick={handleImportFromNFR} disabled={importing || selectedImportApps.size === 0}
+                      className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
+                      {importing ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
+                    </button>
+                  </div>
+                </>
+              )}
+              {nfrApps.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-sm text-indigo-500">Click "Load Available Apps" to see applications from Network Firewall Request that can be imported for migration.</p>
+                </div>
+              )}
+            </div>
+          ) : loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
             </div>
