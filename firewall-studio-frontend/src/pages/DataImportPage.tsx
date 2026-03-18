@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
-import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping } from '@/lib/api';
+import { useState, useCallback, useEffect } from 'react';
+import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC } from '@/lib/api';
+import type { FirewallRule } from '@/types';
 
 interface DataImportPageProps {
   context?: string;
@@ -15,12 +16,70 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [showMappings, setShowMappings] = useState(false);
   const [newMapping, setNewMapping] = useState({ legacy_name: '', legacy_dc: '', ngdc_name: '', ngdc_dc: '', ngdc_nh: '', ngdc_sz: '', type: 'group' });
 
+  // NFR import state (for ngdc-import-rules context)
+  const [nfrRules, setNfrRules] = useState<FirewallRule[]>([]);
+  const [nfrApps, setNfrApps] = useState<{ value: string; label: string }[]>([]);
+  const [selectedImportApps, setSelectedImportApps] = useState<Set<string>>(new Set());
+  const [importingFromNFR, setImportingFromNFR] = useState(false);
+  const [nfrLoading, setNfrLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; apps: number } | null>(null);
+
   const isNGDCMappings = context === 'ngdc-mappings';
+  const isNFRImport = context === 'ngdc-import-rules';
   const pageTitle = isNGDCMappings ? 'NGDC Organization Mappings' :
+    isNFRImport ? 'Import Rules from Network Firewall Request' :
     context === 'ngdc-standardization' ? 'Import Legacy Rules for Migration' :
     context === 'firewall-management' ? 'Import Firewall Rules' :
     context === 'firewall-studio' ? 'Import Rules for Firewall Studio' :
     'Data Import';
+
+  // Load NFR apps when this is the NFR import page
+  const loadNFRApps = useCallback(async () => {
+    setNfrLoading(true);
+    try {
+      const rules = await getRules();
+      setNfrRules(rules);
+      const apps = Array.from(new Set(rules.map((r: FirewallRule) => `${r.application}|${r.application_name || r.application}`))).map(key => {
+        const [appId, appName] = (key as string).split('|');
+        return { value: appId, label: `${appId} - ${appName}` };
+      });
+      setNfrApps(apps);
+    } catch { setNfrApps([]); }
+    setNfrLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (isNFRImport) loadNFRApps();
+  }, [isNFRImport, loadNFRApps]);
+
+  const toggleImportApp = (appId: string) => {
+    setSelectedImportApps(prev => {
+      const next = new Set(prev);
+      if (next.has(appId)) next.delete(appId); else next.add(appId);
+      return next;
+    });
+  };
+
+  const selectAllImportApps = () => {
+    if (selectedImportApps.size === nfrApps.length) setSelectedImportApps(new Set());
+    else setSelectedImportApps(new Set(nfrApps.map(a => a.value)));
+  };
+
+  const handleImportFromNFR = async () => {
+    if (selectedImportApps.size === 0) return;
+    setImportingFromNFR(true);
+    setError('');
+    setImportResult(null);
+    try {
+      const selectedAppIds = Array.from(selectedImportApps);
+      const res = await importRulesToNGDC(selectedAppIds);
+      setImportResult({ imported: res.imported, apps: selectedImportApps.size });
+      setSelectedImportApps(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import rules from Network Request');
+    }
+    setImportingFromNFR(false);
+  };
 
   const loadMappings = useCallback(async () => {
     try {
@@ -71,19 +130,92 @@ export default function DataImportPage({ context }: DataImportPageProps) {
           <p className="text-sm text-gray-500 mt-1">
             {isNGDCMappings
               ? 'Manage organization-provided legacy-to-NGDC name mappings used during migration'
+              : isNFRImport
+              ? 'Select applications to import their Network Firewall Request rules for NGDC migration'
               : 'Upload Excel (.xlsx) files to import rules into the system'}
           </p>
         </div>
-        <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-          value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
-          <option value="Production">Production</option>
-          <option value="Non-Production">Non-Production</option>
-          <option value="Pre-Production">Pre-Production</option>
-        </select>
+        {!isNFRImport && (
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
+          </select>
+        )}
       </div>
 
-      {/* Import Section */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+      {/* NFR Import Section - App Dropdown */}
+      {isNFRImport && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-5">
+            <p className="text-sm text-indigo-700">Select one or more applications to import their Network Firewall Request rules for NGDC migration. These rules will be copied and available for one-to-one DC mapping in Migration Studio.</p>
+          </div>
+
+          {nfrLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Loading applications from Network Firewall Request...</p>
+            </div>
+          ) : nfrApps.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-sm text-gray-500">No applications found in Network Firewall Request.</p>
+              <button onClick={loadNFRApps} className="mt-3 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
+                Retry
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-gray-700">{nfrApps.length} Applications Available</span>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
+                    <input type="checkbox" checked={selectedImportApps.size === nfrApps.length && nfrApps.length > 0} onChange={selectAllImportApps} className="rounded border-gray-300 text-indigo-600" />
+                    Select All
+                  </label>
+                  <button onClick={loadNFRApps} className="text-xs text-indigo-600 hover:text-indigo-800">Refresh</button>
+                </div>
+              </div>
+              <div className="max-h-80 overflow-y-auto border rounded-lg divide-y divide-gray-100">
+                {nfrApps.map(app => (
+                  <label key={app.value} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-indigo-50 transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-50' : ''}`}>
+                    <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                    <span className="text-sm text-gray-800 font-medium">{app.label}</span>
+                    <span className="text-xs text-gray-400 ml-auto">{nfrRules.filter(r => r.application === app.value).length} rules</span>
+                  </label>
+                ))}
+              </div>
+
+              {selectedImportApps.size > 0 && (
+                <div className="mt-4 bg-gray-50 rounded-lg p-4 flex items-center justify-between">
+                  <span className="text-sm text-gray-600">
+                    <strong>{selectedImportApps.size}</strong> app(s) selected &middot; <strong>{nfrRules.filter(r => selectedImportApps.has(r.application)).length}</strong> rules will be imported for migration
+                  </span>
+                  <button onClick={handleImportFromNFR} disabled={importingFromNFR}
+                    className="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition-colors">
+                    {importingFromNFR ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
+          )}
+          {importResult && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h3 className="text-sm font-semibold text-green-800 mb-1">Import Successful</h3>
+              <p className="text-sm text-green-700">
+                <strong>{importResult.imported}</strong> rules imported from <strong>{importResult.apps}</strong> app(s) for NGDC migration. Go to <strong>Migration Studio</strong> to map and migrate these rules.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Excel Import Section (for non-NFR contexts) */}
+      {!isNFRImport && <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">
           {isNGDCMappings ? 'Import Mappings from Excel' : 'Import from Excel'}
         </h2>
@@ -126,7 +258,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             <p className="text-xs text-green-600 mt-2">Source/destination groups have been expanded to show associated IPs, ranges, and subnets.</p>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* NGDC Mappings Table */}
       {isNGDCMappings && (
