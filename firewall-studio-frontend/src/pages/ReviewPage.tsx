@@ -14,6 +14,7 @@ export default function ReviewPage(props: { context?: string }) {
   void props;
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('Pending');
   const approvalModal = useModal<ReviewRequest>();
   const { notification, showNotification } = useNotification();
@@ -31,16 +32,21 @@ export default function ReviewPage(props: { context?: string }) {
 
   useEffect(() => { loadReviews(); }, [loadReviews]);
 
-  const filteredReviews = reviews.filter(r => {
+  const envFilteredReviews = reviews.filter(r => {
+    if (selectedEnv && r.rule_summary?.environment !== selectedEnv) return false;
+    return true;
+  });
+
+  const filteredReviews = envFilteredReviews.filter(r => {
     if (activeTab === 'All') return true;
     return r.status === activeTab;
   });
 
   const counts = {
-    All: reviews.length,
-    Pending: reviews.filter(r => r.status === 'Pending').length,
-    Approved: reviews.filter(r => r.status === 'Approved').length,
-    Rejected: reviews.filter(r => r.status === 'Rejected').length,
+    All: envFilteredReviews.length,
+    Pending: envFilteredReviews.filter(r => r.status === 'Pending').length,
+    Approved: envFilteredReviews.filter(r => r.status === 'Approved').length,
+    Rejected: envFilteredReviews.filter(r => r.status === 'Rejected').length,
   };
 
   const handleApprove = async (reviewId: string, notes: string) => {
@@ -173,7 +179,14 @@ export default function ReviewPage(props: { context?: string }) {
           <h1 className="text-2xl font-bold text-gray-900">Review & Approval</h1>
           <p className="text-sm text-gray-500 mt-1">Review migration and firewall rule requests. Export new/modify/remove requests from the table below.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
+          </select>
           <span className="text-xs text-gray-500">Export is available for Add / Modify / Remove requests</span>
         </div>
       </div>

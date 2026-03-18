@@ -24,9 +24,15 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
   const srcGroup = getVal(rule.source, 'group_name') || getVal(rule.source, 'ip_address') || (typeof rule.source === 'string' ? rule.source : '');
   const srcZone = getVal(rule.source, 'security_zone');
   const srcPorts = getVal(rule.source, 'ports');
+  const srcDC = getVal(rule.source, 'datacenter') || rule.datacenter || '';
+  const srcNH = getVal(rule.source, 'neighbourhood') || getVal(rule.source, 'nh') || '';
+  const srcSZ = getVal(rule.source, 'sz') || srcZone;
   const dstName = getVal(rule.destination, 'name') || (typeof rule.destination === 'string' ? rule.destination : '');
   const dstZone = getVal(rule.destination, 'security_zone');
   const dstPorts = getVal(rule.destination, 'ports');
+  const dstDC = getVal(rule.destination, 'datacenter') || rule.datacenter || '';
+  const dstNH = getVal(rule.destination, 'neighbourhood') || getVal(rule.destination, 'nh') || '';
+  const dstSZ = getVal(rule.destination, 'sz') || dstZone;
 
   const rows: [string, string | React.ReactNode][] = [
     ['Rule ID', rule.rule_id],
@@ -36,9 +42,15 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
     ['Datacenter', rule.datacenter],
     ['Source', srcGroup],
     ['Source Zone', srcZone],
+    ['Source DC', srcDC],
+    ['Source NH', srcNH],
+    ['Source SZ', srcSZ],
     ['Source Ports', srcPorts],
     ['Destination', dstName],
     ['Destination Zone', dstZone],
+    ['Destination DC', dstDC],
+    ['Destination NH', dstNH],
+    ['Destination SZ', dstSZ],
     ['Destination Ports', dstPorts],
     ['Policy Result', rule.policy_result ? <StatusBadge key="p" status={rule.policy_result} /> : 'N/A'],
     ['Owner', rule.owner || 'N/A'],

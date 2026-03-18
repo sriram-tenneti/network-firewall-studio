@@ -7,6 +7,7 @@ interface DataImportPageProps {
 
 export default function DataImportPage({ context }: DataImportPageProps) {
   const [file, setFile] = useState<File | null>(null);
+  const [selectedEnv, setSelectedEnv] = useState<string>('Production');
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState('');
@@ -64,13 +65,21 @@ export default function DataImportPage({ context }: DataImportPageProps) {
 
   return (
     <div className="max-w-[1800px] mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {isNGDCMappings
-            ? 'Manage organization-provided legacy-to-NGDC name mappings used during migration'
-            : 'Upload Excel (.xlsx) files to import rules into the system'}
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {isNGDCMappings
+              ? 'Manage organization-provided legacy-to-NGDC name mappings used during migration'
+              : 'Upload Excel (.xlsx) files to import rules into the system'}
+          </p>
+        </div>
+        <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+          value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
+          <option value="Production">Production</option>
+          <option value="Non-Production">Non-Production</option>
+          <option value="Pre-Production">Pre-Production</option>
+        </select>
       </div>
 
       {/* Import Section */}

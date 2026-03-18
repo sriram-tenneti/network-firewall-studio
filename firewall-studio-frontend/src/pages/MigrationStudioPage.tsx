@@ -9,7 +9,7 @@ import { useNotification } from '@/hooks/useNotification';
 import {
   getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
-  validateBirthright, getGroups, importRulesToNGDC,
+  validateBirthright, getGroups,
   createMigrationGroup,
 } from '@/lib/api';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
@@ -113,7 +113,8 @@ export function MigrationStudioPage() {
   const [legacyRules, setLegacyRules] = useState<LegacyRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
-  const [activeTab, setActiveTab] = useState('Import');
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
+  const [activeTab, setActiveTab] = useState('All');
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
   const { notification, showNotification } = useNotification();
@@ -136,10 +137,9 @@ export function MigrationStudioPage() {
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
   const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit'>('review');
 
-  // Import from NFR state
+  // Import from NFR state (used by DataImportPage now, kept for reference)
   const [nfrApps, setNfrApps] = useState<{ value: string; label: string }[]>([]);
   const [selectedImportApps, setSelectedImportApps] = useState<Set<string>>(new Set());
-  const [importing, setImporting] = useState(false);
   // New group creation during migration
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -158,7 +158,12 @@ export function MigrationStudioPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filteredRules = legacyRules.filter(r => {
+  const envFilteredRules = legacyRules.filter(r => {
+    if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
+    return true;
+  });
+
+  const filteredRules = envFilteredRules.filter(r => {
     if (activeTab === 'All') return true;
     if (activeTab === 'Non-Standard') return !r.is_standard;
     if (activeTab === 'Standard') return r.is_standard;
@@ -166,11 +171,11 @@ export function MigrationStudioPage() {
   });
 
   const counts = {
-    All: legacyRules.length,
-    'Non-Standard': legacyRules.filter(r => !r.is_standard).length,
-    Standard: legacyRules.filter(r => r.is_standard).length,
-    'Not Started': legacyRules.filter(r => r.migration_status === 'Not Started').length,
-    'In Progress': legacyRules.filter(r => r.migration_status === 'In Progress').length,
+    All: envFilteredRules.length,
+    'Non-Standard': envFilteredRules.filter(r => !r.is_standard).length,
+    Standard: envFilteredRules.filter(r => r.is_standard).length,
+    'Not Started': envFilteredRules.filter(r => r.migration_status === 'Not Started').length,
+    'In Progress': envFilteredRules.filter(r => r.migration_status === 'In Progress').length,
   };
 
   const appOptions = Array.from(new Set(legacyRules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
@@ -275,42 +280,8 @@ export function MigrationStudioPage() {
     return text.split('\n').map(line => line.replace(/\t/g, '  '));
   };
 
-  // Import from Network Firewall Request
-  const handleLoadNfrApps = async () => {
-    try {
-      const allRules = await getLegacyRules(undefined, true);
-      const apps = Array.from(new Set(allRules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
-        const [appId, distId, appName] = key.split('|');
-        return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
-      });
-      setNfrApps(apps);
-    } catch { showNotification('Failed to load NFR applications', 'error'); }
-  };
-
-  const handleImportFromNFR = async () => {
-    if (selectedImportApps.size === 0) { showNotification('Select at least one application to import', 'error'); return; }
-    setImporting(true);
-    try {
-      const result = await importRulesToNGDC(Array.from(selectedImportApps));
-      showNotification(`Imported ${result.imported} rules from Network Firewall Request`, 'success');
-      setSelectedImportApps(new Set());
-      loadData();
-    } catch { showNotification('Failed to import rules from NFR', 'error'); }
-    setImporting(false);
-  };
-
-  const toggleImportApp = (appId: string) => {
-    setSelectedImportApps(prev => {
-      const next = new Set(prev);
-      if (next.has(appId)) next.delete(appId); else next.add(appId);
-      return next;
-    });
-  };
-
-  const selectAllImportApps = () => {
-    if (selectedImportApps.size === nfrApps.length) setSelectedImportApps(new Set());
-    else setSelectedImportApps(new Set(nfrApps.map(a => a.value)));
-  };
+  // Import from NFR functions moved to DataImportPage
+  void nfrApps; void setNfrApps; void selectedImportApps; void setSelectedImportApps;
 
   // Create new group during migration
   const handleCreateMigrationGroup = async () => {
@@ -394,7 +365,6 @@ export function MigrationStudioPage() {
   ];
 
   const tabs = [
-    { id: 'Import', label: 'Import Rules' },
     { id: 'All', label: 'All Rules', count: counts.All },
     { id: 'Non-Standard', label: 'Non-Standard', count: counts['Non-Standard'] },
     { id: 'Standard', label: 'Standard', count: counts.Standard },
@@ -425,6 +395,13 @@ export function MigrationStudioPage() {
             {appOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
+          </select>
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
           </select>
           {selectedRuleIds.size > 0 && (
             <>
@@ -458,59 +435,13 @@ export function MigrationStudioPage() {
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4 flex items-center justify-between">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-          {activeTab !== 'Import' && (
-            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
-              <input type="checkbox" checked={selectedRuleIds.size === filteredRules.length && filteredRules.length > 0} onChange={toggleSelectAll} className="rounded border-gray-300 text-blue-600" />
-              Select All
-            </label>
-          )}
+          <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+            <input type="checkbox" checked={selectedRuleIds.size === filteredRules.length && filteredRules.length > 0} onChange={toggleSelectAll} className="rounded border-gray-300 text-blue-600" />
+            Select All
+          </label>
         </div>
         <div className="p-4">
-          {activeTab === 'Import' ? (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-indigo-800">Import Rules from Network Firewall Request</h3>
-                  <p className="text-xs text-indigo-600 mt-1">Select applications from Network Firewall Request to import their legacy rules for NGDC standardization and migration.</p>
-                </div>
-                <div className="flex gap-2">
-                  {nfrApps.length === 0 ? (
-                    <button onClick={handleLoadNfrApps} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm">
-                      Load Available Apps
-                    </button>
-                  ) : (
-                    <button onClick={selectAllImportApps} className="px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-300 rounded-md hover:bg-indigo-100">
-                      {selectedImportApps.size === nfrApps.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                  )}
-                </div>
-              </div>
-              {nfrApps.length > 0 && (
-                <>
-                  <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto mb-4">
-                    {nfrApps.map(app => (
-                      <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
-                        <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600" />
-                        {app.label}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between pt-3 border-t border-indigo-200">
-                    <span className="text-sm text-indigo-700 font-medium">{selectedImportApps.size} application(s) selected</span>
-                    <button onClick={handleImportFromNFR} disabled={importing || selectedImportApps.size === 0}
-                      className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
-                      {importing ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
-                    </button>
-                  </div>
-                </>
-              )}
-              {nfrApps.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-indigo-500">Click "Load Available Apps" to see applications from Network Firewall Request that can be imported for migration.</p>
-                </div>
-              )}
-            </div>
-          ) : loading ? (
+          {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
             </div>

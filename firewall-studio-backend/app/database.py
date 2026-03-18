@@ -538,23 +538,147 @@ SEED_NGDC_PROD_MATRIX = [
 # --- 3) Non-Prod Rules Matrix ---
 # Source zone to destination zone rules for non-production
 SEED_NONPROD_MATRIX = [
-    {"dc": "Any", "source_zone": "UGEN/USTD", "dest_zone": "UGEN/USTD",
-     "action": "Permitted", "reason": "Non-Prod UGEN/USTD to Pre-Prod UGEN/USTD = Permitted"},
-    {"dc": "Any", "source_zone": "UGEN/USTD", "dest_zone": "PAA/CCS/CPA",
+    # Non-Prod to Non-Prod (same environment)
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UGEN",
+     "action": "Permitted", "reason": "Non-Prod UGEN to Non-Prod UGEN = Permitted"},
+    {"dc": "Any", "source_zone": "USTD", "dest_zone": "USTD",
+     "action": "Permitted", "reason": "Non-Prod USTD to Non-Prod USTD = Permitted"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "USTD",
+     "action": "Permitted", "reason": "Non-Prod UGEN to Non-Prod USTD = Permitted"},
+    {"dc": "Any", "source_zone": "USTD", "dest_zone": "UGEN",
+     "action": "Permitted", "reason": "Non-Prod USTD to Non-Prod UGEN = Permitted"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "UCCS",
+     "action": "Permitted", "reason": "Non-Prod UCCS to Non-Prod UCCS = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "UPAA",
+     "action": "Permitted", "reason": "Non-Prod UPAA to Non-Prod UPAA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "UCPA",
+     "action": "Permitted", "reason": "Non-Prod UCPA to Non-Prod UCPA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "UCDE",
+     "action": "Permitted", "reason": "Non-Prod UCDE to Non-Prod UCDE = Permitted (same SZ)"},
+    # Non-Prod to Non-Prod cross-SZ (Blocked)
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UCCS",
      "action": "Blocked - Firewall Request Required",
-     "reason": "Non-Prod UGEN/USTD to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
-    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "PAA/CCS/CPA",
+     "reason": "Non-Prod UGEN to Non-Prod UCCS = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UPAA",
      "action": "Blocked - Firewall Request Required",
-     "reason": "Non-Prod UCCS to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
-    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "PAA/CCS/CPA",
+     "reason": "Non-Prod UGEN to Non-Prod UPAA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UCPA",
      "action": "Blocked - Firewall Request Required",
-     "reason": "Non-Prod UPAA to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
-    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "PAA/CCS/CPA",
+     "reason": "Non-Prod UGEN to Non-Prod UCPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UCDE",
      "action": "Blocked - Firewall Request Required",
-     "reason": "Non-Prod UCPA to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
-    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "PAA/CCS/CPA",
+     "reason": "Non-Prod UGEN to Non-Prod UCDE = Blocked; different security zones"},
+    # Non-Prod to Pre-Prod (cross-environment)
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "PAA",
      "action": "Blocked - Firewall Request Required",
-     "reason": "Non-Prod UCDE to Pre-Prod PAA/CCS/CPA = Blocked; submit a firewall request"},
+     "reason": "Non-Prod UGEN to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "USTD", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod USTD to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCCS to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCCS to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCCS to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UPAA to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UPAA to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UPAA to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCPA to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCPA to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCPA to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCDE to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCDE to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCDE to Pre-Prod CPA = Blocked; cross-environment"},
+]
+
+# --- 4) Pre-Prod Rules Matrix ---
+# Pre-Prod environment has its own SZ rules (maps to Prod SZ names but separate environment)
+SEED_PREPROD_MATRIX = [
+    # Pre-Prod to Pre-Prod (same environment)
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "GEN",
+     "action": "Permitted", "reason": "Pre-Prod GEN to Pre-Prod GEN = Permitted"},
+    {"dc": "Any", "source_zone": "STD", "dest_zone": "STD",
+     "action": "Permitted", "reason": "Pre-Prod STD to Pre-Prod STD = Permitted"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "STD",
+     "action": "Permitted", "reason": "Pre-Prod GEN to Pre-Prod STD = Permitted"},
+    {"dc": "Any", "source_zone": "STD", "dest_zone": "GEN",
+     "action": "Permitted", "reason": "Pre-Prod STD to Pre-Prod GEN = Permitted"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "PAA",
+     "action": "Permitted", "reason": "Pre-Prod PAA to Pre-Prod PAA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "CCS",
+     "action": "Permitted", "reason": "Pre-Prod CCS to Pre-Prod CCS = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "CPA", "dest_zone": "CPA",
+     "action": "Permitted", "reason": "Pre-Prod CPA to Pre-Prod CPA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "CDE", "dest_zone": "CDE",
+     "action": "Permitted", "reason": "Pre-Prod CDE to Pre-Prod CDE = Permitted (same SZ)"},
+    # Pre-Prod cross-SZ (Blocked)
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod PAA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod CCS = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod CPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "CDE",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod CDE = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod PAA to Pre-Prod CCS = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod PAA to Pre-Prod CPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod CCS to Pre-Prod CPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "CDE",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod CCS to Pre-Prod CDE = Blocked; different security zones"},
+    # Pre-Prod to Non-Prod (cross-environment)
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "UGEN",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Non-Prod UGEN = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "UPAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod PAA to Non-Prod UPAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "UCCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod CCS to Non-Prod UCCS = Blocked; cross-environment"},
+    # Pre-Prod to Prod (cross-environment - always blocked)
+    {"dc": "Any", "source_zone": "Any", "dest_zone": "Any",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod to Prod traffic is blocked; submit a firewall request to open",
+     "cross_env": "Pre-Prod to Prod"},
 ]
 
 # Combined policy matrix for backward compatibility (flat list used by API)
@@ -1174,6 +1298,7 @@ async def seed_database() -> None:
     _save("heritage_dc_matrix", deepcopy(SEED_HERITAGE_DC_MATRIX))
     _save("ngdc_prod_matrix", deepcopy(SEED_NGDC_PROD_MATRIX))
     _save("nonprod_matrix", deepcopy(SEED_NONPROD_MATRIX))
+    _save("preprod_matrix", deepcopy(SEED_PREPROD_MATRIX))
     _save("org_config", deepcopy(SEED_ORG_CONFIG))
     _save("firewall_rules", _build_seed_rules())
     _save("rule_history", [])
@@ -1234,6 +1359,10 @@ async def get_ngdc_prod_matrix() -> list[dict[str, Any]]:
 
 async def get_nonprod_matrix() -> list[dict[str, Any]]:
     return _load("nonprod_matrix") or []
+
+
+async def get_preprod_matrix() -> list[dict[str, Any]]:
+    return _load("preprod_matrix") or []
 
 
 async def get_org_config() -> dict[str, Any] | None:
@@ -2337,10 +2466,13 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
 # ============================================================
 
 async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
-    """Validate a rule against birthright rules using NH/SZ/DC matrix."""
+    """Validate a rule against birthright rules using NH/SZ/DC matrix.
+    Supports environment parameter: 'Production', 'Non-Production', 'Pre-Production'.
+    """
     heritage = _load("heritage_dc_matrix") or []
     ngdc_prod = _load("ngdc_prod_matrix") or []
     nonprod = _load("nonprod_matrix") or []
+    preprod = _load("preprod_matrix") or []
 
     src_zone = rule_data.get("source_zone", "")
     dst_zone = rule_data.get("destination_zone", "")
@@ -2350,7 +2482,11 @@ async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
     dst_dc = rule_data.get("destination_dc", "")
     src_sz = rule_data.get("source_sz", "")
     dst_sz = rule_data.get("destination_sz", "")
-    is_prod = rule_data.get("is_prod", True)
+    # Support both legacy is_prod flag and new environment string
+    environment = rule_data.get("environment", "")
+    if not environment:
+        is_prod = rule_data.get("is_prod", True)
+        environment = "Production" if is_prod else "Non-Production"
 
     violations: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
@@ -2362,7 +2498,6 @@ async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
         new_zone = entry.get("new_dc_zone", "")
         action = entry.get("action", "")
         reason = entry.get("reason", "")
-        prod_nonprod = entry.get("prod_nonprod", "")
         if (h_zone.lower() in src_zone.lower() or h_zone == "Default") and \
            (new_zone.lower() in dst_sz.lower() or new_zone == dst_sz):
             if "Blocked" in action:
@@ -2375,44 +2510,98 @@ async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
                 permitted.append({"matrix": "Heritage DC", "rule": f"{h_zone} -> {new_zone}",
                                   "action": action, "reason": reason})
 
-    # Check NGDC prod matrix
-    matrix = ngdc_prod if is_prod else nonprod
-    for entry in matrix:
-        e_src_sz = entry.get("src_sz", "")
-        e_dst_sz = entry.get("dst_sz", "")
-        e_src_nh = entry.get("src_nh", "")
-        e_dst_nh = entry.get("dst_nh", "")
-        e_src_dc = entry.get("src_dc", "")
-        e_dst_dc = entry.get("dst_dc", "")
-        action = entry.get("action", "")
-        reason = entry.get("reason", "")
+    # Select the correct matrix based on environment
+    env_lower = environment.lower()
+    if "pre" in env_lower:
+        matrix = preprod
+        env_label = "Pre-Prod"
+    elif "non" in env_lower:
+        matrix = nonprod
+        env_label = "Non-Prod"
+    else:
+        matrix = ngdc_prod
+        env_label = "Prod"
 
-        sz_match = (e_src_sz == src_sz or e_src_sz in ("Any", "Same")) and \
-                   (e_dst_sz == dst_sz or e_dst_sz in ("Any", "Same"))
-        nh_match = (e_src_nh in ("Any", "Same", src_nh)) and (e_dst_nh in ("Any", "Same", dst_nh))
-        dc_match = (e_src_dc in ("Any", "Same", "Different", src_dc)) and \
-                   (e_dst_dc in ("Any", "Same", "Different", dst_dc))
+    # For Prod matrix: check DC/NH/SZ matching
+    if env_label == "Prod":
+        for entry in matrix:
+            e_src_sz = entry.get("src_sz", "")
+            e_dst_sz = entry.get("dst_sz", "")
+            e_src_nh = entry.get("src_nh", "")
+            e_dst_nh = entry.get("dst_nh", "")
+            e_src_dc = entry.get("src_dc", "")
+            e_dst_dc = entry.get("dst_dc", "")
+            action = entry.get("action", "")
+            reason = entry.get("reason", "")
 
-        if sz_match and nh_match and dc_match:
-            label = f"NGDC {'Prod' if is_prod else 'NonProd'}"
-            rule_desc = f"{e_src_dc}/{e_src_nh}/{e_src_sz} -> {e_dst_dc}/{e_dst_nh}/{e_dst_sz}"
-            if "Blocked" in action:
-                violations.append({"matrix": label, "rule": rule_desc,
-                                   "action": action, "reason": reason})
-            elif "Exception" in action:
-                warnings.append({"matrix": label, "rule": rule_desc,
-                                 "action": action, "reason": reason})
+            # Smart matching: "Same" means values are equal, "Different" means not equal
+            if e_src_dc == "Same" and e_dst_dc == "Same":
+                dc_match = src_dc == dst_dc
+            elif e_src_dc == "Different" and e_dst_dc == "Different":
+                dc_match = src_dc != dst_dc
             else:
-                permitted.append({"matrix": label, "rule": rule_desc,
-                                  "action": action, "reason": reason})
+                dc_match = (e_src_dc in ("Any", src_dc)) and (e_dst_dc in ("Any", dst_dc))
+
+            if e_src_nh == "Same" and e_dst_nh == "Same":
+                nh_match = src_nh == dst_nh
+            elif e_src_nh == "Different" and e_dst_nh == "Different":
+                nh_match = src_nh != dst_nh
+            else:
+                nh_match = (e_src_nh in ("Any", src_nh)) and (e_dst_nh in ("Any", dst_nh))
+
+            if e_src_sz == "Same" and e_dst_sz == "Same":
+                sz_match = src_sz == dst_sz
+            elif e_src_sz == "Different" and e_dst_sz == "Different":
+                sz_match = src_sz != dst_sz
+            else:
+                sz_match = (e_src_sz in ("Any", src_sz)) and (e_dst_sz in ("Any", dst_sz))
+
+            if sz_match and nh_match and dc_match:
+                rule_desc = f"DC:{e_src_dc}/{e_dst_dc} NH:{e_src_nh}/{e_dst_nh} SZ:{e_src_sz}/{e_dst_sz}"
+                if "Blocked" in action:
+                    violations.append({"matrix": f"NGDC {env_label}", "rule": rule_desc,
+                                       "action": action, "reason": reason})
+                elif "Exception" in action:
+                    warnings.append({"matrix": f"NGDC {env_label}", "rule": rule_desc,
+                                     "action": action, "reason": reason})
+                else:
+                    permitted.append({"matrix": f"NGDC {env_label}", "rule": rule_desc,
+                                      "action": action, "reason": reason})
+    else:
+        # For Non-Prod and Pre-Prod: check source_zone -> dest_zone matching
+        for entry in matrix:
+            e_src_zone = entry.get("source_zone", "")
+            e_dst_zone = entry.get("dest_zone", "")
+            action = entry.get("action", "")
+            reason = entry.get("reason", "")
+
+            # Match source SZ to entry source_zone, dest SZ to entry dest_zone
+            sz_src_match = (e_src_zone == "Any" or e_src_zone == src_sz or
+                           e_src_zone.upper() == src_sz.upper())
+            sz_dst_match = (e_dst_zone == "Any" or e_dst_zone == dst_sz or
+                           e_dst_zone.upper() == dst_sz.upper())
+
+            if sz_src_match and sz_dst_match:
+                rule_desc = f"SZ:{e_src_zone} -> SZ:{e_dst_zone}"
+                if "Blocked" in action:
+                    violations.append({"matrix": f"NGDC {env_label}", "rule": rule_desc,
+                                       "action": action, "reason": reason})
+                elif "Exception" in action:
+                    warnings.append({"matrix": f"NGDC {env_label}", "rule": rule_desc,
+                                     "action": action, "reason": reason})
+                else:
+                    permitted.append({"matrix": f"NGDC {env_label}", "rule": rule_desc,
+                                      "action": action, "reason": reason})
 
     is_compliant = len(violations) == 0
     return {
         "compliant": is_compliant,
+        "environment": environment,
+        "matrix_used": env_label,
         "violations": violations,
         "warnings": warnings,
         "permitted": permitted,
-        "summary": f"{'Compliant' if is_compliant else 'Non-Compliant'} - {len(violations)} violations, {len(warnings)} warnings",
+        "summary": f"{'Compliant' if is_compliant else 'Non-Compliant'} ({env_label}) - {len(violations)} violations, {len(warnings)} warnings, {len(permitted)} permitted",
     }
 
 

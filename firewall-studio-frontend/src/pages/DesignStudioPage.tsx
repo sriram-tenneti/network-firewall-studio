@@ -22,6 +22,7 @@ export function DesignStudioPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
 
@@ -73,17 +74,18 @@ export function DesignStudioPage() {
   const filteredRules = rules.filter(r => {
     if (r.status === 'Deleted') return false;
     if (selectedApp && r.application !== selectedApp) return false;
+    if (selectedEnv && r.environment !== selectedEnv) return false;
     if (activeTab === 'All') return true;
     return r.status === activeTab;
   });
 
   const statusCounts = {
-    All: rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp)).length,
-    Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp)).length,
-    'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp)).length,
-    Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp)).length,
-    Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp)).length,
-    Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp)).length,
+    All: rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
   };
 
   const handleCreate = async (data: Record<string, string | boolean>) => {
@@ -260,6 +262,16 @@ export function DesignStudioPage() {
             {applications.map(app => (
               <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
             ))}
+          </select>
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedEnv}
+            onChange={e => setSelectedEnv(e.target.value)}
+          >
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
           </select>
           <div className="flex rounded-md border border-gray-300 overflow-hidden">
             <button onClick={() => setViewMode('table')} className={'px-3 py-2 text-xs font-medium ' + (viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}>

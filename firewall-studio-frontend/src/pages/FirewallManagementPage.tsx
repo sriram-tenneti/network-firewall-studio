@@ -441,6 +441,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 export default function FirewallManagementPage() {
   const [rules, setRules] = useState<LegacyRule[]>([]);
   const [selectedApp, setSelectedApp] = useState<string>('');
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const { notification, showNotification, clearNotification } = useNotification();
@@ -475,14 +476,19 @@ export default function FirewallManagementPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filteredRules = rules.filter(r => {
+  const envFilteredRules = rules.filter(r => {
+    if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
+    return true;
+  });
+
+  const filteredRules = envFilteredRules.filter(r => {
     if (activeTab === 'non_standard') return !r.is_standard;
     if (activeTab === 'standard') return r.is_standard;
     return true;
   });
 
-  const standardCount = rules.filter(r => r.is_standard).length;
-  const nonStandardCount = rules.filter(r => !r.is_standard).length;
+  const standardCount = envFilteredRules.filter(r => r.is_standard).length;
+  const nonStandardCount = envFilteredRules.filter(r => !r.is_standard).length;
 
   const appOptions = Array.from(new Set(rules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
     const [appId, distId, appName] = key.split('|');
@@ -699,6 +705,12 @@ export default function FirewallManagementPage() {
             {appOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
+          </select>
+          <select value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
           </select>
           <button onClick={() => { setSelectedExportApps(selectedApp ? new Set([selectedApp]) : new Set()); setShowExportModal(true); }} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
             Export Rules

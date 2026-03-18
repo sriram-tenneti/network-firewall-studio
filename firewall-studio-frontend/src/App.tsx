@@ -34,7 +34,11 @@ function App() {
             <MigrationStudioPage />
           </ModuleLayout>
         } />
-        {/* Import removed from NGDC Standardization - imports from NFR by App ID */}
+        <Route path="/ngdc-standardization/import" element={
+          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
+            <DataImportPage context="ngdc-import-rules" />
+          </ModuleLayout>
+        } />
         <Route path="/ngdc-standardization/review" element={
           <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
             <ReviewPage context="ngdc-standardization" />
