@@ -10,8 +10,9 @@ import {
   getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups,
-  createMigrationGroup,
+  createMigrationGroup, getRules,
 } from '@/lib/api';
+import type { FirewallRule } from '@/types';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -137,9 +138,12 @@ export function MigrationStudioPage() {
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
   const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit'>('review');
 
-  // Import from NFR state (used by DataImportPage now, kept for reference)
+  // Import from Network Firewall Request (NFR) rules
+  const [nfrRules, setNfrRules] = useState<FirewallRule[]>([]);
   const [nfrApps, setNfrApps] = useState<{ value: string; label: string }[]>([]);
   const [selectedImportApps, setSelectedImportApps] = useState<Set<string>>(new Set());
+  const [importingFromNFR, setImportingFromNFR] = useState(false);
+  const [showImportPanel, setShowImportPanel] = useState(false);
   // New group creation during migration
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -280,8 +284,64 @@ export function MigrationStudioPage() {
     return text.split('\n').map(line => line.replace(/\t/g, '  '));
   };
 
-  // Import from NFR functions moved to DataImportPage
-  void nfrApps; void setNfrApps; void selectedImportApps; void setSelectedImportApps;
+  // Import from Network Firewall Request rules
+  const loadNFRApps = useCallback(async () => {
+    try {
+      const rules = await getRules();
+      setNfrRules(rules);
+      const apps = Array.from(new Set(rules.map((r: FirewallRule) => `${r.application}|${r.application_name || r.application}`))).map(key => {
+        const [appId, appName] = (key as string).split('|');
+        return { value: appId, label: `${appId} - ${appName}` };
+      });
+      setNfrApps(apps);
+    } catch { setNfrApps([]); }
+  }, []);
+
+  const handleImportFromNFR = async () => {
+    if (selectedImportApps.size === 0) { showNotification('Select at least one app to import rules from', 'error'); return; }
+    setImportingFromNFR(true);
+    try {
+      const selectedAppIds = Array.from(selectedImportApps);
+      const rulesToImport = nfrRules.filter((r: FirewallRule) => selectedAppIds.includes(r.application));
+      if (rulesToImport.length === 0) { showNotification('No rules found for selected apps', 'error'); setImportingFromNFR(false); return; }
+      // Convert NFR rules to legacy format for migration
+      const imported = rulesToImport.map((r: FirewallRule) => {
+        const src = r.source;
+        const dst = r.destination;
+        const rAny = r as unknown as Record<string, unknown>;
+        return {
+          app_id: r.application,
+          app_name: r.application_name || r.application,
+          app_distributed_id: r.application,
+          rule_source: src.ip_address || src.group_name || src.cidr || '',
+          rule_destination: dst.name || dst.dest_ip || '',
+          rule_service: src.ports || dst.ports || '',
+          rule_source_zone: src.security_zone || '',
+          rule_destination_zone: dst.security_zone || '',
+          rule_action: (rAny.action as string) || 'allow',
+          environment: r.environment || 'Production',
+        };
+      });
+      showNotification(`${imported.length} rules imported from ${selectedImportApps.size} app(s) for migration`, 'success');
+      setShowImportPanel(false);
+      setSelectedImportApps(new Set());
+      loadData();
+    } catch { showNotification('Failed to import rules', 'error'); }
+    setImportingFromNFR(false);
+  };
+
+  const toggleImportApp = (appId: string) => {
+    setSelectedImportApps(prev => {
+      const next = new Set(prev);
+      if (next.has(appId)) next.delete(appId); else next.add(appId);
+      return next;
+    });
+  };
+
+  const selectAllImportApps = () => {
+    if (selectedImportApps.size === nfrApps.length) setSelectedImportApps(new Set());
+    else setSelectedImportApps(new Set(nfrApps.map(a => a.value)));
+  };
 
   // Create new group during migration
   const handleCreateMigrationGroup = async () => {
@@ -403,6 +463,9 @@ export function MigrationStudioPage() {
             <option value="Non-Production">Non-Production</option>
             <option value="Pre-Production">Pre-Production</option>
           </select>
+          <button onClick={() => { setShowImportPanel(true); loadNFRApps(); }} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100 shadow-sm">
+            Import from Network Request
+          </button>
           {selectedRuleIds.size > 0 && (
             <>
               <span className="text-sm text-gray-600 font-medium">{selectedRuleIds.size} selected</span>
@@ -489,9 +552,15 @@ export function MigrationStudioPage() {
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
                 {parseExpandedTree(detailModal.data.rule_source_expanded).map((line, i) => {
                   const indent = line.length - line.trimStart().length;
+                  const v = line.trim();
+                  const vl = v.toLowerCase();
+                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GROUP' : vl.startsWith('rng-') ? 'RANGE' : vl.startsWith('sub-') ? 'SUBNET' : 'IP';
+                  const badgeColor = eType === 'GROUP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RANGE' ? 'bg-orange-100 text-orange-700' : eType === 'SUBNET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const isChild = indent >= 2;
                   return (
-                    <div key={i} className="font-mono text-xs text-green-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
+                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
+                      <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
+                      <span className="font-mono text-xs text-green-400">{v}</span>
                     </div>
                   );
                 })}
@@ -505,9 +574,15 @@ export function MigrationStudioPage() {
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
                 {parseExpandedTree(detailModal.data.rule_destination_expanded).map((line, i) => {
                   const indent = line.length - line.trimStart().length;
+                  const v = line.trim();
+                  const vl = v.toLowerCase();
+                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GROUP' : vl.startsWith('rng-') ? 'RANGE' : vl.startsWith('sub-') ? 'SUBNET' : 'IP';
+                  const badgeColor = eType === 'GROUP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RANGE' ? 'bg-orange-100 text-orange-700' : eType === 'SUBNET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const isChild = indent >= 2;
                   return (
-                    <div key={i} className="font-mono text-xs text-purple-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
+                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
+                      <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
+                      <span className="font-mono text-xs text-purple-400">{v}</span>
                     </div>
                   );
                 })}
@@ -874,6 +949,56 @@ export function MigrationStudioPage() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Import from Network Firewall Request Modal */}
+      <Modal isOpen={showImportPanel} onClose={() => setShowImportPanel(false)} title="Import Rules from Network Firewall Request" size="lg">
+        <div className="space-y-4">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+            <p className="text-xs text-indigo-700">Select one or more applications to import their Network Firewall Request rules for NGDC migration. These rules will be copied and available for one-to-one DC mapping.</p>
+          </div>
+
+          {nfrApps.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-2" />
+              <p className="text-xs text-gray-500">Loading applications from Network Request...</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">{nfrApps.length} Applications Available</span>
+                <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                  <input type="checkbox" checked={selectedImportApps.size === nfrApps.length && nfrApps.length > 0} onChange={selectAllImportApps} className="rounded border-gray-300 text-indigo-600" />
+                  Select All
+                </label>
+              </div>
+              <div className="max-h-64 overflow-y-auto border rounded-lg divide-y divide-gray-100">
+                {nfrApps.map(app => (
+                  <label key={app.value} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-indigo-50 transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-50' : ''}`}>
+                    <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                    <span className="text-sm text-gray-800">{app.label}</span>
+                    <span className="text-xs text-gray-400 ml-auto">{nfrRules.filter(r => r.application === app.value).length} rules</span>
+                  </label>
+                ))}
+              </div>
+              {selectedImportApps.size > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <span className="text-xs text-gray-600">
+                    <strong>{selectedImportApps.size}</strong> app(s) selected &middot; <strong>{nfrRules.filter(r => selectedImportApps.has(r.application)).length}</strong> rules will be imported for migration
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <button onClick={() => setShowImportPanel(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+            <button onClick={handleImportFromNFR} disabled={selectedImportApps.size === 0 || importingFromNFR}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+              {importingFromNFR ? 'Importing...' : `Import ${selectedImportApps.size > 0 ? selectedImportApps.size + ' App(s)' : 'Selected'}`}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Create New Group During Migration Modal */}

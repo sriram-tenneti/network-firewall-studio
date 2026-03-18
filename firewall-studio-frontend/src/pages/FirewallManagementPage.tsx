@@ -106,31 +106,100 @@ interface ResourceEntry {
 
 const IP_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
-const GROUP_PREFIXES = ['grp-', 'svr-', 'rng-', 'sub-'];
-
+/**
+ * Naming conventions from Excel:
+ *   svr-  = IP address (server)
+ *   g- or grp- = Group (contains members)
+ *   rng-  = Range of IPs/subnets
+ *   sub-  = Subnet
+ */
 function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'group' {
   const v = value.trim();
-  // Check if it's a known group by prefix
-  if (GROUP_PREFIXES.some(p => v.toLowerCase().startsWith(p))) return 'group';
+  const vl = v.toLowerCase();
+  // grp- or g- prefix = GROUP
+  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
   // Check if it matches a known group name from the backend
   if (allGroupNames && allGroupNames.has(v)) return 'group';
+  // rng- prefix = SUBNET (range of IPs/subnets)
+  if (vl.startsWith('rng-')) return 'subnet';
+  // sub- prefix = SUBNET
+  if (vl.startsWith('sub-')) return 'subnet';
+  // svr- prefix = IP (server)
+  if (vl.startsWith('svr-')) return 'ip';
   // Check CIDR notation (subnet)
   if (CIDR_REGEX.test(v)) return 'subnet';
   // Check plain IP
   if (IP_REGEX.test(v)) return 'ip';
   // If it contains '/' it's likely a subnet
   if (v.includes('/')) return 'subnet';
-  // Default: if it looks like an IP range or something else, treat as IP
+  // Default: treat as IP
   return 'ip';
 }
 
-function parseToResourceEntries(raw: string, groups: FirewallGroup[]): ResourceEntry[] {
-  if (!raw) return [];
+/**
+ * Parse expanded text (hierarchical) into ResourceEntry[]. The expanded format is:
+ *   grp-xxx           <- group header (no indent)
+ *     svr-10.1.2.3    <- member (indented 2+ spaces or tab)
+ *     rng-10.1.2.3-10 <- member
+ *   svr-10.5.6.7      <- standalone IP (no indent)
+ */
+function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?: string): ResourceEntry[] {
+  if (!raw && !expanded) return [];
   const groupNameSet = new Set(groups.map(g => g.name));
+
+  // If we have expanded text, parse the hierarchical structure
+  if (expanded && expanded.trim()) {
+    const lines = expanded.split('\n');
+    const entries: ResourceEntry[] = [];
+    let currentGroup: ResourceEntry | null = null;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const indent = line.length - line.trimStart().length;
+      const v = line.trim();
+
+      if (indent >= 2 || line.startsWith('\t')) {
+        // This is an indented member belonging to the current group
+        if (currentGroup) {
+          const memberType = detectEntryType(v, groupNameSet);
+          const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'range' : 'ip';
+          if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+          currentGroup.groupMembers.push({ type: mType, value: v });
+        }
+      } else {
+        // Top-level entry — finalize previous group if any
+        if (currentGroup) entries.push(currentGroup);
+        const type = detectEntryType(v, groupNameSet);
+        if (type === 'group') {
+          // Start a new group; members will come from indented lines below
+          const matchedGroup = groups.find(g => g.name === v);
+          currentGroup = {
+            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'group',
+            value: v,
+            groupMembers: matchedGroup
+              ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
+              : [],
+          };
+        } else {
+          currentGroup = null;
+          entries.push({
+            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type,
+            value: v,
+          });
+        }
+      }
+    }
+    // Push last group
+    if (currentGroup) entries.push(currentGroup);
+    return entries;
+  }
+
+  // Fallback: parse flat raw text
   return raw.split('\n').filter(Boolean).map((line, i) => {
     const v = line.trim();
     const type = detectEntryType(v, groupNameSet);
-    // For groups, always try to resolve members from the groups list
     const matchedGroup = type === 'group' ? groups.find(g => g.name === v) : undefined;
     return {
       id: `entry-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -152,12 +221,14 @@ function memberTypeLabel(t: string): string {
   if (t === 'cidr' || t === 'subnet') return 'Subnet';
   if (t === 'range') return 'Range';
   if (t === 'ip') return 'IP';
+  if (t === 'group') return 'SubGroup';
   return t.toUpperCase();
 }
 
 function memberTypeColor(t: string): string {
   if (t === 'cidr' || t === 'subnet') return 'bg-purple-100 text-purple-700';
   if (t === 'range') return 'bg-orange-100 text-orange-700';
+  if (t === 'group') return 'bg-emerald-100 text-emerald-700';
   return 'bg-blue-100 text-blue-700';
 }
 
@@ -288,12 +359,12 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const typeColors: Record<string, string> = {
     ip: 'bg-blue-50 text-blue-700 border-blue-200',
-    subnet: 'bg-purple-50 text-purple-700 border-purple-200',
+    subnet: 'bg-orange-50 text-orange-700 border-orange-200',
     group: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   };
   const typeLabels: Record<string, string> = {
     ip: 'IP',
-    subnet: 'SUBNET',
+    subnet: 'RANGE',
     group: 'GROUP',
   };
 
@@ -525,9 +596,9 @@ export default function FirewallManagementPage() {
     } catch {
       setAppGroups([]);
     }
-    // Parse entries into resource model
-    setSourceEntries(parseToResourceEntries(rule.rule_source || '', groups));
-    setDestEntries(parseToResourceEntries(rule.rule_destination || '', groups));
+    // Parse entries into resource model — use expanded text for hierarchical group→member structure
+    setSourceEntries(parseToResourceEntries(rule.rule_source || '', groups, rule.rule_source_expanded || ''));
+    setDestEntries(parseToResourceEntries(rule.rule_destination || '', groups, rule.rule_destination_expanded || ''));
     setServiceEntries(parseToResourceEntries(rule.rule_service || '', []));
   };
 
