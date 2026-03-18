@@ -339,6 +339,8 @@ export interface BirthrightValidation {
   warnings: BirthrightEntry[];
   permitted: BirthrightEntry[];
   summary: string;
+  matrix_used?: string;
+  environment?: string;
 }
 
 export interface BirthrightEntry {

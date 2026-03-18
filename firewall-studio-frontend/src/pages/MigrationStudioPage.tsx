@@ -9,7 +9,7 @@ import { useNotification } from '@/hooks/useNotification';
 import {
   getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
-  validateBirthright, getGroups, importRulesToNGDC, checkDuplicates,
+  validateBirthright, getGroups,
   createMigrationGroup,
 } from '@/lib/api';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
@@ -113,6 +113,7 @@ export function MigrationStudioPage() {
   const [legacyRules, setLegacyRules] = useState<LegacyRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
@@ -136,11 +137,6 @@ export function MigrationStudioPage() {
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
   const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit'>('review');
 
-  // Import from NFR state
-  const [showImportPanel, setShowImportPanel] = useState(false);
-  const [nfrApps, setNfrApps] = useState<{ value: string; label: string }[]>([]);
-  const [selectedImportApps, setSelectedImportApps] = useState<Set<string>>(new Set());
-  const [importing, setImporting] = useState(false);
   // New group creation during migration
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -159,7 +155,12 @@ export function MigrationStudioPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filteredRules = legacyRules.filter(r => {
+  const envFilteredRules = legacyRules.filter(r => {
+    if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
+    return true;
+  });
+
+  const filteredRules = envFilteredRules.filter(r => {
     if (activeTab === 'All') return true;
     if (activeTab === 'Non-Standard') return !r.is_standard;
     if (activeTab === 'Standard') return r.is_standard;
@@ -167,11 +168,11 @@ export function MigrationStudioPage() {
   });
 
   const counts = {
-    All: legacyRules.length,
-    'Non-Standard': legacyRules.filter(r => !r.is_standard).length,
-    Standard: legacyRules.filter(r => r.is_standard).length,
-    'Not Started': legacyRules.filter(r => r.migration_status === 'Not Started').length,
-    'In Progress': legacyRules.filter(r => r.migration_status === 'In Progress').length,
+    All: envFilteredRules.length,
+    'Non-Standard': envFilteredRules.filter(r => !r.is_standard).length,
+    Standard: envFilteredRules.filter(r => r.is_standard).length,
+    'Not Started': envFilteredRules.filter(r => r.migration_status === 'Not Started').length,
+    'In Progress': envFilteredRules.filter(r => r.migration_status === 'In Progress').length,
   };
 
   const appOptions = Array.from(new Set(legacyRules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
@@ -276,45 +277,6 @@ export function MigrationStudioPage() {
     return text.split('\n').map(line => line.replace(/\t/g, '  '));
   };
 
-  // Import from Network Firewall Request
-  const handleLoadNfrApps = async () => {
-    try {
-      const allRules = await getLegacyRules(undefined, true);
-      const apps = Array.from(new Set(allRules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
-        const [appId, distId, appName] = key.split('|');
-        return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
-      });
-      setNfrApps(apps);
-      setShowImportPanel(true);
-    } catch { showNotification('Failed to load NFR applications', 'error'); }
-  };
-
-  const handleImportFromNFR = async () => {
-    if (selectedImportApps.size === 0) { showNotification('Select at least one application to import', 'error'); return; }
-    setImporting(true);
-    try {
-      const result = await importRulesToNGDC(Array.from(selectedImportApps));
-      showNotification(`Imported ${result.imported} rules from Network Firewall Request`, 'success');
-      setShowImportPanel(false);
-      setSelectedImportApps(new Set());
-      loadData();
-    } catch { showNotification('Failed to import rules from NFR', 'error'); }
-    setImporting(false);
-  };
-
-  const toggleImportApp = (appId: string) => {
-    setSelectedImportApps(prev => {
-      const next = new Set(prev);
-      if (next.has(appId)) next.delete(appId); else next.add(appId);
-      return next;
-    });
-  };
-
-  const selectAllImportApps = () => {
-    if (selectedImportApps.size === nfrApps.length) setSelectedImportApps(new Set());
-    else setSelectedImportApps(new Set(nfrApps.map(a => a.value)));
-  };
-
   // Create new group during migration
   const handleCreateMigrationGroup = async () => {
     if (!newGroupName.trim() || !migrateRule) { showNotification('Group name is required', 'error'); return; }
@@ -336,18 +298,6 @@ export function MigrationStudioPage() {
       const groups = await getGroups(String(migrateRule.app_id));
       setAppGroups(groups);
     } catch { showNotification('Failed to create migration group', 'error'); }
-  };
-
-  // Check duplicates for a rule
-  const handleCheckDuplicates = async (rule: LegacyRule) => {
-    try {
-      const result = await checkDuplicates(rule.rule_source, rule.rule_destination, rule.rule_service, rule.id);
-      if (result.count > 0) {
-        showNotification(`Found ${result.count} duplicate(s) on source+destination+service`, 'error');
-      } else {
-        showNotification('No duplicates found', 'success');
-      }
-    } catch { showNotification('Failed to check duplicates', 'error'); }
   };
 
   const columns: Column<LegacyRule>[] = [
@@ -403,7 +353,6 @@ export function MigrationStudioPage() {
         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
           <button onClick={() => openMigratePopup(row)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Migrate</button>
-          <button onClick={() => handleCheckDuplicates(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Dup?</button>
         </div>
       ),
     },
@@ -441,9 +390,13 @@ export function MigrationStudioPage() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <button onClick={handleLoadNfrApps} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
-            Import from NFR
-          </button>
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
+          </select>
           {selectedRuleIds.size > 0 && (
             <>
               <span className="text-sm text-gray-600 font-medium">{selectedRuleIds.size} selected</span>
@@ -457,38 +410,6 @@ export function MigrationStudioPage() {
           )}
         </div>
       </div>
-
-      {/* Import from Network Firewall Request Panel */}
-      {showImportPanel && (
-        <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-indigo-800">Import Rules from Network Firewall Request</h3>
-            <div className="flex gap-2">
-              <button onClick={selectAllImportApps} className="px-3 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800">
-                {selectedImportApps.size === nfrApps.length ? 'Deselect All' : 'Select All'}
-              </button>
-              <button onClick={() => setShowImportPanel(false)} className="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-700">Close</button>
-            </div>
-          </div>
-          <p className="text-xs text-indigo-600 mb-3">Select applications from Network Firewall Request to import their rules for NGDC standardization and migration.</p>
-          <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto mb-3">
-            {nfrApps.map(app => (
-              <label key={app.value} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}>
-                <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600" />
-                {app.label}
-              </label>
-            ))}
-            {nfrApps.length === 0 && <p className="col-span-4 text-xs text-gray-400 italic py-4 text-center">No applications found in Network Firewall Request</p>}
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-indigo-600">{selectedImportApps.size} application(s) selected</span>
-            <button onClick={handleImportFromNFR} disabled={importing || selectedImportApps.size === 0}
-              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
-              {importing ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-5 gap-3 mb-6">
         {[
@@ -562,9 +483,15 @@ export function MigrationStudioPage() {
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
                 {parseExpandedTree(detailModal.data.rule_source_expanded).map((line, i) => {
                   const indent = line.length - line.trimStart().length;
+                  const v = line.trim();
+                  const vl = v.toLowerCase();
+                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GROUP' : vl.startsWith('rng-') ? 'RANGE' : vl.startsWith('sub-') ? 'SUBNET' : 'IP';
+                  const badgeColor = eType === 'GROUP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RANGE' ? 'bg-orange-100 text-orange-700' : eType === 'SUBNET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const isChild = indent >= 2;
                   return (
-                    <div key={i} className="font-mono text-xs text-green-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
+                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
+                      <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
+                      <span className="font-mono text-xs text-green-400">{v}</span>
                     </div>
                   );
                 })}
@@ -578,9 +505,15 @@ export function MigrationStudioPage() {
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
                 {parseExpandedTree(detailModal.data.rule_destination_expanded).map((line, i) => {
                   const indent = line.length - line.trimStart().length;
+                  const v = line.trim();
+                  const vl = v.toLowerCase();
+                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GROUP' : vl.startsWith('rng-') ? 'RANGE' : vl.startsWith('sub-') ? 'SUBNET' : 'IP';
+                  const badgeColor = eType === 'GROUP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RANGE' ? 'bg-orange-100 text-orange-700' : eType === 'SUBNET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const isChild = indent >= 2;
                   return (
-                    <div key={i} className="font-mono text-xs text-purple-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
+                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
+                      <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
+                      <span className="font-mono text-xs text-purple-400">{v}</span>
                     </div>
                   );
                 })}

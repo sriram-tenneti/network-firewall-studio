@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../shared/Modal';
-import type { FirewallRule, Application } from '@/types';
+import type { FirewallRule, Application, BirthrightValidation } from '@/types';
+import { validateBirthright } from '@/lib/api';
 
 interface RuleConflict {
   type: 'exact_duplicate' | 'birthright_ngdc' | 'legacy_passthrough' | 'port_overlap';
@@ -114,6 +115,8 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
   });
 
   const [showConflicts, setShowConflicts] = useState(false);
+  const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
+  const [validatingBR, setValidatingBR] = useState(false);
 
   useEffect(() => {
     if (rule && mode === 'edit') {
@@ -157,12 +160,45 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
 
   const hasErrors = conflicts.some(c => c.severity === 'error');
 
+  // Auto-run birthright validation when source/destination zones or environment change
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!form.source_zone && !form.destination_zone) {
+      setBirthrightResult(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setValidatingBR(true);
+      try {
+        const result = await validateBirthright({
+          source_zone: form.source_zone,
+          destination_zone: form.destination_zone,
+          source_sz: form.source_zone,
+          destination_sz: form.destination_zone,
+          source_dc: form.datacenter,
+          destination_dc: form.datacenter,
+          environment: form.environment,
+        });
+        setBirthrightResult(result);
+      } catch {
+        setBirthrightResult(null);
+      }
+      setValidatingBR(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form.source_zone, form.destination_zone, form.environment, form.datacenter, isOpen]);
+
   const handleSubmit = () => {
     if (conflicts.length > 0 && !showConflicts) {
       setShowConflicts(true);
       return;
     }
     if (hasErrors) return;
+    // Block if birthright violations exist
+    if (birthrightResult && !birthrightResult.compliant && birthrightResult.violations.length > 0) {
+      setShowConflicts(true);
+      return;
+    }
     onSave(form);
     onClose();
   };
@@ -281,6 +317,47 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
           <label className={labelClass}>Description</label>
           <textarea className={inputClass + ' h-20 resize-none'} placeholder="Rule description..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
         </div>
+
+        {/* Birthright Validation Result - auto-enforced */}
+        {validatingBR && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+            Validating birthright rules...
+          </div>
+        )}
+        {birthrightResult && !validatingBR && (
+          <div className={`p-3 rounded-lg border text-sm ${birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`font-bold text-xs ${birthrightResult.compliant ? 'text-green-700' : 'text-red-700'}`}>
+                BR {birthrightResult.matrix_used || ''}
+              </span>
+              <span className={`text-xs ${birthrightResult.compliant ? 'text-green-600' : 'text-red-600'}`}>
+                {birthrightResult.summary}
+              </span>
+            </div>
+            {birthrightResult.violations.length > 0 && (
+              <ul className="text-xs text-red-700 list-disc list-inside mt-1">
+                {birthrightResult.violations.map((v, i) => (
+                  <li key={i}>{v.matrix}: {v.rule} — {v.reason}</li>
+                ))}
+              </ul>
+            )}
+            {birthrightResult.permitted.length > 0 && birthrightResult.compliant && (
+              <ul className="text-xs text-green-700 list-disc list-inside mt-1">
+                {birthrightResult.permitted.map((p, i) => (
+                  <li key={i}>{p.matrix}: {p.rule} — {p.reason}</li>
+                ))}
+              </ul>
+            )}
+            {birthrightResult.warnings.length > 0 && (
+              <ul className="text-xs text-amber-700 list-disc list-inside mt-1">
+                {birthrightResult.warnings.map((w, i) => (
+                  <li key={i}>{w.matrix}: {w.rule} — {w.reason}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>

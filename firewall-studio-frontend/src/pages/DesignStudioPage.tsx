@@ -13,16 +13,16 @@ import type { RuleModification } from '@/components/design-studio/RuleModifyModa
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import type { FirewallRule, Application, BirthrightValidation } from '@/types';
+import type { FirewallRule, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 import * as api from '@/lib/api';
-import { Modal } from '@/components/shared/Modal';
 
 export function DesignStudioPage() {
   const [rules, setRules] = useState<FirewallRule[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
 
@@ -35,12 +35,8 @@ export function DesignStudioPage() {
   const deleteConfirm = useModal<string>();
   const { notification, showNotification } = useNotification();
 
-  // Auto-import and birthright state
-  const [autoImporting, setAutoImporting] = useState(false);
+  // Auto-import result state
   const [autoImportResult, setAutoImportResult] = useState<{ imported: number; skipped_non_compliant: number } | null>(null);
-  const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
-  const [showBirthrightModal, setShowBirthrightModal] = useState(false);
-  const [validatingBirthright, setValidatingBirthright] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -59,20 +55,37 @@ export function DesignStudioPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Auto-import non-standard legacy rules from NFR on page load (silent)
+  useEffect(() => {
+    let mounted = true;
+    const doAutoImport = async () => {
+      try {
+        const result = await api.autoImportCompliantToStudio();
+        if (mounted && result.imported > 0) {
+          setAutoImportResult({ imported: result.imported, skipped_non_compliant: result.skipped_non_compliant });
+          loadData();
+        }
+      } catch { /* silent */ }
+    };
+    doAutoImport();
+    return () => { mounted = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filteredRules = rules.filter(r => {
     if (r.status === 'Deleted') return false;
     if (selectedApp && r.application !== selectedApp) return false;
+    if (selectedEnv && r.environment !== selectedEnv) return false;
     if (activeTab === 'All') return true;
     return r.status === activeTab;
   });
 
   const statusCounts = {
-    All: rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp)).length,
-    Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp)).length,
-    'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp)).length,
-    Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp)).length,
-    Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp)).length,
-    Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp)).length,
+    All: rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
   };
 
   const handleCreate = async (data: Record<string, string | boolean>) => {
@@ -144,62 +157,7 @@ export function DesignStudioPage() {
     }
   };
 
-  // Auto-import NGDC-compliant rules from Network Firewall Request (Req 6)
-  const handleAutoImport = async () => {
-    setAutoImporting(true);
-    try {
-      const result = await api.autoImportCompliantToStudio();
-      setAutoImportResult({ imported: result.imported, skipped_non_compliant: result.skipped_non_compliant });
-      if (result.imported > 0) {
-        showNotification(`Auto-imported ${result.imported} NGDC-compliant rules from Network Firewall Request`, 'success');
-        loadData();
-      } else {
-        showNotification(`No new compliant rules to import (${result.skipped_non_compliant} non-compliant skipped)`, 'info');
-      }
-    } catch {
-      showNotification('Failed to auto-import compliant rules', 'error');
-    }
-    setAutoImporting(false);
-  };
 
-  // Birthright validation for new rules (Req 9)
-  const handleBirthrightValidation = async (rule: FirewallRule) => {
-    setValidatingBirthright(true);
-    setShowBirthrightModal(true);
-    try {
-      const src = typeof rule.source === 'object' ? (rule.source as unknown as Record<string, string>).security_zone || '' : '';
-      const dst = typeof rule.destination === 'object' ? (rule.destination as unknown as Record<string, string>).security_zone || '' : '';
-      const result = await api.validateBirthright({
-        source_zone: src,
-        destination_zone: dst,
-        action: 'Allow',
-        service: typeof rule.source === 'object' ? (rule.source as unknown as Record<string, string>).ports || '' : '',
-        app_id: rule.application,
-      });
-      setBirthrightResult(result);
-    } catch {
-      showNotification('Failed to validate birthright', 'error');
-      setShowBirthrightModal(false);
-    }
-    setValidatingBirthright(false);
-  };
-
-  // Duplicate detection (Req 10)
-  const handleCheckDuplicates = async (rule: FirewallRule) => {
-    const src = getSourceDisplay(rule);
-    const dst = getDestDisplay(rule);
-    const svc = typeof rule.source === 'object' ? (rule.source as unknown as Record<string, string>).ports || '' : '';
-    try {
-      const result = await api.checkDuplicates(src, dst, svc, rule.rule_id);
-      if (result.count > 0) {
-        showNotification(`Found ${result.count} duplicate(s) on source+destination+service`, 'error');
-      } else {
-        showNotification('No duplicates found', 'success');
-      }
-    } catch {
-      showNotification('Failed to check duplicates', 'error');
-    }
-  };
 
   function getSourceDisplay(rule: FirewallRule): string {
     if (typeof rule.source === 'string') return rule.source;
@@ -257,8 +215,6 @@ export function DesignStudioPage() {
           {(row.status === 'Approved' || row.status === 'Deployed' || row.status === 'Certified') && (
             <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
           )}
-          <button onClick={() => handleBirthrightValidation(row)} className="px-2 py-1 text-xs font-medium text-cyan-700 bg-cyan-50 rounded hover:bg-cyan-100">BR</button>
-          <button onClick={() => handleCheckDuplicates(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Dup?</button>
           {row.status === 'Draft' && (
             <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
           )}
@@ -307,6 +263,16 @@ export function DesignStudioPage() {
               <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
             ))}
           </select>
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedEnv}
+            onChange={e => setSelectedEnv(e.target.value)}
+          >
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
+          </select>
           <div className="flex rounded-md border border-gray-300 overflow-hidden">
             <button onClick={() => setViewMode('table')} className={'px-3 py-2 text-xs font-medium ' + (viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}>
               Table View
@@ -315,9 +281,6 @@ export function DesignStudioPage() {
               Visual Builder
             </button>
           </div>
-          <button onClick={handleAutoImport} disabled={autoImporting} className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 disabled:opacity-50">
-            {autoImporting ? 'Importing...' : 'Auto-Import from NFR'}
-          </button>
           <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
             Manage Groups
           </button>
@@ -402,53 +365,6 @@ export function DesignStudioPage() {
         confirmVariant="danger"
       />
 
-      {/* Birthright Validation Modal */}
-      <Modal isOpen={showBirthrightModal} onClose={() => { setShowBirthrightModal(false); setBirthrightResult(null); }} title="Birthright Validation" size="lg">
-        {validatingBirthright ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-            <span className="ml-3 text-sm text-gray-500">Validating against birthright rules...</span>
-          </div>
-        ) : birthrightResult ? (
-          <div className="space-y-4">
-            <div className={`p-3 rounded-lg ${birthrightResult.compliant ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-              <h3 className={`text-sm font-semibold ${birthrightResult.compliant ? 'text-green-800' : 'text-red-800'}`}>
-                {birthrightResult.compliant ? 'COMPLIANT - Region-to-Region Flow Allowed' : 'NON-COMPLIANT - Region-to-Region Flow Restricted'}
-              </h3>
-              <p className="text-xs text-gray-600 mt-1">{birthrightResult.summary}</p>
-            </div>
-            {birthrightResult.violations.length > 0 && (
-              <div>
-                <h4 className="text-xs font-semibold text-red-700 mb-1">Violations ({birthrightResult.violations.length})</h4>
-                {birthrightResult.violations.map((v, i) => (
-                  <div key={i} className="text-xs bg-red-50 rounded px-2 py-1 mb-1">
-                    <span className="font-medium">{v.matrix}</span>: {v.rule} - <span className="text-red-700">{v.action}</span>
-                    <div className="text-gray-500">{v.reason}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {birthrightResult.permitted.length > 0 && (
-              <div>
-                <h4 className="text-xs font-semibold text-green-700 mb-1">Permitted ({birthrightResult.permitted.length})</h4>
-                {birthrightResult.permitted.map((v, i) => (
-                  <div key={i} className="text-xs bg-green-50 rounded px-2 py-1 mb-1">
-                    <span className="font-medium">{v.matrix}</span>: {v.rule} - {v.reason}
-                  </div>
-                ))}
-              </div>
-            )}
-            {!birthrightResult.compliant && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-xs text-amber-800">This rule requires an exception request. The region-to-region flow is not in the default birthright matrix.</p>
-                <button onClick={() => { setShowBirthrightModal(false); }} className="mt-2 px-3 py-1 text-xs font-medium text-white bg-amber-600 rounded hover:bg-amber-700">
-                  Raise Exception Request
-                </button>
-              </div>
-            )}
-          </div>
-        ) : null}
-      </Modal>
     </div>
   );
 }

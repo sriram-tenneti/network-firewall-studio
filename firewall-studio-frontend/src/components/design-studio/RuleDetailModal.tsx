@@ -18,15 +18,78 @@ function getVal(obj: unknown, key: string): string {
   return '';
 }
 
+/**
+ * Detect entry type from naming convention:
+ *   svr- = IP, grp-/g- = GROUP, rng- = RANGE, sub- = SUBNET
+ */
+function detectType(value: string): 'ip' | 'group' | 'range' | 'subnet' {
+  const vl = value.trim().toLowerCase();
+  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
+  if (vl.startsWith('rng-')) return 'range';
+  if (vl.startsWith('sub-') || vl.includes('/')) return 'subnet';
+  return 'ip';
+}
+
+const typeBadgeColors: Record<string, string> = {
+  ip: 'bg-blue-100 text-blue-700',
+  group: 'bg-emerald-100 text-emerald-700',
+  range: 'bg-orange-100 text-orange-700',
+  subnet: 'bg-purple-100 text-purple-700',
+};
+const typeBadgeLabels: Record<string, string> = {
+  ip: 'IP',
+  group: 'GROUP',
+  range: 'RANGE',
+  subnet: 'SUBNET',
+};
+
+/** Render hierarchical expanded source/destination with type badges and indentation */
+function ExpandedHierarchy({ text, color }: { text: string; color: string }) {
+  if (!text) return <p className="text-xs text-gray-400 italic">No data</p>;
+  const lines = text.split('\n');
+  return (
+    <div className="space-y-0.5">
+      {lines.map((line, i) => {
+        if (!line.trim()) return null;
+        const indent = line.length - line.trimStart().length;
+        const tabCount = (line.match(/\t/g) || []).length;
+        const totalIndent = indent + tabCount;
+        const v = line.trim();
+        const type = detectType(v);
+        const isGroupMember = totalIndent >= 2;
+        return (
+          <div key={i} className={`flex items-center gap-2 ${isGroupMember ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
+            <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded ${typeBadgeColors[type] || 'bg-gray-100 text-gray-600'}`}>
+              {typeBadgeLabels[type] || type}
+            </span>
+            <span className={`font-mono text-xs ${color}`}>{v}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSubmitReview }: RuleDetailModalProps) {
   if (!rule) return null;
 
   const srcGroup = getVal(rule.source, 'group_name') || getVal(rule.source, 'ip_address') || (typeof rule.source === 'string' ? rule.source : '');
   const srcZone = getVal(rule.source, 'security_zone');
   const srcPorts = getVal(rule.source, 'ports');
+  const srcDC = getVal(rule.source, 'datacenter') || rule.datacenter || '';
+  const srcNH = getVal(rule.source, 'neighbourhood') || getVal(rule.source, 'nh') || '';
+  const srcSZ = getVal(rule.source, 'sz') || srcZone;
   const dstName = getVal(rule.destination, 'name') || (typeof rule.destination === 'string' ? rule.destination : '');
   const dstZone = getVal(rule.destination, 'security_zone');
   const dstPorts = getVal(rule.destination, 'ports');
+  const dstDC = getVal(rule.destination, 'datacenter') || rule.datacenter || '';
+  const dstNH = getVal(rule.destination, 'neighbourhood') || getVal(rule.destination, 'nh') || '';
+  const dstSZ = getVal(rule.destination, 'sz') || dstZone;
+
+  // Check if rule has expanded source/dest (LegacyRule-style)
+  const legacyRule = rule as unknown as Record<string, string>;
+  const srcExpanded = legacyRule.rule_source_expanded || '';
+  const dstExpanded = legacyRule.rule_destination_expanded || '';
 
   const rows: [string, string | React.ReactNode][] = [
     ['Rule ID', rule.rule_id],
@@ -36,9 +99,15 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
     ['Datacenter', rule.datacenter],
     ['Source', srcGroup],
     ['Source Zone', srcZone],
+    ['Source DC', srcDC],
+    ['Source NH', srcNH],
+    ['Source SZ', srcSZ],
     ['Source Ports', srcPorts],
     ['Destination', dstName],
     ['Destination Zone', dstZone],
+    ['Destination DC', dstDC],
+    ['Destination NH', dstNH],
+    ['Destination SZ', dstSZ],
     ['Destination Ports', dstPorts],
     ['Policy Result', rule.policy_result ? <StatusBadge key="p" status={rule.policy_result} /> : 'N/A'],
     ['Owner', rule.owner || 'N/A'],
@@ -58,6 +127,30 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
           </div>
         ))}
       </div>
+
+      {/* Hierarchical Source Expanded */}
+      {srcExpanded && (
+        <div className="mt-4 border rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-blue-50 border-b">
+            <h4 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h4>
+          </div>
+          <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
+            <ExpandedHierarchy text={srcExpanded} color="text-green-400" />
+          </div>
+        </div>
+      )}
+
+      {/* Hierarchical Destination Expanded */}
+      {dstExpanded && (
+        <div className="mt-4 border rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-purple-50 border-b">
+            <h4 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h4>
+          </div>
+          <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
+            <ExpandedHierarchy text={dstExpanded} color="text-purple-400" />
+          </div>
+        </div>
+      )}
 
       {rule.compliance && (
         <div className="mt-4 p-3 bg-gray-50 rounded-lg">

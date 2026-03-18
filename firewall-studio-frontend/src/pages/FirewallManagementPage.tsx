@@ -3,10 +3,9 @@ import { DataTable } from '@/components/shared/DataTable';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
-import { ExceptionHandler } from '@/components/design-studio/ExceptionHandler';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, checkDuplicates } from '@/lib/api';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups } from '@/lib/api';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -96,39 +95,416 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
   return delta;
 }
 
-function FieldEditor({ label, value, onChange, onAddLine, onRemoveLine, appGroups }: {
-  label: string; value: string;
-  onChange: (v: string) => void; onAddLine: (v: string) => void; onRemoveLine: (v: string) => void;
-  appGroups?: FirewallGroup[];
+interface ResourceEntry {
+  id: string;
+  type: 'ip' | 'subnet' | 'group';
+  value: string;
+  groupMembers?: { type: string; value: string }[];
+  isNew?: boolean;
+  isModified?: boolean;
+}
+
+const IP_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
+/**
+ * Naming conventions from Excel:
+ *   svr-  = IP address (server)
+ *   g- or grp- = Group (contains members)
+ *   rng-  = Range of IPs/subnets
+ *   sub-  = Subnet
+ */
+function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'group' {
+  const v = value.trim();
+  const vl = v.toLowerCase();
+  // grp- or g- prefix = GROUP
+  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
+  // Check if it matches a known group name from the backend
+  if (allGroupNames && allGroupNames.has(v)) return 'group';
+  // rng- prefix = SUBNET (range of IPs/subnets)
+  if (vl.startsWith('rng-')) return 'subnet';
+  // sub- prefix = SUBNET
+  if (vl.startsWith('sub-')) return 'subnet';
+  // svr- prefix = IP (server)
+  if (vl.startsWith('svr-')) return 'ip';
+  // Check CIDR notation (subnet)
+  if (CIDR_REGEX.test(v)) return 'subnet';
+  // Check plain IP
+  if (IP_REGEX.test(v)) return 'ip';
+  // If it contains '/' it's likely a subnet
+  if (v.includes('/')) return 'subnet';
+  // Default: treat as IP
+  return 'ip';
+}
+
+/**
+ * Parse expanded text (hierarchical) into ResourceEntry[]. The expanded format is:
+ *   grp-xxx           <- group header (no indent)
+ *     svr-10.1.2.3    <- member (indented 2+ spaces or tab)
+ *     rng-10.1.2.3-10 <- member
+ *   svr-10.5.6.7      <- standalone IP (no indent)
+ */
+function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?: string): ResourceEntry[] {
+  if (!raw && !expanded) return [];
+  const groupNameSet = new Set(groups.map(g => g.name));
+
+  // If we have expanded text, parse the hierarchical structure
+  if (expanded && expanded.trim()) {
+    const lines = expanded.split('\n');
+    const entries: ResourceEntry[] = [];
+    let currentGroup: ResourceEntry | null = null;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const indent = line.length - line.trimStart().length;
+      const v = line.trim();
+
+      if (indent >= 2 || line.startsWith('\t')) {
+        // This is an indented member belonging to the current group
+        if (currentGroup) {
+          const memberType = detectEntryType(v, groupNameSet);
+          const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'range' : 'ip';
+          if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+          currentGroup.groupMembers.push({ type: mType, value: v });
+        }
+      } else {
+        // Top-level entry — finalize previous group if any
+        if (currentGroup) entries.push(currentGroup);
+        const type = detectEntryType(v, groupNameSet);
+        if (type === 'group') {
+          // Start a new group; members will come from indented lines below
+          const matchedGroup = groups.find(g => g.name === v);
+          currentGroup = {
+            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'group',
+            value: v,
+            groupMembers: matchedGroup
+              ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
+              : [],
+          };
+        } else {
+          currentGroup = null;
+          entries.push({
+            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type,
+            value: v,
+          });
+        }
+      }
+    }
+    // Push last group
+    if (currentGroup) entries.push(currentGroup);
+    return entries;
+  }
+
+  // Fallback: parse flat raw text
+  return raw.split('\n').filter(Boolean).map((line, i) => {
+    const v = line.trim();
+    const type = detectEntryType(v, groupNameSet);
+    const matchedGroup = type === 'group' ? groups.find(g => g.name === v) : undefined;
+    return {
+      id: `entry-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type,
+      value: v,
+      groupMembers: matchedGroup
+        ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
+        : type === 'group' ? [] : undefined,
+    };
+  });
+}
+
+function entriesToRaw(entries: ResourceEntry[]): string {
+  return entries.map(e => e.value).join('\n');
+}
+
+/** Display-friendly member type label */
+function memberTypeLabel(t: string): string {
+  if (t === 'cidr' || t === 'subnet') return 'Subnet';
+  if (t === 'range') return 'Range';
+  if (t === 'ip') return 'IP';
+  if (t === 'group') return 'SubGroup';
+  return t.toUpperCase();
+}
+
+function memberTypeColor(t: string): string {
+  if (t === 'cidr' || t === 'subnet') return 'bg-purple-100 text-purple-700';
+  if (t === 'range') return 'bg-orange-100 text-orange-700';
+  if (t === 'group') return 'bg-emerald-100 text-emerald-700';
+  return 'bg-blue-100 text-blue-700';
+}
+
+let _nextId = 1;
+
+function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
+  label: string;
+  entries: ResourceEntry[];
+  onChange: (entries: ResourceEntry[]) => void;
+  appGroups: FirewallGroup[];
+  colorScheme: { bg: string; border: string; text: string; headerBg: string };
 }) {
-  const [newEntry, setNewEntry] = useState('');
-  const lines = value.split('\n').filter(Boolean);
+  const [addType, setAddType] = useState<'ip' | 'subnet' | 'group'>('ip');
+  const [addValue, setAddValue] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  // All groups auto-expand on load to show IPs/subnets
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Group member editing
+  const [addingMemberToGroup, setAddingMemberToGroup] = useState<string | null>(null);
+  const [newMemberType, setNewMemberType] = useState<string>('ip');
+  const [newMemberValue, setNewMemberValue] = useState('');
+  // New group wizard
+  const [showNewGroupWizard, setShowNewGroupWizard] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState<{type: string; value: string}[]>([]);
+  const [wizMemberType, setWizMemberType] = useState('ip');
+  const [wizMemberValue, setWizMemberValue] = useState('');
+
+  const allGroupNames = new Set(appGroups.map(g => g.name));
+
+  const handleAdd = () => {
+    if (!addValue.trim()) return;
+    if (addType === 'group') {
+      // For groups, check if it matches an existing group
+      const matched = appGroups.find(g => g.name === addValue.trim());
+      if (matched) {
+        if (entries.some(e => e.value === matched.name)) return;
+        onChange([...entries, {
+          id: `new-${_nextId++}`,
+          type: 'group',
+          value: matched.name,
+          groupMembers: matched.members.map(m => ({ type: m.type, value: m.value })),
+          isNew: true,
+        }]);
+        setAddValue('');
+      } else {
+        // Open the new group wizard so user can add members
+        setNewGroupName(addValue.trim());
+        setNewGroupMembers([]);
+        setShowNewGroupWizard(true);
+        setAddValue('');
+      }
+      return;
+    }
+    onChange([...entries, {
+      id: `new-${_nextId++}`,
+      type: addType,
+      value: addValue.trim(),
+      isNew: true,
+    }]);
+    setAddValue('');
+  };
+
+  const handleAddFromGroupSelect = (groupName: string) => {
+    if (!groupName) return;
+    const group = appGroups.find(g => g.name === groupName);
+    if (!group) return;
+    if (entries.some(e => e.value === groupName)) return;
+    onChange([...entries, {
+      id: `new-${_nextId++}`,
+      type: 'group',
+      value: groupName,
+      groupMembers: group.members.map(m => ({ type: m.type, value: m.value })),
+      isNew: true,
+    }]);
+  };
+
+  const handleDelete = (id: string) => onChange(entries.filter(e => e.id !== id));
+
+  const handleSaveEdit = (id: string) => {
+    if (!editValue.trim()) return;
+    onChange(entries.map(e => e.id === id ? { ...e, value: editValue.trim(), type: detectEntryType(editValue.trim(), allGroupNames), isModified: true } : e));
+    setEditingId(null);
+  };
+
+  const toggleCollapse = (id: string) => {
+    setCollapsedGroups(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+
+  const handleAddGroupMember = (entryId: string) => {
+    if (!newMemberValue.trim()) return;
+    onChange(entries.map(e => {
+      if (e.id !== entryId) return e;
+      const members = [...(e.groupMembers || []), { type: newMemberType, value: newMemberValue.trim() }];
+      return { ...e, groupMembers: members, isModified: true };
+    }));
+    setNewMemberValue('');
+  };
+
+  const handleRemoveGroupMember = (entryId: string, memberIdx: number) => {
+    onChange(entries.map(e => {
+      if (e.id !== entryId) return e;
+      const members = (e.groupMembers || []).filter((_, i) => i !== memberIdx);
+      return { ...e, groupMembers: members, isModified: true };
+    }));
+  };
+
+  const handleCreateNewGroup = () => {
+    if (!newGroupName.trim() || newGroupMembers.length === 0) return;
+    onChange([...entries, {
+      id: `new-${_nextId++}`,
+      type: 'group',
+      value: newGroupName.trim(),
+      groupMembers: [...newGroupMembers],
+      isNew: true,
+    }]);
+    setShowNewGroupWizard(false);
+    setNewGroupName('');
+    setNewGroupMembers([]);
+  };
+
+  const handleWizAddMember = () => {
+    if (!wizMemberValue.trim()) return;
+    setNewGroupMembers(prev => [...prev, { type: wizMemberType, value: wizMemberValue.trim() }]);
+    setWizMemberValue('');
+  };
+
+  const typeColors: Record<string, string> = {
+    ip: 'bg-blue-50 text-blue-700 border-blue-200',
+    subnet: 'bg-orange-50 text-orange-700 border-orange-200',
+    group: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  };
+  const typeLabels: Record<string, string> = {
+    ip: 'IP',
+    subnet: 'RANGE',
+    group: 'GROUP',
+  };
+
+  const totalIPs = entries.reduce((sum, e) => {
+    if (e.type === 'group') return sum + (e.groupMembers?.length || 0);
+    return sum + 1;
+  }, 0);
+
   return (
-    <div className="border rounded-lg p-3">
-      <label className="block text-xs font-semibold text-gray-700 mb-2">{label}</label>
-      <div className="space-y-1 mb-2 max-h-40 overflow-y-auto">
-        {lines.map((line, i) => (
-          <div key={i} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1">
-            <span className="font-mono text-xs flex-1">{line}</span>
-            <button onClick={() => onRemoveLine(line)} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
-          </div>
-        ))}
-        {lines.length === 0 && <p className="text-xs text-gray-400 italic">No entries</p>}
-      </div>
-      <div className="flex gap-2">
-        <input type="text" value={newEntry} onChange={e => setNewEntry(e.target.value)} placeholder="Add IP, range, or group name" className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md" onKeyDown={e => { if (e.key === 'Enter') { onAddLine(newEntry); setNewEntry(''); } }} />
-        <button onClick={() => { onAddLine(newEntry); setNewEntry(''); }} className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Add</button>
-      </div>
-      {appGroups && appGroups.length > 0 && (
-        <div className="mt-2">
-          <label className="text-xs text-gray-500">App Groups:</label>
-          <select onChange={e => { if (e.target.value) { onAddLine(e.target.value); e.target.value = ''; } }} className="ml-2 px-2 py-1 text-xs border border-gray-300 rounded-md" defaultValue="">
-            <option value="">Select group...</option>
-            {appGroups.map(g => <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>)}
-          </select>
+    <div className={`border ${colorScheme.border} rounded-lg overflow-hidden`}>
+      <div className={`px-4 py-3 ${colorScheme.headerBg} border-b ${colorScheme.border} flex items-center justify-between`}>
+        <h3 className={`text-sm font-semibold ${colorScheme.text}`}>{label}</h3>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500">{entries.length} entries</span>
+          <span className="text-xs text-gray-400">|</span>
+          <span className="text-xs text-gray-500">{totalIPs} total IPs/subnets</span>
         </div>
-      )}
-      <textarea value={value} onChange={e => onChange(e.target.value)} className="w-full mt-2 px-2 py-1 text-xs font-mono border border-gray-200 rounded bg-gray-50 h-16 resize-none" placeholder="Or edit directly (one entry per line)" />
+      </div>
+      <div className="p-4 space-y-2">
+        {/* Entry List */}
+        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+          {entries.length === 0 && <p className="text-xs text-gray-400 italic py-3 text-center">No entries. Add IPs, subnets, or groups below.</p>}
+          {entries.map(entry => (
+            <div key={entry.id}>
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${entry.isNew ? 'bg-green-50 border-green-200' : entry.isModified ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+                <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border ${typeColors[entry.type]}`}>{typeLabels[entry.type]}</span>
+                {editingId === entry.id ? (
+                  <div className="flex-1 flex gap-1.5">
+                    <input type="text" className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500" value={editValue} onChange={e => setEditValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(entry.id); if (e.key === 'Escape') setEditingId(null); }} autoFocus />
+                    <button onClick={() => handleSaveEdit(entry.id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100">Save</button>
+                    <button onClick={() => setEditingId(null)} className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-mono text-gray-800">{entry.value}</span>
+                    {entry.isNew && <span className="text-[10px] text-green-600 font-medium">NEW</span>}
+                    {entry.isModified && <span className="text-[10px] text-amber-600 font-medium">MODIFIED</span>}
+                    {entry.type === 'group' && (
+                      <button onClick={() => toggleCollapse(entry.id)} className="px-2 py-0.5 text-xs text-emerald-600 hover:text-emerald-800 font-medium">
+                        {collapsedGroups.has(entry.id) ? `Show (${(entry.groupMembers || []).length} members)` : 'Hide'}
+                      </button>
+                    )}
+                    <button onClick={() => { setEditingId(entry.id); setEditValue(entry.value); }} className="px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50 rounded">Edit</button>
+                    <button onClick={() => handleDelete(entry.id)} className="px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded">Del</button>
+                  </>
+                )}
+              </div>
+              {/* Group members — shown by default (auto-expanded), hidden when user collapses */}
+              {entry.type === 'group' && !collapsedGroups.has(entry.id) && (
+                <div className="ml-6 mt-1 mb-2 border-l-2 border-emerald-200 pl-3 space-y-1">
+                  {(entry.groupMembers || []).length === 0 && <p className="text-[10px] text-amber-600 italic py-1">No IPs/subnets configured for this group. Add members below.</p>}
+                  {(entry.groupMembers || []).map((m, mi) => (
+                    <div key={mi} className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded text-xs">
+                      <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(m.type)}`}>{memberTypeLabel(m.type)}</span>
+                      <span className="font-mono flex-1 text-gray-800">{m.value}</span>
+                      <button onClick={() => handleRemoveGroupMember(entry.id, mi)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
+                    </div>
+                  ))}
+                  {/* Always show add-member form for groups */}
+                  {addingMemberToGroup === entry.id ? (
+                    <div className="flex gap-1.5 items-center mt-1 bg-white border border-gray-200 rounded p-2">
+                      <select value={newMemberType} onChange={e => setNewMemberType(e.target.value)} className="px-1.5 py-1 text-xs border border-gray-300 rounded">
+                        <option value="ip">IP Address</option>
+                        <option value="cidr">Subnet (CIDR)</option>
+                        <option value="range">IP Range</option>
+                      </select>
+                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'cidr' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
+                      <button onClick={() => handleAddGroupMember(entry.id)} disabled={!newMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
+                      <button onClick={() => setAddingMemberToGroup(null)} className="text-xs text-gray-500 hover:text-gray-700">Done</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setAddingMemberToGroup(entry.id); setNewMemberType('ip'); setNewMemberValue(''); }} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium mt-1 flex items-center gap-1">
+                      <span>+</span> Add IP / Subnet / Range to this group
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Add new entry */}
+        <div className="border-t border-gray-100 pt-3 space-y-2">
+          <div className="flex gap-2">
+            <select value={addType} onChange={e => setAddType(e.target.value as 'ip' | 'subnet' | 'group')} className="px-2 py-1.5 text-xs font-medium border border-gray-300 rounded-md bg-white">
+              <option value="ip">IP Address</option>
+              <option value="subnet">Subnet (CIDR)</option>
+              <option value="group">Group</option>
+            </select>
+            <input type="text" placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : 'e.g. grp-APP01-NH01-STD-web'} value={addValue} onChange={e => setAddValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500" />
+            <button onClick={handleAdd} disabled={!addValue.trim()} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">+ Add</button>
+          </div>
+          {addType === 'group' && appGroups.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Or select existing group:</span>
+              <select onChange={e => { handleAddFromGroupSelect(e.target.value); e.target.value = ''; }} className="px-2 py-1 text-xs border border-gray-300 rounded-md flex-1" defaultValue="">
+                <option value="">Select group...</option>
+                {appGroups.map(g => <option key={g.name} value={g.name}>{g.name} ({g.members.length} IPs/subnets)</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* New Group Wizard */}
+        {showNewGroupWizard && (
+          <div className="border-2 border-emerald-300 rounded-lg p-4 bg-emerald-50 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-emerald-800">Create New Group</h4>
+              <button onClick={() => setShowNewGroupWizard(false)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Group Name</label>
+              <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} className="w-full px-3 py-1.5 text-sm font-mono border border-gray-300 rounded-md" placeholder="grp-APP01-NH01-STD-web" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Group Members (IPs / Subnets / Ranges)</label>
+              {newGroupMembers.length === 0 && <p className="text-xs text-amber-600 italic mb-2">Add at least one IP, subnet, or range to this group.</p>}
+              {newGroupMembers.map((m, mi) => (
+                <div key={mi} className="flex items-center gap-2 mb-1 px-2 py-1 bg-white rounded border border-gray-200">
+                  <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(m.type)}`}>{memberTypeLabel(m.type)}</span>
+                  <span className="font-mono text-xs flex-1">{m.value}</span>
+                  <button onClick={() => setNewGroupMembers(prev => prev.filter((_, i) => i !== mi))} className="text-red-500 text-[10px]">Remove</button>
+                </div>
+              ))}
+              <div className="flex gap-1.5 items-center mt-2">
+                <select value={wizMemberType} onChange={e => setWizMemberType(e.target.value)} className="px-1.5 py-1 text-xs border border-gray-300 rounded">
+                  <option value="ip">IP Address</option>
+                  <option value="cidr">Subnet (CIDR)</option>
+                  <option value="range">IP Range</option>
+                </select>
+                <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)} placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'cidr' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
+                <button onClick={handleWizAddMember} disabled={!wizMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
+              </div>
+            </div>
+            <button onClick={handleCreateNewGroup} disabled={!newGroupName.trim() || newGroupMembers.length === 0} className="w-full px-3 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+              Create Group with {newGroupMembers.length} member{newGroupMembers.length !== 1 ? 's' : ''}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -136,6 +512,7 @@ function FieldEditor({ label, value, onChange, onAddLine, onRemoveLine, appGroup
 export default function FirewallManagementPage() {
   const [rules, setRules] = useState<LegacyRule[]>([]);
   const [selectedApp, setSelectedApp] = useState<string>('');
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const { notification, showNotification, clearNotification } = useNotification();
@@ -150,9 +527,12 @@ export default function FirewallManagementPage() {
   const [compileVendor, setCompileVendor] = useState('generic');
   const [compiling, setCompiling] = useState(false);
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
-  const [exceptions, setExceptions] = useState<Array<{id: string; type: 'ip' | 'subnet'; value: string; justification: string; status: 'Pending' | 'Approved' | 'Rejected'; requested_by: string; requested_at: string}>>([]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedExportApps, setSelectedExportApps] = useState<Set<string>>(new Set());
+  // Resource-based modify state
+  const [sourceEntries, setSourceEntries] = useState<ResourceEntry[]>([]);
+  const [destEntries, setDestEntries] = useState<ResourceEntry[]>([]);
+  const [serviceEntries, setServiceEntries] = useState<ResourceEntry[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -167,14 +547,19 @@ export default function FirewallManagementPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filteredRules = rules.filter(r => {
+  const envFilteredRules = rules.filter(r => {
+    if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
+    return true;
+  });
+
+  const filteredRules = envFilteredRules.filter(r => {
     if (activeTab === 'non_standard') return !r.is_standard;
     if (activeTab === 'standard') return r.is_standard;
     return true;
   });
 
-  const standardCount = rules.filter(r => r.is_standard).length;
-  const nonStandardCount = rules.filter(r => !r.is_standard).length;
+  const standardCount = envFilteredRules.filter(r => r.is_standard).length;
+  const nonStandardCount = envFilteredRules.filter(r => !r.is_standard).length;
 
   const appOptions = Array.from(new Set(rules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
     const [appId, distId, appName] = key.split('|');
@@ -184,28 +569,6 @@ export default function FirewallManagementPage() {
   const parseExpandedTree = (text: string): string[] => {
     if (!text) return [];
     return text.split('\n').map(line => line.replace(/\t/g, '  '));
-  };
-
-  const downloadSpreadsheet = () => {
-    if (!selectedApp) { showNotification('Please select an application first', 'error'); return; }
-    const appRules = rules.filter(r => String(r.app_id) === selectedApp);
-    if (appRules.length === 0) { showNotification('No rules found for selected application', 'error'); return; }
-    const headers = ['App ID', 'App Current Distributed ID', 'App Name', 'Inventory Item', 'Policy Name', 'Rule Global', 'Rule Action', 'Rule Source', 'Rule Source Expanded', 'Rule Source Zone', 'Rule Destination', 'Rule Destination Expanded', 'Rule Destination Zone', 'Rule Service', 'Rule Service Expanded', 'RN', 'RC'];
-    const rows = appRules.map(r => [
-      r.app_id, r.app_distributed_id, r.app_name, r.inventory_item, r.policy_name,
-      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action, r.rule_source, r.rule_source_expanded,
-      r.rule_source_zone, r.rule_destination, r.rule_destination_expanded,
-      r.rule_destination_zone, r.rule_service, r.rule_service_expanded, r.rn, r.rc
-    ]);
-    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `firewall-rules-${selectedApp}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showNotification('Spreadsheet downloaded', 'success');
   };
 
   const openModifyModal = async (rule: LegacyRule) => {
@@ -226,12 +589,17 @@ export default function FirewallManagementPage() {
     setModifyComments('');
     setShowDelta(false);
     setCompiledRule(null);
+    let groups: FirewallGroup[] = [];
     try {
-      const groups = await getGroups(String(rule.app_id));
+      groups = await getGroups(String(rule.app_id));
       setAppGroups(groups);
     } catch {
       setAppGroups([]);
     }
+    // Parse entries into resource model — use expanded text for hierarchical group→member structure
+    setSourceEntries(parseToResourceEntries(rule.rule_source || '', groups, rule.rule_source_expanded || ''));
+    setDestEntries(parseToResourceEntries(rule.rule_destination || '', groups, rule.rule_destination_expanded || ''));
+    setServiceEntries(parseToResourceEntries(rule.rule_service || '', []));
   };
 
   const closeModifyModal = () => {
@@ -247,28 +615,37 @@ export default function FirewallManagementPage() {
     setModifyState({ ...modifyState, [field]: value });
   };
 
-  const addLineToField = (field: keyof ModifyState, value: string) => {
-    if (!modifyState || !value.trim()) return;
-    const current = modifyState[field] || '';
-    const lines = current.split('\n').filter(Boolean);
-    if (!lines.includes(value.trim())) {
-      lines.push(value.trim());
-      setModifyState({ ...modifyState, [field]: lines.join('\n') });
+  /** Build expanded text from resource entries (group → list IPs/subnets) */
+  const buildExpandedText = (entries: ResourceEntry[]): string => {
+    const lines: string[] = [];
+    for (const e of entries) {
+      if (e.type === 'group') {
+        lines.push(`[Group] ${e.value}`);
+        for (const m of (e.groupMembers || [])) {
+          lines.push(`  ${memberTypeLabel(m.type)}: ${m.value}`);
+        }
+      } else {
+        lines.push(e.value);
+      }
     }
-  };
-
-  const removeLineFromField = (field: keyof ModifyState, lineToRemove: string) => {
-    if (!modifyState) return;
-    const current = modifyState[field] || '';
-    const lines = current.split('\n').filter(l => l.trim() !== lineToRemove.trim());
-    setModifyState({ ...modifyState, [field]: lines.join('\n') });
+    return lines.join('\n');
   };
 
   const handleSubmitModification = async () => {
     if (!modifyRule || !modifyState) return;
     setSubmitting(true);
     try {
-      await createRuleModification(modifyRule.id, modifyState as unknown as Record<string, string>, modifyComments);
+      // Sync resource entries back to modifyState before submitting
+      const finalState = {
+        ...modifyState,
+        rule_source: entriesToRaw(sourceEntries),
+        rule_destination: entriesToRaw(destEntries),
+        rule_service: entriesToRaw(serviceEntries),
+        rule_source_expanded: buildExpandedText(sourceEntries),
+        rule_destination_expanded: buildExpandedText(destEntries),
+        rule_service_expanded: buildExpandedText(serviceEntries),
+      };
+      await createRuleModification(modifyRule.id, finalState as unknown as Record<string, string>, modifyComments);
       showNotification('Modification submitted for review', 'success');
       closeModifyModal();
       loadData();
@@ -289,48 +666,17 @@ export default function FirewallManagementPage() {
     setCompiling(false);
   };
 
-  const handleAddException = (data: { type: string; value: string; justification: string }) => {
-    const newException = {
-      id: `exc-${Date.now()}`,
-      type: data.type as 'ip' | 'subnet',
-      value: data.value,
-      justification: data.justification,
-      status: 'Pending' as const,
-      requested_by: 'Current User',
-      requested_at: new Date().toISOString(),
-    };
-    setExceptions(prev => [...prev, newException]);
-    showNotification('Exception submitted for approval', 'success');
-  };
 
-  const handleApproveException = (id: string) => {
-    setExceptions(prev => prev.map(e => e.id === id ? { ...e, status: 'Approved' as const } : e));
-    showNotification('Exception approved', 'success');
-  };
-
-  const handleRejectException = (id: string) => {
-    setExceptions(prev => prev.map(e => e.id === id ? { ...e, status: 'Rejected' as const } : e));
-    showNotification('Exception rejected', 'info');
-  };
-
-  // Duplicate detection (Req 10)
-  const handleCheckDuplicates = async (rule: LegacyRule) => {
-    try {
-      const result = await checkDuplicates(rule.rule_source, rule.rule_destination, rule.rule_service, rule.id);
-      if (result.count > 0) {
-        showNotification(`Found ${result.count} duplicate(s) on source+destination+service`, 'error');
-      } else {
-        showNotification('No duplicates found', 'success');
-      }
-    } catch { showNotification('Failed to check duplicates', 'error'); }
-  };
-
-  // Per-rule export: export the rule + all rules under that App ID
-  const handleExportRuleApp = (rule: LegacyRule) => {
-    const appRules = rules.filter(r => String(r.app_id) === String(rule.app_id));
-    if (appRules.length === 0) { showNotification('No rules found for this app', 'error'); return; }
-    exportRulesToCSV(appRules, String(rule.app_id));
-  };
+  // Sync resource entries back to modifyState when entries change
+  useEffect(() => {
+    if (!modifyState) return;
+    const newSource = entriesToRaw(sourceEntries);
+    const newDest = entriesToRaw(destEntries);
+    const newService = entriesToRaw(serviceEntries);
+    if (newSource !== modifyState.rule_source || newDest !== modifyState.rule_destination || newService !== modifyState.rule_service) {
+      setModifyState(prev => prev ? { ...prev, rule_source: newSource, rule_destination: newDest, rule_service: newService } : prev);
+    }
+  }, [sourceEntries, destEntries, serviceEntries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Multi-app export with selection
   const handleMultiAppExport = () => {
@@ -399,13 +745,11 @@ export default function FirewallManagementPage() {
         </span>
       ),
     },
-    { key: '_actions', header: 'Actions', width: '120px', sortable: false,
+    { key: '_actions', header: 'Actions', width: '100px', sortable: false,
       render: (_, row) => (
         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={() => detailModal.open(row)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
           <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">Modify</button>
-          <button onClick={() => handleCheckDuplicates(row)} className="text-xs text-amber-600 hover:text-amber-800 font-medium">Dup?</button>
-          <button onClick={() => handleExportRuleApp(row)} className="text-xs text-teal-600 hover:text-teal-800 font-medium">Export</button>
         </div>
       ),
     },
@@ -433,11 +777,14 @@ export default function FirewallManagementPage() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <button onClick={() => setShowExportModal(true)} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
-            Export (Multi-App)
-          </button>
-          <button onClick={downloadSpreadsheet} disabled={!selectedApp} className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-700 hover:to-blue-700 disabled:opacity-40 shadow-sm">
-            Export Spreadsheet
+          <select value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
+          </select>
+          <button onClick={() => { setSelectedExportApps(selectedApp ? new Set([selectedApp]) : new Set()); setShowExportModal(true); }} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
+            Export Rules
           </button>
         </div>
       </div>
@@ -447,7 +794,7 @@ export default function FirewallManagementPage() {
           { label: 'Total Rules', value: rules.length, color: 'from-slate-100 to-slate-200 text-slate-800' },
           { label: 'Standard', value: standardCount, color: 'from-green-100 to-green-200 text-green-800' },
           { label: 'Non-Standard', value: nonStandardCount, color: 'from-red-100 to-red-200 text-red-800' },
-          { label: 'Exceptions', value: exceptions.length, color: 'from-amber-100 to-amber-200 text-amber-800' },
+          { label: 'Modifications', value: rules.filter(r => r.rule_action === 'Modify').length, color: 'from-amber-100 to-amber-200 text-amber-800' },
         ].map(card => (
           <div key={card.label} className={`p-4 rounded-lg bg-gradient-to-br ${card.color}`}>
             <div className="text-2xl font-bold">{card.value}</div>
@@ -477,21 +824,11 @@ export default function FirewallManagementPage() {
         )}
       </div>
 
-      <div className="mt-8 p-4 bg-white border border-gray-200 rounded-lg">
-        <ExceptionHandler
-          ruleId={detailModal.data?.id || ''}
-          appId={selectedApp || 'all'}
-          exceptions={exceptions}
-          onAddException={handleAddException}
-          onApproveException={handleApproveException}
-          onRejectException={handleRejectException}
-        />
-      </div>
 
-      {/* Multi-App Export Modal */}
-      <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Rules - Select Applications" size="lg">
+      {/* Export Rules Modal */}
+      <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Rules" size="lg">
         <div className="space-y-4">
-          <p className="text-xs text-gray-600">Select single, multiple, or all applications to export their rules as a spreadsheet with expanded groups.</p>
+          <p className="text-xs text-gray-600">Select a single app, multiple apps, or all apps to export their rules as a CSV spreadsheet with expanded groups. Use <strong>Select All</strong> to export everything at once.</p>
           <div className="flex items-center justify-between">
             <button onClick={() => {
               if (selectedExportApps.size === appOptions.length) setSelectedExportApps(new Set());
@@ -601,40 +938,55 @@ export default function FirewallManagementPage() {
       <Modal isOpen={!!modifyRule} onClose={closeModifyModal} title={`Modify Rule: ${modifyRule?.id || ''}`} size="xl">
         {modifyRule && modifyState && originalState && (
           <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+            {/* Rule summary header */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <div className="grid grid-cols-4 gap-3 text-xs">
+                <div><span className="text-gray-500">Rule ID:</span> <span className="font-medium">{modifyRule.id}</span></div>
+                <div><span className="text-gray-500">App ID:</span> <span className="font-medium">{String(modifyRule.app_id)}</span></div>
+                <div><span className="text-gray-500">App Name:</span> <span className="font-medium">{modifyRule.app_name}</span></div>
+                <div><span className="text-gray-500">Policy:</span> <span className="font-medium">{modifyRule.policy_name}</span></div>
+              </div>
+            </div>
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-700">
-                Modify source, destination, or service entries below. Add or remove individual IPs, ranges, or groups. Preview the delta before submitting for review.
+                Edit source, destination, and service entries below. For groups, expand to view and edit associated IPs/subnets. You can add new IPs, subnets, or groups and manage group members.
               </p>
             </div>
 
-            <FieldEditor label="Source" value={modifyState.rule_source} onChange={(v) => handleModifyField('rule_source', v)} onAddLine={(v) => addLineToField('rule_source', v)} onRemoveLine={(v) => removeLineFromField('rule_source', v)} appGroups={appGroups} />
+            {/* Source Section */}
+            <ResourceEditor label="Source" entries={sourceEntries} onChange={setSourceEntries} appGroups={appGroups} colorScheme={{ bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', headerBg: 'bg-blue-50' }} />
 
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Source Zone</label>
-              <input type="text" value={modifyState.rule_source_zone} onChange={e => handleModifyField('rule_source_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Source Zone</label>
+                <input type="text" value={modifyState.rule_source_zone} onChange={e => handleModifyField('rule_source_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Destination Zone</label>
+                <input type="text" value={modifyState.rule_destination_zone} onChange={e => handleModifyField('rule_destination_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
 
-            <FieldEditor label="Destination" value={modifyState.rule_destination} onChange={(v) => handleModifyField('rule_destination', v)} onAddLine={(v) => addLineToField('rule_destination', v)} onRemoveLine={(v) => removeLineFromField('rule_destination', v)} appGroups={appGroups} />
+            {/* Destination Section */}
+            <ResourceEditor label="Destination" entries={destEntries} onChange={setDestEntries} appGroups={appGroups} colorScheme={{ bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', headerBg: 'bg-purple-50' }} />
 
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Destination Zone</label>
-              <input type="text" value={modifyState.rule_destination_zone} onChange={e => handleModifyField('rule_destination_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
-            </div>
+            {/* Service Section */}
+            <ResourceEditor label="Service / Ports" entries={serviceEntries} onChange={setServiceEntries} appGroups={[]} colorScheme={{ bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', headerBg: 'bg-amber-50' }} />
 
-            <FieldEditor label="Service" value={modifyState.rule_service} onChange={(v) => handleModifyField('rule_service', v)} onAddLine={(v) => addLineToField('rule_service', v)} onRemoveLine={(v) => removeLineFromField('rule_service', v)} />
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Rule Action</label>
-              <select value={modifyState.rule_action} onChange={e => handleModifyField('rule_action', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md">
-                <option value="Accept">Accept</option>
-                <option value="DROP">DROP</option>
-                <option value="Reject">Reject</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Modification Comments</label>
-              <textarea value={modifyComments} onChange={e => setModifyComments(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md h-16 resize-none" placeholder="Describe the reason for modification..." />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Rule Action</label>
+                <select value={modifyState.rule_action} onChange={e => handleModifyField('rule_action', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md">
+                  <option value="Accept">Accept</option>
+                  <option value="DROP">DROP</option>
+                  <option value="Reject">Reject</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Modification Comments</label>
+                <textarea value={modifyComments} onChange={e => setModifyComments(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md h-[38px] resize-none" placeholder="Reason for modification..." />
+              </div>
             </div>
 
             {/* Compile Option */}
@@ -670,7 +1022,15 @@ export default function FirewallManagementPage() {
             ) : (
               <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
                 <h3 className="text-sm font-semibold text-blue-800 mb-2">Change Delta</h3>
-                <DeltaView delta={computeLocalDelta(originalState, modifyState)} />
+                <DeltaView delta={computeLocalDelta(originalState, {
+                  ...modifyState,
+                  rule_source: entriesToRaw(sourceEntries),
+                  rule_destination: entriesToRaw(destEntries),
+                  rule_service: entriesToRaw(serviceEntries),
+                  rule_source_expanded: buildExpandedText(sourceEntries),
+                  rule_destination_expanded: buildExpandedText(destEntries),
+                  rule_service_expanded: buildExpandedText(serviceEntries),
+                })} />
               </div>
             )}
 
