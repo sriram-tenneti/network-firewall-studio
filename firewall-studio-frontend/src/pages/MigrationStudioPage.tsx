@@ -7,7 +7,7 @@ import { Modal } from '@/components/shared/Modal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import {
-  getLegacyRules, updateLegacyRule, submitLegacyRulesForReview,
+  getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups, importRulesToNGDC, checkDuplicates,
   createMigrationGroup,
@@ -208,13 +208,6 @@ export function MigrationStudioPage() {
       showNotification(`${result.migrated} rules migrated to NGDC`, 'success');
       setSelectedRuleIds(new Set()); loadData();
     } catch { showNotification('Failed to migrate rules', 'error'); }
-  };
-
-  const handleStartMigration = async (ruleId: string) => {
-    try {
-      await updateLegacyRule(ruleId, { migration_status: 'In Progress' });
-      showNotification('Migration started', 'success'); detailModal.close(); loadData();
-    } catch { showNotification('Failed to start migration', 'error'); }
   };
 
   const openMigratePopup = async (rule: LegacyRule) => {
@@ -605,15 +598,7 @@ export function MigrationStudioPage() {
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              {detailModal.data.migration_status === 'Not Started' && (
-                <button onClick={() => handleStartMigration(detailModal.data!.id)} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-                  Start Migration
-                </button>
-              )}
-              <button onClick={() => { detailModal.close(); openMigratePopup(detailModal.data!); }} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
-                Migrate to NGDC
-              </button>
+            <div className="flex gap-3 pt-2 justify-end">
               <button onClick={detailModal.close} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
                 Close
               </button>
