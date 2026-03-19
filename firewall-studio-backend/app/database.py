@@ -412,6 +412,323 @@ SEED_APPLICATIONS = [
 ]
 
 # =====================================================================
+# COMPREHENSIVE LEGACY-TO-NGDC IP MAPPINGS PER APPLICATION
+# Maps each app's legacy DC IP ranges to their NGDC equivalents
+# =====================================================================
+SEED_LEGACY_TO_NGDC_IP_MAPPINGS: list[dict[str, Any]] = [
+    # --- CRM (App Alpha) - DC_LEGACY_A -> GAMMA_NGDC ---
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.1.0/24", "ngdc_ip": "10.1.10.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.2.0/24", "ngdc_ip": "10.1.11.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.3.0/24", "ngdc_ip": "10.1.12.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.10.0/24", "ngdc_ip": "10.1.13.0/24", "component": "BAT",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    # --- ORD (App Beta) - DC_LEGACY_A -> ALPHA_NGDC ---
+    {"app_id": "ORD", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.20.0/24", "ngdc_ip": "10.1.20.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    {"app_id": "ORD", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.21.0/24", "ngdc_ip": "10.1.21.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    # --- PSA (App Gamma) - DC_LEGACY_B -> ALPHA_NGDC ---
+    {"app_id": "PSA", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.1.0/24", "ngdc_ip": "10.2.10.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+    {"app_id": "PSA", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.2.0/24", "ngdc_ip": "10.2.11.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+    # --- DIG (App Delta) - DC_LEGACY_B -> BETA_NGDC ---
+    {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.10.0/24", "ngdc_ip": "10.2.20.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+    {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.11.0/24", "ngdc_ip": "10.2.21.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+    {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.12.0/24", "ngdc_ip": "10.2.22.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+    # --- PAY (App Epsilon) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.1.0/24", "ngdc_ip": "10.6.1.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+    {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.2.0/24", "ngdc_ip": "10.6.2.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+    {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.3.0/24", "ngdc_ip": "10.6.3.0/24", "component": "API",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+    # --- ENT (App Zeta) - DC_LEGACY_C -> BETA_NGDC ---
+    {"app_id": "ENT", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.10.0/24", "ngdc_ip": "10.4.1.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+    {"app_id": "ENT", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.11.0/24", "ngdc_ip": "10.4.2.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+    # --- SHR (Shared Platform) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "SHR", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.1.0/24", "ngdc_ip": "10.100.1.0/24", "component": "SVC",
+     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN"},
+    {"app_id": "SHR", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.2.0/24", "ngdc_ip": "10.100.2.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN"},
+    # --- HRM (HR Management) - DC_LEGACY_B -> ALPHA_NGDC ---
+    {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.5.0/24", "ngdc_ip": "10.0.5.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.15.0/24", "ngdc_ip": "10.0.15.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.30.0/24", "ngdc_ip": "10.0.30.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    # --- TRD (Trading) - DC_LEGACY_C -> BETA_NGDC ---
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.1.0/24", "ngdc_ip": "10.5.1.0/24", "component": "WEB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.2.0/24", "ngdc_ip": "10.5.2.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.10.0/24", "ngdc_ip": "10.5.10.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.50.0/24", "ngdc_ip": "10.5.50.0/24", "component": "MQ",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    # --- FRD (Fraud Detection) - DC_LEGACY_E -> ALPHA_NGDC ---
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.1.0/24", "ngdc_ip": "10.1.29.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.1.50", "ngdc_ip": "10.1.29.50", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.2.0/24", "ngdc_ip": "10.1.30.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.5.0/24", "ngdc_ip": "10.1.31.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    # --- INS (Insurance) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.10.0/24", "ngdc_ip": "10.3.10.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.20.0/24", "ngdc_ip": "10.3.20.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.50.0/24", "ngdc_ip": "10.3.50.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    # --- KYC (Know Your Customer) - DC_LEGACY_F -> ALPHA_NGDC ---
+    {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.5.0/24", "ngdc_ip": "10.4.5.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+    {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.10.0/24", "ngdc_ip": "10.4.10.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+    {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.20.0/24", "ngdc_ip": "10.4.20.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+    # --- AML (Anti Money Laundering) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "AML", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.30.0/24", "ngdc_ip": "10.6.30.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+    {"app_id": "AML", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.31.0/24", "ngdc_ip": "10.6.31.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+    # --- TAX (Tax Processing) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "TAX", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.40.0/24", "ngdc_ip": "10.9.40.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+    {"app_id": "TAX", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.41.0/24", "ngdc_ip": "10.9.41.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+    # --- RGM (Regulatory) - DC_LEGACY_E -> BETA_NGDC ---
+    {"app_id": "RGM", "legacy_dc": "DC_LEGACY_E", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.29.10.0/24", "ngdc_ip": "10.10.10.0/24", "component": "APP",
+     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST"},
+    {"app_id": "RGM", "legacy_dc": "DC_LEGACY_E", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.29.11.0/24", "ngdc_ip": "10.10.11.0/24", "component": "DB",
+     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST"},
+    # --- MBL (Mobile Banking) - DC_LEGACY_B -> BETA_NGDC ---
+    {"app_id": "MBL", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.20.0/24", "ngdc_ip": "10.2.30.0/24", "component": "API",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+    {"app_id": "MBL", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.21.0/24", "ngdc_ip": "10.2.31.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+    # --- WHL (Wholesale) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "WHL", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.40.0/24", "ngdc_ip": "10.5.40.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    {"app_id": "WHL", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.41.0/24", "ngdc_ip": "10.5.41.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    # --- CBK (Core Banking) - DC_LEGACY_A -> ALPHA_NGDC ---
+    {"app_id": "CBK", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.50.0/24", "ngdc_ip": "10.50.1.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "CBK", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.51.0/24", "ngdc_ip": "10.50.2.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    # --- TRS (Treasury) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "TRS", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.60.0/24", "ngdc_ip": "10.5.60.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    {"app_id": "TRS", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.61.0/24", "ngdc_ip": "10.5.61.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+    # --- CCM (Credit Card) - DC_LEGACY_A -> ALPHA_NGDC ---
+    {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.70.0/24", "ngdc_ip": "10.1.70.0/24", "component": "WEB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.71.0/24", "ngdc_ip": "10.1.71.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.72.0/24", "ngdc_ip": "10.1.72.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+    # --- LON (Loan Origination) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.60.0/24", "ngdc_ip": "10.9.60.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+    {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.61.0/24", "ngdc_ip": "10.9.61.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+    {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.62.0/24", "ngdc_ip": "10.9.62.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+    # --- BRK (Brokerage) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.70.0/24", "ngdc_ip": "10.3.70.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.71.0/24", "ngdc_ip": "10.3.71.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.72.0/24", "ngdc_ip": "10.3.72.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    # --- AGW (API Gateway) - DC_LEGACY_E -> ALPHA_NGDC ---
+    {"app_id": "AGW", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.20.0/24", "ngdc_ip": "10.70.1.0/24", "component": "API",
+     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ"},
+    {"app_id": "AGW", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.21.0/24", "ngdc_ip": "10.70.2.0/24", "component": "LB",
+     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ"},
+    # --- SOC (Security Operations) - DC_LEGACY_F -> ALPHA_NGDC ---
+    {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.30.0/24", "ngdc_ip": "10.0.200.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.31.0/24", "ngdc_ip": "10.0.201.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.32.0/24", "ngdc_ip": "10.0.202.0/24", "component": "MON",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+    # --- CLN (Client Onboarding) ---
+    {"app_id": "CLN", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.80.0/24", "ngdc_ip": "10.9.80.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+    {"app_id": "CLN", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.81.0/24", "ngdc_ip": "10.9.81.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+    # --- WLT (Wallet) ---
+    {"app_id": "WLT", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.90.0/24", "ngdc_ip": "10.3.90.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    {"app_id": "WLT", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.91.0/24", "ngdc_ip": "10.3.91.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+    # --- ACH (Clearing House) ---
+    {"app_id": "ACH", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.100.0/24", "ngdc_ip": "10.8.100.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+    {"app_id": "ACH", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.101.0/24", "ngdc_ip": "10.8.101.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+]
+
+
+# =====================================================================
+# COMPONENT-TO-SECURITY-ZONE MAPPING
+# Maps app component types (WEB, APP, DB, BAT, MQ, API) to appropriate SZs
+# =====================================================================
+SEED_COMPONENT_TO_SZ: dict[str, dict[str, str]] = {
+    # CDE (Cardholder Data Environment) apps - all components stay in CDE
+    "CDE": {
+        "WEB": "CDE", "APP": "CDE", "DB": "CDE", "BAT": "CDE",
+        "MQ": "CDE", "API": "CDE", "LB": "DMZ", "MON": "MGT",
+    },
+    # GEN (General/Standard) apps
+    "GEN": {
+        "WEB": "GEN", "APP": "GEN", "DB": "GEN", "BAT": "GEN",
+        "MQ": "GEN", "API": "GEN", "LB": "DMZ", "MON": "MGT",
+    },
+    # RST (Restricted) apps
+    "RST": {
+        "WEB": "RST", "APP": "RST", "DB": "RST", "BAT": "RST",
+        "MQ": "RST", "API": "RST", "LB": "DMZ", "MON": "MGT",
+    },
+    # DMZ apps
+    "DMZ": {
+        "WEB": "DMZ", "APP": "DMZ", "DB": "GEN", "BAT": "GEN",
+        "MQ": "GEN", "API": "DMZ", "LB": "DMZ", "MON": "MGT",
+    },
+    # PAA (Payment Account Automation)
+    "PAA": {
+        "WEB": "PAA", "APP": "PAA", "DB": "PAA", "BAT": "PAA",
+        "MQ": "PAA", "API": "PAA", "LB": "DMZ", "MON": "MGT",
+    },
+}
+
+
+# =====================================================================
+# NGDC STANDARD GROUP TEMPLATES PER APPLICATION
+# Recommended group names based on NGDC standards for each app
+# =====================================================================
+SEED_NGDC_STANDARD_GROUPS: list[dict[str, Any]] = []
+for _app in [{"app_id": "CRM", "nh": "NH02", "sz": "CDE"},
+             {"app_id": "ORD", "nh": "NH01", "sz": "GEN"},
+             {"app_id": "PSA", "nh": "NH09", "sz": "GEN"},
+             {"app_id": "DIG", "nh": "NH03", "sz": "CDE"},
+             {"app_id": "PAY", "nh": "NH07", "sz": "CDE"},
+             {"app_id": "ENT", "nh": "NH05", "sz": "GEN"},
+             {"app_id": "SHR", "nh": "NH13", "sz": "GEN"},
+             {"app_id": "WHL", "nh": "NH06", "sz": "CDE"},
+             {"app_id": "CBK", "nh": "NH02", "sz": "CDE"},
+             {"app_id": "CLN", "nh": "NH10", "sz": "GEN"},
+             {"app_id": "WLT", "nh": "NH04", "sz": "GEN"},
+             {"app_id": "ACH", "nh": "NH09", "sz": "GEN"},
+             {"app_id": "HRM", "nh": "NH01", "sz": "GEN"},
+             {"app_id": "TRD", "nh": "NH06", "sz": "CDE"},
+             {"app_id": "FRD", "nh": "NH02", "sz": "CDE"},
+             {"app_id": "RGM", "nh": "NH11", "sz": "RST"},
+             {"app_id": "MBL", "nh": "NH03", "sz": "CDE"},
+             {"app_id": "INS", "nh": "NH04", "sz": "GEN"},
+             {"app_id": "TAX", "nh": "NH10", "sz": "GEN"},
+             {"app_id": "AML", "nh": "NH07", "sz": "CDE"},
+             {"app_id": "KYC", "nh": "NH05", "sz": "GEN"},
+             {"app_id": "TRS", "nh": "NH06", "sz": "CDE"},
+             {"app_id": "CCM", "nh": "NH02", "sz": "CDE"},
+             {"app_id": "LON", "nh": "NH10", "sz": "GEN"},
+             {"app_id": "BRK", "nh": "NH04", "sz": "GEN"},
+             {"app_id": "AGW", "nh": "NH14", "sz": "DMZ"},
+             {"app_id": "SOC", "nh": "NH01", "sz": "GEN"}]:
+    for _comp in ["WEB", "APP", "DB", "BAT", "MQ", "API"]:
+        _csz = SEED_COMPONENT_TO_SZ.get(_app["sz"], {}).get(_comp, _app["sz"])
+        SEED_NGDC_STANDARD_GROUPS.append({
+            "app_id": _app["app_id"],
+            "group_name": f"grp-{_app['app_id']}-{_app['nh']}-{_csz}-{_comp}",
+            "nh": _app["nh"], "sz": _csz, "component": _comp,
+            "description": f"NGDC standard {_comp} group for {_app['app_id']}",
+        })
+
+
+# =====================================================================
 # LEGACY / EXISTING FIREWALL RULES (from imported spreadsheet)
 # Format mirrors the Excel columns: App ID, App Current Distributed ID, App Name,
 # Inventory Item, Policy Name, Rule Global, Rule Action, Rule Source, Rule Source Expanded,
@@ -2668,9 +2985,31 @@ async def delete_birthright_entry(matrix_type: str, index: int) -> bool:
 # NGDC Migration Recommendations
 # ============================================================
 
+def _detect_destination_app(dest_ip: str, source_app_id: str) -> dict[str, Any] | None:
+    """Detect which application owns a destination IP by scanning all legacy-to-NGDC mappings."""
+    ip_base = dest_ip.split("/")[0] if "/" in dest_ip else dest_ip
+    for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS:
+        if m["app_id"].upper() == source_app_id.upper():
+            continue  # Skip same app
+        legacy_base = m["legacy_ip"].split("/")[0] if "/" in m["legacy_ip"] else m["legacy_ip"]
+        # Exact match or subnet prefix match
+        if ip_base == legacy_base or ip_base.startswith(legacy_base.rsplit(".", 1)[0]):
+            return {
+                "app_id": m["app_id"],
+                "legacy_ip": m["legacy_ip"],
+                "ngdc_ip": m["ngdc_ip"],
+                "component": m.get("component", "APP"),
+                "ngdc_nh": m.get("ngdc_nh", ""),
+                "ngdc_sz": m.get("ngdc_sz", ""),
+                "target_dc": m.get("target_dc", ""),
+                "recommended_group": f"grp-{m['app_id']}-{m.get('ngdc_nh', 'NH01')}-{m.get('ngdc_sz', 'GEN')}-{m.get('component', 'APP')}",
+            }
+    return None
+
+
 async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     """Generate NGDC recommendations for a legacy rule based on backend mapping tables,
-    App-DC mappings, and service/port analysis."""
+    App-DC mappings, legacy-to-NGDC IP mappings, and service/port analysis."""
     rules = _load("legacy_rules") or []
     rule = next((r for r in rules if r["id"] == rule_id), None)
     if not rule:
@@ -2753,7 +3092,42 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 "customizable": True,
             }
 
-        # Priority 2: Match against existing groups
+        # Priority 2: Look up legacy-to-NGDC IP mapping seed data
+        ip_mapping_match = next(
+            (m for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS
+             if m["legacy_ip"] == legacy_name and
+             (m["app_id"].upper() == app_id.upper() or m["app_id"].upper() == (app_dist or "").upper())),
+            None)
+        if not ip_mapping_match:
+            # Try partial match (subnet containment)
+            ip_mapping_match = next(
+                (m for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS
+                 if legacy_name.startswith(m["legacy_ip"].split("/")[0].rsplit(".", 1)[0]) and
+                 (m["app_id"].upper() == app_id.upper() or m["app_id"].upper() == (app_dist or "").upper())),
+                None)
+        if ip_mapping_match:
+            comp = ip_mapping_match.get("component", "APP")
+            csz = SEED_COMPONENT_TO_SZ.get(ip_mapping_match.get("ngdc_sz", recommended_sz), {}).get(comp, ip_mapping_match.get("ngdc_sz", recommended_sz))
+            std_grp = f"grp-{app_id.upper()}-{ip_mapping_match['ngdc_nh']}-{csz}-{comp}"
+            return {
+                "legacy": legacy_name,
+                "ngdc_recommended": std_grp,
+                "ngdc_ip": ip_mapping_match["ngdc_ip"],
+                "type": "group",
+                "mapping_source": "legacy_ngdc_ip_mapping",
+                "mapping_id": None,
+                "mapping_status": "mapped",
+                "ngdc_nh": ip_mapping_match["ngdc_nh"],
+                "ngdc_sz": csz,
+                "component": comp,
+                "legacy_dc": ip_mapping_match.get("legacy_dc", ""),
+                "target_dc": ip_mapping_match.get("target_dc", ""),
+                "existing_group": None,
+                "customizable": True,
+                "group_members": [ip_mapping_match["ngdc_ip"]],
+            }
+
+        # Priority 3: Match against existing groups
         existing_group = next((g for g in groups if any(
             m.get("value", "") in legacy_name for m in g.get("members", []))), None)
         if existing_group:
@@ -2770,7 +3144,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 "customizable": True,
             }
 
-        # Priority 3: Generate based on naming convention
+        # Priority 4: Generate based on naming convention
         return {
             "legacy": legacy_name,
             "ngdc_recommended": _suggest_ngdc_name(legacy_name, f"{entry_type}{idx+1:02d}"),
@@ -2786,6 +3160,15 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     source_mappings = [_build_mapping(src, "SRC", i) for i, src in enumerate(src_entries)]
     destination_mappings = [_build_mapping(dst, "DST", i) for i, dst in enumerate(dst_entries)]
+
+    # --- Destination App Detection ---
+    dest_app_info_list = []
+    for dm in destination_mappings:
+        dest_ip = dm.get("legacy", "")
+        detected = _detect_destination_app(dest_ip, app_id)
+        if detected:
+            dest_app_info_list.append(detected)
+            dm["dest_app"] = detected
 
     # --- Step 3: Service/port recommendations ---
     standard_ports: dict[str, str] = {
@@ -2823,6 +3206,15 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     table_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "ngdc_mapping_table")
     group_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "existing_group")
     auto_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "auto_generated")
+    ip_map_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "legacy_ngdc_ip_mapping")
+
+    # --- Standard groups for this app ---
+    app_std_groups = [g for g in SEED_NGDC_STANDARD_GROUPS
+                      if g["app_id"].upper() == app_id.upper()]
+
+    # --- Legacy-to-NGDC IP mappings for this app ---
+    app_ip_mappings = [m for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS
+                       if m["app_id"].upper() == app_id.upper()]
 
     return {
         "rule_id": rule_id,
@@ -2841,11 +3233,16 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "total": len(source_mappings) + len(destination_mappings),
             "from_mapping_table": table_count,
             "from_existing_groups": group_count,
+            "from_ip_mapping": ip_map_count,
             "auto_generated": auto_count,
         },
         "naming_standard": f"grp-{(app_dist or app_id)[:6].upper()}-{recommended_nh}-{recommended_sz}-{{SUBTYPE}}",
         "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
         "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
+        "standard_groups": app_std_groups,
+        "ip_mappings": app_ip_mappings,
+        "destination_apps": dest_app_info_list,
+        "component_sz_mapping": SEED_COMPONENT_TO_SZ,
     }
 
 
@@ -3461,3 +3858,181 @@ async def create_migration_group(name: str, app_id: str, members: list[dict[str,
     groups.append(new_group)
     _save("groups", groups)
     return new_group
+
+
+# ============================================================
+# Comprehensive Migration Details API
+# ============================================================
+
+async def get_migration_details(rule_id: str) -> dict[str, Any] | None:
+    """Get comprehensive migration details for a legacy rule including all mappings,
+    destination app detection, standard groups, and component-to-SZ mappings."""
+    rules = _load("legacy_rules") or []
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        return None
+
+    app_id = str(rule.get("app_id", ""))
+    app_dist = rule.get("app_distributed_id", "")
+    app_name = rule.get("app_name", "")
+    apps = _load("applications") or []
+    app_info = next((a for a in apps if str(a.get("app_id")) == app_id or
+                     a.get("app_distributed_id") == app_dist), None)
+
+    # Get all legacy-to-NGDC IP mappings for this app
+    app_ip_mappings = [m for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS
+                       if m["app_id"].upper() == app_id.upper() or
+                       m["app_id"].upper() == (app_dist or "").upper()]
+
+    # Get standard groups for this app
+    app_std_groups = [g for g in SEED_NGDC_STANDARD_GROUPS
+                      if g["app_id"].upper() == app_id.upper()]
+
+    # Detect destination apps from rule destinations
+    dst_entries = [d.strip() for d in (rule.get("rule_destination", "") or "").split("\n") if d.strip()]
+    dest_apps = []
+    for dst in dst_entries:
+        detected = _detect_destination_app(dst, app_id)
+        if detected:
+            dest_apps.append(detected)
+
+    # Get NH/SZ info
+    nhs = _load("neighbourhoods") or []
+    szs = _load("security_zones") or []
+
+    # Determine recommended DC/NH/SZ
+    app_dc_mappings = _load("app_dc_mappings") or []
+    app_dc = next((m for m in app_dc_mappings if
+                   str(m.get("app_id", "")).upper() == app_id.upper()), None)
+    if app_dc:
+        rec_nh = app_dc.get("neighbourhood", "NH01")
+        rec_sz = app_dc.get("security_zone", "GEN")
+        rec_dc = app_dc.get("datacenter", "")
+    elif app_info:
+        rec_nh = app_info.get("nh", "NH01")
+        rec_sz = app_info.get("sz", "GEN")
+        rec_dc = ""
+    else:
+        rec_nh = "NH01"
+        rec_sz = "GEN"
+        rec_dc = ""
+
+    return {
+        "rule_id": rule_id,
+        "rule": rule,
+        "app_info": app_info,
+        "recommended_nh": rec_nh,
+        "recommended_sz": rec_sz,
+        "recommended_dc": rec_dc,
+        "ip_mappings": app_ip_mappings,
+        "standard_groups": app_std_groups,
+        "destination_apps": dest_apps,
+        "component_sz_mapping": SEED_COMPONENT_TO_SZ,
+        "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
+        "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
+    }
+
+
+async def get_destination_app(dest_ip: str) -> dict[str, Any] | None:
+    """Identify which application owns a given destination IP."""
+    return _detect_destination_app(dest_ip, "")
+
+
+async def get_ip_to_app_mapping(ip: str) -> list[dict[str, Any]]:
+    """Return all legacy-to-NGDC IP mappings that match a given IP."""
+    ip_base = ip.split("/")[0] if "/" in ip else ip
+    results = []
+    for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS:
+        legacy_base = m["legacy_ip"].split("/")[0] if "/" in m["legacy_ip"] else m["legacy_ip"]
+        if ip_base == legacy_base or ip_base.startswith(legacy_base.rsplit(".", 1)[0]):
+            results.append(m)
+    return results
+
+
+async def get_all_legacy_ngdc_ip_mappings(app_id: str | None = None) -> list[dict[str, Any]]:
+    """Return all or app-filtered legacy-to-NGDC IP mappings."""
+    if app_id:
+        return [m for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS
+                if m["app_id"].upper() == app_id.upper()]
+    return list(SEED_LEGACY_TO_NGDC_IP_MAPPINGS)
+
+
+async def get_standard_groups(app_id: str | None = None) -> list[dict[str, Any]]:
+    """Return all or app-filtered NGDC standard groups."""
+    if app_id:
+        return [g for g in SEED_NGDC_STANDARD_GROUPS
+                if g["app_id"].upper() == app_id.upper()]
+    return list(SEED_NGDC_STANDARD_GROUPS)
+
+
+async def get_component_sz_mappings() -> dict[str, dict[str, str]]:
+    """Return the component-to-SZ mapping table."""
+    return dict(SEED_COMPONENT_TO_SZ)
+
+
+async def check_rule_ngdc_standardization(rule_id: str) -> dict[str, Any]:
+    """Check if a migrated rule follows NGDC standards and suggest re-standardization."""
+    rules = _load("rules") or []
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if not rule:
+        return {"compliant": False, "issues": ["Rule not found"], "suggestions": []}
+
+    issues: list[str] = []
+    suggestions: list[dict[str, str]] = []
+    app_id = str(rule.get("app_id", ""))
+
+    # Check source/destination are groups (not individual IPs)
+    for field_name in ["source", "destination"]:
+        field_val = ""
+        if field_name == "source":
+            src_cfg = rule.get("source", {})
+            if isinstance(src_cfg, dict):
+                field_val = src_cfg.get("value", "")
+            else:
+                field_val = str(src_cfg)
+        else:
+            dst_cfg = rule.get("destination", {})
+            if isinstance(dst_cfg, dict):
+                field_val = dst_cfg.get("value", "")
+            else:
+                field_val = str(dst_cfg)
+
+        entries = [e.strip() for e in field_val.split("\n") if e.strip()]
+        for entry in entries:
+            if not entry.startswith("grp-"):
+                issues.append(f"{field_name.title()} '{entry}' is not an NGDC standard group")
+                # Find best matching standard group
+                std_groups = [g for g in SEED_NGDC_STANDARD_GROUPS
+                              if g["app_id"].upper() == app_id.upper()]
+                if std_groups:
+                    suggestions.append({
+                        "field": field_name,
+                        "current": entry,
+                        "suggested": std_groups[0]["group_name"],
+                        "reason": "NGDC requires group-to-group rules",
+                    })
+
+    # Check group naming follows NGDC standard: grp-{APP}-{NH}-{SZ}-{COMPONENT}
+    for field_name in ["source", "destination"]:
+        field_val = ""
+        if field_name == "source":
+            src_cfg = rule.get("source", {})
+            field_val = src_cfg.get("value", "") if isinstance(src_cfg, dict) else str(src_cfg)
+        else:
+            dst_cfg = rule.get("destination", {})
+            field_val = dst_cfg.get("value", "") if isinstance(dst_cfg, dict) else str(dst_cfg)
+        entries = [e.strip() for e in field_val.split("\n") if e.strip()]
+        for entry in entries:
+            if entry.startswith("grp-"):
+                parts = entry.split("-")
+                if len(parts) < 5:
+                    issues.append(f"Group '{entry}' does not follow grp-APP-NH-SZ-COMPONENT naming")
+
+    return {
+        "rule_id": rule_id,
+        "compliant": len(issues) == 0,
+        "issues": issues,
+        "suggestions": suggestions,
+        "standard_groups": [g for g in SEED_NGDC_STANDARD_GROUPS
+                            if g["app_id"].upper() == app_id.upper()],
+    }

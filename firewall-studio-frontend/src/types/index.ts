@@ -298,6 +298,7 @@ export interface MappingSummary {
   total: number;
   from_mapping_table: number;
   from_existing_groups: number;
+  from_ip_mapping: number;
   auto_generated: number;
 }
 
@@ -318,19 +319,84 @@ export interface NGDCRecommendation {
   naming_standard: string;
   available_nhs: { nh_id: string; name: string }[];
   available_szs: { code: string; name: string }[];
+  standard_groups?: NGDCStandardGroup[];
+  ip_mappings?: LegacyNGDCIPMapping[];
+  destination_apps?: DestinationAppInfo[];
+  component_sz_mapping?: Record<string, Record<string, string>>;
 }
 
 export interface IPMapping {
   legacy: string;
   ngdc_recommended: string;
+  ngdc_ip?: string;
   type: 'group' | 'server' | 'range' | 'other';
   existing_group: string | null;
   customizable: boolean;
-  mapping_source?: 'ngdc_mapping_table' | 'existing_group' | 'auto_generated';
+  mapping_source?: 'ngdc_mapping_table' | 'existing_group' | 'legacy_ngdc_ip_mapping' | 'auto_generated';
   mapping_id?: string | null;
   mapping_status?: string;
   ngdc_nh?: string;
   ngdc_sz?: string;
+  component?: string;
+  legacy_dc?: string;
+  target_dc?: string;
+  group_members?: string[];
+  dest_app?: DestinationAppInfo;
+}
+
+export interface LegacyNGDCIPMapping {
+  app_id: string;
+  legacy_dc: string;
+  target_dc: string;
+  legacy_ip: string;
+  ngdc_ip: string;
+  component: string;
+  legacy_zone: string;
+  ngdc_nh: string;
+  ngdc_sz: string;
+}
+
+export interface NGDCStandardGroup {
+  app_id: string;
+  group_name: string;
+  nh: string;
+  sz: string;
+  component: string;
+  description: string;
+}
+
+export interface DestinationAppInfo {
+  app_id: string;
+  legacy_ip: string;
+  ngdc_ip: string;
+  component: string;
+  ngdc_nh: string;
+  ngdc_sz: string;
+  target_dc: string;
+  recommended_group: string;
+}
+
+export interface MigrationDetailsResponse {
+  rule_id: string;
+  rule: LegacyRule;
+  app_info: Record<string, unknown> | null;
+  recommended_nh: string;
+  recommended_sz: string;
+  recommended_dc: string;
+  ip_mappings: LegacyNGDCIPMapping[];
+  standard_groups: NGDCStandardGroup[];
+  destination_apps: DestinationAppInfo[];
+  component_sz_mapping: Record<string, Record<string, string>>;
+  available_nhs: { nh_id: string; name: string }[];
+  available_szs: { code: string; name: string }[];
+}
+
+export interface NGDCStandardizationCheck {
+  rule_id: string;
+  compliant: boolean;
+  issues: string[];
+  suggestions: { field: string; current: string; suggested: string; reason: string }[];
+  standard_groups: NGDCStandardGroup[];
 }
 
 export interface BirthrightValidation {

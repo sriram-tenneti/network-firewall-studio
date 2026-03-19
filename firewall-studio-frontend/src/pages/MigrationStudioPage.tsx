@@ -12,7 +12,7 @@ import {
   validateBirthright, getGroups,
   createMigrationGroup,
 } from '@/lib/api';
-import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
+import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, NGDCStandardGroup, LegacyNGDCIPMapping, DestinationAppInfo } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -611,15 +611,94 @@ export function MigrationStudioPage() {
                         <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-500">
                           <span>Mappings: {recommendation.mapping_summary.total} total</span>
                           {recommendation.mapping_summary.from_mapping_table > 0 && <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded">{recommendation.mapping_summary.from_mapping_table} from table</span>}
+                          {(recommendation.mapping_summary.from_ip_mapping ?? 0) > 0 && <span className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded">{recommendation.mapping_summary.from_ip_mapping} from IP mapping</span>}
                           {recommendation.mapping_summary.from_existing_groups > 0 && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">{recommendation.mapping_summary.from_existing_groups} from groups</span>}
                           {recommendation.mapping_summary.auto_generated > 0 && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">{recommendation.mapping_summary.auto_generated} auto-generated</span>}
                         </div>
                       )}
                     </div>
 
+                    {/* Legacy-to-NGDC IP Mappings for this App */}
+                    {(recommendation.ip_mappings?.length ?? 0) > 0 && (
+                      <div className="border border-teal-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-teal-50 border-b border-teal-200">
+                          <h4 className="text-xs font-semibold text-teal-800">Legacy-to-NGDC IP Mappings ({recommendation.ip_mappings!.length})</h4>
+                          <p className="text-[10px] text-teal-600">All IP/subnet mappings for this application from Legacy DC to NGDC</p>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto">
+                          <table className="w-full text-xs">
+                            <thead className="bg-gray-50 sticky top-0">
+                              <tr>
+                                <th className="px-2 py-1 text-left text-gray-500">Legacy IP</th>
+                                <th className="px-2 py-1 text-left text-gray-500">NGDC IP</th>
+                                <th className="px-2 py-1 text-left text-gray-500">Component</th>
+                                <th className="px-2 py-1 text-left text-gray-500">Legacy DC</th>
+                                <th className="px-2 py-1 text-left text-gray-500">Target DC</th>
+                                <th className="px-2 py-1 text-left text-gray-500">NH/SZ</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {recommendation.ip_mappings!.map((m: LegacyNGDCIPMapping, i: number) => (
+                                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
+                                  <td className="px-2 py-1 font-mono text-red-600">{m.legacy_ip}</td>
+                                  <td className="px-2 py-1 font-mono text-green-600">{m.ngdc_ip}</td>
+                                  <td className="px-2 py-1"><span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px]">{m.component}</span></td>
+                                  <td className="px-2 py-1 text-gray-500">{m.legacy_dc}</td>
+                                  <td className="px-2 py-1 text-gray-500">{m.target_dc}</td>
+                                  <td className="px-2 py-1"><span className="text-gray-600">{m.ngdc_nh}/{m.ngdc_sz}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Destination App Detection */}
+                    {(recommendation.destination_apps?.length ?? 0) > 0 && (
+                      <div className="border border-orange-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-orange-50 border-b border-orange-200">
+                          <h4 className="text-xs font-semibold text-orange-800">Destination App Detection ({recommendation.destination_apps!.length})</h4>
+                          <p className="text-[10px] text-orange-600">Destination IPs were matched to other applications in NGDC</p>
+                        </div>
+                        <div className="p-2 space-y-1">
+                          {recommendation.destination_apps!.map((da: DestinationAppInfo, i: number) => (
+                            <div key={i} className="flex items-center gap-2 text-xs bg-orange-50/50 rounded p-1.5">
+                              <span className="px-1.5 py-0.5 bg-orange-200 text-orange-800 rounded font-medium">{da.app_id}</span>
+                              <span className="font-mono text-red-500">{da.legacy_ip}</span>
+                              <span className="text-gray-400">&rarr;</span>
+                              <span className="font-mono text-green-600">{da.ngdc_ip}</span>
+                              <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px]">{da.component}</span>
+                              <span className="text-gray-400 text-[10px]">{da.target_dc} / {da.ngdc_nh}/{da.ngdc_sz}</span>
+                              <span className="ml-auto font-mono text-[10px] text-blue-600">{da.recommended_group}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* NGDC Standard Groups for this App */}
+                    {(recommendation.standard_groups?.length ?? 0) > 0 && (
+                      <div className="border border-emerald-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-emerald-50 border-b border-emerald-200">
+                          <h4 className="text-xs font-semibold text-emerald-800">NGDC Standard Groups ({recommendation.standard_groups!.length})</h4>
+                          <p className="text-[10px] text-emerald-600">Recommended standard group names for this application</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 p-2">
+                          {recommendation.standard_groups!.map((g: NGDCStandardGroup, i: number) => (
+                            <div key={i} className="flex items-center gap-2 text-xs bg-emerald-50/50 rounded px-2 py-1">
+                              <span className="font-mono text-emerald-700 font-medium">{g.group_name}</span>
+                              <span className="px-1 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">{g.component}</span>
+                              <span className="text-gray-400 text-[10px]">{g.nh}/{g.sz}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {appGroups.length > 0 && (
                       <div className="border rounded-lg p-3">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Available Groups for App {migrateRule.app_id}</h4>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Existing Groups for App {migrateRule.app_id}</h4>
                         <div className="grid grid-cols-3 gap-2">
                           {appGroups.map(g => (
                             <div key={g.name} className="px-2 py-1 bg-gray-50 rounded text-xs">
@@ -679,37 +758,59 @@ export function MigrationStudioPage() {
                     </div>
                     <div className="space-y-2">
                       {customMappings.map((mapping, i) => (
-                        <div key={i} className="grid grid-cols-[1fr,auto,1fr,auto] gap-2 items-center bg-gray-50 rounded-lg p-2">
-                          <div>
-                            <label className="text-xs text-gray-500">Legacy</label>
-                            <div className="font-mono text-xs text-red-600 bg-white rounded px-2 py-1 border">{mapping.legacy}</div>
+                        <div key={i} className="bg-gray-50 rounded-lg p-2 space-y-1">
+                          <div className="grid grid-cols-[1fr,auto,1fr,auto] gap-2 items-center">
+                            <div>
+                              <label className="text-xs text-gray-500">Legacy</label>
+                              <div className="font-mono text-xs text-red-600 bg-white rounded px-2 py-1 border">{mapping.legacy}</div>
+                            </div>
+                            <div className="text-gray-400 text-lg font-bold">&rarr;</div>
+                            <div>
+                              <label className="text-xs text-gray-500">NGDC Group</label>
+                              <input type="text" value={mapping.ngdc_recommended}
+                                onChange={e => updateSourceMapping(i, 'ngdc_recommended', e.target.value)}
+                                disabled={!mapping.customizable}
+                                className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-gray-300 disabled:bg-gray-100" />
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                mapping.type === 'group' ? 'bg-blue-100 text-blue-700' :
+                                mapping.type === 'server' ? 'bg-purple-100 text-purple-700' :
+                                mapping.type === 'range' ? 'bg-amber-100 text-amber-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{mapping.type}</span>
+                              {mapping.mapping_source && (
+                                <span className={`px-1 py-0.5 text-[9px] rounded ${
+                                  mapping.mapping_source === 'ngdc_mapping_table' ? 'bg-green-50 text-green-600' :
+                                  mapping.mapping_source === 'legacy_ngdc_ip_mapping' ? 'bg-teal-50 text-teal-600' :
+                                  mapping.mapping_source === 'existing_group' ? 'bg-blue-50 text-blue-600' :
+                                  'bg-gray-50 text-gray-400'
+                                }`}>
+                                  {mapping.mapping_source === 'ngdc_mapping_table' ? 'table' :
+                                   mapping.mapping_source === 'legacy_ngdc_ip_mapping' ? 'IP mapped' :
+                                   mapping.mapping_source === 'existing_group' ? 'group' : 'auto'}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-gray-400 text-lg font-bold">&rarr;</div>
-                          <div>
-                            <label className="text-xs text-gray-500">NGDC Target</label>
-                            <input type="text" value={mapping.ngdc_recommended}
-                              onChange={e => updateSourceMapping(i, 'ngdc_recommended', e.target.value)}
-                              disabled={!mapping.customizable}
-                              className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-gray-300 disabled:bg-gray-100" />
-                          </div>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span className={`px-1.5 py-0.5 text-xs rounded ${
-                              mapping.type === 'group' ? 'bg-blue-100 text-blue-700' :
-                              mapping.type === 'server' ? 'bg-purple-100 text-purple-700' :
-                              mapping.type === 'range' ? 'bg-amber-100 text-amber-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>{mapping.type}</span>
-                            {mapping.mapping_source && (
-                              <span className={`px-1 py-0.5 text-[9px] rounded ${
-                                mapping.mapping_source === 'ngdc_mapping_table' ? 'bg-green-50 text-green-600' :
-                                mapping.mapping_source === 'existing_group' ? 'bg-blue-50 text-blue-600' :
-                                'bg-gray-50 text-gray-400'
-                              }`}>
-                                {mapping.mapping_source === 'ngdc_mapping_table' ? 'table' :
-                                 mapping.mapping_source === 'existing_group' ? 'group' : 'auto'}
-                              </span>
-                            )}
-                          </div>
+                          {/* Show NGDC IP and component/DC info for IP-mapped entries */}
+                          {mapping.ngdc_ip && (
+                            <div className="flex items-center gap-2 text-[10px] ml-1 text-gray-500">
+                              <span>NGDC IP: <span className="font-mono text-green-600">{mapping.ngdc_ip}</span></span>
+                              {mapping.component && <span className="px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded">{mapping.component}</span>}
+                              {mapping.legacy_dc && <span>Legacy DC: {mapping.legacy_dc}</span>}
+                              {mapping.target_dc && <span>&rarr; {mapping.target_dc}</span>}
+                              {mapping.ngdc_nh && <span>{mapping.ngdc_nh}/{mapping.ngdc_sz}</span>}
+                            </div>
+                          )}
+                          {(mapping.group_members?.length ?? 0) > 0 && (
+                            <div className="flex items-center gap-1 text-[10px] ml-1">
+                              <span className="text-gray-400">Members:</span>
+                              {mapping.group_members!.map((m, j) => (
+                                <span key={j} className="font-mono px-1 py-0.5 bg-gray-200 text-gray-700 rounded">{m}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                       {customMappings.length === 0 && (
@@ -719,39 +820,63 @@ export function MigrationStudioPage() {
 
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mt-4">
                       <h3 className="text-sm font-semibold text-purple-800 mb-1">Destination IP Mapping (Legacy to NGDC)</h3>
+                      <p className="text-xs text-purple-600">Destination IPs may belong to other apps — see detected destination apps below each mapping.</p>
                     </div>
                     <div className="space-y-2">
                       {customDestMappings.map((mapping, i) => (
-                        <div key={i} className="grid grid-cols-[1fr,auto,1fr,auto] gap-2 items-center bg-gray-50 rounded-lg p-2">
-                          <div>
-                            <label className="text-xs text-gray-500">Legacy</label>
-                            <div className="font-mono text-xs text-red-600 bg-white rounded px-2 py-1 border">{mapping.legacy}</div>
+                        <div key={i} className="bg-gray-50 rounded-lg p-2 space-y-1">
+                          <div className="grid grid-cols-[1fr,auto,1fr,auto] gap-2 items-center">
+                            <div>
+                              <label className="text-xs text-gray-500">Legacy</label>
+                              <div className="font-mono text-xs text-red-600 bg-white rounded px-2 py-1 border">{mapping.legacy}</div>
+                            </div>
+                            <div className="text-gray-400 text-lg font-bold">&rarr;</div>
+                            <div>
+                              <label className="text-xs text-gray-500">NGDC Group</label>
+                              <input type="text" value={mapping.ngdc_recommended}
+                                onChange={e => updateDestMapping(i, 'ngdc_recommended', e.target.value)}
+                                disabled={!mapping.customizable}
+                                className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-gray-300 disabled:bg-gray-100" />
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                mapping.type === 'group' ? 'bg-blue-100 text-blue-700' :
+                                mapping.type === 'server' ? 'bg-purple-100 text-purple-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{mapping.type}</span>
+                              {mapping.mapping_source && (
+                                <span className={`px-1 py-0.5 text-[9px] rounded ${
+                                  mapping.mapping_source === 'ngdc_mapping_table' ? 'bg-green-50 text-green-600' :
+                                  mapping.mapping_source === 'legacy_ngdc_ip_mapping' ? 'bg-teal-50 text-teal-600' :
+                                  mapping.mapping_source === 'existing_group' ? 'bg-blue-50 text-blue-600' :
+                                  'bg-gray-50 text-gray-400'
+                                }`}>
+                                  {mapping.mapping_source === 'ngdc_mapping_table' ? 'table' :
+                                   mapping.mapping_source === 'legacy_ngdc_ip_mapping' ? 'IP mapped' :
+                                   mapping.mapping_source === 'existing_group' ? 'group' : 'auto'}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-gray-400 text-lg font-bold">&rarr;</div>
-                          <div>
-                            <label className="text-xs text-gray-500">NGDC Target</label>
-                            <input type="text" value={mapping.ngdc_recommended}
-                              onChange={e => updateDestMapping(i, 'ngdc_recommended', e.target.value)}
-                              disabled={!mapping.customizable}
-                              className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-gray-300 disabled:bg-gray-100" />
-                          </div>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span className={`px-1.5 py-0.5 text-xs rounded ${
-                              mapping.type === 'group' ? 'bg-blue-100 text-blue-700' :
-                              mapping.type === 'server' ? 'bg-purple-100 text-purple-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>{mapping.type}</span>
-                            {mapping.mapping_source && (
-                              <span className={`px-1 py-0.5 text-[9px] rounded ${
-                                mapping.mapping_source === 'ngdc_mapping_table' ? 'bg-green-50 text-green-600' :
-                                mapping.mapping_source === 'existing_group' ? 'bg-blue-50 text-blue-600' :
-                                'bg-gray-50 text-gray-400'
-                              }`}>
-                                {mapping.mapping_source === 'ngdc_mapping_table' ? 'table' :
-                                 mapping.mapping_source === 'existing_group' ? 'group' : 'auto'}
-                              </span>
-                            )}
-                          </div>
+                          {mapping.ngdc_ip && (
+                            <div className="flex items-center gap-2 text-[10px] ml-1 text-gray-500">
+                              <span>NGDC IP: <span className="font-mono text-green-600">{mapping.ngdc_ip}</span></span>
+                              {mapping.component && <span className="px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded">{mapping.component}</span>}
+                              {mapping.legacy_dc && <span>Legacy DC: {mapping.legacy_dc}</span>}
+                              {mapping.target_dc && <span>&rarr; {mapping.target_dc}</span>}
+                            </div>
+                          )}
+                          {/* Destination App Detection inline */}
+                          {mapping.dest_app && (
+                            <div className="flex items-center gap-2 text-[10px] ml-1 bg-orange-50 rounded px-2 py-1">
+                              <span className="text-orange-700 font-medium">Dest App:</span>
+                              <span className="px-1.5 py-0.5 bg-orange-200 text-orange-800 rounded font-medium">{(mapping.dest_app as DestinationAppInfo).app_id}</span>
+                              <span className="font-mono text-green-600">{(mapping.dest_app as DestinationAppInfo).ngdc_ip}</span>
+                              <span className="px-1 py-0.5 bg-indigo-100 text-indigo-700 rounded">{(mapping.dest_app as DestinationAppInfo).component}</span>
+                              <span className="text-gray-400">{(mapping.dest_app as DestinationAppInfo).target_dc}</span>
+                              <span className="ml-auto font-mono text-blue-600">{(mapping.dest_app as DestinationAppInfo).recommended_group}</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                       {customDestMappings.length === 0 && (

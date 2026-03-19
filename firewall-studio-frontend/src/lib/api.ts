@@ -23,6 +23,11 @@ import type {
   RuleModification,
   NGDCRecommendation,
   BirthrightValidation,
+  MigrationDetailsResponse,
+  DestinationAppInfo,
+  LegacyNGDCIPMapping,
+  NGDCStandardGroup,
+  NGDCStandardizationCheck,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -552,3 +557,39 @@ export const getExpandedRule = (ruleId: string) =>
 // Create Migration Group
 export const createMigrationGroup = (data: { name: string; app_id: string; members: { type: string; value: string }[]; nh?: string; sz?: string }) =>
   fetchJSON<Record<string, unknown>>('/api/reference/migration-groups', { method: 'POST', body: JSON.stringify(data) });
+
+// Comprehensive Migration Details
+export const getMigrationDetails = (ruleId: string) =>
+  fetchJSON<MigrationDetailsResponse>(`/api/reference/legacy-rules/${ruleId}/migration-details`);
+
+// Destination App Detection
+export const getDestinationApp = (destIp: string) =>
+  fetchJSON<DestinationAppInfo & { detected: boolean }>(`/api/reference/destination-app/${encodeURIComponent(destIp)}`);
+
+// IP-to-App Mapping
+export const getIPToAppMapping = (ip: string) =>
+  fetchJSON<LegacyNGDCIPMapping[]>(`/api/reference/ip-to-app/${encodeURIComponent(ip)}`);
+
+// Legacy-to-NGDC IP Mappings
+export const getLegacyNGDCIPMappings = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<LegacyNGDCIPMapping[]>(`/api/reference/legacy-ngdc-ip-mappings${qs ? `?${qs}` : ''}`);
+};
+
+// NGDC Standard Groups
+export const getStandardGroups = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<NGDCStandardGroup[]>(`/api/reference/standard-groups${qs ? `?${qs}` : ''}`);
+};
+
+// Component-to-SZ Mappings
+export const getComponentSZMappings = () =>
+  fetchJSON<Record<string, Record<string, string>>>('/api/reference/component-sz-mappings');
+
+// NGDC Standardization Check
+export const checkNGDCStandardization = (ruleId: string) =>
+  fetchJSON<NGDCStandardizationCheck>(`/api/reference/rules/${ruleId}/ngdc-standardization`);

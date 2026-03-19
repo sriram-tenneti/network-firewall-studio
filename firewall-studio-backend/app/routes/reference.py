@@ -920,3 +920,61 @@ async def create_mig_group(data: dict):
     if not name:
         raise HTTPException(status_code=400, detail="Group name required")
     return await create_migration_group(name, app_id, members, nh, sz)
+
+
+# ---- Comprehensive Migration Details ----
+
+@router.get("/legacy-rules/{rule_id}/migration-details")
+async def get_migration_details_endpoint(rule_id: str):
+    """Get comprehensive migration details for a legacy rule including all mappings,
+    destination app detection, standard groups, and component-to-SZ mappings."""
+    from app.database import get_migration_details
+    result = await get_migration_details(rule_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return result
+
+
+@router.get("/destination-app/{dest_ip:path}")
+async def get_destination_app_endpoint(dest_ip: str):
+    """Identify which application owns a given destination IP."""
+    from app.database import get_destination_app
+    result = await get_destination_app(dest_ip)
+    if not result:
+        return {"detected": False, "message": "No application found for this IP"}
+    return {"detected": True, **result}
+
+
+@router.get("/ip-to-app/{ip:path}")
+async def get_ip_to_app_endpoint(ip: str):
+    """Return all legacy-to-NGDC IP mappings that match a given IP."""
+    from app.database import get_ip_to_app_mapping
+    return await get_ip_to_app_mapping(ip)
+
+
+@router.get("/legacy-ngdc-ip-mappings")
+async def get_legacy_ngdc_ip_mappings(app_id: str = ""):
+    """Return all or app-filtered legacy-to-NGDC IP mappings."""
+    from app.database import get_all_legacy_ngdc_ip_mappings
+    return await get_all_legacy_ngdc_ip_mappings(app_id or None)
+
+
+@router.get("/standard-groups")
+async def get_standard_groups_endpoint(app_id: str = ""):
+    """Return all or app-filtered NGDC standard groups."""
+    from app.database import get_standard_groups
+    return await get_standard_groups(app_id or None)
+
+
+@router.get("/component-sz-mappings")
+async def get_component_sz_mappings_endpoint():
+    """Return the component-to-SZ mapping table."""
+    from app.database import get_component_sz_mappings
+    return await get_component_sz_mappings()
+
+
+@router.get("/rules/{rule_id}/ngdc-standardization")
+async def check_ngdc_standardization_endpoint(rule_id: str):
+    """Check if a migrated rule follows NGDC standards and suggest re-standardization."""
+    from app.database import check_rule_ngdc_standardization
+    return await check_rule_ngdc_standardization(rule_id)

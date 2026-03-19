@@ -5,8 +5,8 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups } from '@/lib/api';
-import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup } from '@/types';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, checkNGDCStandardization, getStandardGroups } from '@/lib/api';
+import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, NGDCStandardizationCheck, NGDCStandardGroup } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 interface ModifyState {
@@ -533,6 +533,10 @@ export default function FirewallManagementPage() {
   const [sourceEntries, setSourceEntries] = useState<ResourceEntry[]>([]);
   const [destEntries, setDestEntries] = useState<ResourceEntry[]>([]);
   const [serviceEntries, setServiceEntries] = useState<ResourceEntry[]>([]);
+  // NGDC standardization
+  const [stdCheck, setStdCheck] = useState<NGDCStandardizationCheck | null>(null);
+  const [stdGroups, setStdGroups] = useState<NGDCStandardGroup[]>([]);
+  const [checkingStd, setCheckingStd] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -571,6 +575,21 @@ export default function FirewallManagementPage() {
     return text.split('\n').map(line => line.replace(/\t/g, '  '));
   };
 
+  const handleCheckStandardization = async (ruleId: string, appId: string) => {
+    setCheckingStd(true);
+    try {
+      const [check, groups] = await Promise.all([
+        checkNGDCStandardization(ruleId),
+        getStandardGroups(appId),
+      ]);
+      setStdCheck(check);
+      setStdGroups(groups);
+    } catch {
+      setStdCheck(null); setStdGroups([]);
+    }
+    setCheckingStd(false);
+  };
+
   const openModifyModal = async (rule: LegacyRule) => {
     const state: ModifyState = {
       rule_source: rule.rule_source || '',
@@ -589,6 +608,7 @@ export default function FirewallManagementPage() {
     setModifyComments('');
     setShowDelta(false);
     setCompiledRule(null);
+    setStdCheck(null); setStdGroups([]);
     let groups: FirewallGroup[] = [];
     try {
       groups = await getGroups(String(rule.app_id));
@@ -987,6 +1007,57 @@ export default function FirewallManagementPage() {
                 <label className="block text-xs font-medium text-gray-700 mb-1">Modification Comments</label>
                 <textarea value={modifyComments} onChange={e => setModifyComments(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md h-[38px] resize-none" placeholder="Reason for modification..." />
               </div>
+            </div>
+
+            {/* NGDC Standardization Check */}
+            <div className="border border-cyan-200 rounded-lg p-3 bg-cyan-50">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-cyan-800">NGDC Standardization Check</h4>
+                <button onClick={() => handleCheckStandardization(modifyRule.id, String(modifyRule.app_id))} disabled={checkingStd}
+                  className="px-3 py-1 text-xs font-medium text-cyan-700 bg-white border border-cyan-300 rounded hover:bg-cyan-100 disabled:opacity-50">
+                  {checkingStd ? 'Checking...' : 'Check NGDC Standards'}
+                </button>
+              </div>
+              {stdCheck && (
+                <div className="space-y-2">
+                  <div className={`px-2 py-1 rounded text-xs font-medium ${stdCheck.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {stdCheck.compliant ? 'Rule follows NGDC standards' : 'Rule does NOT follow NGDC standards'}
+                  </div>
+                  {stdCheck.issues.length > 0 && (
+                    <div className="space-y-1">
+                      {stdCheck.issues.map((issue, i) => (
+                        <div key={i} className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">- {issue}</div>
+                      ))}
+                    </div>
+                  )}
+                  {stdCheck.suggestions.length > 0 && (
+                    <div className="space-y-1">
+                      <h5 className="text-[10px] font-semibold text-gray-600">Suggestions:</h5>
+                      {stdCheck.suggestions.map((s, i) => (
+                        <div key={i} className="text-xs bg-amber-50 rounded px-2 py-1">
+                          <span className="text-gray-500">{s.field}:</span>{' '}
+                          <span className="text-red-500 line-through">{s.current}</span>{' '}
+                          <span className="text-green-600 font-medium">{s.suggested}</span>{' '}
+                          <span className="text-gray-400 text-[10px]">({s.reason})</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {stdGroups.length > 0 && (
+                <div className="mt-2">
+                  <h5 className="text-[10px] font-semibold text-gray-600 mb-1">NGDC Standard Groups for this App:</h5>
+                  <div className="flex flex-wrap gap-1">
+                    {stdGroups.map((g, i) => (
+                      <span key={i} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-mono">
+                        {g.group_name} <span className="text-gray-400">({g.component})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="text-[10px] text-cyan-600 mt-1">NGDC requires group-to-group rules. Individual IPs/subnets should be encapsulated in standard groups.</p>
             </div>
 
             {/* Compile Option */}
