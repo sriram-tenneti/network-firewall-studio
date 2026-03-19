@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 
 interface ModuleLayoutProps {
   module: string;
@@ -49,7 +49,6 @@ const moduleActiveColors: Record<string, string> = {
 export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [role, setRole] = useState<'User' | 'Admin'>('Admin');
   const navItems = moduleNav[module] || [];
   const colorGradient = moduleColors[module] || 'from-slate-600 to-slate-700';
   const activeColor = moduleActiveColors[module] || 'bg-slate-500/20 text-slate-200 border-slate-400/30';
@@ -96,20 +95,8 @@ export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-white/50">Enterprise Firewall Management</span>
-              {/* Role Toggle */}
-              <button
-                onClick={() => setRole(r => r === 'User' ? 'Admin' : 'User')}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  role === 'Admin'
-                    ? 'bg-red-500/20 text-red-200 border-red-400/40 hover:bg-red-500/30'
-                    : 'bg-white/10 text-white/60 border-white/20 hover:bg-white/20'
-                }`}
-                title="Toggle User/Admin role"
-              >
-                {role}
-              </button>
               <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center border border-white/20">
-                <span className="text-white text-xs font-medium">{role === 'Admin' ? 'A' : 'U'}</span>
+                <span className="text-white text-xs font-medium">U</span>
               </div>
             </div>
           </div>

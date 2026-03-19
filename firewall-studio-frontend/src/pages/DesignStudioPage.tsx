@@ -35,8 +35,6 @@ export function DesignStudioPage() {
   const deleteConfirm = useModal<string>();
   const { notification, showNotification } = useNotification();
 
-  // Auto-import result state
-  const [autoImportResult, setAutoImportResult] = useState<{ imported: number; skipped_non_compliant: number } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -55,14 +53,13 @@ export function DesignStudioPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Auto-import non-standard legacy rules from NFR on page load (silent)
+  // Auto-import NGDC-compliant legacy rules from NFR on page load (silent)
   useEffect(() => {
     let mounted = true;
     const doAutoImport = async () => {
       try {
         const result = await api.autoImportCompliantToStudio();
         if (mounted && result.imported > 0) {
-          setAutoImportResult({ imported: result.imported, skipped_non_compliant: result.skipped_non_compliant });
           loadData();
         }
       } catch { /* silent */ }
@@ -246,17 +243,6 @@ export function DesignStudioPage() {
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       {notification && <Notification message={notification.message} type={notification.type} />}
-
-      {/* Auto-import result banner */}
-      {autoImportResult && (
-        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
-          <span className="text-sm text-emerald-800">
-            Auto-imported {autoImportResult.imported} NGDC-compliant rule(s) from Network Firewall Request.
-            {autoImportResult.skipped_non_compliant > 0 && ` (${autoImportResult.skipped_non_compliant} non-compliant skipped)`}
-          </span>
-          <button onClick={() => setAutoImportResult(null)} className="text-xs text-emerald-600 hover:text-emerald-800">Dismiss</button>
-        </div>
-      )}
 
       <div className="flex items-center justify-between mb-6">
         <div>

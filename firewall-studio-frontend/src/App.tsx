@@ -77,38 +77,6 @@ function App() {
           </ModuleLayout>
         } />
 
-        {/* Legacy / alternate route aliases */}
-        <Route path="/migration-studio" element={
-          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
-            <MigrationStudioPage />
-          </ModuleLayout>
-        } />
-        <Route path="/design-studio" element={
-          <ModuleLayout module="firewall-studio" title="Firewall Studio">
-            <DesignStudioPage />
-          </ModuleLayout>
-        } />
-        <Route path="/migration" element={
-          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
-            <MigrationStudioPage />
-          </ModuleLayout>
-        } />
-        <Route path="/review" element={
-          <ModuleLayout module="firewall-studio" title="Review & Approval">
-            <ReviewPage />
-          </ModuleLayout>
-        } />
-        <Route path="/management" element={
-          <ModuleLayout module="firewall-management" title="Network Firewall Request">
-            <FirewallManagementPage />
-          </ModuleLayout>
-        } />
-        <Route path="/import" element={
-          <ModuleLayout module="firewall-studio" title="Data Import">
-            <DataImportPage />
-          </ModuleLayout>
-        } />
-
         {/* Catch-all: redirect unknown routes to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

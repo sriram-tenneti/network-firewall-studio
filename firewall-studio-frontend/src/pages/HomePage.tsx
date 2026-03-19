@@ -159,10 +159,6 @@ export default function HomePage() {
             Admin Panel
           </button>
           <span className="text-slate-700">|</span>
-          <button onClick={() => navigate('/settings')} className="hover:text-slate-300 transition-colors">
-            Settings & Org Admin
-          </button>
-          <span className="text-slate-700">|</span>
           <span>Enterprise Firewall Management Platform</span>
           <span className="text-slate-700">|</span>
           <span>NGDC Standards Compliant</span>
