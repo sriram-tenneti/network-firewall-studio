@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from '@/pages/HomePage';
 import { ModuleLayout } from '@/components/layout/ModuleLayout';
 import { DesignStudioPage } from '@/pages/DesignStudioPage';
@@ -77,7 +77,17 @@ function App() {
           </ModuleLayout>
         } />
 
-        {/* Legacy routes redirect */}
+        {/* Legacy / alternate route aliases */}
+        <Route path="/migration-studio" element={
+          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
+            <MigrationStudioPage />
+          </ModuleLayout>
+        } />
+        <Route path="/design-studio" element={
+          <ModuleLayout module="firewall-studio" title="Firewall Studio">
+            <DesignStudioPage />
+          </ModuleLayout>
+        } />
         <Route path="/migration" element={
           <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
             <MigrationStudioPage />
@@ -98,6 +108,9 @@ function App() {
             <DataImportPage />
           </ModuleLayout>
         } />
+
+        {/* Catch-all: redirect unknown routes to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
