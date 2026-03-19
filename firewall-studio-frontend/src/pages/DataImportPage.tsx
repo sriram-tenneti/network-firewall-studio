@@ -90,7 +90,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     setError('');
     setResult(null);
     try {
-      const res = await importLegacyRulesExcel(file);
+      const res = await importLegacyRulesExcel(file, selectedEnv);
       setResult(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');

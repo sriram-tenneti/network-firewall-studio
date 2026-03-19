@@ -382,11 +382,11 @@ export const updateLegacyRule = (ruleId: string, data: Partial<LegacyRule>) =>
 export const deleteLegacyRule = (ruleId: string) =>
   fetchJSON<{ message: string }>(`/api/reference/legacy-rules/${ruleId}`, { method: 'DELETE' });
 
-// Excel import for legacy rules
-export const importLegacyRulesExcel = async (file: File): Promise<{ added: number; duplicates: number; total: number }> => {
+// Excel import for legacy rules (environment is stamped on every imported rule)
+export const importLegacyRulesExcel = async (file: File, environment: string = 'Production'): Promise<{ added: number; duplicates: number; total: number }> => {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch(`${API_BASE}/api/reference/legacy-rules/import`, {
+  const res = await fetch(`${API_BASE}/api/reference/legacy-rules/import?environment=${encodeURIComponent(environment)}`, {
     method: 'POST',
     body: formData,
   });

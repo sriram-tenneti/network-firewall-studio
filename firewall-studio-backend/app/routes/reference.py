@@ -504,8 +504,9 @@ async def delete_legacy_rule_endpoint(rule_id: str):
 
 
 @router.post("/legacy-rules/import")
-async def import_legacy_rules_excel(file: UploadFile = File(...)):
-    """Import legacy rules from an Excel (.xlsx) file with deduplication."""
+async def import_legacy_rules_excel(file: UploadFile = File(...), environment: str = "Production"):
+    """Import legacy rules from an Excel (.xlsx) file with deduplication.
+    The environment query param is stamped onto every imported rule."""
     if not file.filename or not file.filename.endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
     contents = await file.read()
@@ -538,6 +539,7 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
                 rule[col_map[h]] = val if val is not None else ""
         rule["is_standard"] = False
         rule["migration_status"] = "Not Started"
+        rule["environment"] = environment
         parsed_rules.append(rule)
     result = await import_legacy_rules(parsed_rules)
     return result

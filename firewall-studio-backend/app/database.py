@@ -2071,19 +2071,23 @@ async def check_ngdc_compliance(rule: dict[str, Any]) -> dict[str, Any]:
     svc = rule.get("rule_service", "")
 
     # Check source naming standard
-    prefixes = naming_stds.get("prefixes", {"group": "grp-", "server": "svr-", "range": "rng-", "subnet": "sub-"})
+    raw_prefixes = naming_stds.get("prefixes", {"group": "grp-", "server": "svr-", "range": "rng-", "subnet": "sub-"})
+    # Ensure prefix values are strings (they may be dicts in some seed data formats)
+    prefix_strs = [v for v in raw_prefixes.values() if isinstance(v, str)]
+    if not prefix_strs:
+        prefix_strs = ["grp-", "svr-", "rng-", "sub-"]
     src_entries = [s.strip() for s in src.split("\n") if s.strip()] if src else []
     dst_entries = [d.strip() for d in dst.split("\n") if d.strip()] if dst else []
 
     for entry in src_entries:
-        is_named = any(entry.startswith(p) for p in prefixes.values())
+        is_named = any(entry.startswith(p) for p in prefix_strs)
         if not is_named and not entry.replace(".", "").replace("/", "").replace(":", "").isdigit():
             # Not an IP and not following naming standard
             if not any(entry.startswith(p) for p in ["grp-", "svr-", "rng-", "sub-"]):
                 issues.append(f"Source '{entry}' does not follow NGDC naming standards")
 
     for entry in dst_entries:
-        is_named = any(entry.startswith(p) for p in prefixes.values())
+        is_named = any(entry.startswith(p) for p in prefix_strs)
         if not is_named and not entry.replace(".", "").replace("/", "").replace(":", "").isdigit():
             if not any(entry.startswith(p) for p in ["grp-", "svr-", "rng-", "sub-"]):
                 issues.append(f"Destination '{entry}' does not follow NGDC naming standards")
