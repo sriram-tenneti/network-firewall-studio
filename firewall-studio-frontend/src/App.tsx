@@ -7,6 +7,7 @@ import ReviewPage from '@/pages/ReviewPage';
 import FirewallManagementPage from '@/pages/FirewallManagementPage';
 import DataImportPage from '@/pages/DataImportPage';
 import SettingsPage from '@/pages/SettingsPage';
+import AdminPage from '@/pages/AdminPage';
 
 function App() {
   return (
@@ -59,6 +60,13 @@ function App() {
         <Route path="/firewall-management/review" element={
           <ModuleLayout module="firewall-management" title="Network Firewall Request">
             <ReviewPage context="firewall-management" />
+          </ModuleLayout>
+        } />
+
+        {/* Admin */}
+        <Route path="/admin" element={
+          <ModuleLayout module="admin" title="Admin Panel">
+            <AdminPage />
           </ModuleLayout>
         } />
 

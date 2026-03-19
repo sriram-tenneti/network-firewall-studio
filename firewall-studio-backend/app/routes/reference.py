@@ -987,3 +987,23 @@ async def check_ngdc_standardization_endpoint(rule_id: str):
     """Check if a migrated rule follows NGDC standards and suggest re-standardization."""
     from app.database import check_rule_ngdc_standardization
     return await check_rule_ngdc_standardization(rule_id)
+
+
+# ---- App-Environment Assignments (from mappings.py) ----
+
+@router.get("/app-env-assignments")
+async def list_app_env_assignments(app_id: str = "", environment: str = ""):
+    """Return all app-environment DC/NH/SZ assignments from mappings.py."""
+    from app.mappings import APP_ENVIRONMENT_ASSIGNMENTS
+    results = list(APP_ENVIRONMENT_ASSIGNMENTS)
+    if app_id:
+        results = [r for r in results if r.get("app_id") == app_id]
+    if environment:
+        results = [r for r in results if r.get("environment") == environment]
+    return results
+
+
+@router.get("/preprod-matrix")
+async def list_preprod_matrix():
+    from app.database import get_preprod_matrix
+    return await get_preprod_matrix()

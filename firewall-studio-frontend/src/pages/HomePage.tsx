@@ -155,6 +155,10 @@ export default function HomePage() {
 
         {/* Footer Links */}
         <div className="mt-12 flex items-center justify-center gap-8 text-xs text-slate-500">
+          <button onClick={() => navigate('/admin')} className="hover:text-slate-300 transition-colors">
+            Admin Panel
+          </button>
+          <span className="text-slate-700">|</span>
           <button onClick={() => navigate('/settings')} className="hover:text-slate-300 transition-colors">
             Settings & Org Admin
           </button>

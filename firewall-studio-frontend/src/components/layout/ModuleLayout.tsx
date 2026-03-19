@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 
 interface ModuleLayoutProps {
   module: string;
@@ -22,6 +22,9 @@ const moduleNav: Record<string, { path: string; label: string }[]> = {
     { path: '/firewall-management/import', label: 'Import' },
     { path: '/firewall-management/review', label: 'Review & Approval' },
   ],
+  'admin': [
+    { path: '/admin', label: 'App-Specific Management' },
+  ],
   'settings': [
     { path: '/settings', label: 'Org Admin & Settings' },
   ],
@@ -31,6 +34,7 @@ const moduleColors: Record<string, string> = {
   'firewall-studio': 'from-blue-600 to-indigo-700',
   'ngdc-standardization': 'from-emerald-600 to-teal-700',
   'firewall-management': 'from-amber-600 to-orange-700',
+  'admin': 'from-violet-600 to-purple-700',
   'settings': 'from-slate-600 to-slate-700',
 };
 
@@ -38,12 +42,14 @@ const moduleActiveColors: Record<string, string> = {
   'firewall-studio': 'bg-blue-500/20 text-blue-200 border-blue-400/30',
   'ngdc-standardization': 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30',
   'firewall-management': 'bg-amber-500/20 text-amber-200 border-amber-400/30',
+  'admin': 'bg-violet-500/20 text-violet-200 border-violet-400/30',
   'settings': 'bg-slate-500/20 text-slate-200 border-slate-400/30',
 };
 
 export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [role, setRole] = useState<'User' | 'Admin'>('Admin');
   const navItems = moduleNav[module] || [];
   const colorGradient = moduleColors[module] || 'from-slate-600 to-slate-700';
   const activeColor = moduleActiveColors[module] || 'bg-slate-500/20 text-slate-200 border-slate-400/30';
@@ -90,8 +96,20 @@ export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-white/50">Enterprise Firewall Management</span>
+              {/* Role Toggle */}
+              <button
+                onClick={() => setRole(r => r === 'User' ? 'Admin' : 'User')}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  role === 'Admin'
+                    ? 'bg-red-500/20 text-red-200 border-red-400/40 hover:bg-red-500/30'
+                    : 'bg-white/10 text-white/60 border-white/20 hover:bg-white/20'
+                }`}
+                title="Toggle User/Admin role"
+              >
+                {role}
+              </button>
               <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center border border-white/20">
-                <span className="text-white text-xs font-medium">U</span>
+                <span className="text-white text-xs font-medium">{role === 'Admin' ? 'A' : 'U'}</span>
               </div>
             </div>
           </div>

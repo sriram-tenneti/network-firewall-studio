@@ -600,3 +600,28 @@ export const getComponentSZMappings = () =>
 // NGDC Standardization Check
 export const checkNGDCStandardization = (ruleId: string) =>
   fetchJSON<NGDCStandardizationCheck>(`/api/reference/rules/${ruleId}/ngdc-standardization`);
+
+// App-Environment Assignments (Admin)
+export const getAppEnvAssignments = (appId?: string, environment?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  if (environment) params.set('environment', environment);
+  const qs = params.toString();
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/app-env-assignments${qs ? `?${qs}` : ''}`);
+};
+
+// Policy Matrices (Admin)
+export const getAllPolicyMatrices = () =>
+  fetchJSON<{ heritage_dc: Record<string, unknown>[]; ngdc_prod: Record<string, unknown>[]; nonprod: Record<string, unknown>[]; combined: Record<string, unknown>[] }>('/api/reference/policy-matrix/all');
+
+export const getPreprodMatrix = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/preprod-matrix');
+
+export const getHeritageDCMatrix = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/heritage-dc');
+
+export const getNGDCProdMatrix = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/ngdc-prod');
+
+export const getNonprodMatrix = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/nonprod');
