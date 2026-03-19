@@ -474,7 +474,7 @@ async def list_legacy_rules(app_id: str | None = None, exclude_migrated: bool = 
     if exclude_migrated:
         rules = [r for r in rules if r.get("migration_status") != "Completed"]
     if environment:
-        rules = [r for r in rules if r.get("environment", "Production") == environment]
+        rules = [r for r in rules if r.get("environment") == environment or not r.get("environment")]
     return rules
 
 
@@ -963,7 +963,7 @@ async def get_legacy_ngdc_ip_mappings(app_id: str = "", environment: str = ""):
     from app.database import get_all_legacy_ngdc_ip_mappings
     results = await get_all_legacy_ngdc_ip_mappings(app_id or None)
     if environment:
-        results = [r for r in results if r.get("environment", "Production") == environment]
+        results = [r for r in results if r.get("environment") == environment or not r.get("environment")]
     return results
 
 
@@ -973,7 +973,7 @@ async def get_standard_groups_endpoint(app_id: str = "", environment: str = ""):
     from app.database import get_standard_groups
     results = await get_standard_groups(app_id or None)
     if environment:
-        results = [r for r in results if r.get("environment", "Production") == environment]
+        results = [r for r in results if r.get("environment") == environment or not r.get("environment")]
     return results
 
 

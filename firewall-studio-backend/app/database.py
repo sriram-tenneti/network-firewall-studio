@@ -2173,7 +2173,7 @@ async def import_rules_to_ngdc_standardization(app_ids: list[str], environment: 
     imported: list[dict[str, Any]] = []
     for r in legacy:
         if str(r.get("app_id", "")) in [str(a) for a in app_ids]:
-            if environment and r.get("environment", "Production") != environment:
+            if environment and r.get("environment") and r.get("environment") != environment:
                 continue
             # Mark as imported to NGDC standardization
             r["ngdc_imported"] = True
