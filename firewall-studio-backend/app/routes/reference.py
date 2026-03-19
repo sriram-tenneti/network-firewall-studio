@@ -467,12 +467,14 @@ async def remove_member_from_group(name: str, member_value: str):
 # ---- Legacy Rules (for Migration Studio & Firewall Management) ----
 
 @router.get("/legacy-rules")
-async def list_legacy_rules(app_id: str | None = None, exclude_migrated: bool = False):
+async def list_legacy_rules(app_id: str | None = None, exclude_migrated: bool = False, environment: str | None = None):
     rules = await get_legacy_rules()
     if app_id:
         rules = [r for r in rules if str(r.get("app_id")) == str(app_id) or r.get("app_distributed_id") == app_id]
     if exclude_migrated:
         rules = [r for r in rules if r.get("migration_status") != "Completed"]
+    if environment:
+        rules = [r for r in rules if r.get("environment", "Production") == environment]
     return rules
 
 
@@ -876,12 +878,13 @@ async def check_dups(data: dict):
 
 @router.post("/legacy-rules/import-to-ngdc")
 async def import_to_ngdc(data: dict):
-    """Import rules from Network Firewall Request to NGDC Standardization by app IDs."""
+    """Import rules from Network Firewall Request to NGDC Standardization by app IDs and environment."""
     from app.database import import_rules_to_ngdc_standardization
     app_ids = data.get("app_ids", [])
+    environment = data.get("environment", "Production")
     if not app_ids:
         raise HTTPException(status_code=400, detail="app_ids required")
-    return await import_rules_to_ngdc_standardization(app_ids)
+    return await import_rules_to_ngdc_standardization(app_ids, environment)
 
 
 # ---- Auto-Import Compliant Rules to Firewall Studio ----
@@ -936,10 +939,10 @@ async def get_migration_details_endpoint(rule_id: str):
 
 
 @router.get("/destination-app/{dest_ip:path}")
-async def get_destination_app_endpoint(dest_ip: str):
-    """Identify which application owns a given destination IP."""
+async def get_destination_app_endpoint(dest_ip: str, environment: str = "Production"):
+    """Identify which application owns a given destination IP (environment-aware)."""
     from app.database import get_destination_app
-    result = await get_destination_app(dest_ip)
+    result = await get_destination_app(dest_ip, environment)
     if not result:
         return {"detected": False, "message": "No application found for this IP"}
     return {"detected": True, **result}
@@ -953,17 +956,23 @@ async def get_ip_to_app_endpoint(ip: str):
 
 
 @router.get("/legacy-ngdc-ip-mappings")
-async def get_legacy_ngdc_ip_mappings(app_id: str = ""):
-    """Return all or app-filtered legacy-to-NGDC IP mappings."""
+async def get_legacy_ngdc_ip_mappings(app_id: str = "", environment: str = ""):
+    """Return all or app/environment-filtered legacy-to-NGDC IP mappings."""
     from app.database import get_all_legacy_ngdc_ip_mappings
-    return await get_all_legacy_ngdc_ip_mappings(app_id or None)
+    results = await get_all_legacy_ngdc_ip_mappings(app_id or None)
+    if environment:
+        results = [r for r in results if r.get("environment", "Production") == environment]
+    return results
 
 
 @router.get("/standard-groups")
-async def get_standard_groups_endpoint(app_id: str = ""):
-    """Return all or app-filtered NGDC standard groups."""
+async def get_standard_groups_endpoint(app_id: str = "", environment: str = ""):
+    """Return all or app/environment-filtered NGDC standard groups."""
     from app.database import get_standard_groups
-    return await get_standard_groups(app_id or None)
+    results = await get_standard_groups(app_id or None)
+    if environment:
+        results = [r for r in results if r.get("environment", "Production") == environment]
+    return results
 
 
 @router.get("/component-sz-mappings")

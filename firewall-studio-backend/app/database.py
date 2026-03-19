@@ -226,100 +226,179 @@ SEED_SECURITY_ZONES = [
     {"code": "CCS", "name": "Critical Core Services", "description": "Critical core services zone - highest security tier",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
      "vrf_suffix": "sz04", "ip_ranges": [
-        {"cidr": "10.1.0.0/16", "description": "CCS East Block", "dc": "ALPHA_NGDC"},
-        {"cidr": "172.16.0.0/20", "description": "CCS West Block", "dc": "BETA_NGDC"},
-        {"cidr": "10.50.0.0/16", "description": "CCS Central Block", "dc": "GAMMA_NGDC"},
+        {"cidr": "10.1.0.0/16", "description": "CCS East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.0.0/20", "description": "CCS West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.50.0.0/16", "description": "CCS Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "CDE", "name": "Card Holder Data", "description": "Cardholder Data Environment - PCI DSS compliant",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
      "vrf_suffix": "sz05", "ip_ranges": [
-        {"cidr": "10.2.0.0/16", "description": "CDE East Block", "dc": "ALPHA_NGDC"},
-        {"cidr": "172.16.16.0/20", "description": "CDE West Block", "dc": "BETA_NGDC"},
-        {"cidr": "10.52.0.0/16", "description": "CDE Central Block", "dc": "GAMMA_NGDC"},
+        {"cidr": "10.2.0.0/16", "description": "CDE East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.16.0/20", "description": "CDE West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.52.0.0/16", "description": "CDE Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "CPA", "name": "Critical Payment Applications", "description": "Critical payment application processing zone",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
      "vrf_suffix": "sz06", "ip_ranges": [
-        {"cidr": "10.3.0.0/16", "description": "CPA East Block", "dc": "ALPHA_NGDC"},
-        {"cidr": "172.16.32.0/20", "description": "CPA West Block", "dc": "BETA_NGDC"},
-        {"cidr": "10.53.0.0/16", "description": "CPA Central Block", "dc": "GAMMA_NGDC"},
+        {"cidr": "10.3.0.0/16", "description": "CPA East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.32.0/20", "description": "CPA West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.53.0.0/16", "description": "CPA Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "PSE", "name": "Production Simulation Environment", "description": "Production simulation for testing in prod-like conditions",
      "risk_level": "High", "pci_scope": False, "zone_type": "Production",
      "vrf_suffix": "sz07", "ip_ranges": [
-        {"cidr": "10.4.0.0/16", "description": "PSE East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.4.0.0/16", "description": "PSE East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.64.0/20", "description": "PSE West Block", "dc": "BETA_NGDC", "environment": "Production"},
      ]},
     {"code": "Standard", "name": "Standard/General", "description": "Standard general-purpose zone (GEN VRF)",
      "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
      "vrf_suffix": "gen", "ip_ranges": [
-        {"cidr": "10.0.0.0/16", "description": "Standard East Block", "dc": "ALPHA_NGDC"},
-        {"cidr": "172.16.48.0/20", "description": "Standard West Block", "dc": "BETA_NGDC"},
+        {"cidr": "10.0.0.0/16", "description": "Standard East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.48.0/20", "description": "Standard West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.50.48.0/20", "description": "Standard Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "GEN", "name": "General", "description": "General purpose security zone (alias for Standard)",
      "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
      "vrf_suffix": "gen", "ip_ranges": [
-        {"cidr": "10.0.0.0/16", "description": "GEN East Block", "dc": "ALPHA_NGDC"},
-        {"cidr": "172.16.48.0/20", "description": "GEN West Block", "dc": "BETA_NGDC"},
+        {"cidr": "10.0.0.0/16", "description": "GEN East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.48.0/20", "description": "GEN West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.50.48.0/20", "description": "GEN Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "DMZ", "name": "DMZ", "description": "Demilitarized zone for external-facing services",
      "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.70.0.0/16", "description": "DMZ East Block", "dc": "ALPHA_NGDC"},
-        {"cidr": "172.16.70.0/22", "description": "DMZ West Block", "dc": "BETA_NGDC"},
+        {"cidr": "10.70.0.0/16", "description": "DMZ East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.70.0/22", "description": "DMZ West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.70.128.0/20", "description": "DMZ Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "RST", "name": "Restricted", "description": "Highly restricted zone for sensitive systems",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.10.0.0/16", "description": "RST East Block", "dc": "ALPHA_NGDC"},
-        {"cidr": "10.60.0.0/16", "description": "RST Central Block", "dc": "GAMMA_NGDC"},
+        {"cidr": "10.10.0.0/16", "description": "RST East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.10.0/20", "description": "RST West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.60.0.0/16", "description": "RST Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "PAA", "name": "Publicly Accessible Applications", "description": "Publicly accessible application zone",
      "risk_level": "High", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.71.0.0/16", "description": "PAA East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.71.0.0/16", "description": "PAA East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.71.0/22", "description": "PAA West Block", "dc": "BETA_NGDC", "environment": "Production"},
      ]},
     {"code": "3PY", "name": "Third Party", "description": "Third-party connectivity zone",
      "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
-        {"cidr": "10.79.0.0/16", "description": "3PY East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.79.0.0/16", "description": "3PY East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.79.0/22", "description": "3PY West Block", "dc": "BETA_NGDC", "environment": "Production"},
      ]},
     {"code": "PCI_CAN", "name": "PCI CAN", "description": "PCI Cardholder Area Network",
      "risk_level": "Critical", "pci_scope": True, "zone_type": "Heritage", "ip_ranges": [
-        {"cidr": "10.73.0.0/16", "description": "PCI CAN East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.73.0.0/16", "description": "PCI CAN East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
      ]},
     {"code": "CAN", "name": "CAN", "description": "Campus Area Network",
      "risk_level": "High", "pci_scope": False, "zone_type": "Heritage", "ip_ranges": [
-        {"cidr": "10.74.0.0/16", "description": "CAN East Block", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.74.0.0/16", "description": "CAN East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
      ]},
     # === Non-Production Security Zones ===
-    {"code": "UGEN", "name": "Non-Prod General", "description": "Non-production general zone (UGEN/USTD)",
-     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.100.0.0/16", "description": "UGEN East Block", "dc": "ALPHA_NGDC"},
+    {"code": "UGEN", "name": "Non-Prod General", "description": "Non-production general zone",
+     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "ugen", "ip_ranges": [
+        {"cidr": "10.100.0.0/16", "description": "UGEN East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.100.0/20", "description": "UGEN West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.150.0.0/16", "description": "UGEN Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
      ]},
     {"code": "USTD", "name": "Non-Prod Standard", "description": "Non-production standard zone",
-     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.101.0.0/16", "description": "USTD East Block", "dc": "ALPHA_NGDC"},
+     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "ustd", "ip_ranges": [
+        {"cidr": "10.101.0.0/16", "description": "USTD East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.101.0/20", "description": "USTD West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.151.0.0/16", "description": "USTD Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
      ]},
     {"code": "UCCS", "name": "Non-Prod Critical Core Services", "description": "Non-production CCS zone",
-     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.102.0.0/16", "description": "UCCS East Block", "dc": "ALPHA_NGDC"},
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "uccs", "ip_ranges": [
+        {"cidr": "10.102.0.0/16", "description": "UCCS East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.102.0/20", "description": "UCCS West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.152.0.0/16", "description": "UCCS Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
      ]},
     {"code": "UPAA", "name": "Non-Prod PAA", "description": "Non-production publicly accessible apps zone",
-     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.103.0.0/16", "description": "UPAA East Block", "dc": "ALPHA_NGDC"},
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "upaa", "ip_ranges": [
+        {"cidr": "10.103.0.0/16", "description": "UPAA East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.103.0/20", "description": "UPAA West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.153.0.0/16", "description": "UPAA Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
      ]},
     {"code": "UCPA", "name": "Non-Prod Critical Payment Apps", "description": "Non-production critical payment apps zone",
-     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.104.0.0/16", "description": "UCPA East Block", "dc": "ALPHA_NGDC"},
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production",
+     "vrf_suffix": "ucpa", "ip_ranges": [
+        {"cidr": "10.104.0.0/16", "description": "UCPA East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.104.0/20", "description": "UCPA West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.154.0.0/16", "description": "UCPA Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
      ]},
     {"code": "UCDE", "name": "Non-Prod Card Holder Data", "description": "Non-production cardholder data zone",
-     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production", "ip_ranges": [
-        {"cidr": "10.105.0.0/16", "description": "UCDE East Block", "dc": "ALPHA_NGDC"},
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production",
+     "vrf_suffix": "ucde", "ip_ranges": [
+        {"cidr": "10.105.0.0/16", "description": "UCDE East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.105.0/20", "description": "UCDE West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.155.0.0/16", "description": "UCDE Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
      ]},
-    # === Additional Zones ===
+    # === Pre-Production Security Zones ===
+    {"code": "PP_GEN", "name": "Pre-Prod General", "description": "Pre-production general zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppgen", "ip_ranges": [
+        {"cidr": "10.90.0.0/16", "description": "PP_GEN East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.90.0/20", "description": "PP_GEN West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.190.0.0/16", "description": "PP_GEN Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_CCS", "name": "Pre-Prod Critical Core Services", "description": "Pre-production CCS zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppccs", "ip_ranges": [
+        {"cidr": "10.91.0.0/16", "description": "PP_CCS East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.91.0/20", "description": "PP_CCS West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.191.0.0/16", "description": "PP_CCS Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_CDE", "name": "Pre-Prod Card Holder Data", "description": "Pre-production CDE zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppcde", "ip_ranges": [
+        {"cidr": "10.92.0.0/16", "description": "PP_CDE East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.92.0/20", "description": "PP_CDE West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.192.0.0/16", "description": "PP_CDE Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_CPA", "name": "Pre-Prod Critical Payment Apps", "description": "Pre-production CPA zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppcpa", "ip_ranges": [
+        {"cidr": "10.93.0.0/16", "description": "PP_CPA East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.93.0/20", "description": "PP_CPA West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.193.0.0/16", "description": "PP_CPA Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_PAA", "name": "Pre-Prod PAA", "description": "Pre-production publicly accessible apps zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "pppaa", "ip_ranges": [
+        {"cidr": "10.94.0.0/16", "description": "PP_PAA East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.94.0/20", "description": "PP_PAA West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_DMZ", "name": "Pre-Prod DMZ", "description": "Pre-production DMZ zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppdmz", "ip_ranges": [
+        {"cidr": "10.95.0.0/16", "description": "PP_DMZ East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.95.0/20", "description": "PP_DMZ West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_RST", "name": "Pre-Prod Restricted", "description": "Pre-production restricted zone",
+     "risk_level": "High", "pci_scope": True, "zone_type": "Pre-Production",
+     "vrf_suffix": "pprst", "ip_ranges": [
+        {"cidr": "10.96.0.0/16", "description": "PP_RST East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.196.0.0/16", "description": "PP_RST Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    # === Infrastructure Zones ===
     {"code": "MGT", "name": "Management", "description": "Network management and monitoring zone",
      "risk_level": "High", "pci_scope": False, "zone_type": "Infrastructure", "ip_ranges": [
-        {"cidr": "10.200.1.0/24", "description": "MGT East", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.200.1.0/24", "description": "MGT East Prod", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "10.200.2.0/24", "description": "MGT East NonProd", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.200.3.0/24", "description": "MGT East PreProd", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.200.0/24", "description": "MGT West Prod", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.250.1.0/24", "description": "MGT Central Prod", "dc": "GAMMA_NGDC", "environment": "Production"},
      ]},
     {"code": "EXT", "name": "External Partners", "description": "External partner connectivity zone",
      "risk_level": "High", "pci_scope": False, "zone_type": "External", "ip_ranges": [
-        {"cidr": "10.79.1.0/24", "description": "EXT East", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.79.1.0/24", "description": "EXT East Prod", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "10.79.2.0/24", "description": "EXT East NonProd", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.79.3.0/24", "description": "EXT East PreProd", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.79.1/24", "description": "EXT West Prod", "dc": "BETA_NGDC", "environment": "Production"},
      ]},
 ]
 
@@ -419,237 +498,237 @@ SEED_LEGACY_TO_NGDC_IP_MAPPINGS: list[dict[str, Any]] = [
     # --- CRM (App Alpha) - DC_LEGACY_A -> GAMMA_NGDC ---
     {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
      "legacy_ip": "10.25.1.0/24", "ngdc_ip": "10.1.10.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
      "legacy_ip": "10.25.2.0/24", "ngdc_ip": "10.1.11.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
      "legacy_ip": "10.25.3.0/24", "ngdc_ip": "10.1.12.0/24", "component": "WEB",
-     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
      "legacy_ip": "10.25.10.0/24", "ngdc_ip": "10.1.13.0/24", "component": "BAT",
-     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     # --- ORD (App Beta) - DC_LEGACY_A -> ALPHA_NGDC ---
     {"app_id": "ORD", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.25.20.0/24", "ngdc_ip": "10.1.20.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "ORD", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.25.21.0/24", "ngdc_ip": "10.1.21.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     # --- PSA (App Gamma) - DC_LEGACY_B -> ALPHA_NGDC ---
     {"app_id": "PSA", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.26.1.0/24", "ngdc_ip": "10.2.10.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "PSA", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.26.2.0/24", "ngdc_ip": "10.2.11.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
     # --- DIG (App Delta) - DC_LEGACY_B -> BETA_NGDC ---
     {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.26.10.0/24", "ngdc_ip": "10.2.20.0/24", "component": "WEB",
-     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.26.11.0/24", "ngdc_ip": "10.2.21.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.26.12.0/24", "ngdc_ip": "10.2.22.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
     # --- PAY (App Epsilon) - DC_LEGACY_C -> ALPHA_NGDC ---
     {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.1.0/24", "ngdc_ip": "10.6.1.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.2.0/24", "ngdc_ip": "10.6.2.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.3.0/24", "ngdc_ip": "10.6.3.0/24", "component": "API",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
     # --- ENT (App Zeta) - DC_LEGACY_C -> BETA_NGDC ---
     {"app_id": "ENT", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.27.10.0/24", "ngdc_ip": "10.4.1.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "ENT", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.27.11.0/24", "ngdc_ip": "10.4.2.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
     # --- SHR (Shared Platform) - DC_LEGACY_D -> ALPHA_NGDC ---
     {"app_id": "SHR", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.1.0/24", "ngdc_ip": "10.100.1.0/24", "component": "SVC",
-     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "SHR", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.2.0/24", "ngdc_ip": "10.100.2.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN", "environment": "Production"},
     # --- HRM (HR Management) - DC_LEGACY_B -> ALPHA_NGDC ---
     {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.26.5.0/24", "ngdc_ip": "10.0.5.0/24", "component": "WEB",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.26.15.0/24", "ngdc_ip": "10.0.15.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.26.30.0/24", "ngdc_ip": "10.0.30.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     # --- TRD (Trading) - DC_LEGACY_C -> BETA_NGDC ---
     {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.27.1.0/24", "ngdc_ip": "10.5.1.0/24", "component": "WEB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.27.2.0/24", "ngdc_ip": "10.5.2.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.27.10.0/24", "ngdc_ip": "10.5.10.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.27.50.0/24", "ngdc_ip": "10.5.50.0/24", "component": "MQ",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     # --- FRD (Fraud Detection) - DC_LEGACY_E -> ALPHA_NGDC ---
     {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.29.1.0/24", "ngdc_ip": "10.1.29.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.29.1.50", "ngdc_ip": "10.1.29.50", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.29.2.0/24", "ngdc_ip": "10.1.30.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.29.5.0/24", "ngdc_ip": "10.1.31.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     # --- INS (Insurance) - DC_LEGACY_D -> ALPHA_NGDC ---
     {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.10.0/24", "ngdc_ip": "10.3.10.0/24", "component": "WEB",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.20.0/24", "ngdc_ip": "10.3.20.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.50.0/24", "ngdc_ip": "10.3.50.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     # --- KYC (Know Your Customer) - DC_LEGACY_F -> ALPHA_NGDC ---
     {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.30.5.0/24", "ngdc_ip": "10.4.5.0/24", "component": "WEB",
-     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.30.10.0/24", "ngdc_ip": "10.4.10.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.30.20.0/24", "ngdc_ip": "10.4.20.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
     # --- AML (Anti Money Laundering) - DC_LEGACY_C -> ALPHA_NGDC ---
     {"app_id": "AML", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.30.0/24", "ngdc_ip": "10.6.30.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "AML", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.31.0/24", "ngdc_ip": "10.6.31.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
     # --- TAX (Tax Processing) - DC_LEGACY_D -> ALPHA_NGDC ---
     {"app_id": "TAX", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.40.0/24", "ngdc_ip": "10.9.40.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "TAX", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.41.0/24", "ngdc_ip": "10.9.41.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
     # --- RGM (Regulatory) - DC_LEGACY_E -> BETA_NGDC ---
     {"app_id": "RGM", "legacy_dc": "DC_LEGACY_E", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.29.10.0/24", "ngdc_ip": "10.10.10.0/24", "component": "APP",
-     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST"},
+     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST", "environment": "Production"},
     {"app_id": "RGM", "legacy_dc": "DC_LEGACY_E", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.29.11.0/24", "ngdc_ip": "10.10.11.0/24", "component": "DB",
-     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST"},
+     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST", "environment": "Production"},
     # --- MBL (Mobile Banking) - DC_LEGACY_B -> BETA_NGDC ---
     {"app_id": "MBL", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.26.20.0/24", "ngdc_ip": "10.2.30.0/24", "component": "API",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "MBL", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
      "legacy_ip": "10.26.21.0/24", "ngdc_ip": "10.2.31.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
     # --- WHL (Wholesale) - DC_LEGACY_C -> ALPHA_NGDC ---
     {"app_id": "WHL", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.40.0/24", "ngdc_ip": "10.5.40.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "WHL", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.41.0/24", "ngdc_ip": "10.5.41.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     # --- CBK (Core Banking) - DC_LEGACY_A -> ALPHA_NGDC ---
     {"app_id": "CBK", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.25.50.0/24", "ngdc_ip": "10.50.1.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "CBK", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.25.51.0/24", "ngdc_ip": "10.50.2.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     # --- TRS (Treasury) - DC_LEGACY_C -> ALPHA_NGDC ---
     {"app_id": "TRS", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.60.0/24", "ngdc_ip": "10.5.60.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "TRS", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.27.61.0/24", "ngdc_ip": "10.5.61.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
     # --- CCM (Credit Card) - DC_LEGACY_A -> ALPHA_NGDC ---
     {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.25.70.0/24", "ngdc_ip": "10.1.70.0/24", "component": "WEB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.25.71.0/24", "ngdc_ip": "10.1.71.0/24", "component": "APP",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.25.72.0/24", "ngdc_ip": "10.1.72.0/24", "component": "DB",
-     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE"},
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
     # --- LON (Loan Origination) - DC_LEGACY_D -> ALPHA_NGDC ---
     {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.60.0/24", "ngdc_ip": "10.9.60.0/24", "component": "WEB",
-     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.61.0/24", "ngdc_ip": "10.9.61.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.62.0/24", "ngdc_ip": "10.9.62.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
     # --- BRK (Brokerage) - DC_LEGACY_D -> ALPHA_NGDC ---
     {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.70.0/24", "ngdc_ip": "10.3.70.0/24", "component": "WEB",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.71.0/24", "ngdc_ip": "10.3.71.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.72.0/24", "ngdc_ip": "10.3.72.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     # --- AGW (API Gateway) - DC_LEGACY_E -> ALPHA_NGDC ---
     {"app_id": "AGW", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.29.20.0/24", "ngdc_ip": "10.70.1.0/24", "component": "API",
-     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ"},
+     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ", "environment": "Production"},
     {"app_id": "AGW", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.29.21.0/24", "ngdc_ip": "10.70.2.0/24", "component": "LB",
-     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ"},
+     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ", "environment": "Production"},
     # --- SOC (Security Operations) - DC_LEGACY_F -> ALPHA_NGDC ---
     {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.30.30.0/24", "ngdc_ip": "10.0.200.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.30.31.0/24", "ngdc_ip": "10.0.201.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.30.32.0/24", "ngdc_ip": "10.0.202.0/24", "component": "MON",
-     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
     # --- CLN (Client Onboarding) ---
     {"app_id": "CLN", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.80.0/24", "ngdc_ip": "10.9.80.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "CLN", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.81.0/24", "ngdc_ip": "10.9.81.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
     # --- WLT (Wallet) ---
     {"app_id": "WLT", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.90.0/24", "ngdc_ip": "10.3.90.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "WLT", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.91.0/24", "ngdc_ip": "10.3.91.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
     # --- ACH (Clearing House) ---
     {"app_id": "ACH", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.100.0/24", "ngdc_ip": "10.8.100.0/24", "component": "APP",
-     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
     {"app_id": "ACH", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
      "legacy_ip": "10.28.101.0/24", "ngdc_ip": "10.8.101.0/24", "component": "DB",
-     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN"},
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
 ]
 
 
@@ -658,31 +737,27 @@ SEED_LEGACY_TO_NGDC_IP_MAPPINGS: list[dict[str, Any]] = [
 # Maps app component types (WEB, APP, DB, BAT, MQ, API) to appropriate SZs
 # =====================================================================
 SEED_COMPONENT_TO_SZ: dict[str, dict[str, str]] = {
-    # CDE (Cardholder Data Environment) apps - all components stay in CDE
-    "CDE": {
-        "WEB": "CDE", "APP": "CDE", "DB": "CDE", "BAT": "CDE",
-        "MQ": "CDE", "API": "CDE", "LB": "DMZ", "MON": "MGT",
-    },
-    # GEN (General/Standard) apps
-    "GEN": {
-        "WEB": "GEN", "APP": "GEN", "DB": "GEN", "BAT": "GEN",
-        "MQ": "GEN", "API": "GEN", "LB": "DMZ", "MON": "MGT",
-    },
-    # RST (Restricted) apps
-    "RST": {
-        "WEB": "RST", "APP": "RST", "DB": "RST", "BAT": "RST",
-        "MQ": "RST", "API": "RST", "LB": "DMZ", "MON": "MGT",
-    },
-    # DMZ apps
-    "DMZ": {
-        "WEB": "DMZ", "APP": "DMZ", "DB": "GEN", "BAT": "GEN",
-        "MQ": "GEN", "API": "DMZ", "LB": "DMZ", "MON": "MGT",
-    },
-    # PAA (Payment Account Automation)
-    "PAA": {
-        "WEB": "PAA", "APP": "PAA", "DB": "PAA", "BAT": "PAA",
-        "MQ": "PAA", "API": "PAA", "LB": "DMZ", "MON": "MGT",
-    },
+    # === Production SZ mappings ===
+    "CDE": {"WEB": "CDE", "APP": "CDE", "DB": "CDE", "BAT": "CDE", "MQ": "CDE", "API": "CDE", "LB": "DMZ", "MON": "MGT"},
+    "GEN": {"WEB": "GEN", "APP": "GEN", "DB": "GEN", "BAT": "GEN", "MQ": "GEN", "API": "GEN", "LB": "DMZ", "MON": "MGT"},
+    "RST": {"WEB": "RST", "APP": "RST", "DB": "RST", "BAT": "RST", "MQ": "RST", "API": "RST", "LB": "DMZ", "MON": "MGT"},
+    "DMZ": {"WEB": "DMZ", "APP": "DMZ", "DB": "GEN", "BAT": "GEN", "MQ": "GEN", "API": "DMZ", "LB": "DMZ", "MON": "MGT"},
+    "PAA": {"WEB": "PAA", "APP": "PAA", "DB": "PAA", "BAT": "PAA", "MQ": "PAA", "API": "PAA", "LB": "DMZ", "MON": "MGT"},
+    # === Non-Production SZ mappings ===
+    "UCDE": {"WEB": "UCDE", "APP": "UCDE", "DB": "UCDE", "BAT": "UCDE", "MQ": "UCDE", "API": "UCDE", "LB": "UGEN", "MON": "MGT"},
+    "UGEN": {"WEB": "UGEN", "APP": "UGEN", "DB": "UGEN", "BAT": "UGEN", "MQ": "UGEN", "API": "UGEN", "LB": "UGEN", "MON": "MGT"},
+    "USTD": {"WEB": "USTD", "APP": "USTD", "DB": "USTD", "BAT": "USTD", "MQ": "USTD", "API": "USTD", "LB": "UGEN", "MON": "MGT"},
+    "UCCS": {"WEB": "UCCS", "APP": "UCCS", "DB": "UCCS", "BAT": "UCCS", "MQ": "UCCS", "API": "UCCS", "LB": "UGEN", "MON": "MGT"},
+    "UPAA": {"WEB": "UPAA", "APP": "UPAA", "DB": "UPAA", "BAT": "UPAA", "MQ": "UPAA", "API": "UPAA", "LB": "UGEN", "MON": "MGT"},
+    "UCPA": {"WEB": "UCPA", "APP": "UCPA", "DB": "UCPA", "BAT": "UCPA", "MQ": "UCPA", "API": "UCPA", "LB": "UGEN", "MON": "MGT"},
+    # === Pre-Production SZ mappings ===
+    "PP_CDE": {"WEB": "PP_CDE", "APP": "PP_CDE", "DB": "PP_CDE", "BAT": "PP_CDE", "MQ": "PP_CDE", "API": "PP_CDE", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_GEN": {"WEB": "PP_GEN", "APP": "PP_GEN", "DB": "PP_GEN", "BAT": "PP_GEN", "MQ": "PP_GEN", "API": "PP_GEN", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_CCS": {"WEB": "PP_CCS", "APP": "PP_CCS", "DB": "PP_CCS", "BAT": "PP_CCS", "MQ": "PP_CCS", "API": "PP_CCS", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_CPA": {"WEB": "PP_CPA", "APP": "PP_CPA", "DB": "PP_CPA", "BAT": "PP_CPA", "MQ": "PP_CPA", "API": "PP_CPA", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_PAA": {"WEB": "PP_PAA", "APP": "PP_PAA", "DB": "PP_PAA", "BAT": "PP_PAA", "MQ": "PP_PAA", "API": "PP_PAA", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_DMZ": {"WEB": "PP_DMZ", "APP": "PP_DMZ", "DB": "PP_GEN", "BAT": "PP_GEN", "MQ": "PP_GEN", "API": "PP_DMZ", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_RST": {"WEB": "PP_RST", "APP": "PP_RST", "DB": "PP_RST", "BAT": "PP_RST", "MQ": "PP_RST", "API": "PP_RST", "LB": "PP_DMZ", "MON": "MGT"},
 }
 
 
@@ -690,42 +765,111 @@ SEED_COMPONENT_TO_SZ: dict[str, dict[str, str]] = {
 # NGDC STANDARD GROUP TEMPLATES PER APPLICATION
 # Recommended group names based on NGDC standards for each app
 # =====================================================================
+# Production app-to-NH/SZ base definitions
+_PROD_APP_DEFS = [
+    {"app_id": "CRM", "nh": "NH02", "sz": "CDE"}, {"app_id": "ORD", "nh": "NH01", "sz": "GEN"},
+    {"app_id": "PSA", "nh": "NH09", "sz": "GEN"}, {"app_id": "DIG", "nh": "NH03", "sz": "CDE"},
+    {"app_id": "PAY", "nh": "NH07", "sz": "CDE"}, {"app_id": "ENT", "nh": "NH05", "sz": "GEN"},
+    {"app_id": "SHR", "nh": "NH13", "sz": "GEN"}, {"app_id": "WHL", "nh": "NH06", "sz": "CDE"},
+    {"app_id": "CBK", "nh": "NH02", "sz": "CDE"}, {"app_id": "CLN", "nh": "NH10", "sz": "GEN"},
+    {"app_id": "WLT", "nh": "NH04", "sz": "GEN"}, {"app_id": "ACH", "nh": "NH09", "sz": "GEN"},
+    {"app_id": "HRM", "nh": "NH01", "sz": "GEN"}, {"app_id": "TRD", "nh": "NH06", "sz": "CDE"},
+    {"app_id": "FRD", "nh": "NH02", "sz": "CDE"}, {"app_id": "RGM", "nh": "NH11", "sz": "RST"},
+    {"app_id": "MBL", "nh": "NH03", "sz": "CDE"}, {"app_id": "INS", "nh": "NH04", "sz": "GEN"},
+    {"app_id": "TAX", "nh": "NH10", "sz": "GEN"}, {"app_id": "AML", "nh": "NH07", "sz": "CDE"},
+    {"app_id": "KYC", "nh": "NH05", "sz": "GEN"}, {"app_id": "TRS", "nh": "NH06", "sz": "CDE"},
+    {"app_id": "CCM", "nh": "NH02", "sz": "CDE"}, {"app_id": "LON", "nh": "NH10", "sz": "GEN"},
+    {"app_id": "BRK", "nh": "NH04", "sz": "GEN"}, {"app_id": "AGW", "nh": "NH14", "sz": "DMZ"},
+    {"app_id": "SOC", "nh": "NH01", "sz": "GEN"},
+]
+
+# Prod-SZ to Non-Prod SZ mapping
+_SZ_TO_NONPROD: dict[str, str] = {
+    "CDE": "UCDE", "GEN": "UGEN", "RST": "UCCS", "DMZ": "UGEN",
+    "PAA": "UPAA", "CPA": "UCPA", "CCS": "UCCS", "Standard": "USTD",
+}
+# Prod-SZ to Pre-Prod SZ mapping
+_SZ_TO_PREPROD: dict[str, str] = {
+    "CDE": "PP_CDE", "GEN": "PP_GEN", "RST": "PP_RST", "DMZ": "PP_DMZ",
+    "PAA": "PP_PAA", "CPA": "PP_CPA", "CCS": "PP_CCS", "Standard": "PP_GEN",
+}
+# Prod-NH to Non-Prod NH mapping
+_NH_TO_NONPROD: dict[str, str] = {
+    "NH01": "NH12", "NH02": "NH12", "NH03": "NH13", "NH04": "NH13", "NH05": "NH12",
+    "NH06": "NH13", "NH07": "NH15", "NH08": "NH12", "NH09": "NH15", "NH10": "NH13",
+    "NH11": "NH12", "NH13": "NH15", "NH14": "NH15",
+}
+# Prod-NH to Pre-Prod NH mapping
+_NH_TO_PREPROD: dict[str, str] = {
+    "NH01": "NH16", "NH02": "NH16", "NH03": "NH17", "NH04": "NH17", "NH05": "NH16",
+    "NH06": "NH17", "NH07": "NH16", "NH08": "NH16", "NH09": "NH16", "NH10": "NH17",
+    "NH11": "NH16", "NH13": "NH17", "NH14": "NH17",
+}
+
 SEED_NGDC_STANDARD_GROUPS: list[dict[str, Any]] = []
-for _app in [{"app_id": "CRM", "nh": "NH02", "sz": "CDE"},
-             {"app_id": "ORD", "nh": "NH01", "sz": "GEN"},
-             {"app_id": "PSA", "nh": "NH09", "sz": "GEN"},
-             {"app_id": "DIG", "nh": "NH03", "sz": "CDE"},
-             {"app_id": "PAY", "nh": "NH07", "sz": "CDE"},
-             {"app_id": "ENT", "nh": "NH05", "sz": "GEN"},
-             {"app_id": "SHR", "nh": "NH13", "sz": "GEN"},
-             {"app_id": "WHL", "nh": "NH06", "sz": "CDE"},
-             {"app_id": "CBK", "nh": "NH02", "sz": "CDE"},
-             {"app_id": "CLN", "nh": "NH10", "sz": "GEN"},
-             {"app_id": "WLT", "nh": "NH04", "sz": "GEN"},
-             {"app_id": "ACH", "nh": "NH09", "sz": "GEN"},
-             {"app_id": "HRM", "nh": "NH01", "sz": "GEN"},
-             {"app_id": "TRD", "nh": "NH06", "sz": "CDE"},
-             {"app_id": "FRD", "nh": "NH02", "sz": "CDE"},
-             {"app_id": "RGM", "nh": "NH11", "sz": "RST"},
-             {"app_id": "MBL", "nh": "NH03", "sz": "CDE"},
-             {"app_id": "INS", "nh": "NH04", "sz": "GEN"},
-             {"app_id": "TAX", "nh": "NH10", "sz": "GEN"},
-             {"app_id": "AML", "nh": "NH07", "sz": "CDE"},
-             {"app_id": "KYC", "nh": "NH05", "sz": "GEN"},
-             {"app_id": "TRS", "nh": "NH06", "sz": "CDE"},
-             {"app_id": "CCM", "nh": "NH02", "sz": "CDE"},
-             {"app_id": "LON", "nh": "NH10", "sz": "GEN"},
-             {"app_id": "BRK", "nh": "NH04", "sz": "GEN"},
-             {"app_id": "AGW", "nh": "NH14", "sz": "DMZ"},
-             {"app_id": "SOC", "nh": "NH01", "sz": "GEN"}]:
+for _app in _PROD_APP_DEFS:
     for _comp in ["WEB", "APP", "DB", "BAT", "MQ", "API"]:
+        # --- Production groups ---
         _csz = SEED_COMPONENT_TO_SZ.get(_app["sz"], {}).get(_comp, _app["sz"])
         SEED_NGDC_STANDARD_GROUPS.append({
             "app_id": _app["app_id"],
             "group_name": f"grp-{_app['app_id']}-{_app['nh']}-{_csz}-{_comp}",
             "nh": _app["nh"], "sz": _csz, "component": _comp,
-            "description": f"NGDC standard {_comp} group for {_app['app_id']}",
+            "environment": "Production",
+            "description": f"NGDC standard {_comp} group for {_app['app_id']} (Production)",
         })
+        # --- Non-Production groups ---
+        _np_nh = _NH_TO_NONPROD.get(_app["nh"], "NH12")
+        _np_sz = _SZ_TO_NONPROD.get(_app["sz"], "UGEN")
+        _np_csz = SEED_COMPONENT_TO_SZ.get(_np_sz, {}).get(_comp, _np_sz)
+        SEED_NGDC_STANDARD_GROUPS.append({
+            "app_id": _app["app_id"],
+            "group_name": f"grp-{_app['app_id']}-{_np_nh}-{_np_csz}-{_comp}",
+            "nh": _np_nh, "sz": _np_csz, "component": _comp,
+            "environment": "Non-Production",
+            "description": f"NGDC standard {_comp} group for {_app['app_id']} (Non-Production)",
+        })
+        # --- Pre-Production groups ---
+        _pp_nh = _NH_TO_PREPROD.get(_app["nh"], "NH16")
+        _pp_sz = _SZ_TO_PREPROD.get(_app["sz"], "PP_GEN")
+        _pp_csz = SEED_COMPONENT_TO_SZ.get(_pp_sz, {}).get(_comp, _pp_sz)
+        SEED_NGDC_STANDARD_GROUPS.append({
+            "app_id": _app["app_id"],
+            "group_name": f"grp-{_app['app_id']}-{_pp_nh}-{_pp_csz}-{_comp}",
+            "nh": _pp_nh, "sz": _pp_csz, "component": _comp,
+            "environment": "Pre-Production",
+            "description": f"NGDC standard {_comp} group for {_app['app_id']} (Pre-Production)",
+        })
+
+
+# --- Generate Non-Production and Pre-Production IP mapping variants ---
+def _offset_ip(ip_str: str, offset: int) -> str:
+    """Offset the 2nd octet of an IP/CIDR by the given amount."""
+    parts = ip_str.split("/")
+    octets = parts[0].split(".")
+    octets[1] = str(int(octets[1]) + offset)
+    result = ".".join(octets)
+    if len(parts) > 1:
+        result += "/" + parts[1]
+    return result
+
+for _pm in list(SEED_LEGACY_TO_NGDC_IP_MAPPINGS):  # iterate over a copy of Prod-only entries
+    # Non-Production: +100 offset on 2nd octet for ngdc_ip
+    SEED_LEGACY_TO_NGDC_IP_MAPPINGS.append({
+        **_pm,
+        "ngdc_ip": _offset_ip(_pm["ngdc_ip"], 100),
+        "ngdc_nh": _NH_TO_NONPROD.get(_pm["ngdc_nh"], "NH12"),
+        "ngdc_sz": _SZ_TO_NONPROD.get(_pm["ngdc_sz"], "UGEN"),
+        "environment": "Non-Production",
+    })
+    # Pre-Production: +80 offset on 2nd octet for ngdc_ip
+    SEED_LEGACY_TO_NGDC_IP_MAPPINGS.append({
+        **_pm,
+        "ngdc_ip": _offset_ip(_pm["ngdc_ip"], 80),
+        "ngdc_nh": _NH_TO_PREPROD.get(_pm["ngdc_nh"], "NH16"),
+        "ngdc_sz": _SZ_TO_PREPROD.get(_pm["ngdc_sz"], "PP_GEN"),
+        "environment": "Pre-Production",
+    })
 
 
 # =====================================================================
@@ -1233,17 +1377,124 @@ def _build_seed_rules() -> list[dict[str, Any]]:
         ("R-3058", "10.30.5.0/24", "GEN", "10.30.10.0/24", "GEN", "TCP 8080",
          "Legacy DC Zeta App Traffic", "KYC", "Deployed", False, -320),
     ]
-    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in defs:
+
+    # --- Non-Production rules (R-4001 to R-4020) using NP NHs and SZs ---
+    np_defs = [
+        ("R-4001", "grp-CRM-NH12-UCDE-APP", "UCDE", "grp-CBK-NH12-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: CRM App to CBK DB", "CRM", "Deployed", True, -25),
+        ("R-4002", "grp-DIG-NH13-UCDE-WEB", "UCDE", "grp-PAY-NH15-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: DIG Web to PAY App", "DIG", "Certified", True, -12),
+        ("R-4003", "grp-ENT-NH12-UGEN-APP", "UGEN", "grp-SHR-NH15-UGEN-APP", "UGEN", "TCP 8080",
+         "NP: ENT App to SHR Services", "ENT", "Deployed", True, -18),
+        ("R-4004", "grp-HRM-NH12-UGEN-WEB", "UGEN", "grp-HRM-NH12-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: HRM Web to App Tier", "HRM", "Deployed", True, -60),
+        ("R-4005", "grp-HRM-NH12-UGEN-APP", "UGEN", "grp-HRM-NH12-UGEN-DB", "UGEN", "TCP 5432",
+         "NP: HRM App to DB", "HRM", "Deployed", True, -60),
+        ("R-4006", "grp-TRD-NH13-UCDE-WEB", "UCDE", "grp-TRD-NH13-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: TRD Web to App", "TRD", "Deployed", True, -90),
+        ("R-4007", "grp-TRD-NH13-UCDE-APP", "UCDE", "grp-TRD-NH13-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: TRD App to DB", "TRD", "Certified", True, -50),
+        ("R-4008", "grp-FRD-NH12-UCDE-APP", "UCDE", "grp-CBK-NH12-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: FRD to CBK DB", "FRD", "Deployed", True, -70),
+        ("R-4009", "grp-MBL-NH13-UCDE-API", "UCDE", "grp-MBL-NH13-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: MBL API to App", "MBL", "Deployed", True, -120),
+        ("R-4010", "grp-INS-NH13-UGEN-WEB", "UGEN", "grp-INS-NH13-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: INS Portal to App", "INS", "Deployed", True, -55),
+        ("R-4011", "grp-TAX-NH13-UGEN-APP", "UGEN", "grp-TAX-NH13-UGEN-DB", "UGEN", "TCP 5432",
+         "NP: TAX Engine to DB", "TAX", "Certified", True, -40),
+        ("R-4012", "grp-AML-NH15-UCDE-APP", "UCDE", "grp-AML-NH15-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: AML Engine to DB", "AML", "Deployed", True, -80),
+        ("R-4013", "grp-KYC-NH12-UGEN-WEB", "UGEN", "grp-KYC-NH12-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: KYC Portal to App", "KYC", "Deployed", True, -65),
+        ("R-4014", "grp-TRS-NH13-UCDE-APP", "UCDE", "grp-TRS-NH13-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: TRS to Cash DB", "TRS", "Deployed", True, -95),
+        ("R-4015", "grp-CCM-NH12-UCDE-WEB", "UCDE", "grp-CCM-NH12-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: CCM Portal to App", "CCM", "Deployed", True, -110),
+        ("R-4016", "grp-LON-NH13-UGEN-WEB", "UGEN", "grp-LON-NH13-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: LON Portal to Engine", "LON", "Deployed", True, -75),
+        ("R-4017", "grp-BRK-NH13-UGEN-WEB", "UGEN", "grp-BRK-NH13-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: BRK Portal to Engine", "BRK", "Deployed", True, -100),
+        ("R-4018", "grp-AGW-NH15-UGEN-LB", "UGEN", "grp-AGW-NH15-UGEN-API", "UGEN", "TCP 443",
+         "NP: API GW LB to API", "AGW", "Deployed", True, -130),
+        ("R-4019", "grp-SOC-NH12-UGEN-APP", "UGEN", "grp-SOC-NH12-UGEN-DB", "UGEN", "TCP 9200",
+         "NP: SOC Log Collector to DB", "SOC", "Deployed", True, -150),
+        ("R-4020", "grp-RGM-NH12-UCCS-APP", "UCCS", "grp-RGM-NH12-UCCS-DB", "UCCS", "TCP 1521",
+         "NP: RGM to Compliance DB", "RGM", "Deployed", True, -85),
+    ]
+
+    # --- Pre-Production rules (R-5001 to R-5020) using PP NHs and SZs ---
+    pp_defs = [
+        ("R-5001", "grp-CRM-NH16-PP_CDE-APP", "PP_CDE", "grp-CBK-NH16-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: CRM App to CBK DB", "CRM", "Deployed", True, -20),
+        ("R-5002", "grp-DIG-NH17-PP_CDE-WEB", "PP_CDE", "grp-PAY-NH16-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: DIG Web to PAY App", "DIG", "Certified", True, -10),
+        ("R-5003", "grp-ENT-NH16-PP_GEN-APP", "PP_GEN", "grp-SHR-NH17-PP_GEN-APP", "PP_GEN", "TCP 8080",
+         "PP: ENT App to SHR Services", "ENT", "Deployed", True, -15),
+        ("R-5004", "grp-HRM-NH16-PP_GEN-WEB", "PP_GEN", "grp-HRM-NH16-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: HRM Web to App Tier", "HRM", "Deployed", True, -45),
+        ("R-5005", "grp-HRM-NH16-PP_GEN-APP", "PP_GEN", "grp-HRM-NH16-PP_GEN-DB", "PP_GEN", "TCP 5432",
+         "PP: HRM App to DB", "HRM", "Deployed", True, -45),
+        ("R-5006", "grp-TRD-NH17-PP_CDE-WEB", "PP_CDE", "grp-TRD-NH17-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: TRD Web to App", "TRD", "Deployed", True, -70),
+        ("R-5007", "grp-TRD-NH17-PP_CDE-APP", "PP_CDE", "grp-TRD-NH17-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: TRD App to DB", "TRD", "Certified", True, -35),
+        ("R-5008", "grp-FRD-NH16-PP_CDE-APP", "PP_CDE", "grp-CBK-NH16-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: FRD to CBK DB", "FRD", "Deployed", True, -55),
+        ("R-5009", "grp-MBL-NH17-PP_CDE-API", "PP_CDE", "grp-MBL-NH17-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: MBL API to App", "MBL", "Deployed", True, -90),
+        ("R-5010", "grp-INS-NH17-PP_GEN-WEB", "PP_GEN", "grp-INS-NH17-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: INS Portal to App", "INS", "Deployed", True, -40),
+        ("R-5011", "grp-TAX-NH17-PP_GEN-APP", "PP_GEN", "grp-TAX-NH17-PP_GEN-DB", "PP_GEN", "TCP 5432",
+         "PP: TAX Engine to DB", "TAX", "Certified", True, -30),
+        ("R-5012", "grp-AML-NH16-PP_CDE-APP", "PP_CDE", "grp-AML-NH16-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: AML Engine to DB", "AML", "Deployed", True, -60),
+        ("R-5013", "grp-KYC-NH16-PP_GEN-WEB", "PP_GEN", "grp-KYC-NH16-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: KYC Portal to App", "KYC", "Deployed", True, -50),
+        ("R-5014", "grp-TRS-NH17-PP_CDE-APP", "PP_CDE", "grp-TRS-NH17-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: TRS to Cash DB", "TRS", "Deployed", True, -75),
+        ("R-5015", "grp-CCM-NH16-PP_CDE-WEB", "PP_CDE", "grp-CCM-NH16-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: CCM Portal to App", "CCM", "Deployed", True, -85),
+        ("R-5016", "grp-LON-NH17-PP_GEN-WEB", "PP_GEN", "grp-LON-NH17-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: LON Portal to Engine", "LON", "Deployed", True, -60),
+        ("R-5017", "grp-BRK-NH17-PP_GEN-WEB", "PP_GEN", "grp-BRK-NH17-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: BRK Portal to Engine", "BRK", "Deployed", True, -80),
+        ("R-5018", "grp-AGW-NH17-PP_DMZ-LB", "PP_DMZ", "grp-AGW-NH17-PP_DMZ-API", "PP_DMZ", "TCP 443",
+         "PP: API GW LB to API", "AGW", "Deployed", True, -100),
+        ("R-5019", "grp-SOC-NH16-PP_GEN-APP", "PP_GEN", "grp-SOC-NH16-PP_GEN-DB", "PP_GEN", "TCP 9200",
+         "PP: SOC Log Collector to DB", "SOC", "Deployed", True, -120),
+        ("R-5020", "grp-RGM-NH16-PP_CCS-APP", "PP_CCS", "grp-RGM-NH16-PP_CCS-DB", "PP_CCS", "TCP 1521",
+         "PP: RGM to Compliance DB", "RGM", "Deployed", True, -65),
+    ]
+
+    def _build_rule(rid: str, src: str, sz_s: str, dst: str, sz_d: str,
+                    port: str, desc: str, app: str, st: str, g2g: bool,
+                    days: int, env: str, dc: str) -> dict[str, Any]:
         ct = (base + timedelta(days=days)).isoformat()
-        rules.append({
+        is_compiled = st in ("Certified", "Deployed")
+        is_certified = st in ("Certified", "Deployed")
+        return {
             "rule_id": rid, "source": src, "source_zone": sz_s, "destination": dst,
             "destination_zone": sz_d, "port": port, "protocol": port.split(" ")[0],
             "action": "Allow", "description": desc, "application": app, "status": st,
-            "is_group_to_group": g2g, "environment": "Production", "datacenter": "ALPHA_NGDC",
+            "is_group_to_group": g2g, "environment": env, "datacenter": dc,
             "created_at": ct, "updated_at": ct,
-            "certified_date": ct if st in ("Certified", "Deployed") else None,
-            "expiry_date": (base + timedelta(days=365)).isoformat() if st in ("Certified", "Deployed") else None,
-        })
+            "compile_status": "Compiled" if is_compiled else "Not Compiled",
+            "compile_date": ct if is_compiled else None,
+            "certify_status": "Certified" if is_certified else "Not Certified",
+            "certified_date": ct if is_certified else None,
+            "expiry_date": (base + timedelta(days=365)).isoformat() if is_certified else None,
+        }
+
+    # Build Production rules
+    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in defs:
+        rules.append(_build_rule(rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days, "Production", "ALPHA_NGDC"))
+    # Build Non-Production rules
+    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in np_defs:
+        rules.append(_build_rule(rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days, "Non-Production", "ALPHA_NGDC"))
+    # Build Pre-Production rules
+    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in pp_defs:
+        rules.append(_build_rule(rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days, "Pre-Production", "ALPHA_NGDC"))
+
     return rules
 
 
@@ -2985,12 +3236,15 @@ async def delete_birthright_entry(matrix_type: str, index: int) -> bool:
 # NGDC Migration Recommendations
 # ============================================================
 
-def _detect_destination_app(dest_ip: str, source_app_id: str) -> dict[str, Any] | None:
-    """Detect which application owns a destination IP by scanning all legacy-to-NGDC mappings."""
+def _detect_destination_app(dest_ip: str, source_app_id: str, environment: str = "Production") -> dict[str, Any] | None:
+    """Detect which application owns a destination IP by scanning all legacy-to-NGDC mappings.
+    Filters by environment to return environment-specific NH/SZ/IP data."""
     ip_base = dest_ip.split("/")[0] if "/" in dest_ip else dest_ip
     for m in SEED_LEGACY_TO_NGDC_IP_MAPPINGS:
         if m["app_id"].upper() == source_app_id.upper():
             continue  # Skip same app
+        if m.get("environment", "Production") != environment:
+            continue  # Skip different environment
         legacy_base = m["legacy_ip"].split("/")[0] if "/" in m["legacy_ip"] else m["legacy_ip"]
         # Exact match or subnet prefix match
         if ip_base == legacy_base or ip_base.startswith(legacy_base.rsplit(".", 1)[0]):
@@ -3002,6 +3256,7 @@ def _detect_destination_app(dest_ip: str, source_app_id: str) -> dict[str, Any] 
                 "ngdc_nh": m.get("ngdc_nh", ""),
                 "ngdc_sz": m.get("ngdc_sz", ""),
                 "target_dc": m.get("target_dc", ""),
+                "environment": environment,
                 "recommended_group": f"grp-{m['app_id']}-{m.get('ngdc_nh', 'NH01')}-{m.get('ngdc_sz', 'GEN')}-{m.get('component', 'APP')}",
             }
     return None
@@ -3678,13 +3933,15 @@ async def check_duplicates(source: str, destination: str, service: str,
     return duplicates
 
 
-async def import_rules_to_ngdc_standardization(app_ids: list[str]) -> dict[str, Any]:
+async def import_rules_to_ngdc_standardization(app_ids: list[str], environment: str = "Production") -> dict[str, Any]:
     """Import rules from Network Firewall Request (legacy_rules) into NGDC Standardization
-    by App ID. Returns the imported rules for the selected apps."""
+    by App ID and environment. Returns the imported rules for the selected apps."""
     legacy = _load("legacy_rules") or []
     imported: list[dict[str, Any]] = []
     for r in legacy:
         if str(r.get("app_id", "")) in [str(a) for a in app_ids]:
+            if environment and r.get("environment", "Production") != environment:
+                continue
             # Mark as imported to NGDC standardization
             r["ngdc_imported"] = True
             r["ngdc_import_date"] = _now()
@@ -3933,9 +4190,9 @@ async def get_migration_details(rule_id: str) -> dict[str, Any] | None:
     }
 
 
-async def get_destination_app(dest_ip: str) -> dict[str, Any] | None:
+async def get_destination_app(dest_ip: str, environment: str = "Production") -> dict[str, Any] | None:
     """Identify which application owns a given destination IP."""
-    return _detect_destination_app(dest_ip, "")
+    return _detect_destination_app(dest_ip, "", environment)
 
 
 async def get_ip_to_app_mapping(ip: str) -> list[dict[str, Any]]:

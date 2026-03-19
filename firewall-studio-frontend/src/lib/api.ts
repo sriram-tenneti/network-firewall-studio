@@ -367,10 +367,11 @@ export const removeGroupMember = (groupName: string, memberValue: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
 
 // Legacy Rules (for Migration Studio & Firewall Management)
-export const getLegacyRules = (appId?: string, excludeMigrated?: boolean) => {
+export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
   if (excludeMigrated) params.set('exclude_migrated', 'true');
+  if (environment) params.set('environment', environment);
   const qs = params.toString();
   return fetchJSON<LegacyRule[]>(`/api/reference/legacy-rules${qs ? `?${qs}` : ''}`);
 };
@@ -537,10 +538,10 @@ export const checkDuplicates = (source: string, destination: string, service: st
   );
 
 // Import Rules to NGDC Standardization from Network Firewall Request
-export const importRulesToNGDC = (appIds: string[]) =>
+export const importRulesToNGDC = (appIds: string[], environment?: string) =>
   fetchJSON<{ imported: number; rules: LegacyRule[] }>(
     '/api/reference/legacy-rules/import-to-ngdc',
-    { method: 'POST', body: JSON.stringify({ app_ids: appIds }) }
+    { method: 'POST', body: JSON.stringify({ app_ids: appIds, environment: environment || 'Production' }) }
   );
 
 // Auto-Import Compliant Rules to Firewall Studio
@@ -563,25 +564,31 @@ export const getMigrationDetails = (ruleId: string) =>
   fetchJSON<MigrationDetailsResponse>(`/api/reference/legacy-rules/${ruleId}/migration-details`);
 
 // Destination App Detection
-export const getDestinationApp = (destIp: string) =>
-  fetchJSON<DestinationAppInfo & { detected: boolean }>(`/api/reference/destination-app/${encodeURIComponent(destIp)}`);
+export const getDestinationApp = (destIp: string, environment?: string) => {
+  const params = new URLSearchParams();
+  if (environment) params.set('environment', environment);
+  const qs = params.toString();
+  return fetchJSON<DestinationAppInfo & { detected: boolean }>(`/api/reference/destination-app/${encodeURIComponent(destIp)}${qs ? `?${qs}` : ''}`);
+};
 
 // IP-to-App Mapping
 export const getIPToAppMapping = (ip: string) =>
   fetchJSON<LegacyNGDCIPMapping[]>(`/api/reference/ip-to-app/${encodeURIComponent(ip)}`);
 
 // Legacy-to-NGDC IP Mappings
-export const getLegacyNGDCIPMappings = (appId?: string) => {
+export const getLegacyNGDCIPMappings = (appId?: string, environment?: string) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
+  if (environment) params.set('environment', environment);
   const qs = params.toString();
   return fetchJSON<LegacyNGDCIPMapping[]>(`/api/reference/legacy-ngdc-ip-mappings${qs ? `?${qs}` : ''}`);
 };
 
 // NGDC Standard Groups
-export const getStandardGroups = (appId?: string) => {
+export const getStandardGroups = (appId?: string, environment?: string) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
+  if (environment) params.set('environment', environment);
   const qs = params.toString();
   return fetchJSON<NGDCStandardGroup[]>(`/api/reference/standard-groups${qs ? `?${qs}` : ''}`);
 };

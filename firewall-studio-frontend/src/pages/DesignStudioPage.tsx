@@ -22,7 +22,7 @@ export function DesignStudioPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
-  const [selectedEnv, setSelectedEnv] = useState<string>('');
+  const [envTab, setEnvTab] = useState<string>('Production');
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
 
@@ -71,21 +71,30 @@ export function DesignStudioPage() {
     return () => { mounted = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredRules = rules.filter(r => {
+  const envRules = rules.filter(r => {
     if (r.status === 'Deleted') return false;
     if (selectedApp && r.application !== selectedApp) return false;
-    if (selectedEnv && r.environment !== selectedEnv) return false;
+    return r.environment === envTab;
+  });
+
+  const filteredRules = envRules.filter(r => {
     if (activeTab === 'All') return true;
     return r.status === activeTab;
   });
 
+  const envCounts = {
+    Production: rules.filter(r => r.status !== 'Deleted' && r.environment === 'Production' && (!selectedApp || r.application === selectedApp)).length,
+    'Non-Production': rules.filter(r => r.status !== 'Deleted' && r.environment === 'Non-Production' && (!selectedApp || r.application === selectedApp)).length,
+    'Pre-Production': rules.filter(r => r.status !== 'Deleted' && r.environment === 'Pre-Production' && (!selectedApp || r.application === selectedApp)).length,
+  };
+
   const statusCounts = {
-    All: rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    All: envRules.length,
+    Draft: envRules.filter(r => r.status === 'Draft').length,
+    'Pending Review': envRules.filter(r => r.status === 'Pending Review').length,
+    Approved: envRules.filter(r => r.status === 'Approved').length,
+    Deployed: envRules.filter(r => r.status === 'Deployed').length,
+    Certified: envRules.filter(r => r.status === 'Certified').length,
   };
 
   const handleCreate = async (data: Record<string, string | boolean>) => {
@@ -188,7 +197,9 @@ export function DesignStudioPage() {
       key: 'destination', header: 'Destination', sortable: false, width: '180px',
       render: (_, row) => <span className="font-mono text-xs truncate block">{getDestDisplay(row)}</span>,
     },
-    { key: 'environment', header: 'Environment', sortable: true, width: '110px' },
+    { key: 'environment', header: 'Env', sortable: true, width: '80px',
+      render: (_, row) => <span className="text-xs">{row.environment === 'Production' ? 'Prod' : row.environment === 'Non-Production' ? 'Non-Prod' : 'Pre-Prod'}</span>,
+    },
     {
       key: 'policy_result', header: 'Policy', sortable: true, width: '120px',
       render: (_, row) => row.policy_result ? <StatusBadge status={row.policy_result} /> : <span className="text-gray-400 text-xs">N/A</span>,
@@ -263,16 +274,6 @@ export function DesignStudioPage() {
               <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
             ))}
           </select>
-          <select
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-            value={selectedEnv}
-            onChange={e => setSelectedEnv(e.target.value)}
-          >
-            <option value="">All Environments</option>
-            <option value="Production">Production</option>
-            <option value="Non-Production">Non-Production</option>
-            <option value="Pre-Production">Pre-Production</option>
-          </select>
           <div className="flex rounded-md border border-gray-300 overflow-hidden">
             <button onClick={() => setViewMode('table')} className={'px-3 py-2 text-xs font-medium ' + (viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}>
               Table View
@@ -288,6 +289,28 @@ export function DesignStudioPage() {
             + New Rule
           </button>
         </div>
+      </div>
+
+      {/* Environment Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-gray-200">
+        {(['Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
+          <button
+            key={env}
+            onClick={() => { setEnvTab(env); setActiveTab('All'); }}
+            className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 transition-colors ${
+              envTab === env
+                ? env === 'Production' ? 'bg-blue-600 text-white border-blue-600'
+                  : env === 'Non-Production' ? 'bg-amber-600 text-white border-amber-600'
+                  : 'bg-purple-600 text-white border-purple-600'
+                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+            }`}
+          >
+            {env === 'Production' ? 'Production' : env === 'Non-Production' ? 'Non-Production' : 'Pre-Production'}
+            <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+              envTab === env ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+            }`}>{envCounts[env]}</span>
+          </button>
+        ))}
       </div>
 
       {/* Summary cards */}
