@@ -22,7 +22,7 @@ export function DesignStudioPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
-  const [envTab, setEnvTab] = useState<string>('Production');
+  const [envTab, setEnvTab] = useState<string>('All');
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
 
@@ -71,6 +71,8 @@ export function DesignStudioPage() {
   const envRules = rules.filter(r => {
     if (r.status === 'Deleted') return false;
     if (selectedApp && r.application !== selectedApp) return false;
+    if (envTab === 'All') return true;
+    if (!r.environment) return true; // Rules without environment show under all tabs
     return r.environment === envTab;
   });
 
@@ -79,10 +81,12 @@ export function DesignStudioPage() {
     return r.status === activeTab;
   });
 
+  const activeRules = rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp));
   const envCounts = {
-    Production: rules.filter(r => r.status !== 'Deleted' && r.environment === 'Production' && (!selectedApp || r.application === selectedApp)).length,
-    'Non-Production': rules.filter(r => r.status !== 'Deleted' && r.environment === 'Non-Production' && (!selectedApp || r.application === selectedApp)).length,
-    'Pre-Production': rules.filter(r => r.status !== 'Deleted' && r.environment === 'Pre-Production' && (!selectedApp || r.application === selectedApp)).length,
+    All: activeRules.length,
+    Production: activeRules.filter(r => r.environment === 'Production' || !r.environment).length,
+    'Non-Production': activeRules.filter(r => r.environment === 'Non-Production' || !r.environment).length,
+    'Pre-Production': activeRules.filter(r => r.environment === 'Pre-Production' || !r.environment).length,
   };
 
   const statusCounts = {
@@ -279,19 +283,20 @@ export function DesignStudioPage() {
 
       {/* Environment Tabs */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {(['Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
+        {(['All', 'Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
           <button
             key={env}
             onClick={() => { setEnvTab(env); setActiveTab('All'); }}
             className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 transition-colors ${
               envTab === env
-                ? env === 'Production' ? 'bg-blue-600 text-white border-blue-600'
+                ? env === 'All' ? 'bg-slate-700 text-white border-slate-700'
+                  : env === 'Production' ? 'bg-blue-600 text-white border-blue-600'
                   : env === 'Non-Production' ? 'bg-amber-600 text-white border-amber-600'
                   : 'bg-purple-600 text-white border-purple-600'
                 : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
             }`}
           >
-            {env === 'Production' ? 'Production' : env === 'Non-Production' ? 'Non-Production' : 'Pre-Production'}
+            {env}
             <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
               envTab === env ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
             }`}>{envCounts[env]}</span>

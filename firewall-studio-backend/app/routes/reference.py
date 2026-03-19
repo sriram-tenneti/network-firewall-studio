@@ -1005,6 +1005,30 @@ async def list_app_env_assignments(app_id: str = "", environment: str = ""):
     return results
 
 
+@router.put("/app-env-assignments/{app_id}/{environment}")
+async def update_app_env_assignment(app_id: str, environment: str, body: dict):
+    """Update an app-environment assignment (DC, NH, SZ, criticality, pci_scope)."""
+    from app.mappings import APP_ENVIRONMENT_ASSIGNMENTS
+    for entry in APP_ENVIRONMENT_ASSIGNMENTS:
+        if entry.get("app_id") == app_id and entry.get("environment") == environment:
+            for key in ("dc", "nh", "sz", "criticality", "pci_scope"):
+                if key in body:
+                    entry[key] = body[key]
+            return entry
+    raise HTTPException(status_code=404, detail=f"Assignment not found: {app_id}/{environment}")
+
+
+@router.delete("/app-env-assignments/{app_id}/{environment}")
+async def delete_app_env_assignment(app_id: str, environment: str):
+    """Delete an app-environment assignment."""
+    from app.mappings import APP_ENVIRONMENT_ASSIGNMENTS
+    for i, entry in enumerate(APP_ENVIRONMENT_ASSIGNMENTS):
+        if entry.get("app_id") == app_id and entry.get("environment") == environment:
+            APP_ENVIRONMENT_ASSIGNMENTS.pop(i)
+            return {"deleted": True, "app_id": app_id, "environment": environment}
+    raise HTTPException(status_code=404, detail=f"Assignment not found: {app_id}/{environment}")
+
+
 @router.get("/preprod-matrix")
 async def list_preprod_matrix():
     from app.database import get_preprod_matrix

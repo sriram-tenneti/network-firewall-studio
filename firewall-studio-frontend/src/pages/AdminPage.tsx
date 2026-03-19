@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   getAppEnvAssignments, getOrgConfig, getPolicyMatrix, getNamingStandards,
   updateOrgConfig, createPolicyEntry, deletePolicyEntry, updateNamingStandards,
+  updateAppEnvAssignment, deleteAppEnvAssignment,
 } from '@/lib/api';
-import { Shield, Server, Settings, FileText, ChevronRight, Save, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Shield, Server, Settings, FileText, ChevronRight, Save, Plus, Trash2, RefreshCw, Pencil, X, Check } from 'lucide-react';
 
 type AdminTab = 'app-assignments' | 'naming-standards' | 'policy-matrix' | 'org-config';
 
@@ -39,6 +40,8 @@ export default function AdminPage() {
   const [assignments, setAssignments] = useState<AppEnvAssignment[]>([]);
   const [envFilter, setEnvFilter] = useState<string>('');
   const [appFilter, setAppFilter] = useState<string>('');
+  const [editingAssignment, setEditingAssignment] = useState<AppEnvAssignment | null>(null);
+  const [editForm, setEditForm] = useState({ dc: '', nh: '', sz: '', criticality: 1, pci_scope: false });
 
   // Naming standards state
   const [namingStandards, setNamingStandards] = useState<Record<string, unknown>>({});
@@ -128,6 +131,29 @@ export default function AdminPage() {
     } catch (e) { console.error(e); alert('Delete failed'); }
   };
 
+  const startEditAssignment = (a: AppEnvAssignment) => {
+    setEditingAssignment(a);
+    setEditForm({ dc: a.dc, nh: a.nh, sz: a.sz, criticality: a.criticality, pci_scope: a.pci_scope });
+  };
+
+  const handleSaveAssignment = async () => {
+    if (!editingAssignment) return;
+    try {
+      await updateAppEnvAssignment(editingAssignment.app_id, editingAssignment.environment, editForm);
+      setEditingAssignment(null);
+      loadData();
+      showSaveMsg();
+    } catch (e) { console.error(e); alert('Update failed'); }
+  };
+
+  const handleDeleteAssignment = async (a: AppEnvAssignment) => {
+    if (!confirm(`Delete assignment ${a.app_id} / ${a.environment}?`)) return;
+    try {
+      await deleteAppEnvAssignment(a.app_id, a.environment);
+      loadData();
+    } catch (e) { console.error(e); alert('Delete failed'); }
+  };
+
   const renderAppAssignments = () => (
     <div>
       {/* Stats bar */}
@@ -180,35 +206,64 @@ export default function AdminPage() {
               <th className="px-3 py-2.5 text-left font-semibold text-slate-600 w-24">SZ</th>
               <th className="px-3 py-2.5 text-left font-semibold text-slate-600 w-20">Crit.</th>
               <th className="px-3 py-2.5 text-left font-semibold text-slate-600 w-20">PCI</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-slate-600 w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredAssignments.map((a, i) => (
-              <tr key={`${a.app_id}-${a.environment}-${i}`} className="border-b hover:bg-slate-50/50">
+            {filteredAssignments.map((a, i) => {
+              const isEditing = editingAssignment?.app_id === a.app_id && editingAssignment?.environment === a.environment;
+              return (
+              <tr key={`${a.app_id}-${a.environment}-${i}`} className={`border-b hover:bg-slate-50/50 ${isEditing ? 'bg-blue-50/50' : ''}`}>
                 <td className="px-3 py-2 font-medium text-slate-800">{a.app_id}</td>
                 <td className="px-3 py-2">
                   <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${ENV_COLORS[a.environment] || 'bg-gray-100 text-gray-700'}`}>
                     {a.environment}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-slate-600 font-mono text-xs">{a.dc}</td>
-                <td className="px-3 py-2 text-slate-700 font-mono">{a.nh}</td>
+                {isEditing ? (
+                  <>
+                    <td className="px-3 py-1"><input value={editForm.dc} onChange={e => setEditForm(f => ({ ...f, dc: e.target.value }))} className="w-full px-2 py-1 text-xs border rounded font-mono" /></td>
+                    <td className="px-3 py-1"><input value={editForm.nh} onChange={e => setEditForm(f => ({ ...f, nh: e.target.value }))} className="w-full px-2 py-1 text-xs border rounded font-mono" /></td>
+                    <td className="px-3 py-1"><input value={editForm.sz} onChange={e => setEditForm(f => ({ ...f, sz: e.target.value }))} className="w-full px-2 py-1 text-xs border rounded font-mono" /></td>
+                    <td className="px-3 py-1"><input type="number" min={1} max={5} value={editForm.criticality} onChange={e => setEditForm(f => ({ ...f, criticality: Number(e.target.value) }))} className="w-full px-2 py-1 text-xs border rounded" /></td>
+                    <td className="px-3 py-1"><select value={editForm.pci_scope ? 'true' : 'false'} onChange={e => setEditForm(f => ({ ...f, pci_scope: e.target.value === 'true' }))} className="w-full px-2 py-1 text-xs border rounded"><option value="true">Yes</option><option value="false">No</option></select></td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-3 py-2 text-slate-600 font-mono text-xs">{a.dc}</td>
+                    <td className="px-3 py-2 text-slate-700 font-mono">{a.nh}</td>
+                    <td className="px-3 py-2">
+                      <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-purple-50 text-purple-700 border border-purple-200">{a.sz}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`text-xs font-bold ${a.criticality <= 2 ? 'text-red-600' : a.criticality <= 3 ? 'text-amber-600' : 'text-green-600'}`}>
+                        {a.criticality}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`w-2 h-2 inline-block rounded-full ${a.pci_scope ? 'bg-red-500' : 'bg-green-500'}`} />
+                      <span className="ml-1 text-xs text-slate-500">{a.pci_scope ? 'Yes' : 'No'}</span>
+                    </td>
+                  </>
+                )}
                 <td className="px-3 py-2">
-                  <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-purple-50 text-purple-700 border border-purple-200">{a.sz}</span>
-                </td>
-                <td className="px-3 py-2">
-                  <span className={`text-xs font-bold ${a.criticality <= 2 ? 'text-red-600' : a.criticality <= 3 ? 'text-amber-600' : 'text-green-600'}`}>
-                    {a.criticality}
-                  </span>
-                </td>
-                <td className="px-3 py-2">
-                  <span className={`w-2 h-2 inline-block rounded-full ${a.pci_scope ? 'bg-red-500' : 'bg-green-500'}`} />
-                  <span className="ml-1 text-xs text-slate-500">{a.pci_scope ? 'Yes' : 'No'}</span>
+                  {isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <button onClick={handleSaveAssignment} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Save"><Check className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => setEditingAssignment(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded" title="Cancel"><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => startEditAssignment(a)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => handleDeleteAssignment(a)} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+                    </div>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {filteredAssignments.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">No assignments found</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-400">No assignments found</td></tr>
             )}
           </tbody>
         </table>

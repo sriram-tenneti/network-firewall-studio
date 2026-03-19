@@ -610,6 +610,16 @@ export const getAppEnvAssignments = (appId?: string, environment?: string) => {
   return fetchJSON<Record<string, unknown>[]>(`/api/reference/app-env-assignments${qs ? `?${qs}` : ''}`);
 };
 
+export const updateAppEnvAssignment = (appId: string, environment: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/app-env-assignments/${encodeURIComponent(appId)}/${encodeURIComponent(environment)}`, {
+    method: 'PUT', body: JSON.stringify(data),
+  });
+
+export const deleteAppEnvAssignment = (appId: string, environment: string) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/app-env-assignments/${encodeURIComponent(appId)}/${encodeURIComponent(environment)}`, {
+    method: 'DELETE',
+  });
+
 // Policy Matrices (Admin)
 export const getAllPolicyMatrices = () =>
   fetchJSON<{ heritage_dc: Record<string, unknown>[]; ngdc_prod: Record<string, unknown>[]; nonprod: Record<string, unknown>[]; combined: Record<string, unknown>[] }>('/api/reference/policy-matrix/all');

@@ -19,7 +19,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [importingFromFM, setImportingFromFM] = useState(false);
   const [fmLoading, setFmLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; apps: number } | null>(null);
-  const [envTab, setEnvTab] = useState<string>('Production');
+  const [envTab, setEnvTab] = useState<string>('All');
 
   const isNGDCImport = context === 'ngdc-import-rules';
   const pageTitle = isNGDCImport
@@ -32,7 +32,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const loadFMApps = useCallback(async () => {
     setFmLoading(true);
     try {
-      const rules = await getLegacyRules(undefined, false, envTab);
+      const rules = await getLegacyRules(undefined, false, envTab === 'All' ? '' : envTab);
       setFmRules(rules);
       const appMap = new Map<string, { label: string; count: number }>();
       for (const r of rules) {
@@ -130,7 +130,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
           </div>
 
           <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
-            {(['Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
+            {(['All', 'Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
               <button key={env} onClick={() => { setEnvTab(env); setSelectedImportApps(new Set()); }}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${envTab === env ? 'bg-white shadow-sm text-emerald-700 border border-emerald-200' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
                 {env}

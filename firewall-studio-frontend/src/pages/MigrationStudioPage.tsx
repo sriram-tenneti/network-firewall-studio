@@ -113,7 +113,7 @@ export function MigrationStudioPage() {
   const [legacyRules, setLegacyRules] = useState<LegacyRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<string>('');
-  const [envTab, setEnvTab] = useState<string>('Production');
+  const [envTab, setEnvTab] = useState<string>('All');
   const [activeTab, setActiveTab] = useState('All');
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
@@ -155,14 +155,20 @@ export function MigrationStudioPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const getMigEnv = (r: LegacyRule) => (r as unknown as Record<string, string>).environment || '';
+
   const envFilteredRules = legacyRules.filter(r => {
-    return (r as unknown as Record<string, string>).environment === envTab;
+    if (envTab === 'All') return true;
+    const env = getMigEnv(r);
+    if (!env) return true; // Rules without environment show under all tabs
+    return env === envTab;
   });
 
   const envCounts = {
-    Production: legacyRules.filter(r => (r as unknown as Record<string, string>).environment === 'Production').length,
-    'Non-Production': legacyRules.filter(r => (r as unknown as Record<string, string>).environment === 'Non-Production').length,
-    'Pre-Production': legacyRules.filter(r => (r as unknown as Record<string, string>).environment === 'Pre-Production').length,
+    All: legacyRules.length,
+    Production: legacyRules.filter(r => { const e = getMigEnv(r); return e === 'Production' || !e; }).length,
+    'Non-Production': legacyRules.filter(r => { const e = getMigEnv(r); return e === 'Non-Production' || !e; }).length,
+    'Pre-Production': legacyRules.filter(r => { const e = getMigEnv(r); return e === 'Pre-Production' || !e; }).length,
   };
 
   const filteredRules = envFilteredRules.filter(r => {
@@ -411,19 +417,20 @@ export function MigrationStudioPage() {
 
       {/* Environment Tabs */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {(['Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
+        {(['All', 'Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
           <button
             key={env}
             onClick={() => { setEnvTab(env); setActiveTab('All'); }}
             className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 transition-colors ${
               envTab === env
-                ? env === 'Production' ? 'bg-blue-600 text-white border-blue-600'
+                ? env === 'All' ? 'bg-slate-700 text-white border-slate-700'
+                  : env === 'Production' ? 'bg-blue-600 text-white border-blue-600'
                   : env === 'Non-Production' ? 'bg-amber-600 text-white border-amber-600'
                   : 'bg-purple-600 text-white border-purple-600'
                 : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
             }`}
           >
-            {env === 'Production' ? 'Production' : env === 'Non-Production' ? 'Non-Production' : 'Pre-Production'}
+            {env}
             <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
               envTab === env ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
             }`}>{envCounts[env]}</span>
