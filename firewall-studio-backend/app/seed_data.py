@@ -24,7 +24,7 @@ def _now() -> str:
 
 SEED_NEIGHBOURHOODS = [
     # From reference: Each NH has multiple security zones with VRF-IDs and Transit VNIs
-    {"nh_id": "NH01", "name": "Platform Services", "environment": "Production",
+    {"nh_id": "NH01", "name": "Technology Enablement Services", "environment": "Production",
      "description": "Platform and infrastructure services", "ip_ranges": [
         {"cidr": "10.0.1.0/24", "description": "NH01 East Primary", "dc": "ALPHA_NGDC"},
         {"cidr": "10.0.2.0/24", "description": "NH01 East Secondary", "dc": "ALPHA_NGDC"},
@@ -38,7 +38,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "PSE", "vrf_id": "NH01 sz07", "description": "Production Simulation Environment"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH02", "name": "Team Eta", "environment": "Production",
+    {"nh_id": "NH02", "name": "Core Banking", "environment": "Production",
      "description": "Data processing and analytics platforms", "ip_ranges": [
         {"cidr": "10.1.1.0/24", "description": "NH02 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "10.1.2.0/24", "description": "NH02 East DB Tier", "dc": "ALPHA_NGDC"},
@@ -51,7 +51,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH02 sz06", "description": "Critical Payment Applications"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH03", "name": "Team Delta", "environment": "Production",
+    {"nh_id": "NH03", "name": "Digital Channels", "environment": "Production",
      "description": "Web application and API hosting", "ip_ranges": [
         {"cidr": "10.2.1.0/24", "description": "NH03 East Web Servers", "dc": "ALPHA_NGDC"},
         {"cidr": "10.2.2.0/24", "description": "NH03 East App Servers", "dc": "ALPHA_NGDC"},
@@ -62,7 +62,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CDE", "vrf_id": "NH03 sz05", "description": "Card Holder Data"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH04", "name": "Customer Portal", "environment": "Production",
+    {"nh_id": "NH04", "name": "Wealth Management", "environment": "Production",
      "description": "Customer-facing portal services", "ip_ranges": [
         {"cidr": "10.3.1.0/24", "description": "NH04 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.5.0/24", "description": "NH04 West Primary", "dc": "BETA_NGDC"},
@@ -73,7 +73,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH04 sz06", "description": "Critical Payment Applications"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH05", "name": "Team Theta", "environment": "Production",
+    {"nh_id": "NH05", "name": "Enterprise Services", "environment": "Production",
      "description": "Enterprise system hosting", "ip_ranges": [
         {"cidr": "10.4.1.0/24", "description": "NH05 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "10.4.2.0/24", "description": "NH05 East DB Tier", "dc": "ALPHA_NGDC"},
@@ -86,7 +86,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH05 sz06", "description": "Critical Payment Applications"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH06", "name": "Enterprise Extended", "environment": "Production",
+    {"nh_id": "NH06", "name": "Wholesale Banking", "environment": "Production",
      "description": "Enterprise extended services (overlay)", "ip_ranges": [
         {"cidr": "10.5.1.0/24", "description": "NH06 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.20.0/24", "description": "NH06 West App", "dc": "BETA_NGDC"},
@@ -97,7 +97,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH06 sz06", "description": "Critical Payment Applications"},
         {"zone": "Standard", "vrf_id": "Overlay01", "transit_vni": 4000, "description": "Standard/General (Overlay)"},
      ]},
-    {"nh_id": "NH07", "name": "Transaction Processing", "environment": "Production",
+    {"nh_id": "NH07", "name": "Global Payments and Liquidity", "environment": "Production",
      "description": "Transaction processing and settlement", "ip_ranges": [
         {"cidr": "10.6.1.0/24", "description": "NH07 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "10.6.2.0/24", "description": "NH07 East DB Tier", "dc": "ALPHA_NGDC"},
@@ -111,7 +111,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "Extra", "vrf_id": "NH07 sz08", "description": "Additional zone"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH08", "name": "Data Processing Extended", "environment": "Production",
+    {"nh_id": "NH08", "name": "Data and Analytics", "environment": "Production",
      "description": "Extended data processing platforms", "ip_ranges": [
         {"cidr": "10.7.1.0/24", "description": "NH08 East App", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.30.0/24", "description": "NH08 West App", "dc": "BETA_NGDC"},
@@ -122,7 +122,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH08 sz06", "description": "Critical Payment Applications"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH09", "name": "Team Mu", "environment": "Production",
+    {"nh_id": "NH09", "name": "Assisted Channels", "environment": "Production",
      "description": "Support and service channel applications", "ip_ranges": [
         {"cidr": "10.8.1.0/24", "description": "NH09 East App", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.40.0/24", "description": "NH09 West App", "dc": "BETA_NGDC"},
@@ -133,7 +133,7 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH09 sz06", "description": "Critical Payment Applications"},
         {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH10", "name": "Team Kappa", "environment": "Production",
+    {"nh_id": "NH10", "name": "Consumer Lending", "environment": "Production",
      "description": "Lending and origination services", "ip_ranges": [
         {"cidr": "10.9.1.0/24", "description": "NH10 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "10.55.1.0/24", "description": "NH10 Central App", "dc": "GAMMA_NGDC"},
@@ -181,7 +181,7 @@ SEED_NEIGHBOURHOODS = [
         {"cidr": "172.16.80.0/24", "description": "NH15 West Web", "dc": "BETA_NGDC"},
      ],
      "security_zones": []},
-    {"nh_id": "NH16", "name": "Pre-Production Shared", "environment": "Pre-Production",
+    {"nh_id": "NH16", "name": "Pre-Production (Non-Prod Shared)", "environment": "Pre-Production",
      "description": "Pre-production staging environment", "ip_ranges": [
         {"cidr": "10.90.1.0/24", "description": "NH16 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "10.65.1.0/24", "description": "NH16 Central App", "dc": "GAMMA_NGDC"},
@@ -1227,8 +1227,8 @@ SEED_NGDC_PROD_MATRIX = [
     {"src_dc": "Same", "src_nh": "Different", "src_sz": "Same", "dst_dc": "Same", "dst_nh": "Different", "dst_sz": "Same",
      "action": "Permitted", "reason": "Same DC + Different NH + Same SZ = Permitted"},
     {"src_dc": "Different", "src_nh": "Different", "src_sz": "Same", "dst_dc": "Different", "dst_nh": "Different", "dst_sz": "Same",
-     "action": "Blocked - Firewall Request Required",
-     "reason": "Different DC + Different NH + Same SZ = Blocked; submit a firewall request to open"},
+     "action": "Permitted",
+     "reason": "Different DC + Different NH + Same SZ = Permitted"},
     {"src_dc": "Same", "src_nh": "Non-Prod to PROD", "src_sz": "Any", "dst_dc": "Same", "dst_nh": "Non-Prod to PROD", "dst_sz": "Any",
      "action": "Blocked - Firewall Request Required",
      "reason": "Non-Prod to PROD traffic is blocked; submit a firewall request to open"},

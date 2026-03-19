@@ -16,9 +16,14 @@ VALID_NH_IDS = [f"NH{i:02d}" for i in range(1, 18)]
 
 # Valid Security Zone codes
 VALID_SZ_CODES = [
-    "CDE", "GEN", "DMZ", "RST", "MGT", "PNA", "EPAA", "UCPA",
-    "BCCI", "GGEN", "EPIN", "LPAA", "USPP", "EXEN", "SPN", "CPN",
-    "EXT",
+    # Production zones
+    "GEN", "PAA", "CDE", "CPA", "CCS", "3PY",
+    "DMZ", "RST", "MGT", "PSE", "Standard",
+    # Non-Production / Pre-Production zones
+    "UGEN", "USTD", "UCCS", "UPAA", "UCPA", "UCDE", "U3PY",
+    # Legacy / extended zones
+    "PNA", "EPAA", "BCCI", "GGEN", "EPIN", "LPAA", "USPP", "EXEN",
+    "SPN", "CPN", "EXT", "PCI_CAN", "CAN",
 ]
 
 # Valid Subtypes for groups

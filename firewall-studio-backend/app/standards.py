@@ -51,11 +51,11 @@ NGDC_PROD_MATRIX: list[dict[str, str]] = [
      "matrix_type": "NGDC Prod",
      "reason": "Same DC + Different NH + Same SZ = Permitted (cross-NH same zone)"},
 
-    # Row 6: Different DC, Different NH, Same SZ = Blocked
+    # Row 6: Different DC, Different NH, Same SZ = Permitted
     {"src_dc": "Different", "dst_dc": "Different", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "Same", "dst_sz": "Same", "action": "Blocked",
+     "src_sz": "Same", "dst_sz": "Same", "action": "Permitted",
      "matrix_type": "NGDC Prod",
-     "reason": "Different DC + Different NH + Same SZ = Blocked; firewall rule request required"},
+     "reason": "Different DC + Different NH + Same SZ = Permitted"},
 
     # Row 7: Same DC, Non-Prod to PROD, Any SZ = Blocked
     {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Non-Prod", "dst_nh": "Prod",

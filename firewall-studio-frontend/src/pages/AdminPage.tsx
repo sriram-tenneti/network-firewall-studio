@@ -373,8 +373,8 @@ export default function AdminPage() {
           </thead>
           <tbody>
             {policyMatrix.map((row, i) => {
-              const action = String(row.default_action || '');
-              const actionColor = action === 'Permitted' ? 'bg-green-100 text-green-700' : action === 'Blocked' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700';
+              const action = String(row.action || row.default_action || '');
+              const actionColor = action.startsWith('Permitted') ? 'bg-green-100 text-green-700' : action.includes('Blocked') ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700';
               return (
                 <tr key={i} className="border-b hover:bg-slate-50">
                   <td className="px-3 py-2 font-mono text-slate-700">{String(row.source_zone)}</td>
@@ -383,9 +383,9 @@ export default function AdminPage() {
                     <span className={`px-2 py-0.5 text-xs font-medium rounded ${actionColor}`}>{action}</span>
                   </td>
                   <td className="px-3 py-2">
-                    {row.requires_exception ? <span className="text-xs text-red-600 font-medium">Yes</span> : <span className="text-xs text-slate-400">No</span>}
+                    {(row.requires_exception || String(row.action || row.default_action || '').includes('Exception')) ? <span className="text-xs text-red-600 font-medium">Yes</span> : <span className="text-xs text-slate-400">No</span>}
                   </td>
-                  <td className="px-3 py-2 text-slate-500 text-xs">{String(row.description || '')}</td>
+                  <td className="px-3 py-2 text-slate-500 text-xs">{String(row.reason || row.description || '')}</td>
                   <td className="px-3 py-2 text-right">
                     <button onClick={() => handleDeletePolicy(String(row.source_zone), String(row.dest_zone))} className="p-1 text-red-400 hover:text-red-600">
                       <Trash2 className="h-3.5 w-3.5" />
