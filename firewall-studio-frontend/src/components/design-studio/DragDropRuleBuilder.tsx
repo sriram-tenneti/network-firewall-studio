@@ -1,299 +1,461 @@
-import { useState } from 'react';
-import type { Application } from '@/types';
+import { useState, useEffect, useMemo } from 'react';
+import type { Application, BirthrightValidation } from '@/types';
+import * as api from '@/lib/api';
 
 interface DragDropRuleBuilderProps {
   applications: Application[];
   onRuleCreated: () => void;
 }
 
-interface WorkflowNode {
-  id: string;
-  type: 'source' | 'policy' | 'destination' | 'action';
-  label: string;
-  value: string;
-  x: number;
-  y: number;
-}
-
-interface WorkflowConnection {
-  from: string;
-  to: string;
-}
-
-const TEMPLATES = [
-  { label: 'Source (Group)', type: 'source' as const, icon: 'GRP', value: 'grp-' },
-  { label: 'Source (IP)', type: 'source' as const, icon: 'IP', value: 'ip-' },
-  { label: 'Source (Subnet)', type: 'source' as const, icon: 'NET', value: 'subnet-' },
-  { label: 'Policy Check', type: 'policy' as const, icon: 'POL', value: 'policy' },
-  { label: 'Destination', type: 'destination' as const, icon: 'DST', value: 'dest-' },
-  { label: 'Allow', type: 'action' as const, icon: 'OK', value: 'allow' },
-  { label: 'Deny', type: 'action' as const, icon: 'X', value: 'deny' },
+const NEIGHBOURHOODS = [
+  { id: 'NH01', name: 'Technology Enablement Services' },
+  { id: 'NH02', name: 'Core Banking' },
+  { id: 'NH03', name: 'Digital Channels' },
+  { id: 'NH04', name: 'Wealth Management' },
+  { id: 'NH05', name: 'Enterprise Services' },
+  { id: 'NH06', name: 'Wholesale Banking' },
+  { id: 'NH07', name: 'Global Payments and Liquidity' },
+  { id: 'NH08', name: 'Data and Analytics' },
+  { id: 'NH09', name: 'Assisted Channels' },
+  { id: 'NH10', name: 'Consumer Lending' },
+  { id: 'NH11', name: 'Production Mainframe' },
+  { id: 'NH12', name: 'Non-Production Mainframe' },
+  { id: 'NH13', name: 'Non-Production Shared' },
+  { id: 'NH14', name: 'DMZ' },
+  { id: 'NH15', name: 'Non-Production DMZ' },
+  { id: 'NH16', name: 'Pre-Production (Non-Prod Shared)' },
+  { id: 'NH17', name: 'Pre-Production DMZ' },
 ];
 
-const NODE_COLORS: Record<string, string> = {
-  source: 'bg-blue-50 border-blue-300 text-blue-800',
-  policy: 'bg-amber-50 border-amber-300 text-amber-800',
-  destination: 'bg-emerald-50 border-emerald-300 text-emerald-800',
-  action: 'bg-purple-50 border-purple-300 text-purple-800',
-};
+const PROD_ZONES = [
+  { code: 'GEN', name: 'General' },
+  { code: 'PAA', name: 'PAA Zone' },
+  { code: 'CDE', name: 'Cardholder Data Environment' },
+  { code: 'CPA', name: 'Critical Payment Application' },
+  { code: 'CCS', name: 'Common Card Services' },
+  { code: '3PY', name: 'Third Party' },
+];
 
-const ICON_COLORS: Record<string, string> = {
-  source: 'bg-blue-200 text-blue-700',
-  policy: 'bg-amber-200 text-amber-700',
-  destination: 'bg-emerald-200 text-emerald-700',
-  action: 'bg-purple-200 text-purple-700',
-};
+const NONPROD_ZONES = [
+  { code: 'UGEN', name: 'UAT General' },
+  { code: 'USTD', name: 'UAT Standard' },
+  { code: 'UCCS', name: 'UAT Common Card Services' },
+  { code: 'UPAA', name: 'UAT PAA' },
+  { code: 'UCPA', name: 'UAT Critical Payment' },
+  { code: 'UCDE', name: 'UAT Cardholder Data Env' },
+  { code: 'U3PY', name: 'UAT Third Party' },
+];
+
+const DATACENTERS = [
+  { code: 'ALPHA_NGDC', name: 'Alpha NGDC' },
+  { code: 'BETA_NGDC', name: 'Beta NGDC' },
+  { code: 'GAMMA_NGDC', name: 'Gamma NGDC' },
+];
+
+const SUBTYPES = [
+  { code: 'APP', name: 'Application Servers' },
+  { code: 'WEB', name: 'Web Servers' },
+  { code: 'DB', name: 'Database Servers' },
+  { code: 'BAT', name: 'Batch Servers' },
+  { code: 'MQ', name: 'Message Queue' },
+  { code: 'API', name: 'API Servers' },
+  { code: 'LB', name: 'Load Balancers' },
+  { code: 'MON', name: 'Monitoring' },
+  { code: 'MFR', name: 'Mainframe' },
+  { code: 'SVC', name: 'Services' },
+];
+
+const PROTOCOLS = ['TCP', 'UDP', 'ICMP', 'ANY'];
+
+const COMMON_PORTS = [
+  { value: '443', label: 'HTTPS (443)' },
+  { value: '80', label: 'HTTP (80)' },
+  { value: '8443', label: 'Alt HTTPS (8443)' },
+  { value: '8080', label: 'Alt HTTP (8080)' },
+  { value: '1433', label: 'MSSQL (1433)' },
+  { value: '1521', label: 'Oracle (1521)' },
+  { value: '3306', label: 'MySQL (3306)' },
+  { value: '5432', label: 'PostgreSQL (5432)' },
+  { value: '1414', label: 'MQ (1414)' },
+  { value: '9092', label: 'Kafka (9092)' },
+  { value: '22', label: 'SSH (22)' },
+  { value: '3389', label: 'RDP (3389)' },
+];
 
 export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRuleBuilderProps) {
-  const [nodes, setNodes] = useState<WorkflowNode[]>([]);
-  const [connections, setConnections] = useState<WorkflowConnection[]>([]);
-  const [dragItem, setDragItem] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [editLabel, setEditLabel] = useState('');
-  const [editValue, setEditValue] = useState('');
-  const [showForm, setShowForm] = useState(false);
-
-  const [formData, setFormData] = useState({
-    application: '',
-    environment: 'Production',
-    source: '',
-    source_zone: '',
-    destination: '',
-    destination_zone: '',
-    port: '443',
-    protocol: 'TCP',
-    action: 'Allow',
+  const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+    src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
+    dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
+    port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
   });
+  const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
+  const [validatingBR, setValidatingBR] = useState(false);
 
-  const handleDragStart = (templateIdx: number) => {
-    setDragItem(String(templateIdx));
+  const zones = useMemo(() => form.environment === 'Production' ? PROD_ZONES : NONPROD_ZONES, [form.environment]);
+
+  const srcName = useMemo(() => {
+    if (!form.application || !form.src_nh || !form.src_sz) return '';
+    return `grp-${form.application}-${form.src_nh}-${form.src_sz}-${form.src_subtype}`;
+  }, [form.application, form.src_nh, form.src_sz, form.src_subtype]);
+
+  const dstName = useMemo(() => {
+    if (!form.application || !form.dst_nh || !form.dst_sz) return '';
+    return `grp-${form.application}-${form.dst_nh}-${form.dst_sz}-${form.dst_subtype}`;
+  }, [form.application, form.dst_nh, form.dst_sz, form.dst_subtype]);
+
+  const effectivePort = form.port === 'custom' ? form.customPort : form.port;
+
+  useEffect(() => {
+    if (!form.src_sz || !form.dst_sz) { setBirthrightResult(null); return; }
+    const timer = setTimeout(async () => {
+      setValidatingBR(true);
+      try {
+        const result = await api.validateBirthright({
+          source_zone: form.src_sz, destination_zone: form.dst_sz,
+          source_sz: form.src_sz, destination_sz: form.dst_sz,
+          source_dc: form.datacenter, destination_dc: form.datacenter,
+          environment: form.environment,
+        });
+        setBirthrightResult(result);
+      } catch { setBirthrightResult(null); }
+      setValidatingBR(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.src_sz, form.dst_sz, form.datacenter, form.environment]);
+
+  const canStep1 = form.application && form.environment && form.datacenter;
+  const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz;
+  const canStep3 = effectivePort && form.protocol;
+  const canSubmit = canStep1 && canStep2 && canStep3 && !(birthrightResult && !birthrightResult.compliant);
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      await api.createRule({
+        application: form.application, environment: form.environment, datacenter: form.datacenter,
+        source: form.src_custom || srcName, source_zone: form.src_sz,
+        destination: form.dst_custom || dstName, destination_zone: form.dst_sz,
+        port: effectivePort, protocol: form.protocol, action: form.action,
+        description: form.description, is_group_to_group: true,
+      });
+      onRuleCreated();
+      setStep(1);
+      setForm({ application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+        src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
+        dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
+        port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '' });
+      setBirthrightResult(null);
+    } catch { /* handled by parent */ }
+    setSubmitting(false);
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (dragItem === null) return;
-    const tmpl = TEMPLATES[Number(dragItem)];
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const newNode: WorkflowNode = {
-      id: `node-${Date.now()}`,
-      type: tmpl.type,
-      label: tmpl.label,
-      value: tmpl.value,
-      x: Math.max(0, Math.min(x - 60, rect.width - 120)),
-      y: Math.max(0, Math.min(y - 16, rect.height - 32)),
-    };
-    setNodes(prev => [...prev, newNode]);
-    setDragItem(null);
+  const upd = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
+  const sel = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors';
+  const lbl = 'block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5';
 
-    if (nodes.length > 0) {
-      const lastNode = nodes[nodes.length - 1];
-      setConnections(prev => [...prev, { from: lastNode.id, to: newNode.id }]);
-    }
+  const stepClass = (s: number) => {
+    if (step === s) return 'border-blue-600 text-blue-700 bg-white';
+    if (step > s) return 'border-green-500 text-green-700 bg-green-50/50';
+    return 'border-transparent text-gray-500 hover:text-gray-700';
   };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const selectNode = (nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
-    if (node) {
-      setSelectedNode(nodeId);
-      setEditLabel(node.label);
-      setEditValue(node.value);
-    }
-  };
-
-  const updateNode = () => {
-    if (!selectedNode) return;
-    setNodes(prev => prev.map(n => n.id === selectedNode ? { ...n, label: editLabel, value: editValue } : n));
-    setSelectedNode(null);
-  };
-
-  const removeNode = (nodeId: string) => {
-    setNodes(prev => prev.filter(n => n.id !== nodeId));
-    setConnections(prev => prev.filter(c => c.from !== nodeId && c.to !== nodeId));
-    if (selectedNode === nodeId) setSelectedNode(null);
-  };
-
-  const buildRuleFromWorkflow = () => {
-    const sourceNode = nodes.find(n => n.type === 'source');
-    const destNode = nodes.find(n => n.type === 'destination');
-    const actionNode = nodes.find(n => n.type === 'action');
-    if (sourceNode) {
-      setFormData(prev => ({ ...prev, source: sourceNode.value, source_zone: 'Standard' }));
-    }
-    if (destNode) {
-      setFormData(prev => ({ ...prev, destination: destNode.value, destination_zone: 'Standard' }));
-    }
-    if (actionNode) {
-      setFormData(prev => ({ ...prev, action: actionNode.value === 'allow' ? 'Allow' : 'Deny' }));
-    }
-    setShowForm(true);
-  };
-
-  const submitRule = () => {
-    onRuleCreated();
-    setShowForm(false);
-    setNodes([]);
-    setConnections([]);
-  };
-
-  const clearCanvas = () => {
-    setNodes([]);
-    setConnections([]);
-    setSelectedNode(null);
+  const dotClass = (s: number) => {
+    if (step === s) return 'bg-blue-600 text-white';
+    if (step > s) return 'bg-green-500 text-white';
+    return 'bg-gray-300 text-white';
   };
 
   return (
-    <div className="space-y-3">
-      {/* Compact toolbar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-2">Drag to canvas:</span>
-          {TEMPLATES.map((tmpl, idx) => (
-            <div
-              key={idx}
-              draggable
-              onDragStart={() => handleDragStart(idx)}
-              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium border rounded cursor-grab hover:shadow-sm transition-shadow ${NODE_COLORS[tmpl.type]}`}
-            >
-              <span className={`w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center ${ICON_COLORS[tmpl.type]}`}>{tmpl.icon}</span>
-              <span>{tmpl.label}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={clearCanvas} className="px-2 py-1 text-xs text-gray-600 hover:text-red-600 border border-gray-200 rounded hover:border-red-200">Clear</button>
-          <button
-            onClick={buildRuleFromWorkflow}
-            disabled={nodes.length === 0}
-            className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-40"
-          >
-            Build Rule
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      {/* Step indicators */}
+      <div className="flex border-b border-gray-200 bg-gray-50">
+        {[{ num: 1, label: 'Application & Environment' }, { num: 2, label: 'Source & Destination' }, { num: 3, label: 'Connection & Review' }].map(s => (
+          <button key={s.num} onClick={() => setStep(s.num)}
+            className={'flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ' + stepClass(s.num)}>
+            <span className={'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ' + dotClass(s.num)}>
+              {step > s.num ? '\u2713' : s.num}
+            </span>
+            <span className="hidden sm:inline">{s.label}</span>
           </button>
-        </div>
-      </div>
-
-      {/* Canvas area - compact */}
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        className="relative bg-gradient-to-br from-slate-50 to-gray-100 border-2 border-dashed border-gray-300 rounded-lg overflow-hidden"
-        style={{ height: '220px' }}
-      >
-        {nodes.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <p className="text-sm text-gray-400">Drag components here to build your firewall rule workflow</p>
-          </div>
-        )}
-
-        {/* SVG connections */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
-          {connections.map((conn, idx) => {
-            const fromNode = nodes.find(n => n.id === conn.from);
-            const toNode = nodes.find(n => n.id === conn.to);
-            if (!fromNode || !toNode) return null;
-            const x1 = fromNode.x + 60;
-            const y1 = fromNode.y + 16;
-            const x2 = toNode.x + 60;
-            const y2 = toNode.y + 16;
-            const midX = (x1 + x2) / 2;
-            return (
-              <g key={idx}>
-                <path
-                  d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
-                  stroke="#94a3b8"
-                  strokeWidth="1.5"
-                  fill="none"
-                  strokeDasharray="4,3"
-                />
-                <circle cx={x2} cy={y2} r="3" fill="#94a3b8" />
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Nodes */}
-        {nodes.map(node => (
-          <div
-            key={node.id}
-            onClick={() => selectNode(node.id)}
-            className={`absolute flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-md shadow-sm cursor-pointer transition-all hover:shadow-md ${NODE_COLORS[node.type]} ${selectedNode === node.id ? 'ring-2 ring-indigo-400' : ''}`}
-            style={{ left: node.x, top: node.y, zIndex: 2, minWidth: '100px' }}
-          >
-            <span className="truncate">{node.label}</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
-              className="ml-auto text-gray-400 hover:text-red-500 text-xs leading-none"
-            >&times;</button>
-          </div>
         ))}
       </div>
 
-      {/* Inline node editor */}
-      {selectedNode && (
-        <div className="flex items-center gap-2 p-2 bg-white border border-gray-200 rounded-lg">
-          <span className="text-xs text-gray-500 font-medium">Edit:</span>
-          <input
-            className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded"
-            value={editLabel}
-            onChange={e => setEditLabel(e.target.value)}
-            placeholder="Label"
-          />
-          <input
-            className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded"
-            value={editValue}
-            onChange={e => setEditValue(e.target.value)}
-            placeholder="Value (e.g. grp-APP01-NH01-STD-web)"
-          />
-          <button onClick={updateNode} className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700">Save</button>
-          <button onClick={() => setSelectedNode(null)} className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800">Cancel</button>
-        </div>
-      )}
-
-      {/* Rule form from workflow */}
-      {showForm && (
-        <div className="p-4 bg-white border border-indigo-200 rounded-lg shadow-sm">
-          <h4 className="text-sm font-semibold text-indigo-800 mb-3">Configure Rule from Workflow</h4>
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Application</label>
-              <select className="w-full px-2 py-1.5 text-xs border rounded" value={formData.application} onChange={e => setFormData({...formData, application: e.target.value})}>
-                <option value="">Select...</option>
-                {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_id} - {a.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Source</label>
-              <input className="w-full px-2 py-1.5 text-xs border rounded" value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Destination</label>
-              <input className="w-full px-2 py-1.5 text-xs border rounded" value={formData.destination} onChange={e => setFormData({...formData, destination: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Port / Protocol</label>
-              <div className="flex gap-1">
-                <input className="w-1/2 px-2 py-1.5 text-xs border rounded" value={formData.port} onChange={e => setFormData({...formData, port: e.target.value})} />
-                <select className="w-1/2 px-1 py-1.5 text-xs border rounded" value={formData.protocol} onChange={e => setFormData({...formData, protocol: e.target.value})}>
-                  <option>TCP</option><option>UDP</option><option>ICMP</option><option>Any</option>
+      <div className="p-6">
+        {/* Step 1: Application & Environment */}
+        {step === 1 && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-5">
+              <div>
+                <label className={lbl}>Application</label>
+                <select className={sel} value={form.application} onChange={e => upd('application', e.target.value)}>
+                  <option value="">Select Application...</option>
+                  {applications.map(app => (
+                    <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Environment</label>
+                <select className={sel} value={form.environment} onChange={e => { upd('environment', e.target.value); upd('src_sz', ''); upd('dst_sz', ''); }}>
+                  <option value="Production">Production</option>
+                  <option value="Non-Production">Non-Production</option>
+                  <option value="Pre-Production">Pre-Production</option>
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Datacenter</label>
+                <select className={sel} value={form.datacenter} onChange={e => upd('datacenter', e.target.value)}>
+                  {DATACENTERS.map(dc => (
+                    <option key={dc.code} value={dc.code}>{dc.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
+            {form.application && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <span className="text-sm text-blue-800 font-medium">
+                  Building rule for <strong>{form.application}</strong> in <strong>{form.environment}</strong> at <strong>{DATACENTERS.find(d => d.code === form.datacenter)?.name}</strong>
+                </span>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button onClick={() => setStep(2)} disabled={!canStep1}
+                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                Next: Source &amp; Destination &rarr;
+              </button>
+            </div>
           </div>
-          <div className="flex justify-end gap-2 mt-3">
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-xs text-gray-600 border rounded hover:bg-gray-50">Cancel</button>
-            <button onClick={submitRule} disabled={!formData.application} className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-40">Create Rule</button>
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Hint */}
-      <div className="text-xs text-gray-500">
-        Drag components to the canvas, connect them, then click &quot;Build Rule&quot; to configure.
+        {/* Step 2: Source & Destination */}
+        {step === 2 && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+              {/* Source panel */}
+              <div className="border border-blue-200 rounded-xl p-4 bg-blue-50/30">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-bold">SRC</span>
+                  <h3 className="text-sm font-bold text-blue-800">Source</h3>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className={lbl}>Neighbourhood</label>
+                    <select className={sel} value={form.src_nh} onChange={e => upd('src_nh', e.target.value)}>
+                      <option value="">Select Neighbourhood...</option>
+                      {NEIGHBOURHOODS.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={lbl}>Security Zone</label>
+                    <select className={sel} value={form.src_sz} onChange={e => upd('src_sz', e.target.value)}>
+                      <option value="">Select Zone...</option>
+                      {zones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={lbl}>Subtype</label>
+                    <select className={sel} value={form.src_subtype} onChange={e => upd('src_subtype', e.target.value)}>
+                      {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                    </select>
+                  </div>
+                  {srcName && (
+                    <div className="p-2 bg-white border border-blue-200 rounded-lg">
+                      <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Generated Name</div>
+                      <code className="text-xs font-mono text-blue-700 break-all">{srcName}</code>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[10px] text-gray-500">Or override with custom name:</label>
+                    <input className={sel + ' mt-1'} placeholder="e.g. grp-APP01-NH01-GEN-APP" value={form.src_custom} onChange={e => upd('src_custom', e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Arrow connector */}
+              <div className="flex flex-col items-center justify-center pt-12 gap-2">
+                <div className="w-px h-8 bg-gray-300" />
+                <div className="w-10 h-10 rounded-full bg-amber-100 border-2 border-amber-400 flex items-center justify-center">
+                  <span className="text-amber-700 text-lg font-bold">&rarr;</span>
+                </div>
+                <div className="text-[10px] text-gray-400 font-semibold uppercase">Policy</div>
+                {validatingBR && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600" />}
+                {birthrightResult && !validatingBR && (
+                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                    {birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
+                  </span>
+                )}
+                <div className="w-px h-8 bg-gray-300" />
+              </div>
+
+              {/* Destination panel */}
+              <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/30">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">DST</span>
+                  <h3 className="text-sm font-bold text-emerald-800">Destination</h3>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className={lbl}>Neighbourhood</label>
+                    <select className={sel} value={form.dst_nh} onChange={e => upd('dst_nh', e.target.value)}>
+                      <option value="">Select Neighbourhood...</option>
+                      {NEIGHBOURHOODS.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={lbl}>Security Zone</label>
+                    <select className={sel} value={form.dst_sz} onChange={e => upd('dst_sz', e.target.value)}>
+                      <option value="">Select Zone...</option>
+                      {zones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={lbl}>Subtype</label>
+                    <select className={sel} value={form.dst_subtype} onChange={e => upd('dst_subtype', e.target.value)}>
+                      {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                    </select>
+                  </div>
+                  {dstName && (
+                    <div className="p-2 bg-white border border-emerald-200 rounded-lg">
+                      <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Generated Name</div>
+                      <code className="text-xs font-mono text-emerald-700 break-all">{dstName}</code>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[10px] text-gray-500">Or override with custom name:</label>
+                    <input className={sel + ' mt-1'} placeholder="e.g. grp-APP01-NH02-CCS-DB" value={form.dst_custom} onChange={e => upd('dst_custom', e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {birthrightResult && !validatingBR && (
+              <div className={'p-3 rounded-lg border text-sm ' + (birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={'font-bold text-xs ' + (birthrightResult.compliant ? 'text-green-700' : 'text-red-700')}>
+                    Birthright: {birthrightResult.matrix_used || ''}
+                  </span>
+                  <span className={'text-xs ' + (birthrightResult.compliant ? 'text-green-600' : 'text-red-600')}>
+                    {birthrightResult.summary}
+                  </span>
+                </div>
+                {birthrightResult.violations.length > 0 && (
+                  <ul className="text-xs text-red-700 list-disc list-inside mt-1">
+                    {birthrightResult.violations.map((v, i) => (<li key={i}>{v.matrix}: {v.rule} &mdash; {v.reason}</li>))}
+                  </ul>
+                )}
+                {birthrightResult.permitted.length > 0 && birthrightResult.compliant && (
+                  <ul className="text-xs text-green-700 list-disc list-inside mt-1">
+                    {birthrightResult.permitted.map((p, i) => (<li key={i}>{p.matrix}: {p.rule} &mdash; {p.reason}</li>))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-between">
+              <button onClick={() => setStep(1)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                &larr; Back
+              </button>
+              <button onClick={() => setStep(3)} disabled={!canStep2}
+                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                Next: Connection Details &rarr;
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Connection & Review */}
+        {step === 3 && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-5">
+              <div>
+                <label className={lbl}>Port</label>
+                <select className={sel} value={form.port} onChange={e => upd('port', e.target.value)}>
+                  {COMMON_PORTS.map(p => (<option key={p.value} value={p.value}>{p.label}</option>))}
+                  <option value="custom">Custom Port...</option>
+                </select>
+                {form.port === 'custom' && (
+                  <input className={sel + ' mt-2'} placeholder="e.g. 8443, 9090-9095" value={form.customPort} onChange={e => upd('customPort', e.target.value)} />
+                )}
+              </div>
+              <div>
+                <label className={lbl}>Protocol</label>
+                <select className={sel} value={form.protocol} onChange={e => upd('protocol', e.target.value)}>
+                  {PROTOCOLS.map(p => (<option key={p} value={p}>{p}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Action</label>
+                <select className={sel} value={form.action} onChange={e => upd('action', e.target.value)}>
+                  <option value="Allow">Allow</option>
+                  <option value="Deny">Deny</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className={lbl}>Description (optional)</label>
+              <textarea className={sel + ' h-16 resize-none'} placeholder="Brief description of this rule..." value={form.description} onChange={e => upd('description', e.target.value)} />
+            </div>
+
+            {/* Review summary */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Rule Summary</h4>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Application:</span>
+                  <span className="font-medium text-gray-900">{form.application || '\u2014'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Environment:</span>
+                  <span className="font-medium text-gray-900">{form.environment}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Datacenter:</span>
+                  <span className="font-medium text-gray-900">{DATACENTERS.find(d => d.code === form.datacenter)?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Protocol/Port:</span>
+                  <span className="font-medium text-gray-900">{form.protocol}/{effectivePort}</span>
+                </div>
+                <div className="col-span-2 border-t border-gray-200 pt-2 mt-1">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="text-[10px] text-gray-500 font-semibold uppercase">Source</div>
+                      <code className="text-xs font-mono text-blue-700">{form.src_custom || srcName || '\u2014'}</code>
+                      <div className="text-[10px] text-gray-400">{form.src_nh} / {form.src_sz}</div>
+                    </div>
+                    <span className="text-gray-400 text-lg font-bold">&rarr;</span>
+                    <div className="flex-1 text-right">
+                      <div className="text-[10px] text-gray-500 font-semibold uppercase">Destination</div>
+                      <code className="text-xs font-mono text-emerald-700">{form.dst_custom || dstName || '\u2014'}</code>
+                      <div className="text-[10px] text-gray-400">{form.dst_nh} / {form.dst_sz}</div>
+                    </div>
+                  </div>
+                </div>
+                {birthrightResult && (
+                  <div className="col-span-2 mt-1">
+                    <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                      {birthrightResult.compliant ? 'Birthright: Permitted' : 'Birthright: Blocked'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-between">
+              <button onClick={() => setStep(2)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                &larr; Back
+              </button>
+              <button onClick={handleSubmit} disabled={!canSubmit || submitting}
+                className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
+                {submitting ? 'Creating...' : 'Create Firewall Rule'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

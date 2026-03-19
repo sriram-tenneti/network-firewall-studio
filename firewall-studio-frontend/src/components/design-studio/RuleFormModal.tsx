@@ -3,6 +3,25 @@ import { Modal } from '../shared/Modal';
 import type { FirewallRule, Application, BirthrightValidation } from '@/types';
 import { validateBirthright } from '@/lib/api';
 
+const PROD_ZONES = [
+  { code: 'GEN', name: 'General' },
+  { code: 'PAA', name: 'PAA Zone' },
+  { code: 'CDE', name: 'Cardholder Data Environment' },
+  { code: 'CPA', name: 'Critical Payment Application' },
+  { code: 'CCS', name: 'Common Card Services' },
+  { code: '3PY', name: 'Third Party' },
+];
+
+const NONPROD_ZONES = [
+  { code: 'UGEN', name: 'UAT General' },
+  { code: 'USTD', name: 'UAT Standard' },
+  { code: 'UCCS', name: 'UAT Common Card Services' },
+  { code: 'UPAA', name: 'UAT PAA' },
+  { code: 'UCPA', name: 'UAT Critical Payment' },
+  { code: 'UCDE', name: 'UAT Cardholder Data Env' },
+  { code: 'U3PY', name: 'UAT Third Party' },
+];
+
 interface RuleConflict {
   type: 'exact_duplicate' | 'birthright_ngdc' | 'legacy_passthrough' | 'port_overlap';
   severity: 'error' | 'warning';
@@ -263,11 +282,9 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
             <label className={labelClass}>Source Zone</label>
             <select className={inputClass} value={form.source_zone} onChange={e => setForm({ ...form, source_zone: e.target.value })}>
               <option value="">Select Zone</option>
-              <option value="Standard">Standard</option>
-              <option value="CCS">CCS</option>
-              <option value="CDE">CDE</option>
-              <option value="CPA">CPA</option>
-              <option value="PSE">PSE</option>
+              {(form.environment === 'Production' ? PROD_ZONES : NONPROD_ZONES).map(z => (
+                <option key={z.code} value={z.code}>{z.code} - {z.name}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -281,11 +298,9 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
             <label className={labelClass}>Destination Zone</label>
             <select className={inputClass} value={form.destination_zone} onChange={e => setForm({ ...form, destination_zone: e.target.value })}>
               <option value="">Select Zone</option>
-              <option value="Standard">Standard</option>
-              <option value="CCS">CCS</option>
-              <option value="CDE">CDE</option>
-              <option value="CPA">CPA</option>
-              <option value="PSE">PSE</option>
+              {(form.environment === 'Production' ? PROD_ZONES : NONPROD_ZONES).map(z => (
+                <option key={z.code} value={z.code}>{z.code} - {z.name}</option>
+              ))}
             </select>
           </div>
         </div>
