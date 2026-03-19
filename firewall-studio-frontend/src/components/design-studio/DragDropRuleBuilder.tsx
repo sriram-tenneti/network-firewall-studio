@@ -129,7 +129,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const canStep1 = form.application && form.environment && form.datacenter;
   const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz;
   const canStep3 = effectivePort && form.protocol;
-  const canSubmit = canStep1 && canStep2 && canStep3 && !(birthrightResult && !birthrightResult.compliant);
+  const canSubmit = canStep1 && canStep2 && canStep3 && !(birthrightResult && birthrightResult.compliant);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -283,8 +283,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 <div className="text-[10px] text-gray-400 font-semibold uppercase">Policy</div>
                 {validatingBR && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600" />}
                 {birthrightResult && !validatingBR && (
-                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                    {birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
+                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700')}>
+                    {birthrightResult.compliant ? 'PERMITTED' : 'NEEDS RULE'}
                   </span>
                 )}
                 <div className="w-px h-8 bg-gray-300" />
@@ -332,17 +332,20 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
             </div>
 
             {birthrightResult && !validatingBR && (
-              <div className={'p-3 rounded-lg border text-sm ' + (birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')}>
+              <div className={'p-3 rounded-lg border text-sm ' + (birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200')}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={'font-bold text-xs ' + (birthrightResult.compliant ? 'text-green-700' : 'text-red-700')}>
+                  <span className={'font-bold text-xs ' + (birthrightResult.compliant ? 'text-green-700' : 'text-amber-700')}>
                     Birthright: {birthrightResult.matrix_used || ''}
                   </span>
-                  <span className={'text-xs ' + (birthrightResult.compliant ? 'text-green-600' : 'text-red-600')}>
+                  <span className={'text-xs ' + (birthrightResult.compliant ? 'text-green-600' : 'text-amber-600')}>
                     {birthrightResult.summary}
                   </span>
                 </div>
-                {birthrightResult.violations.length > 0 && (
-                  <ul className="text-xs text-red-700 list-disc list-inside mt-1">
+                {birthrightResult.compliant && (
+                  <div className="text-xs text-green-700 mt-1 font-medium">Traffic already permitted by birthright policy — no firewall rule needed.</div>
+                )}
+                {birthrightResult.violations.length > 0 && !birthrightResult.compliant && (
+                  <ul className="text-xs text-amber-700 list-disc list-inside mt-1">
                     {birthrightResult.violations.map((v, i) => (<li key={i}>{v.matrix}: {v.rule} &mdash; {v.reason}</li>))}
                   </ul>
                 )}
@@ -437,8 +440,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 </div>
                 {birthrightResult && (
                   <div className="col-span-2 mt-1">
-                    <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                      {birthrightResult.compliant ? 'Birthright: Permitted' : 'Birthright: Blocked'}
+                    <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700')}>
+                      {birthrightResult.compliant ? 'Already Permitted — No Rule Needed' : 'Birthright: Needs Rule'}
                     </span>
                   </div>
                 )}
