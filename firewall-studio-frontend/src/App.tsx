@@ -44,11 +44,6 @@ function App() {
             <ReviewPage context="ngdc-standardization" />
           </ModuleLayout>
         } />
-        <Route path="/ngdc-standardization/mappings" element={
-          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
-            <DataImportPage context="ngdc-mappings" />
-          </ModuleLayout>
-        } />
 
         {/* Network Firewall Request Module */}
         <Route path="/firewall-management" element={

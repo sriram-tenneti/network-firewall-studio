@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC } from '@/lib/api';
-import type { FirewallRule } from '@/types';
+import { importLegacyRulesExcel, getLegacyRules, importRulesToNGDC } from '@/lib/api';
+import type { LegacyRule } from '@/types';
 
 interface DataImportPageProps {
   context?: string;
@@ -12,45 +12,48 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState('');
-  const [mappings, setMappings] = useState<Record<string, unknown>[]>([]);
-  const [showMappings, setShowMappings] = useState(false);
-  const [newMapping, setNewMapping] = useState({ legacy_name: '', legacy_dc: '', ngdc_name: '', ngdc_dc: '', ngdc_nh: '', ngdc_sz: '', type: 'group' });
-
-  // NFR import state (for ngdc-import-rules context)
-  const [nfrRules, setNfrRules] = useState<FirewallRule[]>([]);
-  const [nfrApps, setNfrApps] = useState<{ value: string; label: string }[]>([]);
+  // FM import state (for ngdc-import-rules context)
+  const [fmRules, setFmRules] = useState<LegacyRule[]>([]);
+  const [fmApps, setFmApps] = useState<{ value: string; label: string; ruleCount: number }[]>([]);
   const [selectedImportApps, setSelectedImportApps] = useState<Set<string>>(new Set());
-  const [importingFromNFR, setImportingFromNFR] = useState(false);
-  const [nfrLoading, setNfrLoading] = useState(false);
+  const [importingFromFM, setImportingFromFM] = useState(false);
+  const [fmLoading, setFmLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; apps: number } | null>(null);
+  const [envTab, setEnvTab] = useState<string>('Production');
 
-  const isNGDCMappings = context === 'ngdc-mappings';
-  const isNFRImport = context === 'ngdc-import-rules';
-  const pageTitle = isNGDCMappings ? 'NGDC Organization Mappings' :
-    isNFRImport ? 'Import Rules from Network Firewall Request' :
-    context === 'ngdc-standardization' ? 'Import Legacy Rules for Migration' :
-    context === 'firewall-management' ? 'Import Firewall Rules' :
-    context === 'firewall-studio' ? 'Import Rules for Firewall Studio' :
-    'Data Import';
+  const isNGDCImport = context === 'ngdc-import-rules';
+  const pageTitle = isNGDCImport
+    ? 'Import Rules from Firewall Management'
+    : context === 'firewall-management'
+    ? 'Import Firewall Rules'
+    : 'Data Import';
 
-  // Load NFR apps when this is the NFR import page
-  const loadNFRApps = useCallback(async () => {
-    setNfrLoading(true);
+  // Load FM apps when this is the NGDC import page
+  const loadFMApps = useCallback(async () => {
+    setFmLoading(true);
     try {
-      const rules = await getRules();
-      setNfrRules(rules);
-      const apps = Array.from(new Set(rules.map((r: FirewallRule) => `${r.application}|${r.application_name || r.application}`))).map(key => {
-        const [appId, appName] = (key as string).split('|');
-        return { value: appId, label: `${appId} - ${appName}` };
-      });
-      setNfrApps(apps);
-    } catch { setNfrApps([]); }
-    setNfrLoading(false);
-  }, []);
+      const rules = await getLegacyRules(undefined, false, envTab);
+      setFmRules(rules);
+      const appMap = new Map<string, { label: string; count: number }>();
+      for (const r of rules) {
+        const key = String(r.app_id);
+        if (!appMap.has(key)) {
+          appMap.set(key, { label: `${r.app_id} - ${r.app_name} (${r.app_distributed_id})`, count: 0 });
+        }
+        appMap.get(key)!.count++;
+      }
+      setFmApps(
+        Array.from(appMap.entries())
+          .map(([value, { label, count }]) => ({ value, label, ruleCount: count }))
+          .sort((a, b) => a.label.localeCompare(b.label))
+      );
+    } catch { setFmApps([]); }
+    setFmLoading(false);
+  }, [envTab]);
 
   useEffect(() => {
-    if (isNFRImport) loadNFRApps();
-  }, [isNFRImport, loadNFRApps]);
+    if (isNGDCImport) loadFMApps();
+  }, [isNGDCImport, loadFMApps]);
 
   const toggleImportApp = (appId: string) => {
     setSelectedImportApps(prev => {
@@ -61,33 +64,25 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   };
 
   const selectAllImportApps = () => {
-    if (selectedImportApps.size === nfrApps.length) setSelectedImportApps(new Set());
-    else setSelectedImportApps(new Set(nfrApps.map(a => a.value)));
+    if (selectedImportApps.size === fmApps.length) setSelectedImportApps(new Set());
+    else setSelectedImportApps(new Set(fmApps.map(a => a.value)));
   };
 
-  const handleImportFromNFR = async () => {
+  const handleImportFromFM = async () => {
     if (selectedImportApps.size === 0) return;
-    setImportingFromNFR(true);
+    setImportingFromFM(true);
     setError('');
     setImportResult(null);
     try {
-      const selectedAppIds = Array.from(selectedImportApps);
-      const res = await importRulesToNGDC(selectedAppIds);
+      const res = await importRulesToNGDC(Array.from(selectedImportApps), envTab);
       setImportResult({ imported: res.imported, apps: selectedImportApps.size });
       setSelectedImportApps(new Set());
+      loadFMApps();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import rules from Network Request');
+      setError(err instanceof Error ? err.message : 'Failed to import rules from Firewall Management');
     }
-    setImportingFromNFR(false);
+    setImportingFromFM(false);
   };
-
-  const loadMappings = useCallback(async () => {
-    try {
-      const data = await getNGDCMappings();
-      setMappings(data);
-      setShowMappings(true);
-    } catch { setError('Failed to load mappings'); }
-  }, []);
 
   const handleImport = async () => {
     if (!file) return;
@@ -95,11 +90,8 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     setError('');
     setResult(null);
     try {
-      const res = isNGDCMappings
-        ? await importNGDCMappingsExcel(file)
-        : await importLegacyRulesExcel(file);
+      const res = await importLegacyRulesExcel(file);
       setResult(res);
-      if (isNGDCMappings) loadMappings();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
@@ -107,20 +99,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     }
   };
 
-  const handleDeleteMapping = async (id: string) => {
-    try {
-      await deleteNGDCMapping(id);
-      setMappings(prev => prev.filter(m => (m as Record<string, unknown>).id !== id));
-    } catch { setError('Failed to delete mapping'); }
-  };
-
-  const handleAddMapping = async () => {
-    try {
-      const created = await createNGDCMapping(newMapping);
-      setMappings(prev => [...prev, created]);
-      setNewMapping({ legacy_name: '', legacy_dc: '', ngdc_name: '', ngdc_dc: '', ngdc_nh: '', ngdc_sz: '', type: 'group' });
-    } catch { setError('Failed to add mapping'); }
-  };
+  const selectedRuleCount = fmRules.filter(r => selectedImportApps.has(String(r.app_id))).length;
 
   return (
     <div className="max-w-[1800px] mx-auto p-6">
@@ -128,14 +107,12 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {isNGDCMappings
-              ? 'Manage organization-provided legacy-to-NGDC name mappings used during migration'
-              : isNFRImport
-              ? 'Select applications to import their Network Firewall Request rules for NGDC migration'
+            {isNGDCImport
+              ? 'Select applications from Firewall Management to import their rules for NGDC migration'
               : 'Upload Excel (.xlsx) files to import rules into the system'}
           </p>
         </div>
-        {!isNFRImport && (
+        {!isNGDCImport && (
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
             <option value="Production">Production</option>
@@ -145,43 +122,52 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         )}
       </div>
 
-      {/* NFR Import Section - App Dropdown */}
-      {isNFRImport && (
+      {/* FM Import Section - Import from Firewall Management */}
+      {isNGDCImport && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-5">
-            <p className="text-sm text-indigo-700">Select one or more applications to import their Network Firewall Request rules for NGDC migration. These rules will be copied and available for one-to-one DC mapping in Migration Studio.</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-5">
+            <p className="text-sm text-emerald-700">Select one or more applications to import their current Firewall Management rules for NGDC migration. These rules will be available for one-to-one DC mapping in Migration Studio.</p>
           </div>
 
-          {nfrLoading ? (
+          <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
+            {(['Production', 'Non-Production', 'Pre-Production'] as const).map(env => (
+              <button key={env} onClick={() => { setEnvTab(env); setSelectedImportApps(new Set()); }}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${envTab === env ? 'bg-white shadow-sm text-emerald-700 border border-emerald-200' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
+                {env}
+              </button>
+            ))}
+          </div>
+
+          {fmLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">Loading applications from Network Firewall Request...</p>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Loading applications from Firewall Management...</p>
             </div>
-          ) : nfrApps.length === 0 ? (
+          ) : fmApps.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-sm text-gray-500">No applications found in Network Firewall Request.</p>
-              <button onClick={loadNFRApps} className="mt-3 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
+              <p className="text-sm text-gray-500">No applications found in Firewall Management for {envTab}.</p>
+              <button onClick={loadFMApps} className="mt-3 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100">
                 Retry
               </button>
             </div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-gray-700">{nfrApps.length} Applications Available</span>
+                <span className="text-sm font-semibold text-gray-700">{fmApps.length} Applications &middot; {fmRules.length} Rules ({envTab})</span>
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
-                    <input type="checkbox" checked={selectedImportApps.size === nfrApps.length && nfrApps.length > 0} onChange={selectAllImportApps} className="rounded border-gray-300 text-indigo-600" />
+                    <input type="checkbox" checked={selectedImportApps.size === fmApps.length && fmApps.length > 0} onChange={selectAllImportApps} className="rounded border-gray-300 text-emerald-600" />
                     Select All
                   </label>
-                  <button onClick={loadNFRApps} className="text-xs text-indigo-600 hover:text-indigo-800">Refresh</button>
+                  <button onClick={loadFMApps} className="text-xs text-emerald-600 hover:text-emerald-800">Refresh</button>
                 </div>
               </div>
-              <div className="max-h-80 overflow-y-auto border rounded-lg divide-y divide-gray-100">
-                {nfrApps.map(app => (
-                  <label key={app.value} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-indigo-50 transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-50' : ''}`}>
-                    <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              <div className="max-h-96 overflow-y-auto border rounded-lg divide-y divide-gray-100">
+                {fmApps.map(app => (
+                  <label key={app.value} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-emerald-50 transition-colors ${selectedImportApps.has(app.value) ? 'bg-emerald-50' : ''}`}>
+                    <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
                     <span className="text-sm text-gray-800 font-medium">{app.label}</span>
-                    <span className="text-xs text-gray-400 ml-auto">{nfrRules.filter(r => r.application === app.value).length} rules</span>
+                    <span className="text-xs text-gray-400 ml-auto">{app.ruleCount} rule{app.ruleCount !== 1 ? 's' : ''}</span>
                   </label>
                 ))}
               </div>
@@ -189,11 +175,11 @@ export default function DataImportPage({ context }: DataImportPageProps) {
               {selectedImportApps.size > 0 && (
                 <div className="mt-4 bg-gray-50 rounded-lg p-4 flex items-center justify-between">
                   <span className="text-sm text-gray-600">
-                    <strong>{selectedImportApps.size}</strong> app(s) selected &middot; <strong>{nfrRules.filter(r => selectedImportApps.has(r.application)).length}</strong> rules will be imported for migration
+                    <strong>{selectedImportApps.size}</strong> app(s) selected &middot; <strong>{selectedRuleCount}</strong> rules will be imported for NGDC migration
                   </span>
-                  <button onClick={handleImportFromNFR} disabled={importingFromNFR}
-                    className="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition-colors">
-                    {importingFromNFR ? 'Importing...' : `Import ${selectedImportApps.size} App(s)`}
+                  <button onClick={handleImportFromFM} disabled={importingFromFM}
+                    className="px-6 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
+                    {importingFromFM ? 'Importing...' : `Import ${selectedImportApps.size} App(s) to NGDC`}
                   </button>
                 </div>
               )}
@@ -214,11 +200,9 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         </div>
       )}
 
-      {/* Excel Import Section (for non-NFR contexts) */}
-      {!isNFRImport && <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">
-          {isNGDCMappings ? 'Import Mappings from Excel' : 'Import from Excel'}
-        </h2>
+      {/* Excel Import Section (for non-NGDC contexts) */}
+      {!isNGDCImport && <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">Import from Excel</h2>
         <div className="flex items-center gap-4">
           <label className="flex-1">
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all">
@@ -260,79 +244,6 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         )}
       </div>}
 
-      {/* NGDC Mappings Table */}
-      {isNGDCMappings && (
-        <>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Add Manual Mapping</h2>
-            </div>
-            <div className="grid grid-cols-7 gap-3 mb-3">
-              <input placeholder="Legacy Name" value={newMapping.legacy_name} onChange={e => setNewMapping(p => ({ ...p, legacy_name: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
-              <input placeholder="Legacy DC" value={newMapping.legacy_dc} onChange={e => setNewMapping(p => ({ ...p, legacy_dc: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
-              <input placeholder="NGDC Name" value={newMapping.ngdc_name} onChange={e => setNewMapping(p => ({ ...p, ngdc_name: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
-              <input placeholder="NGDC DC" value={newMapping.ngdc_dc} onChange={e => setNewMapping(p => ({ ...p, ngdc_dc: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
-              <input placeholder="NH" value={newMapping.ngdc_nh} onChange={e => setNewMapping(p => ({ ...p, ngdc_nh: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
-              <input placeholder="SZ" value={newMapping.ngdc_sz} onChange={e => setNewMapping(p => ({ ...p, ngdc_sz: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm" />
-              <button onClick={handleAddMapping} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Add</button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Organization NGDC Mappings</h2>
-              <button onClick={loadMappings} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-                {showMappings ? 'Refresh' : 'Load Mappings'}
-              </button>
-            </div>
-            {showMappings && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left">
-                      <th className="px-3 py-2 font-medium text-gray-600">Legacy Name</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">Legacy DC</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">NGDC Name</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">NGDC DC</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">NH</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">SZ</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">Type</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">Status</th>
-                      <th className="px-3 py-2 font-medium text-gray-600">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mappings.map((m, i) => (
-                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-3 py-2 font-mono text-xs">{String(m.legacy_name || '')}</td>
-                        <td className="px-3 py-2">{String(m.legacy_dc || '')}</td>
-                        <td className="px-3 py-2 font-mono text-xs text-blue-700">{String(m.ngdc_name || '')}</td>
-                        <td className="px-3 py-2">{String(m.ngdc_dc || '')}</td>
-                        <td className="px-3 py-2">{String(m.ngdc_nh || '')}</td>
-                        <td className="px-3 py-2">{String(m.ngdc_sz || '')}</td>
-                        <td className="px-3 py-2">
-                          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs">{String(m.type || '')}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${m.status === 'Verified' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                            {String(m.status || 'Pending')}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <button onClick={() => handleDeleteMapping(String(m.id))} className="text-red-500 hover:text-red-700 text-xs">Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                    {mappings.length === 0 && (
-                      <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-400">No mappings loaded. Click "Load Mappings" or import from Excel.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }

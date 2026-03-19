@@ -1,44 +1,17 @@
 """Seed data for the Network Firewall Studio.
 
-This module contains ALL seed / demo data used to initialize the JSON database
-on first startup.  When real data arrives (e.g. from MongoDB or an Excel
-import), this file can be safely deleted or emptied.
+ALL reference data, policy matrices, IP mappings, rules, groups, and migrations
+are defined here. This module is the SINGLE SOURCE of seed data.
 
-The module re-exports reference data from config.py, standards.py, and
-mappings.py so that database.py has a single import source for seed data.
+To update seed data:
+  1. Edit the constants below directly, OR
+  2. Use the Admin UI to modify via API (future MongoDB migration)
 
-Architecture:
-  config.py     -> Org config, naming standards, environments, predefined dests
-  standards.py  -> Policy matrices (Heritage DC, NGDC Prod, Non-Prod, Pre-Prod)
-  mappings.py   -> Per-app per-environment DC/NH/SZ assignments, component-to-SZ
-  seed_data.py  -> This file: transient demo data (rules, groups, migrations, etc.)
-  database.py   -> JSON persistence + CRUD operations (imports from above)
+Imported by database.py for initial seeding.
 """
 
 from datetime import datetime, timedelta
 from typing import Any
-
-# ── Re-export from config.py ──────────────────────────────────────────
-from app.config import (
-    ORG_CONFIG as SEED_ORG_CONFIG,
-    NAMING_STANDARDS as SEED_NAMING_STANDARDS,
-    ENVIRONMENTS as SEED_ENVIRONMENTS,
-    PREDEFINED_DESTINATIONS as SEED_PREDEFINED_DESTINATIONS,
-)
-
-# ── Re-export from standards.py ───────────────────────────────────────
-from app.standards import (
-    HERITAGE_DC_MATRIX as SEED_HERITAGE_DC_MATRIX,
-    NGDC_PROD_MATRIX as SEED_NGDC_PROD_MATRIX,
-    NONPROD_PREPROD_MATRIX as SEED_NONPROD_MATRIX,
-    POLICY_MATRIX as SEED_POLICY_MATRIX,
-)
-
-# ── Re-export from mappings.py ────────────────────────────────────────
-from app.mappings import (
-    APP_ENVIRONMENT_ASSIGNMENTS as SEED_APP_ENVIRONMENT_ASSIGNMENTS,
-    COMPONENT_TO_SZ as SEED_COMPONENT_TO_SZ,
-)
 
 
 def _now() -> str:
@@ -46,30 +19,2065 @@ def _now() -> str:
 
 
 # ============================================================
-# Transient Seed Data  (can be wiped when real data arrives)
+# Seed Data Definitions
 # ============================================================
 
-# The following seed constants are defined in database.py directly
-# because they reference helper functions (_offset_ip, _build_seed_rules)
-# that live there.  This file serves as the architectural bridge:
-#
-#   SEED_NEIGHBOURHOODS        – defined in database.py (17 NHs)
-#   SEED_SECURITY_ZONES        – defined in database.py (Prod/NP/PP/Infra)
-#   SEED_NGDC_DATACENTERS      – defined in database.py (3 NGDC DCs)
-#   SEED_LEGACY_DATACENTERS    – defined in database.py (6 legacy DCs)
-#   SEED_APPLICATIONS          – defined in database.py (27 apps)
-#   SEED_LEGACY_TO_NGDC_IP_MAPPINGS – defined in database.py
-#   SEED_COMPONENT_TO_SZ       – re-exported from mappings.py above
-#   SEED_NGDC_STANDARD_GROUPS  – generated in database.py
-#   _build_seed_rules()        – defined in database.py
-#   SEED_MIGRATIONS            – defined in database.py
-#   SEED_MIGRATION_MAPPINGS    – defined in database.py
-#   SEED_GROUPS                – defined in database.py
-#   SEED_CHG_REQUESTS          – defined in database.py
-#   SEED_LEGACY_RULES          – defined in database.py
-#
-# As the MongoDB migration proceeds, each of these will be moved here
-# (or removed entirely when real data is available).
+SEED_NEIGHBOURHOODS = [
+    # From reference: Each NH has multiple security zones with VRF-IDs and Transit VNIs
+    {"nh_id": "NH01", "name": "Platform Services", "environment": "Production",
+     "description": "Platform and infrastructure services", "ip_ranges": [
+        {"cidr": "10.0.1.0/24", "description": "NH01 East Primary", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.0.2.0/24", "description": "NH01 East Secondary", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.50.0/24", "description": "NH01 West Primary", "dc": "BETA_NGDC"},
+        {"cidr": "10.50.50.0/24", "description": "NH01 Central Primary", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH01 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH01 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH01 sz06", "description": "Critical Payment Applications"},
+        {"zone": "PSE", "vrf_id": "NH01 sz07", "description": "Production Simulation Environment"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH02", "name": "Team Eta", "environment": "Production",
+     "description": "Data processing and analytics platforms", "ip_ranges": [
+        {"cidr": "10.1.1.0/24", "description": "NH02 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.1.2.0/24", "description": "NH02 East DB Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.1.0/24", "description": "NH02 West App", "dc": "BETA_NGDC"},
+        {"cidr": "10.50.1.0/24", "description": "NH02 Central App", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH02 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH02 sz05", "transit_vni": 8051, "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH02 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH03", "name": "Team Delta", "environment": "Production",
+     "description": "Web application and API hosting", "ip_ranges": [
+        {"cidr": "10.2.1.0/24", "description": "NH03 East Web Servers", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.2.2.0/24", "description": "NH03 East App Servers", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.3.0/24", "description": "NH03 West Web", "dc": "BETA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH03 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH03 sz05", "description": "Card Holder Data"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH04", "name": "Customer Portal", "environment": "Production",
+     "description": "Customer-facing portal services", "ip_ranges": [
+        {"cidr": "10.3.1.0/24", "description": "NH04 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.5.0/24", "description": "NH04 West Primary", "dc": "BETA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH04 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH04 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH04 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH05", "name": "Team Theta", "environment": "Production",
+     "description": "Enterprise system hosting", "ip_ranges": [
+        {"cidr": "10.4.1.0/24", "description": "NH05 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.4.2.0/24", "description": "NH05 East DB Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.10.0/24", "description": "NH05 West App", "dc": "BETA_NGDC"},
+        {"cidr": "10.54.1.0/24", "description": "NH05 Central App", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH05 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH05 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH05 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH06", "name": "Enterprise Extended", "environment": "Production",
+     "description": "Enterprise extended services (overlay)", "ip_ranges": [
+        {"cidr": "10.5.1.0/24", "description": "NH06 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.20.0/24", "description": "NH06 West App", "dc": "BETA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH06 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH06 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH06 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "Overlay01", "transit_vni": 4000, "description": "Standard/General (Overlay)"},
+     ]},
+    {"nh_id": "NH07", "name": "Transaction Processing", "environment": "Production",
+     "description": "Transaction processing and settlement", "ip_ranges": [
+        {"cidr": "10.6.1.0/24", "description": "NH07 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.6.2.0/24", "description": "NH07 East DB Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.22.0/24", "description": "NH07 West App", "dc": "BETA_NGDC"},
+        {"cidr": "10.56.1.0/24", "description": "NH07 Central App", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH07 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH07 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH07 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Extra", "vrf_id": "NH07 sz08", "description": "Additional zone"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH08", "name": "Data Processing Extended", "environment": "Production",
+     "description": "Extended data processing platforms", "ip_ranges": [
+        {"cidr": "10.7.1.0/24", "description": "NH08 East App", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.30.0/24", "description": "NH08 West App", "dc": "BETA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH08 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH08 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH08 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH09", "name": "Team Mu", "environment": "Production",
+     "description": "Support and service channel applications", "ip_ranges": [
+        {"cidr": "10.8.1.0/24", "description": "NH09 East App", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.40.0/24", "description": "NH09 West App", "dc": "BETA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH09 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH09 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH09 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH10", "name": "Team Kappa", "environment": "Production",
+     "description": "Lending and origination services", "ip_ranges": [
+        {"cidr": "10.9.1.0/24", "description": "NH10 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.55.1.0/24", "description": "NH10 Central App", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH10 sz04", "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH10 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH10 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "gen", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    {"nh_id": "NH11", "name": "Production Mainframe", "environment": "Production",
+     "description": "Production mainframe systems", "ip_ranges": [
+        {"cidr": "10.10.1.0/24", "description": "NH11 East Primary", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.60.1.0/24", "description": "NH11 Central Primary", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": []},
+    {"nh_id": "NH12", "name": "Non-Production Mainframe", "environment": "Non-Production",
+     "description": "Non-production mainframe systems", "ip_ranges": [
+        {"cidr": "10.11.1.0/24", "description": "NH12 East Primary", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.61.1.0/24", "description": "NH12 Central Primary", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": []},
+    {"nh_id": "NH13", "name": "Non-Production Shared", "environment": "Non-Production",
+     "description": "Shared non-production environment", "ip_ranges": [
+        {"cidr": "10.100.1.0/24", "description": "NH13 East App", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.100.0/24", "description": "NH13 West App", "dc": "BETA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH13 sz04", "transit_vni": 3061, "description": "Critical Core Services"},
+        {"zone": "CDE", "vrf_id": "NH13 sz05", "description": "Card Holder Data"},
+        {"zone": "CPA", "vrf_id": "NH13 sz06", "description": "Critical Payment Applications"},
+        {"zone": "Standard", "vrf_id": "Overlay01", "transit_vni": 4000, "description": "Standard/General (Overlay)"},
+     ]},
+    {"nh_id": "NH14", "name": "DMZ", "environment": "Production",
+     "description": "Demilitarized zone for external-facing services", "ip_ranges": [
+        {"cidr": "10.70.1.0/24", "description": "NH14 East Web Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.70.2.0/24", "description": "NH14 East API Gateway", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.70.0/24", "description": "NH14 West Web", "dc": "BETA_NGDC"},
+        {"cidr": "10.70.10.0/24", "description": "NH14 Central Web", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": []},
+    {"nh_id": "NH15", "name": "Non-Production DMZ", "environment": "Non-Production",
+     "description": "Non-production DMZ for test external services", "ip_ranges": [
+        {"cidr": "10.80.1.0/24", "description": "NH15 East Web", "dc": "ALPHA_NGDC"},
+        {"cidr": "172.16.80.0/24", "description": "NH15 West Web", "dc": "BETA_NGDC"},
+     ],
+     "security_zones": []},
+    {"nh_id": "NH16", "name": "Pre-Production Shared", "environment": "Pre-Production",
+     "description": "Pre-production staging environment", "ip_ranges": [
+        {"cidr": "10.90.1.0/24", "description": "NH16 East App Tier", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.65.1.0/24", "description": "NH16 Central App", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": []},
+    {"nh_id": "NH17", "name": "Pre-Production DMZ", "environment": "Pre-Production",
+     "description": "Pre-production DMZ for staging external services", "ip_ranges": [
+        {"cidr": "10.91.1.0/24", "description": "NH17 East Web", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.66.1.0/24", "description": "NH17 Central Web", "dc": "GAMMA_NGDC"},
+     ],
+     "security_zones": []},
+]
 
-# Pre-Production matrix is the same as nonprod for now
-SEED_PREPROD_MATRIX = SEED_NONPROD_MATRIX
+SEED_SECURITY_ZONES = [
+    # === Production Security Zones (per NH reference) ===
+    {"code": "CCS", "name": "Critical Core Services", "description": "Critical core services zone - highest security tier",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
+     "vrf_suffix": "sz04", "ip_ranges": [
+        {"cidr": "10.1.0.0/16", "description": "CCS East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.0.0/20", "description": "CCS West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.50.0.0/16", "description": "CCS Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "CDE", "name": "Card Holder Data", "description": "Cardholder Data Environment - PCI DSS compliant",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
+     "vrf_suffix": "sz05", "ip_ranges": [
+        {"cidr": "10.2.0.0/16", "description": "CDE East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.16.0/20", "description": "CDE West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.52.0.0/16", "description": "CDE Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "CPA", "name": "Critical Payment Applications", "description": "Critical payment application processing zone",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production",
+     "vrf_suffix": "sz06", "ip_ranges": [
+        {"cidr": "10.3.0.0/16", "description": "CPA East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.32.0/20", "description": "CPA West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.53.0.0/16", "description": "CPA Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "PSE", "name": "Production Simulation Environment", "description": "Production simulation for testing in prod-like conditions",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Production",
+     "vrf_suffix": "sz07", "ip_ranges": [
+        {"cidr": "10.4.0.0/16", "description": "PSE East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.64.0/20", "description": "PSE West Block", "dc": "BETA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "Standard", "name": "Standard/General", "description": "Standard general-purpose zone (GEN VRF)",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
+     "vrf_suffix": "gen", "ip_ranges": [
+        {"cidr": "10.0.0.0/16", "description": "Standard East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.48.0/20", "description": "Standard West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.50.48.0/20", "description": "Standard Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "GEN", "name": "General", "description": "General purpose security zone (alias for Standard)",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Production",
+     "vrf_suffix": "gen", "ip_ranges": [
+        {"cidr": "10.0.0.0/16", "description": "GEN East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.48.0/20", "description": "GEN West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.50.48.0/20", "description": "GEN Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "DMZ", "name": "DMZ", "description": "Demilitarized zone for external-facing services",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
+        {"cidr": "10.70.0.0/16", "description": "DMZ East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.70.0/22", "description": "DMZ West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.70.128.0/20", "description": "DMZ Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "RST", "name": "Restricted", "description": "Highly restricted zone for sensitive systems",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
+        {"cidr": "10.10.0.0/16", "description": "RST East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.10.0/20", "description": "RST West Block", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.60.0.0/16", "description": "RST Central Block", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "PAA", "name": "Publicly Accessible Applications", "description": "Publicly accessible application zone",
+     "risk_level": "High", "pci_scope": True, "zone_type": "Production", "ip_ranges": [
+        {"cidr": "10.71.0.0/16", "description": "PAA East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.71.0/22", "description": "PAA West Block", "dc": "BETA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "3PY", "name": "Third Party", "description": "Third-party connectivity zone",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Production", "ip_ranges": [
+        {"cidr": "10.79.0.0/16", "description": "3PY East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "172.16.79.0/22", "description": "3PY West Block", "dc": "BETA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "PCI_CAN", "name": "PCI CAN", "description": "PCI Cardholder Area Network",
+     "risk_level": "Critical", "pci_scope": True, "zone_type": "Heritage", "ip_ranges": [
+        {"cidr": "10.73.0.0/16", "description": "PCI CAN East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "CAN", "name": "CAN", "description": "Campus Area Network",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Heritage", "ip_ranges": [
+        {"cidr": "10.74.0.0/16", "description": "CAN East Block", "dc": "ALPHA_NGDC", "environment": "Production"},
+     ]},
+    # === Non-Production Security Zones ===
+    {"code": "UGEN", "name": "Non-Prod General", "description": "Non-production general zone",
+     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "ugen", "ip_ranges": [
+        {"cidr": "10.100.0.0/16", "description": "UGEN East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.100.0/20", "description": "UGEN West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.150.0.0/16", "description": "UGEN Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
+     ]},
+    {"code": "USTD", "name": "Non-Prod Standard", "description": "Non-production standard zone",
+     "risk_level": "Low", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "ustd", "ip_ranges": [
+        {"cidr": "10.101.0.0/16", "description": "USTD East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.101.0/20", "description": "USTD West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.151.0.0/16", "description": "USTD Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
+     ]},
+    {"code": "UCCS", "name": "Non-Prod Critical Core Services", "description": "Non-production CCS zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "uccs", "ip_ranges": [
+        {"cidr": "10.102.0.0/16", "description": "UCCS East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.102.0/20", "description": "UCCS West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.152.0.0/16", "description": "UCCS Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
+     ]},
+    {"code": "UPAA", "name": "Non-Prod PAA", "description": "Non-production publicly accessible apps zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Non-Production",
+     "vrf_suffix": "upaa", "ip_ranges": [
+        {"cidr": "10.103.0.0/16", "description": "UPAA East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.103.0/20", "description": "UPAA West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.153.0.0/16", "description": "UPAA Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
+     ]},
+    {"code": "UCPA", "name": "Non-Prod Critical Payment Apps", "description": "Non-production critical payment apps zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production",
+     "vrf_suffix": "ucpa", "ip_ranges": [
+        {"cidr": "10.104.0.0/16", "description": "UCPA East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.104.0/20", "description": "UCPA West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.154.0.0/16", "description": "UCPA Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
+     ]},
+    {"code": "UCDE", "name": "Non-Prod Card Holder Data", "description": "Non-production cardholder data zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Non-Production",
+     "vrf_suffix": "ucde", "ip_ranges": [
+        {"cidr": "10.105.0.0/16", "description": "UCDE East Block", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "172.16.105.0/20", "description": "UCDE West Block", "dc": "BETA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.155.0.0/16", "description": "UCDE Central Block", "dc": "GAMMA_NGDC", "environment": "Non-Production"},
+     ]},
+    # === Pre-Production Security Zones ===
+    {"code": "PP_GEN", "name": "Pre-Prod General", "description": "Pre-production general zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppgen", "ip_ranges": [
+        {"cidr": "10.90.0.0/16", "description": "PP_GEN East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.90.0/20", "description": "PP_GEN West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.190.0.0/16", "description": "PP_GEN Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_CCS", "name": "Pre-Prod Critical Core Services", "description": "Pre-production CCS zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppccs", "ip_ranges": [
+        {"cidr": "10.91.0.0/16", "description": "PP_CCS East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.91.0/20", "description": "PP_CCS West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.191.0.0/16", "description": "PP_CCS Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_CDE", "name": "Pre-Prod Card Holder Data", "description": "Pre-production CDE zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppcde", "ip_ranges": [
+        {"cidr": "10.92.0.0/16", "description": "PP_CDE East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.92.0/20", "description": "PP_CDE West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.192.0.0/16", "description": "PP_CDE Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_CPA", "name": "Pre-Prod Critical Payment Apps", "description": "Pre-production CPA zone",
+     "risk_level": "Medium", "pci_scope": True, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppcpa", "ip_ranges": [
+        {"cidr": "10.93.0.0/16", "description": "PP_CPA East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.93.0/20", "description": "PP_CPA West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.193.0.0/16", "description": "PP_CPA Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_PAA", "name": "Pre-Prod PAA", "description": "Pre-production publicly accessible apps zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "pppaa", "ip_ranges": [
+        {"cidr": "10.94.0.0/16", "description": "PP_PAA East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.94.0/20", "description": "PP_PAA West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_DMZ", "name": "Pre-Prod DMZ", "description": "Pre-production DMZ zone",
+     "risk_level": "Medium", "pci_scope": False, "zone_type": "Pre-Production",
+     "vrf_suffix": "ppdmz", "ip_ranges": [
+        {"cidr": "10.95.0.0/16", "description": "PP_DMZ East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.95.0/20", "description": "PP_DMZ West Block", "dc": "BETA_NGDC", "environment": "Pre-Production"},
+     ]},
+    {"code": "PP_RST", "name": "Pre-Prod Restricted", "description": "Pre-production restricted zone",
+     "risk_level": "High", "pci_scope": True, "zone_type": "Pre-Production",
+     "vrf_suffix": "pprst", "ip_ranges": [
+        {"cidr": "10.96.0.0/16", "description": "PP_RST East Block", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "10.196.0.0/16", "description": "PP_RST Central Block", "dc": "GAMMA_NGDC", "environment": "Pre-Production"},
+     ]},
+    # === Infrastructure Zones ===
+    {"code": "MGT", "name": "Management", "description": "Network management and monitoring zone",
+     "risk_level": "High", "pci_scope": False, "zone_type": "Infrastructure", "ip_ranges": [
+        {"cidr": "10.200.1.0/24", "description": "MGT East Prod", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "10.200.2.0/24", "description": "MGT East NonProd", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.200.3.0/24", "description": "MGT East PreProd", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.200.0/24", "description": "MGT West Prod", "dc": "BETA_NGDC", "environment": "Production"},
+        {"cidr": "10.250.1.0/24", "description": "MGT Central Prod", "dc": "GAMMA_NGDC", "environment": "Production"},
+     ]},
+    {"code": "EXT", "name": "External Partners", "description": "External partner connectivity zone",
+     "risk_level": "High", "pci_scope": False, "zone_type": "External", "ip_ranges": [
+        {"cidr": "10.79.1.0/24", "description": "EXT East Prod", "dc": "ALPHA_NGDC", "environment": "Production"},
+        {"cidr": "10.79.2.0/24", "description": "EXT East NonProd", "dc": "ALPHA_NGDC", "environment": "Non-Production"},
+        {"cidr": "10.79.3.0/24", "description": "EXT East PreProd", "dc": "ALPHA_NGDC", "environment": "Pre-Production"},
+        {"cidr": "172.16.79.1/24", "description": "EXT West Prod", "dc": "BETA_NGDC", "environment": "Production"},
+     ]},
+]
+
+SEED_NGDC_DATACENTERS = [
+    {"name": "Alpha NGDC", "code": "ALPHA_NGDC", "location": "Region Alpha", "status": "Active",
+     "description": "Primary Alpha NGDC facility", "contact": "noc-alpha@example.com",
+     "capacity": "2000 racks", "ip_supernet": "10.0.0.0/8",
+     "neighbourhoods": ["NH01","NH02","NH03","NH04","NH05","NH07","NH08","NH09","NH13","NH14","NH15","NH16","NH17"]},
+    {"name": "Beta NGDC", "code": "BETA_NGDC", "location": "Region Beta", "status": "Active",
+     "description": "Primary Beta NGDC facility", "contact": "noc-beta@example.com",
+     "capacity": "1500 racks", "ip_supernet": "172.16.0.0/12",
+     "neighbourhoods": ["NH03","NH05","NH06","NH08","NH09","NH14","NH15"]},
+    {"name": "Gamma NGDC", "code": "GAMMA_NGDC", "location": "Region Gamma", "status": "Active",
+     "description": "Gamma NGDC for DR and mainframe", "contact": "noc-gamma@example.com",
+     "capacity": "1200 racks", "ip_supernet": "10.50.0.0/12",
+     "neighbourhoods": ["NH02","NH10","NH11","NH12","NH16","NH17"]},
+]
+
+SEED_LEGACY_DATACENTERS = [
+    {"name": "Legacy DC Alpha", "code": "DC_LEGACY_A", "location": "Legacy Region A", "status": "Decommissioning",
+     "description": "Legacy DC - migration to Gamma NGDC", "ip_range": "10.25.0.0/16", "server_count": 450, "app_count": 35},
+    {"name": "Legacy DC Beta", "code": "DC_LEGACY_B", "location": "Legacy Region B", "status": "Decommissioning",
+     "description": "Legacy DC - migration to Alpha NGDC", "ip_range": "10.26.0.0/16", "server_count": 320, "app_count": 22},
+    {"name": "Legacy DC Gamma", "code": "DC_LEGACY_C", "location": "Legacy Region C", "status": "Active",
+     "description": "Legacy DC - partial migration in progress", "ip_range": "10.27.0.0/16", "server_count": 580, "app_count": 41},
+    {"name": "Legacy DC Delta", "code": "DC_LEGACY_D", "location": "Legacy Region D", "status": "Active",
+     "description": "Legacy DC - migration planned", "ip_range": "10.28.0.0/16", "server_count": 410, "app_count": 29},
+    {"name": "Legacy DC Epsilon", "code": "DC_LEGACY_E", "location": "Legacy Region E", "status": "Decommissioning",
+     "description": "Legacy DC - final migration wave", "ip_range": "10.29.0.0/16", "server_count": 270, "app_count": 18},
+    {"name": "Legacy DC Zeta", "code": "DC_LEGACY_F", "location": "Legacy Region F", "status": "Active",
+     "description": "Legacy DC - migration in planning", "ip_range": "10.30.0.0/16", "server_count": 390, "app_count": 27},
+]
+
+SEED_APPLICATIONS = [
+    {"app_id": "CRM", "app_distributed_id": "SEA3", "name": "App Alpha", "owner": "Owner A", "team": "Team Alpha",
+     "nh": "NH02", "sz": "CDE", "criticality": 2, "pci_scope": True, "description": "Application alpha system"},
+    {"app_id": "ORD", "app_distributed_id": "LOGIN", "name": "App Beta", "owner": "Jon", "team": "Team Beta",
+     "nh": "NH03", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application beta platform"},
+    {"app_id": "PSA", "app_distributed_id": "PSA01", "name": "App Gamma", "owner": "Owner A", "team": "Team Gamma",
+     "nh": "NH05", "sz": "GEN", "criticality": 3, "pci_scope": False, "description": "Application gamma automation"},
+    {"app_id": "DIG", "app_distributed_id": "DIG01", "name": "App Delta", "owner": "Jon", "team": "Team Delta",
+     "nh": "NH03", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application delta platform"},
+    {"app_id": "PAY", "app_distributed_id": "PAY01", "name": "App Epsilon", "owner": "Owner A", "team": "Team Epsilon",
+     "nh": "NH07", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application epsilon engine"},
+    {"app_id": "ENT", "app_distributed_id": "ENT01", "name": "App Zeta", "owner": "Jon", "team": "Team Gamma",
+     "nh": "NH05", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application zeta system"},
+    {"app_id": "SHR", "app_distributed_id": "SHR01", "name": "App Eta", "owner": "Owner A", "team": "Team Eta",
+     "nh": "NH08", "sz": "GEN", "criticality": 3, "pci_scope": False, "description": "Application eta platform"},
+    {"app_id": "WHL", "app_distributed_id": "WHL01", "name": "Team Theta", "owner": "Jon", "team": "Team Theta",
+     "nh": "NH06", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application theta system"},
+    {"app_id": "CBK", "app_distributed_id": "CBK01", "name": "Team Iota", "owner": "Owner A", "team": "Team Iota",
+     "nh": "NH02", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application iota ledger"},
+    {"app_id": "CLN", "app_distributed_id": "CLN01", "name": "Team Kappa", "owner": "Jon", "team": "Team Kappa",
+     "nh": "NH10", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application kappa origination"},
+    {"app_id": "WLT", "app_distributed_id": "WLT01", "name": "App Lambda", "owner": "Owner A", "team": "Team Lambda",
+     "nh": "NH04", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application lambda advisory"},
+    {"app_id": "ACH", "app_distributed_id": "ACH01", "name": "Team Mu", "owner": "Jon", "team": "Team Mu",
+     "nh": "NH09", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application mu services"},
+    # --- 15 additional applications ---
+    {"app_id": "HRM", "app_distributed_id": "HRM01", "name": "App Nu", "owner": "Owner B", "team": "Team Nu",
+     "nh": "NH01", "sz": "GEN", "criticality": 3, "pci_scope": False, "description": "Application nu management"},
+    {"app_id": "TRD", "app_distributed_id": "TRD01", "name": "App Xi", "owner": "Owner C", "team": "Team Xi",
+     "nh": "NH06", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application xi processing"},
+    {"app_id": "FRD", "app_distributed_id": "FRD01", "name": "App Omicron", "owner": "Owner D", "team": "Team Omicron",
+     "nh": "NH02", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application omicron detection"},
+    {"app_id": "RGM", "app_distributed_id": "RGM01", "name": "App Pi", "owner": "Owner E", "team": "Team Pi",
+     "nh": "NH11", "sz": "RST", "criticality": 1, "pci_scope": True, "description": "Application pi reporting"},
+    {"app_id": "MBL", "app_distributed_id": "MBL01", "name": "App Rho", "owner": "Owner F", "team": "Team Delta",
+     "nh": "NH03", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application rho mobile app"},
+    {"app_id": "INS", "app_distributed_id": "INS01", "name": "App Sigma", "owner": "Owner G", "team": "Team Lambda",
+     "nh": "NH04", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application sigma underwriting"},
+    {"app_id": "TAX", "app_distributed_id": "TAX01", "name": "App Tau", "owner": "Owner H", "team": "Team Tau",
+     "nh": "NH10", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application tau calculation"},
+    {"app_id": "AML", "app_distributed_id": "AML01", "name": "App Upsilon", "owner": "Owner I", "team": "Team Omicron",
+     "nh": "NH07", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application upsilon screening"},
+    {"app_id": "KYC", "app_distributed_id": "KYC01", "name": "App Phi", "owner": "Owner J", "team": "Team Pi",
+     "nh": "NH05", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application phi verification"},
+    {"app_id": "TRS", "app_distributed_id": "TRS01", "name": "App Chi", "owner": "Owner K", "team": "Team Chi",
+     "nh": "NH06", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application chi management"},
+    {"app_id": "CCM", "app_distributed_id": "CCM01", "name": "App Psi", "owner": "Owner L", "team": "Team Psi",
+     "nh": "NH02", "sz": "CDE", "criticality": 1, "pci_scope": True, "description": "Application psi processing"},
+    {"app_id": "LON", "app_distributed_id": "LON01", "name": "App Omega", "owner": "Owner M", "team": "Team Kappa",
+     "nh": "NH10", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application omega underwriting"},
+    {"app_id": "BRK", "app_distributed_id": "BRK01", "name": "App Alpha2", "owner": "Owner N", "team": "Team Lambda",
+     "nh": "NH04", "sz": "GEN", "criticality": 2, "pci_scope": False, "description": "Application alpha2 platform"},
+    {"app_id": "AGW", "app_distributed_id": "AGW01", "name": "App Beta2", "owner": "Owner O", "team": "Team Beta2",
+     "nh": "NH14", "sz": "DMZ", "criticality": 1, "pci_scope": False, "description": "Application beta2 gateway"},
+    {"app_id": "SOC", "app_distributed_id": "SOC01", "name": "App Gamma2", "owner": "Owner P", "team": "Team Gamma2",
+     "nh": "NH01", "sz": "GEN", "criticality": 1, "pci_scope": False, "description": "Application gamma2 monitoring"},
+]
+
+# =====================================================================
+# COMPREHENSIVE LEGACY-TO-NGDC IP MAPPINGS PER APPLICATION
+# Maps each app's legacy DC IP ranges to their NGDC equivalents
+# =====================================================================
+SEED_LEGACY_TO_NGDC_IP_MAPPINGS: list[dict[str, Any]] = [
+    # --- CRM (App Alpha) - DC_LEGACY_A -> GAMMA_NGDC ---
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.1.0/24", "ngdc_ip": "10.1.10.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.2.0/24", "ngdc_ip": "10.1.11.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.3.0/24", "ngdc_ip": "10.1.12.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "CRM", "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "legacy_ip": "10.25.10.0/24", "ngdc_ip": "10.1.13.0/24", "component": "BAT",
+     "legacy_zone": "Default", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- ORD (App Beta) - DC_LEGACY_A -> ALPHA_NGDC ---
+    {"app_id": "ORD", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.20.0/24", "ngdc_ip": "10.1.20.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "ORD", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.21.0/24", "ngdc_ip": "10.1.21.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- PSA (App Gamma) - DC_LEGACY_B -> ALPHA_NGDC ---
+    {"app_id": "PSA", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.1.0/24", "ngdc_ip": "10.2.10.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "PSA", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.2.0/24", "ngdc_ip": "10.2.11.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- DIG (App Delta) - DC_LEGACY_B -> BETA_NGDC ---
+    {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.10.0/24", "ngdc_ip": "10.2.20.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.11.0/24", "ngdc_ip": "10.2.21.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "DIG", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.12.0/24", "ngdc_ip": "10.2.22.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- PAY (App Epsilon) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.1.0/24", "ngdc_ip": "10.6.1.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.2.0/24", "ngdc_ip": "10.6.2.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "PAY", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.3.0/24", "ngdc_ip": "10.6.3.0/24", "component": "API",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- ENT (App Zeta) - DC_LEGACY_C -> BETA_NGDC ---
+    {"app_id": "ENT", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.10.0/24", "ngdc_ip": "10.4.1.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "ENT", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.11.0/24", "ngdc_ip": "10.4.2.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- SHR (Shared Platform) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "SHR", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.1.0/24", "ngdc_ip": "10.100.1.0/24", "component": "SVC",
+     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "SHR", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.2.0/24", "ngdc_ip": "10.100.2.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH13", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- HRM (HR Management) - DC_LEGACY_B -> ALPHA_NGDC ---
+    {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.5.0/24", "ngdc_ip": "10.0.5.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.15.0/24", "ngdc_ip": "10.0.15.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "HRM", "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.26.30.0/24", "ngdc_ip": "10.0.30.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- TRD (Trading) - DC_LEGACY_C -> BETA_NGDC ---
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.1.0/24", "ngdc_ip": "10.5.1.0/24", "component": "WEB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.2.0/24", "ngdc_ip": "10.5.2.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.10.0/24", "ngdc_ip": "10.5.10.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "TRD", "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.27.50.0/24", "ngdc_ip": "10.5.50.0/24", "component": "MQ",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- FRD (Fraud Detection) - DC_LEGACY_E -> ALPHA_NGDC ---
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.1.0/24", "ngdc_ip": "10.1.29.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.1.50", "ngdc_ip": "10.1.29.50", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.2.0/24", "ngdc_ip": "10.1.30.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "FRD", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.5.0/24", "ngdc_ip": "10.1.31.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- INS (Insurance) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.10.0/24", "ngdc_ip": "10.3.10.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.20.0/24", "ngdc_ip": "10.3.20.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "INS", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.50.0/24", "ngdc_ip": "10.3.50.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- KYC (Know Your Customer) - DC_LEGACY_F -> ALPHA_NGDC ---
+    {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.5.0/24", "ngdc_ip": "10.4.5.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.10.0/24", "ngdc_ip": "10.4.10.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "KYC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.20.0/24", "ngdc_ip": "10.4.20.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH05", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- AML (Anti Money Laundering) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "AML", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.30.0/24", "ngdc_ip": "10.6.30.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "AML", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.31.0/24", "ngdc_ip": "10.6.31.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH07", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- TAX (Tax Processing) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "TAX", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.40.0/24", "ngdc_ip": "10.9.40.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "TAX", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.41.0/24", "ngdc_ip": "10.9.41.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- RGM (Regulatory) - DC_LEGACY_E -> BETA_NGDC ---
+    {"app_id": "RGM", "legacy_dc": "DC_LEGACY_E", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.29.10.0/24", "ngdc_ip": "10.10.10.0/24", "component": "APP",
+     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST", "environment": "Production"},
+    {"app_id": "RGM", "legacy_dc": "DC_LEGACY_E", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.29.11.0/24", "ngdc_ip": "10.10.11.0/24", "component": "DB",
+     "legacy_zone": "CAN", "ngdc_nh": "NH11", "ngdc_sz": "RST", "environment": "Production"},
+    # --- MBL (Mobile Banking) - DC_LEGACY_B -> BETA_NGDC ---
+    {"app_id": "MBL", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.20.0/24", "ngdc_ip": "10.2.30.0/24", "component": "API",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "MBL", "legacy_dc": "DC_LEGACY_B", "target_dc": "BETA_NGDC",
+     "legacy_ip": "10.26.21.0/24", "ngdc_ip": "10.2.31.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH03", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- WHL (Wholesale) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "WHL", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.40.0/24", "ngdc_ip": "10.5.40.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "WHL", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.41.0/24", "ngdc_ip": "10.5.41.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- CBK (Core Banking) - DC_LEGACY_A -> ALPHA_NGDC ---
+    {"app_id": "CBK", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.50.0/24", "ngdc_ip": "10.50.1.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "CBK", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.51.0/24", "ngdc_ip": "10.50.2.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- TRS (Treasury) - DC_LEGACY_C -> ALPHA_NGDC ---
+    {"app_id": "TRS", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.60.0/24", "ngdc_ip": "10.5.60.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "TRS", "legacy_dc": "DC_LEGACY_C", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.27.61.0/24", "ngdc_ip": "10.5.61.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH06", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- CCM (Credit Card) - DC_LEGACY_A -> ALPHA_NGDC ---
+    {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.70.0/24", "ngdc_ip": "10.1.70.0/24", "component": "WEB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.71.0/24", "ngdc_ip": "10.1.71.0/24", "component": "APP",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    {"app_id": "CCM", "legacy_dc": "DC_LEGACY_A", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.25.72.0/24", "ngdc_ip": "10.1.72.0/24", "component": "DB",
+     "legacy_zone": "PCI CAN", "ngdc_nh": "NH02", "ngdc_sz": "CDE", "environment": "Production"},
+    # --- LON (Loan Origination) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.60.0/24", "ngdc_ip": "10.9.60.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.61.0/24", "ngdc_ip": "10.9.61.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "LON", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.62.0/24", "ngdc_ip": "10.9.62.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- BRK (Brokerage) - DC_LEGACY_D -> ALPHA_NGDC ---
+    {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.70.0/24", "ngdc_ip": "10.3.70.0/24", "component": "WEB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.71.0/24", "ngdc_ip": "10.3.71.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "BRK", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.72.0/24", "ngdc_ip": "10.3.72.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- AGW (API Gateway) - DC_LEGACY_E -> ALPHA_NGDC ---
+    {"app_id": "AGW", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.20.0/24", "ngdc_ip": "10.70.1.0/24", "component": "API",
+     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ", "environment": "Production"},
+    {"app_id": "AGW", "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.29.21.0/24", "ngdc_ip": "10.70.2.0/24", "component": "LB",
+     "legacy_zone": "DMZ", "ngdc_nh": "NH14", "ngdc_sz": "DMZ", "environment": "Production"},
+    # --- SOC (Security Operations) - DC_LEGACY_F -> ALPHA_NGDC ---
+    {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.30.0/24", "ngdc_ip": "10.0.200.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.31.0/24", "ngdc_ip": "10.0.201.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "SOC", "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.30.32.0/24", "ngdc_ip": "10.0.202.0/24", "component": "MON",
+     "legacy_zone": "Default", "ngdc_nh": "NH01", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- CLN (Client Onboarding) ---
+    {"app_id": "CLN", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.80.0/24", "ngdc_ip": "10.9.80.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "CLN", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.81.0/24", "ngdc_ip": "10.9.81.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH10", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- WLT (Wallet) ---
+    {"app_id": "WLT", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.90.0/24", "ngdc_ip": "10.3.90.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "WLT", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.91.0/24", "ngdc_ip": "10.3.91.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH04", "ngdc_sz": "GEN", "environment": "Production"},
+    # --- ACH (Clearing House) ---
+    {"app_id": "ACH", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.100.0/24", "ngdc_ip": "10.8.100.0/24", "component": "APP",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
+    {"app_id": "ACH", "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "legacy_ip": "10.28.101.0/24", "ngdc_ip": "10.8.101.0/24", "component": "DB",
+     "legacy_zone": "Default", "ngdc_nh": "NH09", "ngdc_sz": "GEN", "environment": "Production"},
+]
+
+
+# =====================================================================
+# COMPONENT-TO-SECURITY-ZONE MAPPING
+# Maps app component types (WEB, APP, DB, BAT, MQ, API) to appropriate SZs
+# =====================================================================
+SEED_COMPONENT_TO_SZ: dict[str, dict[str, str]] = {
+    # === Production SZ mappings ===
+    "CDE": {"WEB": "CDE", "APP": "CDE", "DB": "CDE", "BAT": "CDE", "MQ": "CDE", "API": "CDE", "LB": "DMZ", "MON": "MGT"},
+    "GEN": {"WEB": "GEN", "APP": "GEN", "DB": "GEN", "BAT": "GEN", "MQ": "GEN", "API": "GEN", "LB": "DMZ", "MON": "MGT"},
+    "RST": {"WEB": "RST", "APP": "RST", "DB": "RST", "BAT": "RST", "MQ": "RST", "API": "RST", "LB": "DMZ", "MON": "MGT"},
+    "DMZ": {"WEB": "DMZ", "APP": "DMZ", "DB": "GEN", "BAT": "GEN", "MQ": "GEN", "API": "DMZ", "LB": "DMZ", "MON": "MGT"},
+    "PAA": {"WEB": "PAA", "APP": "PAA", "DB": "PAA", "BAT": "PAA", "MQ": "PAA", "API": "PAA", "LB": "DMZ", "MON": "MGT"},
+    # === Non-Production SZ mappings ===
+    "UCDE": {"WEB": "UCDE", "APP": "UCDE", "DB": "UCDE", "BAT": "UCDE", "MQ": "UCDE", "API": "UCDE", "LB": "UGEN", "MON": "MGT"},
+    "UGEN": {"WEB": "UGEN", "APP": "UGEN", "DB": "UGEN", "BAT": "UGEN", "MQ": "UGEN", "API": "UGEN", "LB": "UGEN", "MON": "MGT"},
+    "USTD": {"WEB": "USTD", "APP": "USTD", "DB": "USTD", "BAT": "USTD", "MQ": "USTD", "API": "USTD", "LB": "UGEN", "MON": "MGT"},
+    "UCCS": {"WEB": "UCCS", "APP": "UCCS", "DB": "UCCS", "BAT": "UCCS", "MQ": "UCCS", "API": "UCCS", "LB": "UGEN", "MON": "MGT"},
+    "UPAA": {"WEB": "UPAA", "APP": "UPAA", "DB": "UPAA", "BAT": "UPAA", "MQ": "UPAA", "API": "UPAA", "LB": "UGEN", "MON": "MGT"},
+    "UCPA": {"WEB": "UCPA", "APP": "UCPA", "DB": "UCPA", "BAT": "UCPA", "MQ": "UCPA", "API": "UCPA", "LB": "UGEN", "MON": "MGT"},
+    # === Pre-Production SZ mappings ===
+    "PP_CDE": {"WEB": "PP_CDE", "APP": "PP_CDE", "DB": "PP_CDE", "BAT": "PP_CDE", "MQ": "PP_CDE", "API": "PP_CDE", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_GEN": {"WEB": "PP_GEN", "APP": "PP_GEN", "DB": "PP_GEN", "BAT": "PP_GEN", "MQ": "PP_GEN", "API": "PP_GEN", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_CCS": {"WEB": "PP_CCS", "APP": "PP_CCS", "DB": "PP_CCS", "BAT": "PP_CCS", "MQ": "PP_CCS", "API": "PP_CCS", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_CPA": {"WEB": "PP_CPA", "APP": "PP_CPA", "DB": "PP_CPA", "BAT": "PP_CPA", "MQ": "PP_CPA", "API": "PP_CPA", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_PAA": {"WEB": "PP_PAA", "APP": "PP_PAA", "DB": "PP_PAA", "BAT": "PP_PAA", "MQ": "PP_PAA", "API": "PP_PAA", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_DMZ": {"WEB": "PP_DMZ", "APP": "PP_DMZ", "DB": "PP_GEN", "BAT": "PP_GEN", "MQ": "PP_GEN", "API": "PP_DMZ", "LB": "PP_DMZ", "MON": "MGT"},
+    "PP_RST": {"WEB": "PP_RST", "APP": "PP_RST", "DB": "PP_RST", "BAT": "PP_RST", "MQ": "PP_RST", "API": "PP_RST", "LB": "PP_DMZ", "MON": "MGT"},
+}
+
+
+# =====================================================================
+# NGDC STANDARD GROUP TEMPLATES PER APPLICATION
+# Recommended group names based on NGDC standards for each app
+# =====================================================================
+# Production app-to-NH/SZ base definitions
+_PROD_APP_DEFS = [
+    {"app_id": "CRM", "nh": "NH02", "sz": "CDE"}, {"app_id": "ORD", "nh": "NH01", "sz": "GEN"},
+    {"app_id": "PSA", "nh": "NH09", "sz": "GEN"}, {"app_id": "DIG", "nh": "NH03", "sz": "CDE"},
+    {"app_id": "PAY", "nh": "NH07", "sz": "CDE"}, {"app_id": "ENT", "nh": "NH05", "sz": "GEN"},
+    {"app_id": "SHR", "nh": "NH13", "sz": "GEN"}, {"app_id": "WHL", "nh": "NH06", "sz": "CDE"},
+    {"app_id": "CBK", "nh": "NH02", "sz": "CDE"}, {"app_id": "CLN", "nh": "NH10", "sz": "GEN"},
+    {"app_id": "WLT", "nh": "NH04", "sz": "GEN"}, {"app_id": "ACH", "nh": "NH09", "sz": "GEN"},
+    {"app_id": "HRM", "nh": "NH01", "sz": "GEN"}, {"app_id": "TRD", "nh": "NH06", "sz": "CDE"},
+    {"app_id": "FRD", "nh": "NH02", "sz": "CDE"}, {"app_id": "RGM", "nh": "NH11", "sz": "RST"},
+    {"app_id": "MBL", "nh": "NH03", "sz": "CDE"}, {"app_id": "INS", "nh": "NH04", "sz": "GEN"},
+    {"app_id": "TAX", "nh": "NH10", "sz": "GEN"}, {"app_id": "AML", "nh": "NH07", "sz": "CDE"},
+    {"app_id": "KYC", "nh": "NH05", "sz": "GEN"}, {"app_id": "TRS", "nh": "NH06", "sz": "CDE"},
+    {"app_id": "CCM", "nh": "NH02", "sz": "CDE"}, {"app_id": "LON", "nh": "NH10", "sz": "GEN"},
+    {"app_id": "BRK", "nh": "NH04", "sz": "GEN"}, {"app_id": "AGW", "nh": "NH14", "sz": "DMZ"},
+    {"app_id": "SOC", "nh": "NH01", "sz": "GEN"},
+]
+
+# Prod-SZ to Non-Prod SZ mapping
+_SZ_TO_NONPROD: dict[str, str] = {
+    "CDE": "UCDE", "GEN": "UGEN", "RST": "UCCS", "DMZ": "UGEN",
+    "PAA": "UPAA", "CPA": "UCPA", "CCS": "UCCS", "Standard": "USTD",
+}
+# Prod-SZ to Pre-Prod SZ mapping
+_SZ_TO_PREPROD: dict[str, str] = {
+    "CDE": "PP_CDE", "GEN": "PP_GEN", "RST": "PP_RST", "DMZ": "PP_DMZ",
+    "PAA": "PP_PAA", "CPA": "PP_CPA", "CCS": "PP_CCS", "Standard": "PP_GEN",
+}
+# Prod-NH to Non-Prod NH mapping
+_NH_TO_NONPROD: dict[str, str] = {
+    "NH01": "NH12", "NH02": "NH12", "NH03": "NH13", "NH04": "NH13", "NH05": "NH12",
+    "NH06": "NH13", "NH07": "NH15", "NH08": "NH12", "NH09": "NH15", "NH10": "NH13",
+    "NH11": "NH12", "NH13": "NH15", "NH14": "NH15",
+}
+# Prod-NH to Pre-Prod NH mapping
+_NH_TO_PREPROD: dict[str, str] = {
+    "NH01": "NH16", "NH02": "NH16", "NH03": "NH17", "NH04": "NH17", "NH05": "NH16",
+    "NH06": "NH17", "NH07": "NH16", "NH08": "NH16", "NH09": "NH16", "NH10": "NH17",
+    "NH11": "NH16", "NH13": "NH17", "NH14": "NH17",
+}
+
+SEED_NGDC_STANDARD_GROUPS: list[dict[str, Any]] = []
+for _app in _PROD_APP_DEFS:
+    for _comp in ["WEB", "APP", "DB", "BAT", "MQ", "API"]:
+        # --- Production groups ---
+        _csz = SEED_COMPONENT_TO_SZ.get(_app["sz"], {}).get(_comp, _app["sz"])
+        SEED_NGDC_STANDARD_GROUPS.append({
+            "app_id": _app["app_id"],
+            "group_name": f"grp-{_app['app_id']}-{_app['nh']}-{_csz}-{_comp}",
+            "nh": _app["nh"], "sz": _csz, "component": _comp,
+            "environment": "Production",
+            "description": f"NGDC standard {_comp} group for {_app['app_id']} (Production)",
+        })
+        # --- Non-Production groups ---
+        _np_nh = _NH_TO_NONPROD.get(_app["nh"], "NH12")
+        _np_sz = _SZ_TO_NONPROD.get(_app["sz"], "UGEN")
+        _np_csz = SEED_COMPONENT_TO_SZ.get(_np_sz, {}).get(_comp, _np_sz)
+        SEED_NGDC_STANDARD_GROUPS.append({
+            "app_id": _app["app_id"],
+            "group_name": f"grp-{_app['app_id']}-{_np_nh}-{_np_csz}-{_comp}",
+            "nh": _np_nh, "sz": _np_csz, "component": _comp,
+            "environment": "Non-Production",
+            "description": f"NGDC standard {_comp} group for {_app['app_id']} (Non-Production)",
+        })
+        # --- Pre-Production groups ---
+        _pp_nh = _NH_TO_PREPROD.get(_app["nh"], "NH16")
+        _pp_sz = _SZ_TO_PREPROD.get(_app["sz"], "PP_GEN")
+        _pp_csz = SEED_COMPONENT_TO_SZ.get(_pp_sz, {}).get(_comp, _pp_sz)
+        SEED_NGDC_STANDARD_GROUPS.append({
+            "app_id": _app["app_id"],
+            "group_name": f"grp-{_app['app_id']}-{_pp_nh}-{_pp_csz}-{_comp}",
+            "nh": _pp_nh, "sz": _pp_csz, "component": _comp,
+            "environment": "Pre-Production",
+            "description": f"NGDC standard {_comp} group for {_app['app_id']} (Pre-Production)",
+        })
+
+
+# --- Generate Non-Production and Pre-Production IP mapping variants ---
+def _offset_ip(ip_str: str, offset: int) -> str:
+    """Offset the 2nd octet of an IP/CIDR by the given amount."""
+    parts = ip_str.split("/")
+    octets = parts[0].split(".")
+    octets[1] = str(int(octets[1]) + offset)
+    result = ".".join(octets)
+    if len(parts) > 1:
+        result += "/" + parts[1]
+    return result
+
+for _pm in list(SEED_LEGACY_TO_NGDC_IP_MAPPINGS):  # iterate over a copy of Prod-only entries
+    # Non-Production: +100 offset on 2nd octet for ngdc_ip
+    SEED_LEGACY_TO_NGDC_IP_MAPPINGS.append({
+        **_pm,
+        "ngdc_ip": _offset_ip(_pm["ngdc_ip"], 100),
+        "ngdc_nh": _NH_TO_NONPROD.get(_pm["ngdc_nh"], "NH12"),
+        "ngdc_sz": _SZ_TO_NONPROD.get(_pm["ngdc_sz"], "UGEN"),
+        "environment": "Non-Production",
+    })
+    # Pre-Production: +80 offset on 2nd octet for ngdc_ip
+    SEED_LEGACY_TO_NGDC_IP_MAPPINGS.append({
+        **_pm,
+        "ngdc_ip": _offset_ip(_pm["ngdc_ip"], 80),
+        "ngdc_nh": _NH_TO_PREPROD.get(_pm["ngdc_nh"], "NH16"),
+        "ngdc_sz": _SZ_TO_PREPROD.get(_pm["ngdc_sz"], "PP_GEN"),
+        "environment": "Pre-Production",
+    })
+
+
+# =====================================================================
+# LEGACY / EXISTING FIREWALL RULES (from imported spreadsheet)
+# Format mirrors the Excel columns: App ID, App Current Distributed ID, App Name,
+# Inventory Item, Policy Name, Rule Global, Rule Action, Rule Source, Rule Source Expanded,
+# Rule Source Zone, Rule Destination, Rule Destination Expanded, Rule Destination Zone,
+# Rule Service, Rule Service Expanded, RN, RC
+# =====================================================================
+# Legacy rules populated from seed - represents imported Excel data
+# Each app has rules across Production, Non-Production, Pre-Production
+# Total: 261 rules across 27 applications
+SEED_LEGACY_RULES: list[dict[str, Any]] = [
+    {"id": "LR-001", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-P-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.25.1.0/24", "rule_source_expanded": "svr-10.25.1.10\nsvr-10.25.1.11\nsvr-10.25.1.12", "rule_source_zone": "Default", "rule_destination": "10.25.2.0/24", "rule_destination_expanded": "svr-10.25.2.20\nsvr-10.25.2.21", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-002", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-P-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-CRM-APP-SRC", "rule_source_expanded": "grp-CRM-APP-SRC\n  svr-10.25.3.10\n  svr-10.25.3.11", "rule_source_zone": "Default", "rule_destination": "grp-CRM-DB-DST", "rule_destination_expanded": "grp-CRM-DB-DST\n  svr-10.25.4.30\n  svr-10.25.4.31", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-003", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-P-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.25.5.50", "rule_source_expanded": "svr-10.25.5.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.6.0-10.25.6.255", "rule_destination_expanded": "rng-10.25.6.0-10.25.6.255", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-004", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-NP-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.25.51.0/24", "rule_source_expanded": "svr-10.25.51.10\nsvr-10.25.51.11\nsvr-10.25.51.12", "rule_source_zone": "Default", "rule_destination": "10.25.52.0/24", "rule_destination_expanded": "svr-10.25.52.20\nsvr-10.25.52.21", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-005", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-NP-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-CRM-APP-SRC", "rule_source_expanded": "grp-CRM-APP-SRC\n  svr-10.25.53.10\n  svr-10.25.53.11", "rule_source_zone": "Default", "rule_destination": "grp-CRM-DB-DST", "rule_destination_expanded": "grp-CRM-DB-DST\n  svr-10.25.54.30\n  svr-10.25.54.31", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-006", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-NP-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.25.55.50", "rule_source_expanded": "svr-10.25.55.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.56.0-10.25.56.255", "rule_destination_expanded": "rng-10.25.56.0-10.25.56.255", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-007", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-PP-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.25.101.0/24", "rule_source_expanded": "svr-10.25.101.10\nsvr-10.25.101.11\nsvr-10.25.101.12", "rule_source_zone": "Default", "rule_destination": "10.25.102.0/24", "rule_destination_expanded": "svr-10.25.102.20\nsvr-10.25.102.21", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-008", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-PP-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-CRM-APP-SRC", "rule_source_expanded": "grp-CRM-APP-SRC\n  svr-10.25.103.10\n  svr-10.25.103.11", "rule_source_zone": "Default", "rule_destination": "grp-CRM-DB-DST", "rule_destination_expanded": "grp-CRM-DB-DST\n  svr-10.25.104.30\n  svr-10.25.104.31", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-009", "app_id": "CRM", "app_distributed_id": "SEA3", "app_name": "App Alpha", "inventory_item": "CRM-DC_LEGACY_A-PP-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.25.105.50", "rule_source_expanded": "svr-10.25.105.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.106.0-10.25.106.255", "rule_destination_expanded": "rng-10.25.106.0-10.25.106.255", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-010", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-P-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.25.2.0/24", "rule_source_expanded": "svr-10.25.2.10\nsvr-10.25.2.11\nsvr-10.25.2.12", "rule_source_zone": "Default", "rule_destination": "10.25.3.0/24", "rule_destination_expanded": "svr-10.25.3.20\nsvr-10.25.3.21", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-011", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-P-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-ORD-APP-SRC", "rule_source_expanded": "grp-ORD-APP-SRC\n  svr-10.25.4.10\n  svr-10.25.4.11", "rule_source_zone": "Default", "rule_destination": "grp-ORD-DB-DST", "rule_destination_expanded": "grp-ORD-DB-DST\n  svr-10.25.5.30\n  svr-10.25.5.31", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-012", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-P-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.25.6.50", "rule_source_expanded": "svr-10.25.6.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.7.0-10.25.7.255", "rule_destination_expanded": "rng-10.25.7.0-10.25.7.255", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-013", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-P-04", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Drop", "rule_source": "10.25.8.100", "rule_source_expanded": "svr-10.25.8.100", "rule_source_zone": "Default", "rule_destination": "10.25.9.200", "rule_destination_expanded": "svr-10.25.9.200", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-014", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-NP-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.25.52.0/24", "rule_source_expanded": "svr-10.25.52.10\nsvr-10.25.52.11\nsvr-10.25.52.12", "rule_source_zone": "Default", "rule_destination": "10.25.53.0/24", "rule_destination_expanded": "svr-10.25.53.20\nsvr-10.25.53.21", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-015", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-NP-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-ORD-APP-SRC", "rule_source_expanded": "grp-ORD-APP-SRC\n  svr-10.25.54.10\n  svr-10.25.54.11", "rule_source_zone": "Default", "rule_destination": "grp-ORD-DB-DST", "rule_destination_expanded": "grp-ORD-DB-DST\n  svr-10.25.55.30\n  svr-10.25.55.31", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-016", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-NP-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.25.56.50", "rule_source_expanded": "svr-10.25.56.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.57.0-10.25.57.255", "rule_destination_expanded": "rng-10.25.57.0-10.25.57.255", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-017", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-PP-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.25.102.0/24", "rule_source_expanded": "svr-10.25.102.10\nsvr-10.25.102.11\nsvr-10.25.102.12", "rule_source_zone": "Default", "rule_destination": "10.25.103.0/24", "rule_destination_expanded": "svr-10.25.103.20\nsvr-10.25.103.21", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-018", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-PP-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-ORD-APP-SRC", "rule_source_expanded": "grp-ORD-APP-SRC\n  svr-10.25.104.10\n  svr-10.25.104.11", "rule_source_zone": "Default", "rule_destination": "grp-ORD-DB-DST", "rule_destination_expanded": "grp-ORD-DB-DST\n  svr-10.25.105.30\n  svr-10.25.105.31", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-019", "app_id": "ORD", "app_distributed_id": "LOGIN", "app_name": "App Beta", "inventory_item": "ORD-DC_LEGACY_A-PP-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.25.106.50", "rule_source_expanded": "svr-10.25.106.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.107.0-10.25.107.255", "rule_destination_expanded": "rng-10.25.107.0-10.25.107.255", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-020", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-P-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.26.3.0/24", "rule_source_expanded": "svr-10.26.3.10\nsvr-10.26.3.11\nsvr-10.26.3.12", "rule_source_zone": "Default", "rule_destination": "10.26.4.0/24", "rule_destination_expanded": "svr-10.26.4.20\nsvr-10.26.4.21", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-021", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-P-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-PSA-APP-SRC", "rule_source_expanded": "grp-PSA-APP-SRC\n  svr-10.26.5.10\n  svr-10.26.5.11", "rule_source_zone": "Default", "rule_destination": "grp-PSA-DB-DST", "rule_destination_expanded": "grp-PSA-DB-DST\n  svr-10.26.6.30\n  svr-10.26.6.31", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-022", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-P-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.26.7.50", "rule_source_expanded": "svr-10.26.7.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.8.0-10.26.8.255", "rule_destination_expanded": "rng-10.26.8.0-10.26.8.255", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-023", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-P-04", "policy_name": "FW-NONP-ALLOW", "rule_action": "Drop", "rule_source": "10.26.9.100", "rule_source_expanded": "svr-10.26.9.100", "rule_source_zone": "Default", "rule_destination": "10.26.10.200", "rule_destination_expanded": "svr-10.26.10.200", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-024", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-NP-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.26.53.0/24", "rule_source_expanded": "svr-10.26.53.10\nsvr-10.26.53.11\nsvr-10.26.53.12", "rule_source_zone": "Default", "rule_destination": "10.26.54.0/24", "rule_destination_expanded": "svr-10.26.54.20\nsvr-10.26.54.21", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-025", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-NP-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-PSA-APP-SRC", "rule_source_expanded": "grp-PSA-APP-SRC\n  svr-10.26.55.10\n  svr-10.26.55.11", "rule_source_zone": "Default", "rule_destination": "grp-PSA-DB-DST", "rule_destination_expanded": "grp-PSA-DB-DST\n  svr-10.26.56.30\n  svr-10.26.56.31", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-026", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-NP-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.26.57.50", "rule_source_expanded": "svr-10.26.57.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.58.0-10.26.58.255", "rule_destination_expanded": "rng-10.26.58.0-10.26.58.255", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-027", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-PP-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.26.103.0/24", "rule_source_expanded": "svr-10.26.103.10\nsvr-10.26.103.11\nsvr-10.26.103.12", "rule_source_zone": "Default", "rule_destination": "10.26.104.0/24", "rule_destination_expanded": "svr-10.26.104.20\nsvr-10.26.104.21", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-028", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-PP-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-PSA-APP-SRC", "rule_source_expanded": "grp-PSA-APP-SRC\n  svr-10.26.105.10\n  svr-10.26.105.11", "rule_source_zone": "Default", "rule_destination": "grp-PSA-DB-DST", "rule_destination_expanded": "grp-PSA-DB-DST\n  svr-10.26.106.30\n  svr-10.26.106.31", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-029", "app_id": "PSA", "app_distributed_id": "PSA01", "app_name": "App Gamma", "inventory_item": "PSA-DC_LEGACY_B-PP-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.26.107.50", "rule_source_expanded": "svr-10.26.107.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.108.0-10.26.108.255", "rule_destination_expanded": "rng-10.26.108.0-10.26.108.255", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-030", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-P-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.26.4.0/24", "rule_source_expanded": "svr-10.26.4.10\nsvr-10.26.4.11\nsvr-10.26.4.12", "rule_source_zone": "Default", "rule_destination": "10.26.5.0/24", "rule_destination_expanded": "svr-10.26.5.20\nsvr-10.26.5.21", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-031", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-P-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-DIG-APP-SRC", "rule_source_expanded": "grp-DIG-APP-SRC\n  svr-10.26.6.10\n  svr-10.26.6.11", "rule_source_zone": "Default", "rule_destination": "grp-DIG-DB-DST", "rule_destination_expanded": "grp-DIG-DB-DST\n  svr-10.26.7.30\n  svr-10.26.7.31", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-032", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-P-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.26.8.50", "rule_source_expanded": "svr-10.26.8.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.9.0-10.26.9.255", "rule_destination_expanded": "rng-10.26.9.0-10.26.9.255", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-033", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-NP-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.26.54.0/24", "rule_source_expanded": "svr-10.26.54.10\nsvr-10.26.54.11\nsvr-10.26.54.12", "rule_source_zone": "Default", "rule_destination": "10.26.55.0/24", "rule_destination_expanded": "svr-10.26.55.20\nsvr-10.26.55.21", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-034", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-NP-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-DIG-APP-SRC", "rule_source_expanded": "grp-DIG-APP-SRC\n  svr-10.26.56.10\n  svr-10.26.56.11", "rule_source_zone": "Default", "rule_destination": "grp-DIG-DB-DST", "rule_destination_expanded": "grp-DIG-DB-DST\n  svr-10.26.57.30\n  svr-10.26.57.31", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-035", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-NP-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.26.58.50", "rule_source_expanded": "svr-10.26.58.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.59.0-10.26.59.255", "rule_destination_expanded": "rng-10.26.59.0-10.26.59.255", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-036", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-PP-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.26.104.0/24", "rule_source_expanded": "svr-10.26.104.10\nsvr-10.26.104.11\nsvr-10.26.104.12", "rule_source_zone": "Default", "rule_destination": "10.26.105.0/24", "rule_destination_expanded": "svr-10.26.105.20\nsvr-10.26.105.21", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-037", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-PP-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-DIG-APP-SRC", "rule_source_expanded": "grp-DIG-APP-SRC\n  svr-10.26.106.10\n  svr-10.26.106.11", "rule_source_zone": "Default", "rule_destination": "grp-DIG-DB-DST", "rule_destination_expanded": "grp-DIG-DB-DST\n  svr-10.26.107.30\n  svr-10.26.107.31", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-038", "app_id": "DIG", "app_distributed_id": "DIG01", "app_name": "App Delta", "inventory_item": "DIG-DC_LEGACY_B-PP-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.26.108.50", "rule_source_expanded": "svr-10.26.108.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.109.0-10.26.109.255", "rule_destination_expanded": "rng-10.26.109.0-10.26.109.255", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-039", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-P-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.27.5.0/24", "rule_source_expanded": "svr-10.27.5.10\nsvr-10.27.5.11\nsvr-10.27.5.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.6.0/24", "rule_destination_expanded": "svr-10.27.6.20\nsvr-10.27.6.21", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-040", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-P-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-PAY-APP-SRC", "rule_source_expanded": "grp-PAY-APP-SRC\n  svr-10.27.7.10\n  svr-10.27.7.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-PAY-DB-DST", "rule_destination_expanded": "grp-PAY-DB-DST\n  svr-10.27.8.30\n  svr-10.27.8.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-041", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-P-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.27.9.50", "rule_source_expanded": "svr-10.27.9.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.10.0-10.27.10.255", "rule_destination_expanded": "rng-10.27.10.0-10.27.10.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-042", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-P-04", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Drop", "rule_source": "10.27.11.100", "rule_source_expanded": "svr-10.27.11.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.12.200", "rule_destination_expanded": "svr-10.27.12.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-043", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-NP-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.27.55.0/24", "rule_source_expanded": "svr-10.27.55.10\nsvr-10.27.55.11\nsvr-10.27.55.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.56.0/24", "rule_destination_expanded": "svr-10.27.56.20\nsvr-10.27.56.21", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-044", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-NP-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-PAY-APP-SRC", "rule_source_expanded": "grp-PAY-APP-SRC\n  svr-10.27.57.10\n  svr-10.27.57.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-PAY-DB-DST", "rule_destination_expanded": "grp-PAY-DB-DST\n  svr-10.27.58.30\n  svr-10.27.58.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-045", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-NP-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.27.59.50", "rule_source_expanded": "svr-10.27.59.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.60.0-10.27.60.255", "rule_destination_expanded": "rng-10.27.60.0-10.27.60.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-046", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-PP-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.27.105.0/24", "rule_source_expanded": "svr-10.27.105.10\nsvr-10.27.105.11\nsvr-10.27.105.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.106.0/24", "rule_destination_expanded": "svr-10.27.106.20\nsvr-10.27.106.21", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-047", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-PP-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-PAY-APP-SRC", "rule_source_expanded": "grp-PAY-APP-SRC\n  svr-10.27.107.10\n  svr-10.27.107.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-PAY-DB-DST", "rule_destination_expanded": "grp-PAY-DB-DST\n  svr-10.27.108.30\n  svr-10.27.108.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-048", "app_id": "PAY", "app_distributed_id": "PAY01", "app_name": "App Epsilon", "inventory_item": "PAY-DC_LEGACY_C-PP-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.27.109.50", "rule_source_expanded": "svr-10.27.109.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.110.0-10.27.110.255", "rule_destination_expanded": "rng-10.27.110.0-10.27.110.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-049", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-P-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.27.6.0/24", "rule_source_expanded": "svr-10.27.6.10\nsvr-10.27.6.11\nsvr-10.27.6.12", "rule_source_zone": "Default", "rule_destination": "10.27.7.0/24", "rule_destination_expanded": "svr-10.27.7.20\nsvr-10.27.7.21", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-050", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-P-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-ENT-APP-SRC", "rule_source_expanded": "grp-ENT-APP-SRC\n  svr-10.27.8.10\n  svr-10.27.8.11", "rule_source_zone": "Default", "rule_destination": "grp-ENT-DB-DST", "rule_destination_expanded": "grp-ENT-DB-DST\n  svr-10.27.9.30\n  svr-10.27.9.31", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-051", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-P-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.27.10.50", "rule_source_expanded": "svr-10.27.10.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.11.0-10.27.11.255", "rule_destination_expanded": "rng-10.27.11.0-10.27.11.255", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-052", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-P-04", "policy_name": "FW-DB-ACCESS", "rule_action": "Drop", "rule_source": "10.27.12.100", "rule_source_expanded": "svr-10.27.12.100", "rule_source_zone": "Default", "rule_destination": "10.27.13.200", "rule_destination_expanded": "svr-10.27.13.200", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-053", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-NP-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.27.56.0/24", "rule_source_expanded": "svr-10.27.56.10\nsvr-10.27.56.11\nsvr-10.27.56.12", "rule_source_zone": "Default", "rule_destination": "10.27.57.0/24", "rule_destination_expanded": "svr-10.27.57.20\nsvr-10.27.57.21", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-054", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-NP-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-ENT-APP-SRC", "rule_source_expanded": "grp-ENT-APP-SRC\n  svr-10.27.58.10\n  svr-10.27.58.11", "rule_source_zone": "Default", "rule_destination": "grp-ENT-DB-DST", "rule_destination_expanded": "grp-ENT-DB-DST\n  svr-10.27.59.30\n  svr-10.27.59.31", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-055", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-NP-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.27.60.50", "rule_source_expanded": "svr-10.27.60.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.61.0-10.27.61.255", "rule_destination_expanded": "rng-10.27.61.0-10.27.61.255", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-056", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-PP-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.27.106.0/24", "rule_source_expanded": "svr-10.27.106.10\nsvr-10.27.106.11\nsvr-10.27.106.12", "rule_source_zone": "Default", "rule_destination": "10.27.107.0/24", "rule_destination_expanded": "svr-10.27.107.20\nsvr-10.27.107.21", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-057", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-PP-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-ENT-APP-SRC", "rule_source_expanded": "grp-ENT-APP-SRC\n  svr-10.27.108.10\n  svr-10.27.108.11", "rule_source_zone": "Default", "rule_destination": "grp-ENT-DB-DST", "rule_destination_expanded": "grp-ENT-DB-DST\n  svr-10.27.109.30\n  svr-10.27.109.31", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-058", "app_id": "ENT", "app_distributed_id": "ENT01", "app_name": "App Zeta", "inventory_item": "ENT-DC_LEGACY_C-PP-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.27.110.50", "rule_source_expanded": "svr-10.27.110.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.111.0-10.27.111.255", "rule_destination_expanded": "rng-10.27.111.0-10.27.111.255", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-059", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-P-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.28.7.0/24", "rule_source_expanded": "svr-10.28.7.10\nsvr-10.28.7.11\nsvr-10.28.7.12", "rule_source_zone": "Default", "rule_destination": "10.28.8.0/24", "rule_destination_expanded": "svr-10.28.8.20\nsvr-10.28.8.21", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-060", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-P-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-SHR-APP-SRC", "rule_source_expanded": "grp-SHR-APP-SRC\n  svr-10.28.9.10\n  svr-10.28.9.11", "rule_source_zone": "Default", "rule_destination": "grp-SHR-DB-DST", "rule_destination_expanded": "grp-SHR-DB-DST\n  svr-10.28.10.30\n  svr-10.28.10.31", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-061", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-P-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.28.11.50", "rule_source_expanded": "svr-10.28.11.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.12.0-10.28.12.255", "rule_destination_expanded": "rng-10.28.12.0-10.28.12.255", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-062", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-NP-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.28.57.0/24", "rule_source_expanded": "svr-10.28.57.10\nsvr-10.28.57.11\nsvr-10.28.57.12", "rule_source_zone": "Default", "rule_destination": "10.28.58.0/24", "rule_destination_expanded": "svr-10.28.58.20\nsvr-10.28.58.21", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-063", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-NP-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-SHR-APP-SRC", "rule_source_expanded": "grp-SHR-APP-SRC\n  svr-10.28.59.10\n  svr-10.28.59.11", "rule_source_zone": "Default", "rule_destination": "grp-SHR-DB-DST", "rule_destination_expanded": "grp-SHR-DB-DST\n  svr-10.28.60.30\n  svr-10.28.60.31", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-064", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-NP-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.28.61.50", "rule_source_expanded": "svr-10.28.61.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.62.0-10.28.62.255", "rule_destination_expanded": "rng-10.28.62.0-10.28.62.255", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-065", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-PP-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.28.107.0/24", "rule_source_expanded": "svr-10.28.107.10\nsvr-10.28.107.11\nsvr-10.28.107.12", "rule_source_zone": "Default", "rule_destination": "10.28.108.0/24", "rule_destination_expanded": "svr-10.28.108.20\nsvr-10.28.108.21", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-066", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-PP-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-SHR-APP-SRC", "rule_source_expanded": "grp-SHR-APP-SRC\n  svr-10.28.109.10\n  svr-10.28.109.11", "rule_source_zone": "Default", "rule_destination": "grp-SHR-DB-DST", "rule_destination_expanded": "grp-SHR-DB-DST\n  svr-10.28.110.30\n  svr-10.28.110.31", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-067", "app_id": "SHR", "app_distributed_id": "SHR01", "app_name": "App Eta", "inventory_item": "SHR-DC_LEGACY_D-PP-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.28.111.50", "rule_source_expanded": "svr-10.28.111.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.112.0-10.28.112.255", "rule_destination_expanded": "rng-10.28.112.0-10.28.112.255", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-068", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-P-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.27.8.0/24", "rule_source_expanded": "svr-10.27.8.10\nsvr-10.27.8.11\nsvr-10.27.8.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.9.0/24", "rule_destination_expanded": "svr-10.27.9.20\nsvr-10.27.9.21", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-069", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-P-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-WHL-APP-SRC", "rule_source_expanded": "grp-WHL-APP-SRC\n  svr-10.27.10.10\n  svr-10.27.10.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-WHL-DB-DST", "rule_destination_expanded": "grp-WHL-DB-DST\n  svr-10.27.11.30\n  svr-10.27.11.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-070", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-P-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.27.12.50", "rule_source_expanded": "svr-10.27.12.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.13.0-10.27.13.255", "rule_destination_expanded": "rng-10.27.13.0-10.27.13.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-071", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-P-04", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Drop", "rule_source": "10.27.14.100", "rule_source_expanded": "svr-10.27.14.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.15.200", "rule_destination_expanded": "svr-10.27.15.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-072", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-NP-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.27.58.0/24", "rule_source_expanded": "svr-10.27.58.10\nsvr-10.27.58.11\nsvr-10.27.58.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.59.0/24", "rule_destination_expanded": "svr-10.27.59.20\nsvr-10.27.59.21", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-073", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-NP-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-WHL-APP-SRC", "rule_source_expanded": "grp-WHL-APP-SRC\n  svr-10.27.60.10\n  svr-10.27.60.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-WHL-DB-DST", "rule_destination_expanded": "grp-WHL-DB-DST\n  svr-10.27.61.30\n  svr-10.27.61.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-074", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-NP-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.27.62.50", "rule_source_expanded": "svr-10.27.62.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.63.0-10.27.63.255", "rule_destination_expanded": "rng-10.27.63.0-10.27.63.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-075", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-PP-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.27.108.0/24", "rule_source_expanded": "svr-10.27.108.10\nsvr-10.27.108.11\nsvr-10.27.108.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.109.0/24", "rule_destination_expanded": "svr-10.27.109.20\nsvr-10.27.109.21", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-076", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-PP-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-WHL-APP-SRC", "rule_source_expanded": "grp-WHL-APP-SRC\n  svr-10.27.110.10\n  svr-10.27.110.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-WHL-DB-DST", "rule_destination_expanded": "grp-WHL-DB-DST\n  svr-10.27.111.30\n  svr-10.27.111.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-077", "app_id": "WHL", "app_distributed_id": "WHL01", "app_name": "Team Theta", "inventory_item": "WHL-DC_LEGACY_C-PP-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.27.112.50", "rule_source_expanded": "svr-10.27.112.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.113.0-10.27.113.255", "rule_destination_expanded": "rng-10.27.113.0-10.27.113.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-078", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-P-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.25.9.0/24", "rule_source_expanded": "svr-10.25.9.10\nsvr-10.25.9.11\nsvr-10.25.9.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.10.0/24", "rule_destination_expanded": "svr-10.25.10.20\nsvr-10.25.10.21", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-079", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-P-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-CBK-APP-SRC", "rule_source_expanded": "grp-CBK-APP-SRC\n  svr-10.25.11.10\n  svr-10.25.11.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-CBK-DB-DST", "rule_destination_expanded": "grp-CBK-DB-DST\n  svr-10.25.12.30\n  svr-10.25.12.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-080", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-P-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.25.13.50", "rule_source_expanded": "svr-10.25.13.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.14.0-10.25.14.255", "rule_destination_expanded": "rng-10.25.14.0-10.25.14.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-081", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-P-04", "policy_name": "FW-MONITORING", "rule_action": "Drop", "rule_source": "10.25.15.100", "rule_source_expanded": "svr-10.25.15.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.16.200", "rule_destination_expanded": "svr-10.25.16.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-082", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-NP-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.25.59.0/24", "rule_source_expanded": "svr-10.25.59.10\nsvr-10.25.59.11\nsvr-10.25.59.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.60.0/24", "rule_destination_expanded": "svr-10.25.60.20\nsvr-10.25.60.21", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-083", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-NP-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-CBK-APP-SRC", "rule_source_expanded": "grp-CBK-APP-SRC\n  svr-10.25.61.10\n  svr-10.25.61.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-CBK-DB-DST", "rule_destination_expanded": "grp-CBK-DB-DST\n  svr-10.25.62.30\n  svr-10.25.62.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-084", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-NP-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.25.63.50", "rule_source_expanded": "svr-10.25.63.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.64.0-10.25.64.255", "rule_destination_expanded": "rng-10.25.64.0-10.25.64.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-085", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-PP-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.25.109.0/24", "rule_source_expanded": "svr-10.25.109.10\nsvr-10.25.109.11\nsvr-10.25.109.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.110.0/24", "rule_destination_expanded": "svr-10.25.110.20\nsvr-10.25.110.21", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-086", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-PP-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-CBK-APP-SRC", "rule_source_expanded": "grp-CBK-APP-SRC\n  svr-10.25.111.10\n  svr-10.25.111.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-CBK-DB-DST", "rule_destination_expanded": "grp-CBK-DB-DST\n  svr-10.25.112.30\n  svr-10.25.112.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-087", "app_id": "CBK", "app_distributed_id": "CBK01", "app_name": "Team Iota", "inventory_item": "CBK-DC_LEGACY_A-PP-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.25.113.50", "rule_source_expanded": "svr-10.25.113.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.114.0-10.25.114.255", "rule_destination_expanded": "rng-10.25.114.0-10.25.114.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-088", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-P-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.28.10.0/24", "rule_source_expanded": "svr-10.28.10.10\nsvr-10.28.10.11\nsvr-10.28.10.12", "rule_source_zone": "Default", "rule_destination": "10.28.11.0/24", "rule_destination_expanded": "svr-10.28.11.20\nsvr-10.28.11.21", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-089", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-P-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-CLN-APP-SRC", "rule_source_expanded": "grp-CLN-APP-SRC\n  svr-10.28.12.10\n  svr-10.28.12.11", "rule_source_zone": "Default", "rule_destination": "grp-CLN-DB-DST", "rule_destination_expanded": "grp-CLN-DB-DST\n  svr-10.28.13.30\n  svr-10.28.13.31", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-090", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-P-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.28.14.50", "rule_source_expanded": "svr-10.28.14.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.15.0-10.28.15.255", "rule_destination_expanded": "rng-10.28.15.0-10.28.15.255", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-091", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-NP-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.28.60.0/24", "rule_source_expanded": "svr-10.28.60.10\nsvr-10.28.60.11\nsvr-10.28.60.12", "rule_source_zone": "Default", "rule_destination": "10.28.61.0/24", "rule_destination_expanded": "svr-10.28.61.20\nsvr-10.28.61.21", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-092", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-NP-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-CLN-APP-SRC", "rule_source_expanded": "grp-CLN-APP-SRC\n  svr-10.28.62.10\n  svr-10.28.62.11", "rule_source_zone": "Default", "rule_destination": "grp-CLN-DB-DST", "rule_destination_expanded": "grp-CLN-DB-DST\n  svr-10.28.63.30\n  svr-10.28.63.31", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-093", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-NP-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.28.64.50", "rule_source_expanded": "svr-10.28.64.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.65.0-10.28.65.255", "rule_destination_expanded": "rng-10.28.65.0-10.28.65.255", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-094", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-PP-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.28.110.0/24", "rule_source_expanded": "svr-10.28.110.10\nsvr-10.28.110.11\nsvr-10.28.110.12", "rule_source_zone": "Default", "rule_destination": "10.28.111.0/24", "rule_destination_expanded": "svr-10.28.111.20\nsvr-10.28.111.21", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-095", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-PP-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-CLN-APP-SRC", "rule_source_expanded": "grp-CLN-APP-SRC\n  svr-10.28.112.10\n  svr-10.28.112.11", "rule_source_zone": "Default", "rule_destination": "grp-CLN-DB-DST", "rule_destination_expanded": "grp-CLN-DB-DST\n  svr-10.28.113.30\n  svr-10.28.113.31", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-096", "app_id": "CLN", "app_distributed_id": "CLN01", "app_name": "Team Kappa", "inventory_item": "CLN-DC_LEGACY_D-PP-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.28.114.50", "rule_source_expanded": "svr-10.28.114.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.115.0-10.28.115.255", "rule_destination_expanded": "rng-10.28.115.0-10.28.115.255", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-097", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-P-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.28.11.0/24", "rule_source_expanded": "svr-10.28.11.10\nsvr-10.28.11.11\nsvr-10.28.11.12", "rule_source_zone": "Default", "rule_destination": "10.28.12.0/24", "rule_destination_expanded": "svr-10.28.12.20\nsvr-10.28.12.21", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-098", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-P-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-WLT-APP-SRC", "rule_source_expanded": "grp-WLT-APP-SRC\n  svr-10.28.13.10\n  svr-10.28.13.11", "rule_source_zone": "Default", "rule_destination": "grp-WLT-DB-DST", "rule_destination_expanded": "grp-WLT-DB-DST\n  svr-10.28.14.30\n  svr-10.28.14.31", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-099", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-P-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.28.15.50", "rule_source_expanded": "svr-10.28.15.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.16.0-10.28.16.255", "rule_destination_expanded": "rng-10.28.16.0-10.28.16.255", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-100", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-P-04", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Drop", "rule_source": "10.28.17.100", "rule_source_expanded": "svr-10.28.17.100", "rule_source_zone": "Default", "rule_destination": "10.28.18.200", "rule_destination_expanded": "svr-10.28.18.200", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-101", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-NP-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.28.61.0/24", "rule_source_expanded": "svr-10.28.61.10\nsvr-10.28.61.11\nsvr-10.28.61.12", "rule_source_zone": "Default", "rule_destination": "10.28.62.0/24", "rule_destination_expanded": "svr-10.28.62.20\nsvr-10.28.62.21", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-102", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-NP-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-WLT-APP-SRC", "rule_source_expanded": "grp-WLT-APP-SRC\n  svr-10.28.63.10\n  svr-10.28.63.11", "rule_source_zone": "Default", "rule_destination": "grp-WLT-DB-DST", "rule_destination_expanded": "grp-WLT-DB-DST\n  svr-10.28.64.30\n  svr-10.28.64.31", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-103", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-NP-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.28.65.50", "rule_source_expanded": "svr-10.28.65.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.66.0-10.28.66.255", "rule_destination_expanded": "rng-10.28.66.0-10.28.66.255", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-104", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-PP-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.28.111.0/24", "rule_source_expanded": "svr-10.28.111.10\nsvr-10.28.111.11\nsvr-10.28.111.12", "rule_source_zone": "Default", "rule_destination": "10.28.112.0/24", "rule_destination_expanded": "svr-10.28.112.20\nsvr-10.28.112.21", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-105", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-PP-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-WLT-APP-SRC", "rule_source_expanded": "grp-WLT-APP-SRC\n  svr-10.28.113.10\n  svr-10.28.113.11", "rule_source_zone": "Default", "rule_destination": "grp-WLT-DB-DST", "rule_destination_expanded": "grp-WLT-DB-DST\n  svr-10.28.114.30\n  svr-10.28.114.31", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-106", "app_id": "WLT", "app_distributed_id": "WLT01", "app_name": "App Lambda", "inventory_item": "WLT-DC_LEGACY_D-PP-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.28.115.50", "rule_source_expanded": "svr-10.28.115.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.116.0-10.28.116.255", "rule_destination_expanded": "rng-10.28.116.0-10.28.116.255", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-107", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-P-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.26.12.0/24", "rule_source_expanded": "svr-10.26.12.10\nsvr-10.26.12.11\nsvr-10.26.12.12", "rule_source_zone": "Default", "rule_destination": "10.26.13.0/24", "rule_destination_expanded": "svr-10.26.13.20\nsvr-10.26.13.21", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-108", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-P-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-ACH-APP-SRC", "rule_source_expanded": "grp-ACH-APP-SRC\n  svr-10.26.14.10\n  svr-10.26.14.11", "rule_source_zone": "Default", "rule_destination": "grp-ACH-DB-DST", "rule_destination_expanded": "grp-ACH-DB-DST\n  svr-10.26.15.30\n  svr-10.26.15.31", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-109", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-P-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.26.16.50", "rule_source_expanded": "svr-10.26.16.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.17.0-10.26.17.255", "rule_destination_expanded": "rng-10.26.17.0-10.26.17.255", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-110", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-P-04", "policy_name": "FW-NONP-ALLOW", "rule_action": "Drop", "rule_source": "10.26.18.100", "rule_source_expanded": "svr-10.26.18.100", "rule_source_zone": "Default", "rule_destination": "10.26.19.200", "rule_destination_expanded": "svr-10.26.19.200", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-111", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-NP-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.26.62.0/24", "rule_source_expanded": "svr-10.26.62.10\nsvr-10.26.62.11\nsvr-10.26.62.12", "rule_source_zone": "Default", "rule_destination": "10.26.63.0/24", "rule_destination_expanded": "svr-10.26.63.20\nsvr-10.26.63.21", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-112", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-NP-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-ACH-APP-SRC", "rule_source_expanded": "grp-ACH-APP-SRC\n  svr-10.26.64.10\n  svr-10.26.64.11", "rule_source_zone": "Default", "rule_destination": "grp-ACH-DB-DST", "rule_destination_expanded": "grp-ACH-DB-DST\n  svr-10.26.65.30\n  svr-10.26.65.31", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-113", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-NP-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.26.66.50", "rule_source_expanded": "svr-10.26.66.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.67.0-10.26.67.255", "rule_destination_expanded": "rng-10.26.67.0-10.26.67.255", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-114", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-PP-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.26.112.0/24", "rule_source_expanded": "svr-10.26.112.10\nsvr-10.26.112.11\nsvr-10.26.112.12", "rule_source_zone": "Default", "rule_destination": "10.26.113.0/24", "rule_destination_expanded": "svr-10.26.113.20\nsvr-10.26.113.21", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-115", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-PP-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-ACH-APP-SRC", "rule_source_expanded": "grp-ACH-APP-SRC\n  svr-10.26.114.10\n  svr-10.26.114.11", "rule_source_zone": "Default", "rule_destination": "grp-ACH-DB-DST", "rule_destination_expanded": "grp-ACH-DB-DST\n  svr-10.26.115.30\n  svr-10.26.115.31", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-116", "app_id": "ACH", "app_distributed_id": "ACH01", "app_name": "Team Mu", "inventory_item": "ACH-DC_LEGACY_B-PP-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.26.116.50", "rule_source_expanded": "svr-10.26.116.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.117.0-10.26.117.255", "rule_destination_expanded": "rng-10.26.117.0-10.26.117.255", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-117", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-P-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.26.13.0/24", "rule_source_expanded": "svr-10.26.13.10\nsvr-10.26.13.11\nsvr-10.26.13.12", "rule_source_zone": "Default", "rule_destination": "10.26.14.0/24", "rule_destination_expanded": "svr-10.26.14.20\nsvr-10.26.14.21", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-118", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-P-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-HRM-APP-SRC", "rule_source_expanded": "grp-HRM-APP-SRC\n  svr-10.26.15.10\n  svr-10.26.15.11", "rule_source_zone": "Default", "rule_destination": "grp-HRM-DB-DST", "rule_destination_expanded": "grp-HRM-DB-DST\n  svr-10.26.16.30\n  svr-10.26.16.31", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-119", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-P-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.26.17.50", "rule_source_expanded": "svr-10.26.17.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.18.0-10.26.18.255", "rule_destination_expanded": "rng-10.26.18.0-10.26.18.255", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-120", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-NP-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.26.63.0/24", "rule_source_expanded": "svr-10.26.63.10\nsvr-10.26.63.11\nsvr-10.26.63.12", "rule_source_zone": "Default", "rule_destination": "10.26.64.0/24", "rule_destination_expanded": "svr-10.26.64.20\nsvr-10.26.64.21", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-121", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-NP-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-HRM-APP-SRC", "rule_source_expanded": "grp-HRM-APP-SRC\n  svr-10.26.65.10\n  svr-10.26.65.11", "rule_source_zone": "Default", "rule_destination": "grp-HRM-DB-DST", "rule_destination_expanded": "grp-HRM-DB-DST\n  svr-10.26.66.30\n  svr-10.26.66.31", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-122", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-NP-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.26.67.50", "rule_source_expanded": "svr-10.26.67.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.68.0-10.26.68.255", "rule_destination_expanded": "rng-10.26.68.0-10.26.68.255", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-123", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-PP-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.26.113.0/24", "rule_source_expanded": "svr-10.26.113.10\nsvr-10.26.113.11\nsvr-10.26.113.12", "rule_source_zone": "Default", "rule_destination": "10.26.114.0/24", "rule_destination_expanded": "svr-10.26.114.20\nsvr-10.26.114.21", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-124", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-PP-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-HRM-APP-SRC", "rule_source_expanded": "grp-HRM-APP-SRC\n  svr-10.26.115.10\n  svr-10.26.115.11", "rule_source_zone": "Default", "rule_destination": "grp-HRM-DB-DST", "rule_destination_expanded": "grp-HRM-DB-DST\n  svr-10.26.116.30\n  svr-10.26.116.31", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-125", "app_id": "HRM", "app_distributed_id": "HRM01", "app_name": "App Nu", "inventory_item": "HRM-DC_LEGACY_B-PP-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.26.117.50", "rule_source_expanded": "svr-10.26.117.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.118.0-10.26.118.255", "rule_destination_expanded": "rng-10.26.118.0-10.26.118.255", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-126", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-P-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.27.14.0/24", "rule_source_expanded": "svr-10.27.14.10\nsvr-10.27.14.11\nsvr-10.27.14.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.15.0/24", "rule_destination_expanded": "svr-10.27.15.20\nsvr-10.27.15.21", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-127", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-P-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-TRD-APP-SRC", "rule_source_expanded": "grp-TRD-APP-SRC\n  svr-10.27.16.10\n  svr-10.27.16.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-TRD-DB-DST", "rule_destination_expanded": "grp-TRD-DB-DST\n  svr-10.27.17.30\n  svr-10.27.17.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-128", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-P-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.27.18.50", "rule_source_expanded": "svr-10.27.18.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.19.0-10.27.19.255", "rule_destination_expanded": "rng-10.27.19.0-10.27.19.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-129", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-P-04", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Drop", "rule_source": "10.27.20.100", "rule_source_expanded": "svr-10.27.20.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.21.200", "rule_destination_expanded": "svr-10.27.21.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-130", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-NP-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.27.64.0/24", "rule_source_expanded": "svr-10.27.64.10\nsvr-10.27.64.11\nsvr-10.27.64.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.65.0/24", "rule_destination_expanded": "svr-10.27.65.20\nsvr-10.27.65.21", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-131", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-NP-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-TRD-APP-SRC", "rule_source_expanded": "grp-TRD-APP-SRC\n  svr-10.27.66.10\n  svr-10.27.66.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-TRD-DB-DST", "rule_destination_expanded": "grp-TRD-DB-DST\n  svr-10.27.67.30\n  svr-10.27.67.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-132", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-NP-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.27.68.50", "rule_source_expanded": "svr-10.27.68.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.69.0-10.27.69.255", "rule_destination_expanded": "rng-10.27.69.0-10.27.69.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-133", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-PP-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.27.114.0/24", "rule_source_expanded": "svr-10.27.114.10\nsvr-10.27.114.11\nsvr-10.27.114.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.115.0/24", "rule_destination_expanded": "svr-10.27.115.20\nsvr-10.27.115.21", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-134", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-PP-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-TRD-APP-SRC", "rule_source_expanded": "grp-TRD-APP-SRC\n  svr-10.27.116.10\n  svr-10.27.116.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-TRD-DB-DST", "rule_destination_expanded": "grp-TRD-DB-DST\n  svr-10.27.117.30\n  svr-10.27.117.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-135", "app_id": "TRD", "app_distributed_id": "TRD01", "app_name": "App Xi", "inventory_item": "TRD-DC_LEGACY_C-PP-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.27.118.50", "rule_source_expanded": "svr-10.27.118.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.119.0-10.27.119.255", "rule_destination_expanded": "rng-10.27.119.0-10.27.119.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-136", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-P-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.29.15.0/24", "rule_source_expanded": "svr-10.29.15.10\nsvr-10.29.15.11\nsvr-10.29.15.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.16.0/24", "rule_destination_expanded": "svr-10.29.16.20\nsvr-10.29.16.21", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-137", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-P-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-FRD-APP-SRC", "rule_source_expanded": "grp-FRD-APP-SRC\n  svr-10.29.17.10\n  svr-10.29.17.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-FRD-DB-DST", "rule_destination_expanded": "grp-FRD-DB-DST\n  svr-10.29.18.30\n  svr-10.29.18.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-138", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-P-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.29.19.50", "rule_source_expanded": "svr-10.29.19.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.20.0-10.29.20.255", "rule_destination_expanded": "rng-10.29.20.0-10.29.20.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-139", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-P-04", "policy_name": "FW-DB-ACCESS", "rule_action": "Drop", "rule_source": "10.29.21.100", "rule_source_expanded": "svr-10.29.21.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.22.200", "rule_destination_expanded": "svr-10.29.22.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-140", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-NP-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.29.65.0/24", "rule_source_expanded": "svr-10.29.65.10\nsvr-10.29.65.11\nsvr-10.29.65.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.66.0/24", "rule_destination_expanded": "svr-10.29.66.20\nsvr-10.29.66.21", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-141", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-NP-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-FRD-APP-SRC", "rule_source_expanded": "grp-FRD-APP-SRC\n  svr-10.29.67.10\n  svr-10.29.67.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-FRD-DB-DST", "rule_destination_expanded": "grp-FRD-DB-DST\n  svr-10.29.68.30\n  svr-10.29.68.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-142", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-NP-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.29.69.50", "rule_source_expanded": "svr-10.29.69.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.70.0-10.29.70.255", "rule_destination_expanded": "rng-10.29.70.0-10.29.70.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-143", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-PP-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.29.115.0/24", "rule_source_expanded": "svr-10.29.115.10\nsvr-10.29.115.11\nsvr-10.29.115.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.116.0/24", "rule_destination_expanded": "svr-10.29.116.20\nsvr-10.29.116.21", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-144", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-PP-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-FRD-APP-SRC", "rule_source_expanded": "grp-FRD-APP-SRC\n  svr-10.29.117.10\n  svr-10.29.117.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-FRD-DB-DST", "rule_destination_expanded": "grp-FRD-DB-DST\n  svr-10.29.118.30\n  svr-10.29.118.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-145", "app_id": "FRD", "app_distributed_id": "FRD01", "app_name": "App Omicron", "inventory_item": "FRD-DC_LEGACY_E-PP-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.29.119.50", "rule_source_expanded": "svr-10.29.119.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.120.0-10.29.120.255", "rule_destination_expanded": "rng-10.29.120.0-10.29.120.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-146", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-P-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.29.16.0/24", "rule_source_expanded": "svr-10.29.16.10\nsvr-10.29.16.11\nsvr-10.29.16.12", "rule_source_zone": "Default", "rule_destination": "10.29.17.0/24", "rule_destination_expanded": "svr-10.29.17.20\nsvr-10.29.17.21", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-147", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-P-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-RGM-APP-SRC", "rule_source_expanded": "grp-RGM-APP-SRC\n  svr-10.29.18.10\n  svr-10.29.18.11", "rule_source_zone": "Default", "rule_destination": "grp-RGM-DB-DST", "rule_destination_expanded": "grp-RGM-DB-DST\n  svr-10.29.19.30\n  svr-10.29.19.31", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-148", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-P-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.29.20.50", "rule_source_expanded": "svr-10.29.20.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.21.0-10.29.21.255", "rule_destination_expanded": "rng-10.29.21.0-10.29.21.255", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-149", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-NP-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.29.66.0/24", "rule_source_expanded": "svr-10.29.66.10\nsvr-10.29.66.11\nsvr-10.29.66.12", "rule_source_zone": "Default", "rule_destination": "10.29.67.0/24", "rule_destination_expanded": "svr-10.29.67.20\nsvr-10.29.67.21", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-150", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-NP-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-RGM-APP-SRC", "rule_source_expanded": "grp-RGM-APP-SRC\n  svr-10.29.68.10\n  svr-10.29.68.11", "rule_source_zone": "Default", "rule_destination": "grp-RGM-DB-DST", "rule_destination_expanded": "grp-RGM-DB-DST\n  svr-10.29.69.30\n  svr-10.29.69.31", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-151", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-NP-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.29.70.50", "rule_source_expanded": "svr-10.29.70.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.71.0-10.29.71.255", "rule_destination_expanded": "rng-10.29.71.0-10.29.71.255", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-152", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-PP-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.29.116.0/24", "rule_source_expanded": "svr-10.29.116.10\nsvr-10.29.116.11\nsvr-10.29.116.12", "rule_source_zone": "Default", "rule_destination": "10.29.117.0/24", "rule_destination_expanded": "svr-10.29.117.20\nsvr-10.29.117.21", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-153", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-PP-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-RGM-APP-SRC", "rule_source_expanded": "grp-RGM-APP-SRC\n  svr-10.29.118.10\n  svr-10.29.118.11", "rule_source_zone": "Default", "rule_destination": "grp-RGM-DB-DST", "rule_destination_expanded": "grp-RGM-DB-DST\n  svr-10.29.119.30\n  svr-10.29.119.31", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-154", "app_id": "RGM", "app_distributed_id": "RGM01", "app_name": "App Pi", "inventory_item": "RGM-DC_LEGACY_E-PP-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.29.120.50", "rule_source_expanded": "svr-10.29.120.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.121.0-10.29.121.255", "rule_destination_expanded": "rng-10.29.121.0-10.29.121.255", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-155", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-P-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.26.17.0/24", "rule_source_expanded": "svr-10.26.17.10\nsvr-10.26.17.11\nsvr-10.26.17.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.26.18.0/24", "rule_destination_expanded": "svr-10.26.18.20\nsvr-10.26.18.21", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-156", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-P-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-MBL-APP-SRC", "rule_source_expanded": "grp-MBL-APP-SRC\n  svr-10.26.19.10\n  svr-10.26.19.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-MBL-DB-DST", "rule_destination_expanded": "grp-MBL-DB-DST\n  svr-10.26.20.30\n  svr-10.26.20.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-157", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-P-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.26.21.50", "rule_source_expanded": "svr-10.26.21.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.22.0-10.26.22.255", "rule_destination_expanded": "rng-10.26.22.0-10.26.22.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-158", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-P-04", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Drop", "rule_source": "10.26.23.100", "rule_source_expanded": "svr-10.26.23.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.26.24.200", "rule_destination_expanded": "svr-10.26.24.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-159", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-NP-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.26.67.0/24", "rule_source_expanded": "svr-10.26.67.10\nsvr-10.26.67.11\nsvr-10.26.67.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.26.68.0/24", "rule_destination_expanded": "svr-10.26.68.20\nsvr-10.26.68.21", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-160", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-NP-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-MBL-APP-SRC", "rule_source_expanded": "grp-MBL-APP-SRC\n  svr-10.26.69.10\n  svr-10.26.69.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-MBL-DB-DST", "rule_destination_expanded": "grp-MBL-DB-DST\n  svr-10.26.70.30\n  svr-10.26.70.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-161", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-NP-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.26.71.50", "rule_source_expanded": "svr-10.26.71.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.72.0-10.26.72.255", "rule_destination_expanded": "rng-10.26.72.0-10.26.72.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-162", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-PP-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.26.117.0/24", "rule_source_expanded": "svr-10.26.117.10\nsvr-10.26.117.11\nsvr-10.26.117.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.26.118.0/24", "rule_destination_expanded": "svr-10.26.118.20\nsvr-10.26.118.21", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-163", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-PP-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-MBL-APP-SRC", "rule_source_expanded": "grp-MBL-APP-SRC\n  svr-10.26.119.10\n  svr-10.26.119.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-MBL-DB-DST", "rule_destination_expanded": "grp-MBL-DB-DST\n  svr-10.26.120.30\n  svr-10.26.120.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-164", "app_id": "MBL", "app_distributed_id": "MBL01", "app_name": "App Rho", "inventory_item": "MBL-DC_LEGACY_B-PP-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.26.121.50", "rule_source_expanded": "svr-10.26.121.50", "rule_source_zone": "Default", "rule_destination": "rng-10.26.122.0-10.26.122.255", "rule_destination_expanded": "rng-10.26.122.0-10.26.122.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_B"},
+    {"id": "LR-165", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-P-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.28.18.0/24", "rule_source_expanded": "svr-10.28.18.10\nsvr-10.28.18.11\nsvr-10.28.18.12", "rule_source_zone": "Default", "rule_destination": "10.28.19.0/24", "rule_destination_expanded": "svr-10.28.19.20\nsvr-10.28.19.21", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-166", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-P-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-INS-APP-SRC", "rule_source_expanded": "grp-INS-APP-SRC\n  svr-10.28.20.10\n  svr-10.28.20.11", "rule_source_zone": "Default", "rule_destination": "grp-INS-DB-DST", "rule_destination_expanded": "grp-INS-DB-DST\n  svr-10.28.21.30\n  svr-10.28.21.31", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-167", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-P-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.28.22.50", "rule_source_expanded": "svr-10.28.22.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.23.0-10.28.23.255", "rule_destination_expanded": "rng-10.28.23.0-10.28.23.255", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-168", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-P-04", "policy_name": "FW-MONITORING", "rule_action": "Drop", "rule_source": "10.28.24.100", "rule_source_expanded": "svr-10.28.24.100", "rule_source_zone": "Default", "rule_destination": "10.28.25.200", "rule_destination_expanded": "svr-10.28.25.200", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-169", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-NP-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.28.68.0/24", "rule_source_expanded": "svr-10.28.68.10\nsvr-10.28.68.11\nsvr-10.28.68.12", "rule_source_zone": "Default", "rule_destination": "10.28.69.0/24", "rule_destination_expanded": "svr-10.28.69.20\nsvr-10.28.69.21", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-170", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-NP-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-INS-APP-SRC", "rule_source_expanded": "grp-INS-APP-SRC\n  svr-10.28.70.10\n  svr-10.28.70.11", "rule_source_zone": "Default", "rule_destination": "grp-INS-DB-DST", "rule_destination_expanded": "grp-INS-DB-DST\n  svr-10.28.71.30\n  svr-10.28.71.31", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-171", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-NP-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.28.72.50", "rule_source_expanded": "svr-10.28.72.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.73.0-10.28.73.255", "rule_destination_expanded": "rng-10.28.73.0-10.28.73.255", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-172", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-PP-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.28.118.0/24", "rule_source_expanded": "svr-10.28.118.10\nsvr-10.28.118.11\nsvr-10.28.118.12", "rule_source_zone": "Default", "rule_destination": "10.28.119.0/24", "rule_destination_expanded": "svr-10.28.119.20\nsvr-10.28.119.21", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-173", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-PP-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-INS-APP-SRC", "rule_source_expanded": "grp-INS-APP-SRC\n  svr-10.28.120.10\n  svr-10.28.120.11", "rule_source_zone": "Default", "rule_destination": "grp-INS-DB-DST", "rule_destination_expanded": "grp-INS-DB-DST\n  svr-10.28.121.30\n  svr-10.28.121.31", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-174", "app_id": "INS", "app_distributed_id": "INS01", "app_name": "App Sigma", "inventory_item": "INS-DC_LEGACY_D-PP-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.28.122.50", "rule_source_expanded": "svr-10.28.122.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.123.0-10.28.123.255", "rule_destination_expanded": "rng-10.28.123.0-10.28.123.255", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-175", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-P-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.30.19.0/24", "rule_source_expanded": "svr-10.30.19.10\nsvr-10.30.19.11\nsvr-10.30.19.12", "rule_source_zone": "Default", "rule_destination": "10.30.20.0/24", "rule_destination_expanded": "svr-10.30.20.20\nsvr-10.30.20.21", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-176", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-P-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-TAX-APP-SRC", "rule_source_expanded": "grp-TAX-APP-SRC\n  svr-10.30.21.10\n  svr-10.30.21.11", "rule_source_zone": "Default", "rule_destination": "grp-TAX-DB-DST", "rule_destination_expanded": "grp-TAX-DB-DST\n  svr-10.30.22.30\n  svr-10.30.22.31", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-177", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-P-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.30.23.50", "rule_source_expanded": "svr-10.30.23.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.24.0-10.30.24.255", "rule_destination_expanded": "rng-10.30.24.0-10.30.24.255", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-178", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-NP-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.30.69.0/24", "rule_source_expanded": "svr-10.30.69.10\nsvr-10.30.69.11\nsvr-10.30.69.12", "rule_source_zone": "Default", "rule_destination": "10.30.70.0/24", "rule_destination_expanded": "svr-10.30.70.20\nsvr-10.30.70.21", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-179", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-NP-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-TAX-APP-SRC", "rule_source_expanded": "grp-TAX-APP-SRC\n  svr-10.30.71.10\n  svr-10.30.71.11", "rule_source_zone": "Default", "rule_destination": "grp-TAX-DB-DST", "rule_destination_expanded": "grp-TAX-DB-DST\n  svr-10.30.72.30\n  svr-10.30.72.31", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-180", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-NP-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.30.73.50", "rule_source_expanded": "svr-10.30.73.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.74.0-10.30.74.255", "rule_destination_expanded": "rng-10.30.74.0-10.30.74.255", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-181", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-PP-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.30.119.0/24", "rule_source_expanded": "svr-10.30.119.10\nsvr-10.30.119.11\nsvr-10.30.119.12", "rule_source_zone": "Default", "rule_destination": "10.30.120.0/24", "rule_destination_expanded": "svr-10.30.120.20\nsvr-10.30.120.21", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-182", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-PP-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-TAX-APP-SRC", "rule_source_expanded": "grp-TAX-APP-SRC\n  svr-10.30.121.10\n  svr-10.30.121.11", "rule_source_zone": "Default", "rule_destination": "grp-TAX-DB-DST", "rule_destination_expanded": "grp-TAX-DB-DST\n  svr-10.30.122.30\n  svr-10.30.122.31", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-183", "app_id": "TAX", "app_distributed_id": "TAX01", "app_name": "App Tau", "inventory_item": "TAX-DC_LEGACY_F-PP-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.30.123.50", "rule_source_expanded": "svr-10.30.123.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.124.0-10.30.124.255", "rule_destination_expanded": "rng-10.30.124.0-10.30.124.255", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-184", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-P-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.29.20.0/24", "rule_source_expanded": "svr-10.29.20.10\nsvr-10.29.20.11\nsvr-10.29.20.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.21.0/24", "rule_destination_expanded": "svr-10.29.21.20\nsvr-10.29.21.21", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-185", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-P-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-AML-APP-SRC", "rule_source_expanded": "grp-AML-APP-SRC\n  svr-10.29.22.10\n  svr-10.29.22.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-AML-DB-DST", "rule_destination_expanded": "grp-AML-DB-DST\n  svr-10.29.23.30\n  svr-10.29.23.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-186", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-P-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.29.24.50", "rule_source_expanded": "svr-10.29.24.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.25.0-10.29.25.255", "rule_destination_expanded": "rng-10.29.25.0-10.29.25.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-187", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-P-04", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Drop", "rule_source": "10.29.26.100", "rule_source_expanded": "svr-10.29.26.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.27.200", "rule_destination_expanded": "svr-10.29.27.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-188", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-NP-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.29.70.0/24", "rule_source_expanded": "svr-10.29.70.10\nsvr-10.29.70.11\nsvr-10.29.70.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.71.0/24", "rule_destination_expanded": "svr-10.29.71.20\nsvr-10.29.71.21", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-189", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-NP-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-AML-APP-SRC", "rule_source_expanded": "grp-AML-APP-SRC\n  svr-10.29.72.10\n  svr-10.29.72.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-AML-DB-DST", "rule_destination_expanded": "grp-AML-DB-DST\n  svr-10.29.73.30\n  svr-10.29.73.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-190", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-NP-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.29.74.50", "rule_source_expanded": "svr-10.29.74.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.75.0-10.29.75.255", "rule_destination_expanded": "rng-10.29.75.0-10.29.75.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-191", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-PP-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.29.120.0/24", "rule_source_expanded": "svr-10.29.120.10\nsvr-10.29.120.11\nsvr-10.29.120.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.29.121.0/24", "rule_destination_expanded": "svr-10.29.121.20\nsvr-10.29.121.21", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-192", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-PP-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-AML-APP-SRC", "rule_source_expanded": "grp-AML-APP-SRC\n  svr-10.29.122.10\n  svr-10.29.122.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-AML-DB-DST", "rule_destination_expanded": "grp-AML-DB-DST\n  svr-10.29.123.30\n  svr-10.29.123.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-193", "app_id": "AML", "app_distributed_id": "AML01", "app_name": "App Upsilon", "inventory_item": "AML-DC_LEGACY_E-PP-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.29.124.50", "rule_source_expanded": "svr-10.29.124.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.125.0-10.29.125.255", "rule_destination_expanded": "rng-10.29.125.0-10.29.125.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-194", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-P-01", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "10.30.21.0/24", "rule_source_expanded": "svr-10.30.21.10\nsvr-10.30.21.11\nsvr-10.30.21.12", "rule_source_zone": "Default", "rule_destination": "10.30.22.0/24", "rule_destination_expanded": "svr-10.30.22.20\nsvr-10.30.22.21", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-195", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-P-02", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "grp-KYC-APP-SRC", "rule_source_expanded": "grp-KYC-APP-SRC\n  svr-10.30.23.10\n  svr-10.30.23.11", "rule_source_zone": "Default", "rule_destination": "grp-KYC-DB-DST", "rule_destination_expanded": "grp-KYC-DB-DST\n  svr-10.30.24.30\n  svr-10.30.24.31", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-196", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-P-03", "policy_name": "FW-NONP-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.30.25.50", "rule_source_expanded": "svr-10.30.25.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.26.0-10.30.26.255", "rule_destination_expanded": "rng-10.30.26.0-10.30.26.255", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-197", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-P-04", "policy_name": "FW-NONP-ALLOW", "rule_action": "Drop", "rule_source": "10.30.27.100", "rule_source_expanded": "svr-10.30.27.100", "rule_source_zone": "Default", "rule_destination": "10.30.28.200", "rule_destination_expanded": "svr-10.30.28.200", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-198", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-NP-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.30.71.0/24", "rule_source_expanded": "svr-10.30.71.10\nsvr-10.30.71.11\nsvr-10.30.71.12", "rule_source_zone": "Default", "rule_destination": "10.30.72.0/24", "rule_destination_expanded": "svr-10.30.72.20\nsvr-10.30.72.21", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-199", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-NP-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-KYC-APP-SRC", "rule_source_expanded": "grp-KYC-APP-SRC\n  svr-10.30.73.10\n  svr-10.30.73.11", "rule_source_zone": "Default", "rule_destination": "grp-KYC-DB-DST", "rule_destination_expanded": "grp-KYC-DB-DST\n  svr-10.30.74.30\n  svr-10.30.74.31", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-200", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-NP-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.30.75.50", "rule_source_expanded": "svr-10.30.75.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.76.0-10.30.76.255", "rule_destination_expanded": "rng-10.30.76.0-10.30.76.255", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-201", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-PP-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.30.121.0/24", "rule_source_expanded": "svr-10.30.121.10\nsvr-10.30.121.11\nsvr-10.30.121.12", "rule_source_zone": "Default", "rule_destination": "10.30.122.0/24", "rule_destination_expanded": "svr-10.30.122.20\nsvr-10.30.122.21", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-202", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-PP-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-KYC-APP-SRC", "rule_source_expanded": "grp-KYC-APP-SRC\n  svr-10.30.123.10\n  svr-10.30.123.11", "rule_source_zone": "Default", "rule_destination": "grp-KYC-DB-DST", "rule_destination_expanded": "grp-KYC-DB-DST\n  svr-10.30.124.30\n  svr-10.30.124.31", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-203", "app_id": "KYC", "app_distributed_id": "KYC01", "app_name": "App Phi", "inventory_item": "KYC-DC_LEGACY_F-PP-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.30.125.50", "rule_source_expanded": "svr-10.30.125.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.126.0-10.30.126.255", "rule_destination_expanded": "rng-10.30.126.0-10.30.126.255", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-204", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-P-01", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "10.27.22.0/24", "rule_source_expanded": "svr-10.27.22.10\nsvr-10.27.22.11\nsvr-10.27.22.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.23.0/24", "rule_destination_expanded": "svr-10.27.23.20\nsvr-10.27.23.21", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-205", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-P-02", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-TRS-APP-SRC", "rule_source_expanded": "grp-TRS-APP-SRC\n  svr-10.27.24.10\n  svr-10.27.24.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-TRS-DB-DST", "rule_destination_expanded": "grp-TRS-DB-DST\n  svr-10.27.25.30\n  svr-10.27.25.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-206", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-P-03", "policy_name": "FW-PREPROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.27.26.50", "rule_source_expanded": "svr-10.27.26.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.27.0-10.27.27.255", "rule_destination_expanded": "rng-10.27.27.0-10.27.27.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-207", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-NP-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.27.72.0/24", "rule_source_expanded": "svr-10.27.72.10\nsvr-10.27.72.11\nsvr-10.27.72.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.73.0/24", "rule_destination_expanded": "svr-10.27.73.20\nsvr-10.27.73.21", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-208", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-NP-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-TRS-APP-SRC", "rule_source_expanded": "grp-TRS-APP-SRC\n  svr-10.27.74.10\n  svr-10.27.74.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-TRS-DB-DST", "rule_destination_expanded": "grp-TRS-DB-DST\n  svr-10.27.75.30\n  svr-10.27.75.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-209", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-NP-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.27.76.50", "rule_source_expanded": "svr-10.27.76.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.77.0-10.27.77.255", "rule_destination_expanded": "rng-10.27.77.0-10.27.77.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-210", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-PP-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.27.122.0/24", "rule_source_expanded": "svr-10.27.122.10\nsvr-10.27.122.11\nsvr-10.27.122.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.27.123.0/24", "rule_destination_expanded": "svr-10.27.123.20\nsvr-10.27.123.21", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-211", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-PP-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-TRS-APP-SRC", "rule_source_expanded": "grp-TRS-APP-SRC\n  svr-10.27.124.10\n  svr-10.27.124.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-TRS-DB-DST", "rule_destination_expanded": "grp-TRS-DB-DST\n  svr-10.27.125.30\n  svr-10.27.125.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-212", "app_id": "TRS", "app_distributed_id": "TRS01", "app_name": "App Chi", "inventory_item": "TRS-DC_LEGACY_C-PP-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.27.126.50", "rule_source_expanded": "svr-10.27.126.50", "rule_source_zone": "Default", "rule_destination": "rng-10.27.127.0-10.27.127.255", "rule_destination_expanded": "rng-10.27.127.0-10.27.127.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_C"},
+    {"id": "LR-213", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-P-01", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "10.25.23.0/24", "rule_source_expanded": "svr-10.25.23.10\nsvr-10.25.23.11\nsvr-10.25.23.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.24.0/24", "rule_destination_expanded": "svr-10.25.24.20\nsvr-10.25.24.21", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-214", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-P-02", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "grp-CCM-APP-SRC", "rule_source_expanded": "grp-CCM-APP-SRC\n  svr-10.25.25.10\n  svr-10.25.25.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-CCM-DB-DST", "rule_destination_expanded": "grp-CCM-DB-DST\n  svr-10.25.26.30\n  svr-10.25.26.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-215", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-P-03", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Accept", "rule_source": "svr-10.25.27.50", "rule_source_expanded": "svr-10.25.27.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.28.0-10.25.28.255", "rule_destination_expanded": "rng-10.25.28.0-10.25.28.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-216", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-P-04", "policy_name": "FW-DMZ-INGRESS", "rule_action": "Drop", "rule_source": "10.25.29.100", "rule_source_expanded": "svr-10.25.29.100", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.30.200", "rule_destination_expanded": "svr-10.25.30.200", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-217", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-NP-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.25.73.0/24", "rule_source_expanded": "svr-10.25.73.10\nsvr-10.25.73.11\nsvr-10.25.73.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.74.0/24", "rule_destination_expanded": "svr-10.25.74.20\nsvr-10.25.74.21", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-218", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-NP-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-CCM-APP-SRC", "rule_source_expanded": "grp-CCM-APP-SRC\n  svr-10.25.75.10\n  svr-10.25.75.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-CCM-DB-DST", "rule_destination_expanded": "grp-CCM-DB-DST\n  svr-10.25.76.30\n  svr-10.25.76.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-219", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-NP-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.25.77.50", "rule_source_expanded": "svr-10.25.77.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.78.0-10.25.78.255", "rule_destination_expanded": "rng-10.25.78.0-10.25.78.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-220", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-PP-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.25.123.0/24", "rule_source_expanded": "svr-10.25.123.10\nsvr-10.25.123.11\nsvr-10.25.123.12", "rule_source_zone": "PCI CAN", "rule_destination": "10.25.124.0/24", "rule_destination_expanded": "svr-10.25.124.20\nsvr-10.25.124.21", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-221", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-PP-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-CCM-APP-SRC", "rule_source_expanded": "grp-CCM-APP-SRC\n  svr-10.25.125.10\n  svr-10.25.125.11", "rule_source_zone": "PCI CAN", "rule_destination": "grp-CCM-DB-DST", "rule_destination_expanded": "grp-CCM-DB-DST\n  svr-10.25.126.30\n  svr-10.25.126.31", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-222", "app_id": "CCM", "app_distributed_id": "CCM01", "app_name": "App Psi", "inventory_item": "CCM-DC_LEGACY_A-PP-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.25.127.50", "rule_source_expanded": "svr-10.25.127.50", "rule_source_zone": "Default", "rule_destination": "rng-10.25.128.0-10.25.128.255", "rule_destination_expanded": "rng-10.25.128.0-10.25.128.255", "rule_destination_zone": "PCI CAN", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_A"},
+    {"id": "LR-223", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-P-01", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "10.30.24.0/24", "rule_source_expanded": "svr-10.30.24.10\nsvr-10.30.24.11\nsvr-10.30.24.12", "rule_source_zone": "Default", "rule_destination": "10.30.25.0/24", "rule_destination_expanded": "svr-10.30.25.20\nsvr-10.30.25.21", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-224", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-P-02", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "grp-LON-APP-SRC", "rule_source_expanded": "grp-LON-APP-SRC\n  svr-10.30.26.10\n  svr-10.30.26.11", "rule_source_zone": "Default", "rule_destination": "grp-LON-DB-DST", "rule_destination_expanded": "grp-LON-DB-DST\n  svr-10.30.27.30\n  svr-10.30.27.31", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-225", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-P-03", "policy_name": "FW-DB-ACCESS", "rule_action": "Accept", "rule_source": "svr-10.30.28.50", "rule_source_expanded": "svr-10.30.28.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.29.0-10.30.29.255", "rule_destination_expanded": "rng-10.30.29.0-10.30.29.255", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-226", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-P-04", "policy_name": "FW-DB-ACCESS", "rule_action": "Drop", "rule_source": "10.30.30.100", "rule_source_expanded": "svr-10.30.30.100", "rule_source_zone": "Default", "rule_destination": "10.30.31.200", "rule_destination_expanded": "svr-10.30.31.200", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-227", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-NP-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.30.74.0/24", "rule_source_expanded": "svr-10.30.74.10\nsvr-10.30.74.11\nsvr-10.30.74.12", "rule_source_zone": "Default", "rule_destination": "10.30.75.0/24", "rule_destination_expanded": "svr-10.30.75.20\nsvr-10.30.75.21", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-228", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-NP-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-LON-APP-SRC", "rule_source_expanded": "grp-LON-APP-SRC\n  svr-10.30.76.10\n  svr-10.30.76.11", "rule_source_zone": "Default", "rule_destination": "grp-LON-DB-DST", "rule_destination_expanded": "grp-LON-DB-DST\n  svr-10.30.77.30\n  svr-10.30.77.31", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-229", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-NP-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.30.78.50", "rule_source_expanded": "svr-10.30.78.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.79.0-10.30.79.255", "rule_destination_expanded": "rng-10.30.79.0-10.30.79.255", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-230", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-PP-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.30.124.0/24", "rule_source_expanded": "svr-10.30.124.10\nsvr-10.30.124.11\nsvr-10.30.124.12", "rule_source_zone": "Default", "rule_destination": "10.30.125.0/24", "rule_destination_expanded": "svr-10.30.125.20\nsvr-10.30.125.21", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-231", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-PP-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-LON-APP-SRC", "rule_source_expanded": "grp-LON-APP-SRC\n  svr-10.30.126.10\n  svr-10.30.126.11", "rule_source_zone": "Default", "rule_destination": "grp-LON-DB-DST", "rule_destination_expanded": "grp-LON-DB-DST\n  svr-10.30.127.30\n  svr-10.30.127.31", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-232", "app_id": "LON", "app_distributed_id": "LON01", "app_name": "App Omega", "inventory_item": "LON-DC_LEGACY_F-PP-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.30.128.50", "rule_source_expanded": "svr-10.30.128.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.129.0-10.30.129.255", "rule_destination_expanded": "rng-10.30.129.0-10.30.129.255", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-233", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-P-01", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "10.28.25.0/24", "rule_source_expanded": "svr-10.28.25.10\nsvr-10.28.25.11\nsvr-10.28.25.12", "rule_source_zone": "Default", "rule_destination": "10.28.26.0/24", "rule_destination_expanded": "svr-10.28.26.20\nsvr-10.28.26.21", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-234", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-P-02", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "grp-BRK-APP-SRC", "rule_source_expanded": "grp-BRK-APP-SRC\n  svr-10.28.27.10\n  svr-10.28.27.11", "rule_source_zone": "Default", "rule_destination": "grp-BRK-DB-DST", "rule_destination_expanded": "grp-BRK-DB-DST\n  svr-10.28.28.30\n  svr-10.28.28.31", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-235", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-P-03", "policy_name": "FW-API-GATEWAY", "rule_action": "Accept", "rule_source": "svr-10.28.29.50", "rule_source_expanded": "svr-10.28.29.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.30.0-10.28.30.255", "rule_destination_expanded": "rng-10.28.30.0-10.28.30.255", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-236", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-NP-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.28.75.0/24", "rule_source_expanded": "svr-10.28.75.10\nsvr-10.28.75.11\nsvr-10.28.75.12", "rule_source_zone": "Default", "rule_destination": "10.28.76.0/24", "rule_destination_expanded": "svr-10.28.76.20\nsvr-10.28.76.21", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-237", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-NP-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-BRK-APP-SRC", "rule_source_expanded": "grp-BRK-APP-SRC\n  svr-10.28.77.10\n  svr-10.28.77.11", "rule_source_zone": "Default", "rule_destination": "grp-BRK-DB-DST", "rule_destination_expanded": "grp-BRK-DB-DST\n  svr-10.28.78.30\n  svr-10.28.78.31", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-238", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-NP-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.28.79.50", "rule_source_expanded": "svr-10.28.79.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.80.0-10.28.80.255", "rule_destination_expanded": "rng-10.28.80.0-10.28.80.255", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-239", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-PP-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.28.125.0/24", "rule_source_expanded": "svr-10.28.125.10\nsvr-10.28.125.11\nsvr-10.28.125.12", "rule_source_zone": "Default", "rule_destination": "10.28.126.0/24", "rule_destination_expanded": "svr-10.28.126.20\nsvr-10.28.126.21", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-240", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-PP-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-BRK-APP-SRC", "rule_source_expanded": "grp-BRK-APP-SRC\n  svr-10.28.127.10\n  svr-10.28.127.11", "rule_source_zone": "Default", "rule_destination": "grp-BRK-DB-DST", "rule_destination_expanded": "grp-BRK-DB-DST\n  svr-10.28.128.30\n  svr-10.28.128.31", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-241", "app_id": "BRK", "app_distributed_id": "BRK01", "app_name": "App Alpha2", "inventory_item": "BRK-DC_LEGACY_D-PP-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.28.129.50", "rule_source_expanded": "svr-10.28.129.50", "rule_source_zone": "Default", "rule_destination": "rng-10.28.130.0-10.28.130.255", "rule_destination_expanded": "rng-10.28.130.0-10.28.130.255", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_D"},
+    {"id": "LR-242", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-P-01", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "10.29.1.0/24", "rule_source_expanded": "svr-10.29.1.10\nsvr-10.29.1.11\nsvr-10.29.1.12", "rule_source_zone": "Default", "rule_destination": "10.29.2.0/24", "rule_destination_expanded": "svr-10.29.2.20\nsvr-10.29.2.21", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-243", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-P-02", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "grp-AGW-APP-SRC", "rule_source_expanded": "grp-AGW-APP-SRC\n  svr-10.29.3.10\n  svr-10.29.3.11", "rule_source_zone": "Default", "rule_destination": "grp-AGW-DB-DST", "rule_destination_expanded": "grp-AGW-DB-DST\n  svr-10.29.4.30\n  svr-10.29.4.31", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-244", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-P-03", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Accept", "rule_source": "svr-10.29.5.50", "rule_source_expanded": "svr-10.29.5.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.6.0-10.29.6.255", "rule_destination_expanded": "rng-10.29.6.0-10.29.6.255", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-245", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-P-04", "policy_name": "FW-BATCH-PROCESS", "rule_action": "Drop", "rule_source": "10.29.7.100", "rule_source_expanded": "svr-10.29.7.100", "rule_source_zone": "Default", "rule_destination": "10.29.8.200", "rule_destination_expanded": "svr-10.29.8.200", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-246", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-NP-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.29.51.0/24", "rule_source_expanded": "svr-10.29.51.10\nsvr-10.29.51.11\nsvr-10.29.51.12", "rule_source_zone": "Default", "rule_destination": "10.29.52.0/24", "rule_destination_expanded": "svr-10.29.52.20\nsvr-10.29.52.21", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-247", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-NP-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-AGW-APP-SRC", "rule_source_expanded": "grp-AGW-APP-SRC\n  svr-10.29.53.10\n  svr-10.29.53.11", "rule_source_zone": "Default", "rule_destination": "grp-AGW-DB-DST", "rule_destination_expanded": "grp-AGW-DB-DST\n  svr-10.29.54.30\n  svr-10.29.54.31", "rule_destination_zone": "Default", "rule_service": "tcp/8080", "rule_service_expanded": "tcp/8080", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-248", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-NP-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.29.55.50", "rule_source_expanded": "svr-10.29.55.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.56.0-10.29.56.255", "rule_destination_expanded": "rng-10.29.56.0-10.29.56.255", "rule_destination_zone": "Default", "rule_service": "tcp/9090", "rule_service_expanded": "tcp/9090", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-249", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-PP-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.29.101.0/24", "rule_source_expanded": "svr-10.29.101.10\nsvr-10.29.101.11\nsvr-10.29.101.12", "rule_source_zone": "Default", "rule_destination": "10.29.102.0/24", "rule_destination_expanded": "svr-10.29.102.20\nsvr-10.29.102.21", "rule_destination_zone": "Default", "rule_service": "tcp/6379", "rule_service_expanded": "tcp/6379", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-250", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-PP-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-AGW-APP-SRC", "rule_source_expanded": "grp-AGW-APP-SRC\n  svr-10.29.103.10\n  svr-10.29.103.11", "rule_source_zone": "Default", "rule_destination": "grp-AGW-DB-DST", "rule_destination_expanded": "grp-AGW-DB-DST\n  svr-10.29.104.30\n  svr-10.29.104.31", "rule_destination_zone": "Default", "rule_service": "tcp/27017", "rule_service_expanded": "tcp/27017", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-251", "app_id": "AGW", "app_distributed_id": "AGW01", "app_name": "App Beta2", "inventory_item": "AGW-DC_LEGACY_E-PP-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.29.105.50", "rule_source_expanded": "svr-10.29.105.50", "rule_source_zone": "Default", "rule_destination": "rng-10.29.106.0-10.29.106.255", "rule_destination_expanded": "rng-10.29.106.0-10.29.106.255", "rule_destination_zone": "Default", "rule_service": "tcp/22", "rule_service_expanded": "tcp/22", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_E"},
+    {"id": "LR-252", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-P-01", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "10.30.2.0/24", "rule_source_expanded": "svr-10.30.2.10\nsvr-10.30.2.11\nsvr-10.30.2.12", "rule_source_zone": "Default", "rule_destination": "10.30.3.0/24", "rule_destination_expanded": "svr-10.30.3.20\nsvr-10.30.3.21", "rule_destination_zone": "Default", "rule_service": "tcp/3389", "rule_service_expanded": "tcp/3389", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-253", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-P-02", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "grp-SOC-APP-SRC", "rule_source_expanded": "grp-SOC-APP-SRC\n  svr-10.30.4.10\n  svr-10.30.4.11", "rule_source_zone": "Default", "rule_destination": "grp-SOC-DB-DST", "rule_destination_expanded": "grp-SOC-DB-DST\n  svr-10.30.5.30\n  svr-10.30.5.31", "rule_destination_zone": "Default", "rule_service": "tcp/1433", "rule_service_expanded": "tcp/1433", "is_standard": True, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-254", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-P-03", "policy_name": "FW-MONITORING", "rule_action": "Accept", "rule_source": "svr-10.30.6.50", "rule_source_expanded": "svr-10.30.6.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.7.0-10.30.7.255", "rule_destination_expanded": "rng-10.30.7.0-10.30.7.255", "rule_destination_zone": "Default", "rule_service": "tcp/5672", "rule_service_expanded": "tcp/5672", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-255", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-P-04", "policy_name": "FW-MONITORING", "rule_action": "Drop", "rule_source": "10.30.8.100", "rule_source_expanded": "svr-10.30.8.100", "rule_source_zone": "Default", "rule_destination": "10.30.9.200", "rule_destination_expanded": "svr-10.30.9.200", "rule_destination_zone": "Default", "rule_service": "tcp/9200", "rule_service_expanded": "tcp/9200", "is_standard": False, "migration_status": "Not Started", "environment": "Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-256", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-NP-01", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "10.30.52.0/24", "rule_source_expanded": "svr-10.30.52.10\nsvr-10.30.52.11\nsvr-10.30.52.12", "rule_source_zone": "Default", "rule_destination": "10.30.53.0/24", "rule_destination_expanded": "svr-10.30.53.20\nsvr-10.30.53.21", "rule_destination_zone": "Default", "rule_service": "tcp/443", "rule_service_expanded": "tcp/443", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-257", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-NP-02", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "grp-SOC-APP-SRC", "rule_source_expanded": "grp-SOC-APP-SRC\n  svr-10.30.54.10\n  svr-10.30.54.11", "rule_source_zone": "Default", "rule_destination": "grp-SOC-DB-DST", "rule_destination_expanded": "grp-SOC-DB-DST\n  svr-10.30.55.30\n  svr-10.30.55.31", "rule_destination_zone": "Default", "rule_service": "tcp/8443", "rule_service_expanded": "tcp/8443", "is_standard": True, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-258", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-NP-03", "policy_name": "FW-PROD-ALLOW", "rule_action": "Accept", "rule_source": "svr-10.30.56.50", "rule_source_expanded": "svr-10.30.56.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.57.0-10.30.57.255", "rule_destination_expanded": "rng-10.30.57.0-10.30.57.255", "rule_destination_zone": "Default", "rule_service": "tcp/1521", "rule_service_expanded": "tcp/1521", "is_standard": False, "migration_status": "Not Started", "environment": "Non-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-259", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-PP-01", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "10.30.102.0/24", "rule_source_expanded": "svr-10.30.102.10\nsvr-10.30.102.11\nsvr-10.30.102.12", "rule_source_zone": "Default", "rule_destination": "10.30.103.0/24", "rule_destination_expanded": "svr-10.30.103.20\nsvr-10.30.103.21", "rule_destination_zone": "Default", "rule_service": "tcp/3306", "rule_service_expanded": "tcp/3306", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-260", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-PP-02", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "grp-SOC-APP-SRC", "rule_source_expanded": "grp-SOC-APP-SRC\n  svr-10.30.104.10\n  svr-10.30.104.11", "rule_source_zone": "Default", "rule_destination": "grp-SOC-DB-DST", "rule_destination_expanded": "grp-SOC-DB-DST\n  svr-10.30.105.30\n  svr-10.30.105.31", "rule_destination_zone": "Default", "rule_service": "tcp/5432", "rule_service_expanded": "tcp/5432", "is_standard": True, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+    {"id": "LR-261", "app_id": "SOC", "app_distributed_id": "SOC01", "app_name": "App Gamma2", "inventory_item": "SOC-DC_LEGACY_F-PP-03", "policy_name": "FW-PROD-RESTRICTED", "rule_action": "Accept", "rule_source": "svr-10.30.106.50", "rule_source_expanded": "svr-10.30.106.50", "rule_source_zone": "Default", "rule_destination": "rng-10.30.107.0-10.30.107.255", "rule_destination_expanded": "rng-10.30.107.0-10.30.107.255", "rule_destination_zone": "Default", "rule_service": "tcp/80", "rule_service_expanded": "tcp/80", "is_standard": False, "migration_status": "Not Started", "environment": "Pre-Production", "legacy_dc": "DC_LEGACY_F"},
+]
+
+SEED_ENVIRONMENTS = [
+    {"name": "Production", "code": "PROD", "description": "Live production environment"},
+    {"name": "Non-Production", "code": "NON-PROD", "description": "Shared non-production for testing"},
+    {"name": "Pre-Production", "code": "PRE-PROD", "description": "Staging environment"},
+    {"name": "Development", "code": "DEV", "description": "Development and sandbox"},
+    {"name": "Staging", "code": "STG", "description": "Final validation before production"},
+    {"name": "DR", "code": "DR", "description": "Disaster recovery"},
+]
+
+SEED_PREDEFINED_DESTINATIONS = [
+    {"name": "grp-DIG-NH03-CDE-WEB", "security_zone": "CDE", "description": "Web App Servers",
+     "friendly_name": "WEB APPS - PROD", "ip": "10.2.1.0/24", "port": "TCP 8443", "nh": "NH03"},
+    {"name": "grp-ENT-NH05-GEN-APP", "security_zone": "GEN", "description": "Enterprise App Servers",
+     "friendly_name": "ENTERPRISE APPS", "ip": "10.4.1.0/24", "port": "TCP 8443", "nh": "NH05"},
+    {"name": "grp-SHR-NH13-GEN-SVC", "security_zone": "GEN", "description": "Shared Platform Services",
+     "friendly_name": "SHARED PLATFORMS", "ip": "10.100.1.0/24", "port": "TCP 8080", "nh": "NH13"},
+    {"name": "grp-EXT-NH14-DMZ-API", "security_zone": "DMZ", "description": "External API Gateway",
+     "friendly_name": "EXTERNAL APIS", "ip": "10.70.2.0/24", "port": "TCP 443", "nh": "NH14"},
+    {"name": "grp-CBK-NH02-CDE-DB", "security_zone": "CDE", "description": "Primary DB Cluster",
+     "friendly_name": "PRIMARY DATABASE", "ip": "10.50.1.0/24", "port": "TCP 1521", "nh": "NH02"},
+    {"name": "grp-PAY-NH07-CDE-DB", "security_zone": "CDE", "description": "Transaction Database",
+     "friendly_name": "TRANSACTION DATABASE", "ip": "10.6.2.0/24", "port": "TCP 1521", "nh": "NH07"},
+    {"name": "grp-DMZ-NH14-DMZ-WEB", "security_zone": "DMZ", "description": "DMZ Web Services",
+     "friendly_name": "DMZ WEB SERVICES", "ip": "10.70.1.0/24", "port": "TCP 443", "nh": "NH14"},
+    {"name": "grp-MGT-NH01-MGT-MON", "security_zone": "MGT", "description": "Management & Monitoring",
+     "friendly_name": "MANAGEMENT PLANE", "ip": "10.200.1.0/24", "port": "TCP 8443", "nh": "NH01"},
+    {"name": "grp-WHL-NH06-CDE-APP", "security_zone": "CDE", "description": "Enterprise App Servers Group",
+     "friendly_name": "ENTERPRISE SYSTEMS", "ip": "10.5.1.0/24", "port": "TCP 8443", "nh": "NH06"},
+    {"name": "grp-DAT-NH08-GEN-APP", "security_zone": "GEN", "description": "Data Processing App Servers",
+     "friendly_name": "DATA PROCESSING", "ip": "10.7.1.0/24", "port": "TCP 8443", "nh": "NH08"},
+]
+
+SEED_NAMING_STANDARDS = {
+    "org_name": "Network Firewall Studio",
+    "prefixes": {
+        "grp": {"description": "Group (collection of servers)", "pattern": "grp-{AppID}-{NH}-{SZ}-{Subtype}"},
+        "svr": {"description": "Individual server/IP", "pattern": "svr-{AppID}-{NH}-{SZ}-{ServerName}"},
+        "rng": {"description": "Subnet/IP range", "pattern": "rng-{AppID}-{NH}-{SZ}-{Descriptor}"},
+    },
+    "subtypes": {
+        "APP": "Application Servers", "WEB": "Web Servers", "DB": "Database Servers",
+        "BAT": "Batch Servers", "MQ": "Message Queue", "API": "API Servers",
+        "LB": "Load Balancers", "MON": "Monitoring", "MFR": "Mainframe", "SVC": "Services",
+    },
+    "enforcement_rules": [
+        "All firewall rules MUST be group-to-group by default",
+        "Non-group rules require security exception approval",
+        "All names must follow naming convention with valid NH, SZ, and Subtype",
+        "Legacy names must be migrated to standards-compliant names",
+    ],
+}
+
+# =====================================================================
+# THREE-PART POLICY MATRIX (from NGDC reference)
+# "Blocked" means a new Firewall Request is required to open the flow
+# =====================================================================
+
+# --- 1) Heritage Data Center Matrix ---
+# Legacy zone-to-NGDC zone migration rules
+SEED_HERITAGE_DC_MATRIX = [
+    {"heritage_dc": "Any", "heritage_zone": "Default", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "Standard", "action": "Permitted",
+     "reason": "Default heritage zone maps to Standard in prod NGDC"},
+    {"heritage_dc": "Any", "heritage_zone": "Default", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "Standard", "action": "Permitted (Exception)",
+     "reason": "Default heritage zone to Non-Prod Standard requires exception approval"},
+    {"heritage_dc": "Any", "heritage_zone": "PAA", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "reason": "PAA to PAA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "PAA", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "reason": "PAA to Non-Prod PAA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "PCI CAN", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "reason": "PCI CAN to CDE is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "PCI CAN", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "reason": "PCI CAN to Non-Prod CDE is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to CPA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to Non-Prod CPA is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Prod",
+     "new_dc_zone": "3PY", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to 3PY is blocked by default; submit a firewall request to open"},
+    {"heritage_dc": "Any", "heritage_zone": "CAN", "new_dc": "Any", "prod_nonprod": "Non Prod",
+     "new_dc_zone": "3PY", "action": "Blocked - Firewall Request Required",
+     "reason": "CAN to Non-Prod 3PY is blocked by default; submit a firewall request to open"},
+]
+
+# --- 2) NGDC Prod Rules Matrix ---
+# DC / Neighbourhood / Security Zone based permit/block rules
+SEED_NGDC_PROD_MATRIX = [
+    {"src_dc": "Any", "src_nh": "Any", "src_sz": "GEN", "dst_dc": "Any", "dst_nh": "Any", "dst_sz": "GEN",
+     "action": "Permitted", "reason": "GEN-to-GEN traffic is permitted across all DCs and NHs"},
+    {"src_dc": "Same", "src_nh": "Same", "src_sz": "Same", "dst_dc": "Same", "dst_nh": "Same", "dst_sz": "Same",
+     "action": "Permitted", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"src_dc": "Different", "src_nh": "Same", "src_sz": "Same", "dst_dc": "Different", "dst_nh": "Same", "dst_sz": "Same",
+     "action": "Permitted", "reason": "Different DC + Same NH + Same SZ = Permitted (cross-DC HA)"},
+    {"src_dc": "Same", "src_nh": "Same", "src_sz": "Different", "dst_dc": "Same", "dst_nh": "Same", "dst_sz": "Different",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Same DC + Same NH + Different SZ = Blocked; submit a firewall request to open"},
+    {"src_dc": "Same", "src_nh": "Different", "src_sz": "Same", "dst_dc": "Same", "dst_nh": "Different", "dst_sz": "Same",
+     "action": "Permitted", "reason": "Same DC + Different NH + Same SZ = Permitted"},
+    {"src_dc": "Different", "src_nh": "Different", "src_sz": "Same", "dst_dc": "Different", "dst_nh": "Different", "dst_sz": "Same",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Different DC + Different NH + Same SZ = Blocked; submit a firewall request to open"},
+    {"src_dc": "Same", "src_nh": "Non-Prod to PROD", "src_sz": "Any", "dst_dc": "Same", "dst_nh": "Non-Prod to PROD", "dst_sz": "Any",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod to PROD traffic is blocked; submit a firewall request to open"},
+]
+
+# --- 3) Non-Prod Rules Matrix ---
+# Source zone to destination zone rules for non-production
+SEED_NONPROD_MATRIX = [
+    # Non-Prod to Non-Prod (same environment)
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UGEN",
+     "action": "Permitted", "reason": "Non-Prod UGEN to Non-Prod UGEN = Permitted"},
+    {"dc": "Any", "source_zone": "USTD", "dest_zone": "USTD",
+     "action": "Permitted", "reason": "Non-Prod USTD to Non-Prod USTD = Permitted"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "USTD",
+     "action": "Permitted", "reason": "Non-Prod UGEN to Non-Prod USTD = Permitted"},
+    {"dc": "Any", "source_zone": "USTD", "dest_zone": "UGEN",
+     "action": "Permitted", "reason": "Non-Prod USTD to Non-Prod UGEN = Permitted"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "UCCS",
+     "action": "Permitted", "reason": "Non-Prod UCCS to Non-Prod UCCS = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "UPAA",
+     "action": "Permitted", "reason": "Non-Prod UPAA to Non-Prod UPAA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "UCPA",
+     "action": "Permitted", "reason": "Non-Prod UCPA to Non-Prod UCPA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "UCDE",
+     "action": "Permitted", "reason": "Non-Prod UCDE to Non-Prod UCDE = Permitted (same SZ)"},
+    # Non-Prod to Non-Prod cross-SZ (Blocked)
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UCCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Non-Prod UCCS = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UPAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Non-Prod UPAA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UCPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Non-Prod UCPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "UCDE",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Non-Prod UCDE = Blocked; different security zones"},
+    # Non-Prod to Pre-Prod (cross-environment)
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UGEN", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UGEN to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "USTD", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod USTD to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCCS to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCCS to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCCS", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCCS to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UPAA to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UPAA to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UPAA", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UPAA to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCPA to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCPA to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCPA", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCPA to Pre-Prod CPA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCDE to Pre-Prod PAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCDE to Pre-Prod CCS = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "UCDE", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Non-Prod UCDE to Pre-Prod CPA = Blocked; cross-environment"},
+]
+
+# --- 4) Pre-Prod Rules Matrix ---
+# Pre-Prod environment has its own SZ rules (maps to Prod SZ names but separate environment)
+SEED_PREPROD_MATRIX = [
+    # Pre-Prod to Pre-Prod (same environment)
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "GEN",
+     "action": "Permitted", "reason": "Pre-Prod GEN to Pre-Prod GEN = Permitted"},
+    {"dc": "Any", "source_zone": "STD", "dest_zone": "STD",
+     "action": "Permitted", "reason": "Pre-Prod STD to Pre-Prod STD = Permitted"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "STD",
+     "action": "Permitted", "reason": "Pre-Prod GEN to Pre-Prod STD = Permitted"},
+    {"dc": "Any", "source_zone": "STD", "dest_zone": "GEN",
+     "action": "Permitted", "reason": "Pre-Prod STD to Pre-Prod GEN = Permitted"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "PAA",
+     "action": "Permitted", "reason": "Pre-Prod PAA to Pre-Prod PAA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "CCS",
+     "action": "Permitted", "reason": "Pre-Prod CCS to Pre-Prod CCS = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "CPA", "dest_zone": "CPA",
+     "action": "Permitted", "reason": "Pre-Prod CPA to Pre-Prod CPA = Permitted (same SZ)"},
+    {"dc": "Any", "source_zone": "CDE", "dest_zone": "CDE",
+     "action": "Permitted", "reason": "Pre-Prod CDE to Pre-Prod CDE = Permitted (same SZ)"},
+    # Pre-Prod cross-SZ (Blocked)
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "PAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod PAA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod CCS = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod CPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "CDE",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Pre-Prod CDE = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "CCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod PAA to Pre-Prod CCS = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod PAA to Pre-Prod CPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "CPA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod CCS to Pre-Prod CPA = Blocked; different security zones"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "CDE",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod CCS to Pre-Prod CDE = Blocked; different security zones"},
+    # Pre-Prod to Non-Prod (cross-environment)
+    {"dc": "Any", "source_zone": "GEN", "dest_zone": "UGEN",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod GEN to Non-Prod UGEN = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "PAA", "dest_zone": "UPAA",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod PAA to Non-Prod UPAA = Blocked; cross-environment"},
+    {"dc": "Any", "source_zone": "CCS", "dest_zone": "UCCS",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod CCS to Non-Prod UCCS = Blocked; cross-environment"},
+    # Pre-Prod to Prod (cross-environment - always blocked)
+    {"dc": "Any", "source_zone": "Any", "dest_zone": "Any",
+     "action": "Blocked - Firewall Request Required",
+     "reason": "Pre-Prod to Prod traffic is blocked; submit a firewall request to open",
+     "cross_env": "Pre-Prod to Prod"},
+]
+
+# Combined policy matrix for backward compatibility (flat list used by API)
+SEED_POLICY_MATRIX = [
+    # Heritage DC rules (flattened)
+    {"source_zone": "Default", "dest_zone": "Standard", "action": "Permitted",
+     "matrix_type": "Heritage DC", "reason": "Heritage Default to NGDC Standard = Permitted"},
+    {"source_zone": "PAA", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage PAA to NGDC PAA = Blocked; submit firewall request to open"},
+    {"source_zone": "PCI_CAN", "dest_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage PCI CAN to NGDC CDE = Blocked; submit firewall request to open"},
+    {"source_zone": "CAN", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage CAN to NGDC CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "CAN", "dest_zone": "3PY", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Heritage DC", "reason": "Heritage CAN to NGDC 3PY = Blocked; submit firewall request to open"},
+    # NGDC Prod rules (flattened)
+    {"source_zone": "GEN", "dest_zone": "GEN", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "GEN-to-GEN across all DCs/NHs = Permitted"},
+    {"source_zone": "CCS", "dest_zone": "CCS", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"source_zone": "CDE", "dest_zone": "CDE", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"source_zone": "CPA", "dest_zone": "CPA", "action": "Permitted",
+     "matrix_type": "NGDC Prod", "reason": "Same DC + Same NH + Same SZ = Permitted"},
+    {"source_zone": "CCS", "dest_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CCS", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CDE", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CDE", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CPA", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    {"source_zone": "CPA", "dest_zone": "CDE", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "NGDC Prod", "reason": "Same NH + Different SZ = Blocked; submit firewall request to open"},
+    # Non-Prod rules (flattened)
+    {"source_zone": "UGEN", "dest_zone": "UGEN", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "USTD", "dest_zone": "USTD", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "UGEN", "dest_zone": "USTD", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "USTD", "dest_zone": "UGEN", "action": "Permitted",
+     "matrix_type": "Non-Prod", "reason": "UGEN/USTD to UGEN/USTD = Permitted"},
+    {"source_zone": "UGEN", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UGEN to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UGEN", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UGEN to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UGEN", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UGEN to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCCS", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCCS to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCCS", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCCS to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCCS", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCCS to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UPAA", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UPAA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UPAA", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UPAA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UPAA", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UPAA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCPA", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCPA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCPA", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCPA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCPA", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCPA to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCDE", "dest_zone": "PAA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCDE to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCDE", "dest_zone": "CCS", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCDE to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+    {"source_zone": "UCDE", "dest_zone": "CPA", "action": "Blocked - Firewall Request Required",
+     "matrix_type": "Non-Prod", "reason": "UCDE to PAA/CCS/CPA = Blocked; submit firewall request to open"},
+]
+
+SEED_ORG_CONFIG = {
+    "org_name": "Acme Corporation",
+    "org_code": "ACME",
+    "servicenow_instance": "https://acme.service-now.com",
+    "servicenow_api_path": "/api/now/table/change_request",
+    "gitops_repo": "https://github.com/acme-network/firewall-policies.git",
+    "gitops_branch": "main",
+    "approval_workflow": "two-tier",
+    "auto_certify_days": 365,
+    "max_rule_expiry_days": 730,
+    "notification_email": "firewall-ops@example.com",
+    "notification_slack_channel": "#firewall-changes",
+    "default_environment": "Production",
+    "default_datacenter": "ALPHA_NGDC",
+    "rule_id_prefix": "R-",
+    "rule_id_start": 3000,
+    "migration_id_prefix": "mig-",
+    "chg_id_prefix": "CHG",
+    "chg_id_start": 10000,
+}
+
+
+def _build_seed_rules() -> list[dict[str, Any]]:
+    rules: list[dict[str, Any]] = []
+    base = datetime.utcnow()
+    defs = [
+        # --- Original 7 rules ---
+        ("R-3001", "grp-CRM-NH02-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
+         "App Alpha to Primary DB", "CRM", "Deployed", True, -30),
+        ("R-3002", "grp-DIG-NH03-CDE-WEB", "CDE", "grp-PAY-NH07-CDE-APP", "CDE", "TCP 8443",
+         "App Delta to Transaction Processing", "DIG", "Certified", True, -15),
+        ("R-3003", "grp-ENT-NH05-GEN-APP", "GEN", "grp-SHR-NH13-GEN-SVC", "GEN", "TCP 8080",
+         "App Zeta to Shared Services", "ENT", "Pending Review", True, -5),
+        ("R-3004", "grp-WHL-NH06-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
+         "App Theta to Primary DB", "WHL", "Draft", True, -1),
+        ("R-3005", "grp-PAY-NH07-CDE-APP", "CDE", "grp-EXT-NH14-DMZ-API", "DMZ", "TCP 443",
+         "App Epsilon to External API", "PAY", "Certified", False, -20),
+        ("R-3006", "grp-DAT-NH08-GEN-APP", "GEN", "grp-ENT-NH05-GEN-APP", "GEN", "TCP 8443",
+         "App Eta to Enterprise", "SHR", "Deployed", True, -45),
+        ("R-3007", "192.168.1.10", "GEN", "grp-SHR-NH13-GEN-SVC", "GEN", "TCP 8443",
+         "Single IP to Shared Services", "SHR", "Pending Review", False, -2),
+        # --- HRM (HR Management) rules ---
+        ("R-3008", "grp-HRM-NH01-GEN-WEB", "GEN", "grp-HRM-NH01-GEN-APP", "GEN", "TCP 8443",
+         "App Nu Web to App Tier", "HRM", "Deployed", True, -90),
+        ("R-3009", "grp-HRM-NH01-GEN-APP", "GEN", "grp-HRM-NH01-GEN-DB", "GEN", "TCP 5432",
+         "App Nu App to Database", "HRM", "Deployed", True, -90),
+        ("R-3010", "grp-HRM-NH01-GEN-BAT", "GEN", "grp-HRM-NH01-GEN-DB", "GEN", "TCP 5432",
+         "App Nu Batch to DB", "HRM", "Certified", True, -60),
+        # --- TRD (Trading Platform) rules ---
+        ("R-3011", "grp-TRD-NH06-CDE-WEB", "CDE", "grp-TRD-NH06-CDE-APP", "CDE", "TCP 8443",
+         "App Xi Web to App Tier", "TRD", "Deployed", True, -120),
+        ("R-3012", "grp-TRD-NH06-CDE-APP", "CDE", "grp-TRD-NH06-CDE-DB", "CDE", "TCP 1521",
+         "App Xi App to DB", "TRD", "Deployed", True, -120),
+        ("R-3013", "grp-TRD-NH06-CDE-APP", "CDE", "grp-TRD-NH06-CDE-MQ", "CDE", "TCP 1414",
+         "App Xi App to MQ Broker", "TRD", "Certified", True, -80),
+        ("R-3014", "grp-TRD-NH06-CDE-APP", "CDE", "grp-EXT-NH14-DMZ-API", "DMZ", "TCP 443",
+         "App Xi to Market Data Feed", "TRD", "Certified", False, -50),
+        # --- FRD (Fraud Detection) rules ---
+        ("R-3015", "grp-FRD-NH02-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
+         "App Omicron to Primary DB", "FRD", "Deployed", True, -100),
+        ("R-3016", "grp-FRD-NH02-CDE-APP", "CDE", "grp-CCM-NH02-CDE-DB", "CDE", "TCP 1521",
+         "App Omicron to Card DB", "FRD", "Deployed", True, -100),
+        ("R-3017", "grp-FRD-NH02-CDE-APP", "CDE", "grp-AML-NH07-CDE-APP", "CDE", "TCP 8443",
+         "App Omicron to Upsilon Integration", "FRD", "Certified", True, -40),
+        # --- RGM (Regulatory Compliance) rules ---
+        ("R-3018", "grp-RGM-NH11-RST-APP", "RST", "grp-RGM-NH11-RST-DB", "RST", "TCP 1521",
+         "App Pi to Compliance DB", "RGM", "Deployed", True, -150),
+        ("R-3019", "grp-RGM-NH11-RST-BAT", "RST", "grp-RGM-NH11-RST-DB", "RST", "TCP 1521",
+         "App Pi Batch to DB", "RGM", "Certified", True, -75),
+        # --- MBL (Mobile Banking) rules ---
+        ("R-3020", "grp-MBL-NH03-CDE-API", "CDE", "grp-MBL-NH03-CDE-APP", "CDE", "TCP 8443",
+         "App Rho API to App", "MBL", "Deployed", True, -200),
+        ("R-3021", "grp-MBL-NH03-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
+         "App Rho to Primary Banking", "MBL", "Deployed", True, -200),
+        ("R-3022", "grp-MBL-NH03-CDE-APP", "CDE", "grp-PAY-NH07-CDE-APP", "CDE", "TCP 8443",
+         "App Rho to Payments", "MBL", "Certified", True, -100),
+        ("R-3023", "grp-AGW-NH14-DMZ-API", "DMZ", "grp-MBL-NH03-CDE-API", "CDE", "TCP 8443",
+         "API Gateway to App Rho Backend", "MBL", "Pending Review", False, -3),
+        # --- INS (Insurance Platform) rules ---
+        ("R-3024", "grp-INS-NH04-GEN-WEB", "GEN", "grp-INS-NH04-GEN-APP", "GEN", "TCP 8443",
+         "App Sigma Portal to App Tier", "INS", "Deployed", True, -85),
+        ("R-3025", "grp-INS-NH04-GEN-APP", "GEN", "grp-INS-NH04-GEN-DB", "GEN", "TCP 5432",
+         "App Sigma App to Claims DB", "INS", "Deployed", True, -85),
+        # --- TAX (Tax Processing) rules ---
+        ("R-3026", "grp-TAX-NH10-GEN-APP", "GEN", "grp-TAX-NH10-GEN-DB", "GEN", "TCP 5432",
+         "App Tau Engine to DB", "TAX", "Certified", True, -55),
+        ("R-3027", "grp-TAX-NH10-GEN-BAT", "GEN", "grp-TAX-NH10-GEN-DB", "GEN", "TCP 5432",
+         "App Tau Batch to DB", "TAX", "Deployed", True, -110),
+        # --- AML (Anti Money Laundering) rules ---
+        ("R-3028", "grp-AML-NH07-CDE-APP", "CDE", "grp-AML-NH07-CDE-DB", "CDE", "TCP 1521",
+         "App Upsilon Engine to DB", "AML", "Deployed", True, -130),
+        ("R-3029", "grp-AML-NH07-CDE-APP", "CDE", "grp-PAY-NH07-CDE-APP", "CDE", "TCP 8443",
+         "App Upsilon to Transaction Monitoring", "AML", "Certified", True, -60),
+        ("R-3030", "grp-AML-NH07-CDE-BAT", "CDE", "grp-RGM-NH11-RST-APP", "RST", "TCP 8443",
+         "App Upsilon Batch to Reporting", "AML", "Pending Review", False, -7),
+        # --- KYC (Know Your Customer) rules ---
+        ("R-3031", "grp-KYC-NH05-GEN-WEB", "GEN", "grp-KYC-NH05-GEN-APP", "GEN", "TCP 8443",
+         "App Phi Portal to Verification", "KYC", "Deployed", True, -95),
+        ("R-3032", "grp-KYC-NH05-GEN-APP", "GEN", "grp-KYC-NH05-GEN-DB", "GEN", "TCP 5432",
+         "App Phi Engine to Customer DB", "KYC", "Deployed", True, -95),
+        ("R-3033", "grp-KYC-NH05-GEN-APP", "GEN", "grp-EXT-NH14-DMZ-API", "DMZ", "TCP 443",
+         "App Phi to External Verification API", "KYC", "Certified", False, -30),
+        # --- TRS (Treasury Services) rules ---
+        ("R-3034", "grp-TRS-NH06-CDE-APP", "CDE", "grp-TRS-NH06-CDE-DB", "CDE", "TCP 1521",
+         "App Chi to Cash DB", "TRS", "Deployed", True, -140),
+        ("R-3035", "grp-TRS-NH06-CDE-APP", "CDE", "grp-CBK-NH02-CDE-DB", "CDE", "TCP 1521",
+         "App Chi to Primary Ledger", "TRS", "Deployed", True, -140),
+        ("R-3036", "grp-TRS-NH06-CDE-APP", "CDE", "grp-PAY-NH07-CDE-APP", "CDE", "TCP 8443",
+         "App Chi to Wire Transfers", "TRS", "Certified", True, -45),
+        # --- CCM (Credit Card Management) rules ---
+        ("R-3037", "grp-CCM-NH02-CDE-WEB", "CDE", "grp-CCM-NH02-CDE-APP", "CDE", "TCP 8443",
+         "App Psi Portal to App", "CCM", "Deployed", True, -180),
+        ("R-3038", "grp-CCM-NH02-CDE-APP", "CDE", "grp-CCM-NH02-CDE-DB", "CDE", "TCP 1521",
+         "App Psi to Transaction DB", "CCM", "Deployed", True, -180),
+        ("R-3039", "grp-CCM-NH02-CDE-APP", "CDE", "grp-PAY-NH07-CDE-APP", "CDE", "TCP 8443",
+         "App Psi to Payment Auth", "CCM", "Certified", True, -70),
+        ("R-3040", "grp-CCM-NH02-CDE-APP", "CDE", "grp-FRD-NH02-CDE-APP", "CDE", "TCP 8443",
+         "App Psi to Fraud Scoring", "CCM", "Deployed", True, -160),
+        # --- LON (Loan Origination) rules ---
+        ("R-3041", "grp-LON-NH10-GEN-WEB", "GEN", "grp-LON-NH10-GEN-APP", "GEN", "TCP 8443",
+         "App Omega Portal to Engine", "LON", "Deployed", True, -110),
+        ("R-3042", "grp-LON-NH10-GEN-APP", "GEN", "grp-LON-NH10-GEN-DB", "GEN", "TCP 5432",
+         "App Omega to Loan DB", "LON", "Deployed", True, -110),
+        ("R-3043", "grp-LON-NH10-GEN-APP", "GEN", "grp-KYC-NH05-GEN-APP", "GEN", "TCP 8443",
+         "App Omega to Verification", "LON", "Certified", True, -35),
+        # --- BRK (Brokerage Services) rules ---
+        ("R-3044", "grp-BRK-NH04-GEN-WEB", "GEN", "grp-BRK-NH04-GEN-APP", "GEN", "TCP 8443",
+         "App Alpha2 Portal to Engine", "BRK", "Deployed", True, -160),
+        ("R-3045", "grp-BRK-NH04-GEN-APP", "GEN", "grp-BRK-NH04-GEN-DB", "GEN", "TCP 5432",
+         "App Alpha2 to Portfolio DB", "BRK", "Deployed", True, -160),
+        ("R-3046", "grp-BRK-NH04-GEN-APP", "GEN", "grp-EXT-NH14-DMZ-API", "DMZ", "TCP 443",
+         "App Alpha2 to Market Data", "BRK", "Certified", False, -25),
+        # --- AGW (API Gateway) rules ---
+        ("R-3047", "grp-AGW-NH14-DMZ-LB", "DMZ", "grp-AGW-NH14-DMZ-API", "DMZ", "TCP 443",
+         "External LB to API Gateway", "AGW", "Deployed", True, -200),
+        ("R-3048", "grp-AGW-NH14-DMZ-API", "DMZ", "grp-DIG-NH03-CDE-WEB", "CDE", "TCP 8443",
+         "API GW to Web App Backend", "AGW", "Deployed", False, -200),
+        ("R-3049", "grp-AGW-NH14-DMZ-API", "DMZ", "grp-AGW-NH14-DMZ-MON", "DMZ", "TCP 9090",
+         "API GW to Monitoring", "AGW", "Certified", True, -50),
+        # --- SOC (Security Operations Center) rules ---
+        ("R-3050", "grp-SOC-NH01-GEN-APP", "GEN", "grp-SOC-NH01-GEN-DB", "GEN", "TCP 9200",
+         "Log Collector to Search DB", "SOC", "Deployed", True, -250),
+        ("R-3051", "grp-SOC-NH01-GEN-MON", "GEN", "grp-MGT-NH01-MGT-MON", "MGT", "TCP 8443",
+         "Monitoring to Management Plane", "SOC", "Deployed", False, -250),
+        ("R-3052", "grp-SOC-NH01-GEN-APP", "GEN", "grp-SOC-NH01-GEN-APP", "GEN", "TCP 514",
+         "Log Aggregation within Monitoring", "SOC", "Certified", True, -120),
+        # --- Legacy non-standard rules for migration ---
+        ("R-3053", "10.25.10.0/24", "CDE", "10.25.20.0/24", "CDE", "TCP 1521",
+         "Legacy DC Alpha DB Traffic", "CRM", "Deployed", False, -365),
+        ("R-3054", "10.26.5.0/24", "GEN", "10.26.15.0/24", "GEN", "TCP 8443",
+         "Legacy DC Beta App Traffic", "HRM", "Deployed", False, -300),
+        ("R-3055", "10.27.1.0/24", "CDE", "10.27.2.0/24", "CDE", "TCP 443",
+         "Legacy DC Gamma Web to App", "TRD", "Deployed", False, -280),
+        ("R-3056", "10.28.10.0/24", "GEN", "10.28.20.0/24", "GEN", "TCP 5432",
+         "Legacy DC Delta App to DB", "INS", "Deployed", False, -350),
+        ("R-3057", "svr-10.29.1.50", "CDE", "10.29.2.0/24", "CDE", "TCP 1521",
+         "Legacy DC Epsilon Single Server", "FRD", "Deployed", False, -400),
+        ("R-3058", "10.30.5.0/24", "GEN", "10.30.10.0/24", "GEN", "TCP 8080",
+         "Legacy DC Zeta App Traffic", "KYC", "Deployed", False, -320),
+    ]
+
+    # --- Non-Production rules (R-4001 to R-4020) using NP NHs and SZs ---
+    np_defs = [
+        ("R-4001", "grp-CRM-NH12-UCDE-APP", "UCDE", "grp-CBK-NH12-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: CRM App to CBK DB", "CRM", "Deployed", True, -25),
+        ("R-4002", "grp-DIG-NH13-UCDE-WEB", "UCDE", "grp-PAY-NH15-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: DIG Web to PAY App", "DIG", "Certified", True, -12),
+        ("R-4003", "grp-ENT-NH12-UGEN-APP", "UGEN", "grp-SHR-NH15-UGEN-APP", "UGEN", "TCP 8080",
+         "NP: ENT App to SHR Services", "ENT", "Deployed", True, -18),
+        ("R-4004", "grp-HRM-NH12-UGEN-WEB", "UGEN", "grp-HRM-NH12-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: HRM Web to App Tier", "HRM", "Deployed", True, -60),
+        ("R-4005", "grp-HRM-NH12-UGEN-APP", "UGEN", "grp-HRM-NH12-UGEN-DB", "UGEN", "TCP 5432",
+         "NP: HRM App to DB", "HRM", "Deployed", True, -60),
+        ("R-4006", "grp-TRD-NH13-UCDE-WEB", "UCDE", "grp-TRD-NH13-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: TRD Web to App", "TRD", "Deployed", True, -90),
+        ("R-4007", "grp-TRD-NH13-UCDE-APP", "UCDE", "grp-TRD-NH13-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: TRD App to DB", "TRD", "Certified", True, -50),
+        ("R-4008", "grp-FRD-NH12-UCDE-APP", "UCDE", "grp-CBK-NH12-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: FRD to CBK DB", "FRD", "Deployed", True, -70),
+        ("R-4009", "grp-MBL-NH13-UCDE-API", "UCDE", "grp-MBL-NH13-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: MBL API to App", "MBL", "Deployed", True, -120),
+        ("R-4010", "grp-INS-NH13-UGEN-WEB", "UGEN", "grp-INS-NH13-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: INS Portal to App", "INS", "Deployed", True, -55),
+        ("R-4011", "grp-TAX-NH13-UGEN-APP", "UGEN", "grp-TAX-NH13-UGEN-DB", "UGEN", "TCP 5432",
+         "NP: TAX Engine to DB", "TAX", "Certified", True, -40),
+        ("R-4012", "grp-AML-NH15-UCDE-APP", "UCDE", "grp-AML-NH15-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: AML Engine to DB", "AML", "Deployed", True, -80),
+        ("R-4013", "grp-KYC-NH12-UGEN-WEB", "UGEN", "grp-KYC-NH12-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: KYC Portal to App", "KYC", "Deployed", True, -65),
+        ("R-4014", "grp-TRS-NH13-UCDE-APP", "UCDE", "grp-TRS-NH13-UCDE-DB", "UCDE", "TCP 1521",
+         "NP: TRS to Cash DB", "TRS", "Deployed", True, -95),
+        ("R-4015", "grp-CCM-NH12-UCDE-WEB", "UCDE", "grp-CCM-NH12-UCDE-APP", "UCDE", "TCP 8443",
+         "NP: CCM Portal to App", "CCM", "Deployed", True, -110),
+        ("R-4016", "grp-LON-NH13-UGEN-WEB", "UGEN", "grp-LON-NH13-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: LON Portal to Engine", "LON", "Deployed", True, -75),
+        ("R-4017", "grp-BRK-NH13-UGEN-WEB", "UGEN", "grp-BRK-NH13-UGEN-APP", "UGEN", "TCP 8443",
+         "NP: BRK Portal to Engine", "BRK", "Deployed", True, -100),
+        ("R-4018", "grp-AGW-NH15-UGEN-LB", "UGEN", "grp-AGW-NH15-UGEN-API", "UGEN", "TCP 443",
+         "NP: API GW LB to API", "AGW", "Deployed", True, -130),
+        ("R-4019", "grp-SOC-NH12-UGEN-APP", "UGEN", "grp-SOC-NH12-UGEN-DB", "UGEN", "TCP 9200",
+         "NP: SOC Log Collector to DB", "SOC", "Deployed", True, -150),
+        ("R-4020", "grp-RGM-NH12-UCCS-APP", "UCCS", "grp-RGM-NH12-UCCS-DB", "UCCS", "TCP 1521",
+         "NP: RGM to Compliance DB", "RGM", "Deployed", True, -85),
+    ]
+
+    # --- Pre-Production rules (R-5001 to R-5020) using PP NHs and SZs ---
+    pp_defs = [
+        ("R-5001", "grp-CRM-NH16-PP_CDE-APP", "PP_CDE", "grp-CBK-NH16-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: CRM App to CBK DB", "CRM", "Deployed", True, -20),
+        ("R-5002", "grp-DIG-NH17-PP_CDE-WEB", "PP_CDE", "grp-PAY-NH16-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: DIG Web to PAY App", "DIG", "Certified", True, -10),
+        ("R-5003", "grp-ENT-NH16-PP_GEN-APP", "PP_GEN", "grp-SHR-NH17-PP_GEN-APP", "PP_GEN", "TCP 8080",
+         "PP: ENT App to SHR Services", "ENT", "Deployed", True, -15),
+        ("R-5004", "grp-HRM-NH16-PP_GEN-WEB", "PP_GEN", "grp-HRM-NH16-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: HRM Web to App Tier", "HRM", "Deployed", True, -45),
+        ("R-5005", "grp-HRM-NH16-PP_GEN-APP", "PP_GEN", "grp-HRM-NH16-PP_GEN-DB", "PP_GEN", "TCP 5432",
+         "PP: HRM App to DB", "HRM", "Deployed", True, -45),
+        ("R-5006", "grp-TRD-NH17-PP_CDE-WEB", "PP_CDE", "grp-TRD-NH17-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: TRD Web to App", "TRD", "Deployed", True, -70),
+        ("R-5007", "grp-TRD-NH17-PP_CDE-APP", "PP_CDE", "grp-TRD-NH17-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: TRD App to DB", "TRD", "Certified", True, -35),
+        ("R-5008", "grp-FRD-NH16-PP_CDE-APP", "PP_CDE", "grp-CBK-NH16-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: FRD to CBK DB", "FRD", "Deployed", True, -55),
+        ("R-5009", "grp-MBL-NH17-PP_CDE-API", "PP_CDE", "grp-MBL-NH17-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: MBL API to App", "MBL", "Deployed", True, -90),
+        ("R-5010", "grp-INS-NH17-PP_GEN-WEB", "PP_GEN", "grp-INS-NH17-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: INS Portal to App", "INS", "Deployed", True, -40),
+        ("R-5011", "grp-TAX-NH17-PP_GEN-APP", "PP_GEN", "grp-TAX-NH17-PP_GEN-DB", "PP_GEN", "TCP 5432",
+         "PP: TAX Engine to DB", "TAX", "Certified", True, -30),
+        ("R-5012", "grp-AML-NH16-PP_CDE-APP", "PP_CDE", "grp-AML-NH16-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: AML Engine to DB", "AML", "Deployed", True, -60),
+        ("R-5013", "grp-KYC-NH16-PP_GEN-WEB", "PP_GEN", "grp-KYC-NH16-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: KYC Portal to App", "KYC", "Deployed", True, -50),
+        ("R-5014", "grp-TRS-NH17-PP_CDE-APP", "PP_CDE", "grp-TRS-NH17-PP_CDE-DB", "PP_CDE", "TCP 1521",
+         "PP: TRS to Cash DB", "TRS", "Deployed", True, -75),
+        ("R-5015", "grp-CCM-NH16-PP_CDE-WEB", "PP_CDE", "grp-CCM-NH16-PP_CDE-APP", "PP_CDE", "TCP 8443",
+         "PP: CCM Portal to App", "CCM", "Deployed", True, -85),
+        ("R-5016", "grp-LON-NH17-PP_GEN-WEB", "PP_GEN", "grp-LON-NH17-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: LON Portal to Engine", "LON", "Deployed", True, -60),
+        ("R-5017", "grp-BRK-NH17-PP_GEN-WEB", "PP_GEN", "grp-BRK-NH17-PP_GEN-APP", "PP_GEN", "TCP 8443",
+         "PP: BRK Portal to Engine", "BRK", "Deployed", True, -80),
+        ("R-5018", "grp-AGW-NH17-PP_DMZ-LB", "PP_DMZ", "grp-AGW-NH17-PP_DMZ-API", "PP_DMZ", "TCP 443",
+         "PP: API GW LB to API", "AGW", "Deployed", True, -100),
+        ("R-5019", "grp-SOC-NH16-PP_GEN-APP", "PP_GEN", "grp-SOC-NH16-PP_GEN-DB", "PP_GEN", "TCP 9200",
+         "PP: SOC Log Collector to DB", "SOC", "Deployed", True, -120),
+        ("R-5020", "grp-RGM-NH16-PP_CCS-APP", "PP_CCS", "grp-RGM-NH16-PP_CCS-DB", "PP_CCS", "TCP 1521",
+         "PP: RGM to Compliance DB", "RGM", "Deployed", True, -65),
+    ]
+
+    def _build_rule(rid: str, src: str, sz_s: str, dst: str, sz_d: str,
+                    port: str, desc: str, app: str, st: str, g2g: bool,
+                    days: int, env: str, dc: str) -> dict[str, Any]:
+        ct = (base + timedelta(days=days)).isoformat()
+        is_compiled = st in ("Certified", "Deployed")
+        is_certified = st in ("Certified", "Deployed")
+        return {
+            "rule_id": rid, "source": src, "source_zone": sz_s, "destination": dst,
+            "destination_zone": sz_d, "port": port, "protocol": port.split(" ")[0],
+            "action": "Allow", "description": desc, "application": app, "status": st,
+            "is_group_to_group": g2g, "environment": env, "datacenter": dc,
+            "created_at": ct, "updated_at": ct,
+            "compile_status": "Compiled" if is_compiled else "Not Compiled",
+            "compile_date": ct if is_compiled else None,
+            "certify_status": "Certified" if is_certified else "Not Certified",
+            "certified_date": ct if is_certified else None,
+            "expiry_date": (base + timedelta(days=365)).isoformat() if is_certified else None,
+        }
+
+    # Build Production rules
+    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in defs:
+        rules.append(_build_rule(rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days, "Production", "ALPHA_NGDC"))
+    # Build Non-Production rules
+    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in np_defs:
+        rules.append(_build_rule(rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days, "Non-Production", "ALPHA_NGDC"))
+    # Build Pre-Production rules
+    for rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in pp_defs:
+        rules.append(_build_rule(rid, src, sz_s, dst, sz_d, port, desc, app, st, g2g, days, "Pre-Production", "ALPHA_NGDC"))
+
+    return rules
+
+
+SEED_MIGRATIONS = [
+    {"migration_id": "mig-001", "name": "Legacy DC Alpha to Gamma NGDC Wave 1",
+     "application": "CRM", "source_legacy_dc": "DC_LEGACY_A", "target_ngdc": "GAMMA_NGDC",
+     "legacy_dc": "DC_LEGACY_A", "target_dc": "GAMMA_NGDC",
+     "status": "In Progress", "progress": 35,
+     "total_rules": 45, "migrated_rules": 16, "failed_rules": 2,
+     "created_at": (datetime.utcnow() + timedelta(days=-60)).isoformat(),
+     "updated_at": _now()},
+    {"migration_id": "mig-002", "name": "Legacy DC Beta to Alpha NGDC Wave 1",
+     "application": "HRM", "source_legacy_dc": "DC_LEGACY_B", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_B", "target_dc": "ALPHA_NGDC",
+     "status": "In Progress", "progress": 60,
+     "total_rules": 32, "migrated_rules": 19, "failed_rules": 1,
+     "created_at": (datetime.utcnow() + timedelta(days=-45)).isoformat(),
+     "updated_at": _now()},
+    {"migration_id": "mig-003", "name": "Legacy DC Gamma App Migration",
+     "application": "TRD", "source_legacy_dc": "DC_LEGACY_C", "target_ngdc": "BETA_NGDC",
+     "legacy_dc": "DC_LEGACY_C", "target_dc": "BETA_NGDC",
+     "status": "Planning", "progress": 10,
+     "total_rules": 58, "migrated_rules": 0, "failed_rules": 0,
+     "created_at": (datetime.utcnow() + timedelta(days=-15)).isoformat(),
+     "updated_at": _now()},
+    {"migration_id": "mig-004", "name": "Legacy DC Delta App Migration",
+     "application": "INS", "source_legacy_dc": "DC_LEGACY_D", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_D", "target_dc": "ALPHA_NGDC",
+     "status": "In Progress", "progress": 45,
+     "total_rules": 28, "migrated_rules": 12, "failed_rules": 3,
+     "created_at": (datetime.utcnow() + timedelta(days=-30)).isoformat(),
+     "updated_at": _now()},
+    {"migration_id": "mig-005", "name": "Legacy DC Epsilon Systems Migration",
+     "application": "FRD", "source_legacy_dc": "DC_LEGACY_E", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_E", "target_dc": "ALPHA_NGDC",
+     "status": "Completed", "progress": 100,
+     "total_rules": 22, "migrated_rules": 22, "failed_rules": 0,
+     "created_at": (datetime.utcnow() + timedelta(days=-90)).isoformat(),
+     "updated_at": (datetime.utcnow() + timedelta(days=-10)).isoformat()},
+    {"migration_id": "mig-006", "name": "Legacy DC Zeta App Migration",
+     "application": "KYC", "source_legacy_dc": "DC_LEGACY_F", "target_ngdc": "ALPHA_NGDC",
+     "legacy_dc": "DC_LEGACY_F", "target_dc": "ALPHA_NGDC",
+     "status": "In Progress", "progress": 25,
+     "total_rules": 38, "migrated_rules": 9, "failed_rules": 1,
+     "created_at": (datetime.utcnow() + timedelta(days=-20)).isoformat(),
+     "updated_at": _now()},
+]
+
+SEED_MIGRATION_MAPPINGS = [
+    # --- mig-001: CRM from DC Legacy A ---
+    {"mapping_id": "map-001", "migration_id": "mig-001",
+     "legacy_rule": "permit tcp 10.25.1.0/24 10.25.2.0/24 eq 1521",
+     "legacy_source": "10.25.1.0/24", "legacy_destination": "10.25.2.0/24",
+     "legacy_port": "TCP 1521", "legacy_action": "permit",
+     "ngdc_source": "grp-CBK-NH02-CDE-APP", "ngdc_destination": "grp-CBK-NH02-CDE-DB",
+     "ngdc_port": "TCP 1521", "ngdc_action": "Allow",
+     "source_nh": "NH02", "source_sz": "CDE", "dest_nh": "NH02", "dest_sz": "CDE",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-002", "migration_id": "mig-001",
+     "legacy_rule": "permit tcp 10.25.3.0/24 10.25.4.0/24 eq 8443",
+     "legacy_source": "10.25.3.0/24", "legacy_destination": "10.25.4.0/24",
+     "legacy_port": "TCP 8443", "legacy_action": "permit",
+     "ngdc_source": "grp-PAY-NH07-CDE-APP", "ngdc_destination": "grp-PAY-NH07-CDE-DB",
+     "ngdc_port": "TCP 8443", "ngdc_action": "Allow",
+     "source_nh": "NH07", "source_sz": "CDE", "dest_nh": "NH07", "dest_sz": "CDE",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-003", "migration_id": "mig-001",
+     "legacy_rule": "permit ip any any",
+     "legacy_source": "any", "legacy_destination": "any",
+     "legacy_port": "ANY", "legacy_action": "permit",
+     "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
+     "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
+     "status": "Review Required", "compliance": "Non-Compliant"},
+    # --- mig-002: HRM from DC Legacy B ---
+    {"mapping_id": "map-004", "migration_id": "mig-002",
+     "legacy_rule": "permit tcp 10.26.5.0/24 10.26.15.0/24 eq 8443",
+     "legacy_source": "10.26.5.0/24", "legacy_destination": "10.26.15.0/24",
+     "legacy_port": "TCP 8443", "legacy_action": "permit",
+     "ngdc_source": "grp-HRM-NH01-GEN-WEB", "ngdc_destination": "grp-HRM-NH01-GEN-APP",
+     "ngdc_port": "TCP 8443", "ngdc_action": "Allow",
+     "source_nh": "NH01", "source_sz": "GEN", "dest_nh": "NH01", "dest_sz": "GEN",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-005", "migration_id": "mig-002",
+     "legacy_rule": "permit tcp 10.26.15.0/24 10.26.30.0/24 eq 5432",
+     "legacy_source": "10.26.15.0/24", "legacy_destination": "10.26.30.0/24",
+     "legacy_port": "TCP 5432", "legacy_action": "permit",
+     "ngdc_source": "grp-HRM-NH01-GEN-APP", "ngdc_destination": "grp-HRM-NH01-GEN-DB",
+     "ngdc_port": "TCP 5432", "ngdc_action": "Allow",
+     "source_nh": "NH01", "source_sz": "GEN", "dest_nh": "NH01", "dest_sz": "GEN",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-006", "migration_id": "mig-002",
+     "legacy_rule": "permit tcp 10.26.100.0/24 any eq 22",
+     "legacy_source": "10.26.100.0/24", "legacy_destination": "any",
+     "legacy_port": "TCP 22", "legacy_action": "permit",
+     "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
+     "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
+     "status": "Review Required", "compliance": "Non-Compliant"},
+    # --- mig-003: TRD from DC Legacy C ---
+    {"mapping_id": "map-007", "migration_id": "mig-003",
+     "legacy_rule": "permit tcp 10.27.1.0/24 10.27.2.0/24 eq 443",
+     "legacy_source": "10.27.1.0/24", "legacy_destination": "10.27.2.0/24",
+     "legacy_port": "TCP 443", "legacy_action": "permit",
+     "ngdc_source": "grp-TRD-NH06-CDE-WEB", "ngdc_destination": "grp-TRD-NH06-CDE-APP",
+     "ngdc_port": "TCP 8443", "ngdc_action": "Allow",
+     "source_nh": "NH06", "source_sz": "CDE", "dest_nh": "NH06", "dest_sz": "CDE",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-008", "migration_id": "mig-003",
+     "legacy_rule": "permit tcp 10.27.2.0/24 10.27.10.0/24 eq 1521",
+     "legacy_source": "10.27.2.0/24", "legacy_destination": "10.27.10.0/24",
+     "legacy_port": "TCP 1521", "legacy_action": "permit",
+     "ngdc_source": "grp-TRD-NH06-CDE-APP", "ngdc_destination": "grp-TRD-NH06-CDE-DB",
+     "ngdc_port": "TCP 1521", "ngdc_action": "Allow",
+     "source_nh": "NH06", "source_sz": "CDE", "dest_nh": "NH06", "dest_sz": "CDE",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-009", "migration_id": "mig-003",
+     "legacy_rule": "permit tcp 10.27.2.0/24 10.27.50.0/24 eq 1414",
+     "legacy_source": "10.27.2.0/24", "legacy_destination": "10.27.50.0/24",
+     "legacy_port": "TCP 1414", "legacy_action": "permit",
+     "ngdc_source": "grp-TRD-NH06-CDE-APP", "ngdc_destination": "grp-TRD-NH06-CDE-MQ",
+     "ngdc_port": "TCP 1414", "ngdc_action": "Allow",
+     "source_nh": "NH06", "source_sz": "CDE", "dest_nh": "NH06", "dest_sz": "CDE",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-010", "migration_id": "mig-003",
+     "legacy_rule": "permit ip 10.27.0.0/16 any",
+     "legacy_source": "10.27.0.0/16", "legacy_destination": "any",
+     "legacy_port": "ANY", "legacy_action": "permit",
+     "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
+     "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
+     "status": "Review Required", "compliance": "Non-Compliant"},
+    # --- mig-004: INS from DC Legacy D ---
+    {"mapping_id": "map-011", "migration_id": "mig-004",
+     "legacy_rule": "permit tcp 10.28.10.0/24 10.28.20.0/24 eq 8443",
+     "legacy_source": "10.28.10.0/24", "legacy_destination": "10.28.20.0/24",
+     "legacy_port": "TCP 8443", "legacy_action": "permit",
+     "ngdc_source": "grp-INS-NH04-GEN-WEB", "ngdc_destination": "grp-INS-NH04-GEN-APP",
+     "ngdc_port": "TCP 8443", "ngdc_action": "Allow",
+     "source_nh": "NH04", "source_sz": "GEN", "dest_nh": "NH04", "dest_sz": "GEN",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-012", "migration_id": "mig-004",
+     "legacy_rule": "permit tcp 10.28.20.0/24 10.28.50.0/24 eq 5432",
+     "legacy_source": "10.28.20.0/24", "legacy_destination": "10.28.50.0/24",
+     "legacy_port": "TCP 5432", "legacy_action": "permit",
+     "ngdc_source": "grp-INS-NH04-GEN-APP", "ngdc_destination": "grp-INS-NH04-GEN-DB",
+     "ngdc_port": "TCP 5432", "ngdc_action": "Allow",
+     "source_nh": "NH04", "source_sz": "GEN", "dest_nh": "NH04", "dest_sz": "GEN",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-013", "migration_id": "mig-004",
+     "legacy_rule": "permit tcp 10.28.10.50 10.28.99.0/24 eq 22",
+     "legacy_source": "10.28.10.50", "legacy_destination": "10.28.99.0/24",
+     "legacy_port": "TCP 22", "legacy_action": "permit",
+     "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
+     "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
+     "status": "Review Required", "compliance": "Non-Compliant"},
+    # --- mig-005: FRD from DC Legacy E (completed) ---
+    {"mapping_id": "map-014", "migration_id": "mig-005",
+     "legacy_rule": "permit tcp 10.29.1.0/24 10.29.2.0/24 eq 1521",
+     "legacy_source": "10.29.1.0/24", "legacy_destination": "10.29.2.0/24",
+     "legacy_port": "TCP 1521", "legacy_action": "permit",
+     "ngdc_source": "grp-FRD-NH02-CDE-APP", "ngdc_destination": "grp-CBK-NH02-CDE-DB",
+     "ngdc_port": "TCP 1521", "ngdc_action": "Allow",
+     "source_nh": "NH02", "source_sz": "CDE", "dest_nh": "NH02", "dest_sz": "CDE",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-015", "migration_id": "mig-005",
+     "legacy_rule": "permit tcp 10.29.1.50 10.29.5.0/24 eq 1521",
+     "legacy_source": "10.29.1.50", "legacy_destination": "10.29.5.0/24",
+     "legacy_port": "TCP 1521", "legacy_action": "permit",
+     "ngdc_source": "grp-FRD-NH02-CDE-APP", "ngdc_destination": "grp-CCM-NH02-CDE-DB",
+     "ngdc_port": "TCP 1521", "ngdc_action": "Allow",
+     "source_nh": "NH02", "source_sz": "CDE", "dest_nh": "NH02", "dest_sz": "CDE",
+     "status": "Mapped", "compliance": "Compliant"},
+    # --- mig-006: KYC from DC Legacy F ---
+    {"mapping_id": "map-016", "migration_id": "mig-006",
+     "legacy_rule": "permit tcp 10.30.5.0/24 10.30.10.0/24 eq 8443",
+     "legacy_source": "10.30.5.0/24", "legacy_destination": "10.30.10.0/24",
+     "legacy_port": "TCP 8443", "legacy_action": "permit",
+     "ngdc_source": "grp-KYC-NH05-GEN-WEB", "ngdc_destination": "grp-KYC-NH05-GEN-APP",
+     "ngdc_port": "TCP 8443", "ngdc_action": "Allow",
+     "source_nh": "NH05", "source_sz": "GEN", "dest_nh": "NH05", "dest_sz": "GEN",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-017", "migration_id": "mig-006",
+     "legacy_rule": "permit tcp 10.30.10.0/24 10.30.20.0/24 eq 5432",
+     "legacy_source": "10.30.10.0/24", "legacy_destination": "10.30.20.0/24",
+     "legacy_port": "TCP 5432", "legacy_action": "permit",
+     "ngdc_source": "grp-KYC-NH05-GEN-APP", "ngdc_destination": "grp-KYC-NH05-GEN-DB",
+     "ngdc_port": "TCP 5432", "ngdc_action": "Allow",
+     "source_nh": "NH05", "source_sz": "GEN", "dest_nh": "NH05", "dest_sz": "GEN",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-018", "migration_id": "mig-006",
+     "legacy_rule": "permit tcp 10.30.10.0/24 any eq 443",
+     "legacy_source": "10.30.10.0/24", "legacy_destination": "any",
+     "legacy_port": "TCP 443", "legacy_action": "permit",
+     "ngdc_source": "grp-KYC-NH05-GEN-APP", "ngdc_destination": "grp-EXT-NH14-DMZ-API",
+     "ngdc_port": "TCP 443", "ngdc_action": "Allow",
+     "source_nh": "NH05", "source_sz": "GEN", "dest_nh": "NH14", "dest_sz": "DMZ",
+     "status": "Mapped", "compliance": "Compliant"},
+    {"mapping_id": "map-019", "migration_id": "mig-006",
+     "legacy_rule": "permit ip 10.30.0.0/16 10.30.0.0/16",
+     "legacy_source": "10.30.0.0/16", "legacy_destination": "10.30.0.0/16",
+     "legacy_port": "ANY", "legacy_action": "permit",
+     "ngdc_source": "", "ngdc_destination": "", "ngdc_port": "", "ngdc_action": "",
+     "source_nh": "", "source_sz": "", "dest_nh": "", "dest_sz": "",
+     "status": "Review Required", "compliance": "Non-Compliant"},
+]
+
+# Groups: collections of IPs/ranges that follow naming standards
+# Each group has a name (grp-/svr-/rng-), app_id, nh, sz, subtype, and a list of members (IPs or CIDRs)
+SEED_GROUPS = [
+    # CRM groups
+    {"name": "grp-CRM-NH02-CDE-APP", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+     "description": "App Alpha Application Servers", "members": [
+        {"type": "ip", "value": "10.1.1.10", "description": "Alpha App Server 1"},
+        {"type": "ip", "value": "10.1.1.11", "description": "Alpha App Server 2"},
+        {"type": "ip", "value": "10.1.1.12", "description": "Alpha App Server 3"},
+     ]},
+    {"name": "grp-CRM-NH02-CDE-DB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+     "description": "App Alpha Database Servers", "members": [
+        {"type": "ip", "value": "10.1.2.10", "description": "Alpha DB Primary"},
+        {"type": "ip", "value": "10.1.2.11", "description": "Alpha DB Standby"},
+     ]},
+    # CBK groups
+    {"name": "grp-CBK-NH02-CDE-DB", "app_id": "CBK", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+     "description": "Primary Database Cluster", "members": [
+        {"type": "ip", "value": "10.1.2.20", "description": "Iota DB Primary"},
+        {"type": "ip", "value": "10.1.2.21", "description": "Iota DB Standby"},
+        {"type": "cidr", "value": "10.1.2.64/28", "description": "Iota DB Pool"},
+     ]},
+    # DIG groups
+    {"name": "grp-DIG-NH03-CDE-WEB", "app_id": "DIG", "nh": "NH03", "sz": "CDE", "subtype": "WEB",
+     "description": "App Delta Web Servers", "members": [
+        {"type": "ip", "value": "10.2.1.10", "description": "Delta Web 1"},
+        {"type": "ip", "value": "10.2.1.11", "description": "Delta Web 2"},
+     ]},
+    # PAY groups
+    {"name": "grp-PAY-NH07-CDE-APP", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "APP",
+     "description": "Transaction Processing Servers", "members": [
+        {"type": "ip", "value": "10.6.1.10", "description": "Epsilon App 1"},
+        {"type": "ip", "value": "10.6.1.11", "description": "Epsilon App 2"},
+        {"type": "cidr", "value": "10.6.1.64/28", "description": "Epsilon App Pool"},
+     ]},
+    # ENT groups
+    {"name": "grp-ENT-NH05-GEN-APP", "app_id": "ENT", "nh": "NH05", "sz": "GEN", "subtype": "APP",
+     "description": "App Zeta Application Servers", "members": [
+        {"type": "ip", "value": "10.4.1.10", "description": "Zeta App 1"},
+        {"type": "ip", "value": "10.4.1.11", "description": "Zeta App 2"},
+     ]},
+    # SHR groups
+    {"name": "grp-SHR-NH13-GEN-SVC", "app_id": "SHR", "nh": "NH13", "sz": "GEN", "subtype": "SVC",
+     "description": "Shared Analytics Services", "members": [
+        {"type": "cidr", "value": "10.100.1.0/28", "description": "Shared SVC Subnet"},
+     ]},
+    # HRM groups
+    {"name": "grp-HRM-NH01-GEN-WEB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
+     "description": "App Nu Web Servers", "members": [
+        {"type": "ip", "value": "10.0.1.10", "description": "Nu Web 1"},
+        {"type": "ip", "value": "10.0.1.11", "description": "Nu Web 2"},
+     ]},
+    {"name": "grp-HRM-NH01-GEN-APP", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "APP",
+     "description": "App Nu Application Servers", "members": [
+        {"type": "ip", "value": "10.0.1.20", "description": "Nu App 1"},
+        {"type": "ip", "value": "10.0.1.21", "description": "Nu App 2"},
+     ]},
+    {"name": "grp-HRM-NH01-GEN-DB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "DB",
+     "description": "App Nu Database", "members": [
+        {"type": "ip", "value": "10.0.1.30", "description": "Nu DB Primary"},
+        {"type": "ip", "value": "10.0.1.31", "description": "Nu DB Replica"},
+     ]},
+    {"name": "grp-HRM-NH01-GEN-BAT", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
+     "description": "App Nu Batch Servers", "members": [
+        {"type": "ip", "value": "10.0.1.40", "description": "Nu Batch 1"},
+     ]},
+    # TRD groups
+    {"name": "grp-TRD-NH06-CDE-WEB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
+     "description": "App Xi Web Tier", "members": [
+        {"type": "ip", "value": "10.5.1.10", "description": "Xi Web 1"},
+        {"type": "ip", "value": "10.5.1.11", "description": "Xi Web 2"},
+     ]},
+    {"name": "grp-TRD-NH06-CDE-APP", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
+     "description": "App Xi Application Servers", "members": [
+        {"type": "ip", "value": "10.5.1.20", "description": "Xi App 1"},
+        {"type": "ip", "value": "10.5.1.21", "description": "Xi App 2"},
+        {"type": "ip", "value": "10.5.1.22", "description": "Xi App 3"},
+     ]},
+    {"name": "grp-TRD-NH06-CDE-DB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "DB",
+     "description": "App Xi Database", "members": [
+        {"type": "ip", "value": "10.5.1.30", "description": "Xi DB Primary"},
+        {"type": "ip", "value": "10.5.1.31", "description": "Xi DB Standby"},
+     ]},
+    {"name": "grp-TRD-NH06-CDE-MQ", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "MQ",
+     "description": "App Xi MQ Broker", "members": [
+        {"type": "ip", "value": "10.5.1.40", "description": "Xi MQ Broker 1"},
+     ]},
+    # FRD groups
+    {"name": "grp-FRD-NH02-CDE-APP", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+     "description": "App Omicron Detection Engine", "members": [
+        {"type": "ip", "value": "10.1.1.50", "description": "Omicron Engine 1"},
+        {"type": "ip", "value": "10.1.1.51", "description": "Omicron Engine 2"},
+     ]},
+    # AGW groups
+    {"name": "grp-AGW-NH14-DMZ-API", "app_id": "AGW", "nh": "NH14", "sz": "DMZ", "subtype": "API",
+     "description": "API Gateway Servers", "members": [
+        {"type": "ip", "value": "10.70.1.10", "description": "Beta2 API 1"},
+        {"type": "ip", "value": "10.70.1.11", "description": "Beta2 API 2"},
+     ]},
+    {"name": "grp-AGW-NH14-DMZ-LB", "app_id": "AGW", "nh": "NH14", "sz": "DMZ", "subtype": "LB",
+     "description": "API Gateway Load Balancer", "members": [
+        {"type": "ip", "value": "10.70.1.5", "description": "Beta2 LB VIP"},
+     ]},
+    # EXT group (DMZ external API)
+    {"name": "grp-EXT-NH14-DMZ-API", "app_id": "EXT", "nh": "NH14", "sz": "DMZ", "subtype": "API",
+     "description": "External API Endpoints", "members": [
+        {"type": "cidr", "value": "10.70.2.0/28", "description": "External API Subnet"},
+     ]},
+    # MBL groups
+    {"name": "grp-MBL-NH03-CDE-API", "app_id": "MBL", "nh": "NH03", "sz": "CDE", "subtype": "API",
+     "description": "App Rho API", "members": [
+        {"type": "ip", "value": "10.2.1.50", "description": "Rho API 1"},
+        {"type": "ip", "value": "10.2.1.51", "description": "Rho API 2"},
+     ]},
+    {"name": "grp-MBL-NH03-CDE-APP", "app_id": "MBL", "nh": "NH03", "sz": "CDE", "subtype": "APP",
+     "description": "App Rho App Servers", "members": [
+        {"type": "ip", "value": "10.2.2.10", "description": "Rho App 1"},
+        {"type": "ip", "value": "10.2.2.11", "description": "Rho App 2"},
+     ]},
+    # SOC groups
+    {"name": "grp-SOC-NH01-GEN-APP", "app_id": "SOC", "nh": "NH01", "sz": "GEN", "subtype": "APP",
+     "description": "Log Collectors", "members": [
+        {"type": "ip", "value": "10.0.2.10", "description": "Gamma2 Collector 1"},
+        {"type": "ip", "value": "10.0.2.11", "description": "Gamma2 Collector 2"},
+     ]},
+    {"name": "grp-SOC-NH01-GEN-DB", "app_id": "SOC", "nh": "NH01", "sz": "GEN", "subtype": "DB",
+     "description": "Search DB Cluster", "members": [
+        {"type": "ip", "value": "10.0.2.20", "description": "Gamma2 DB Node 1"},
+        {"type": "ip", "value": "10.0.2.21", "description": "Gamma2 DB Node 2"},
+        {"type": "ip", "value": "10.0.2.22", "description": "Gamma2 DB Node 3"},
+     ]},
+    {"name": "grp-SOC-NH01-GEN-MON", "app_id": "SOC", "nh": "NH01", "sz": "GEN", "subtype": "MON",
+     "description": "Monitoring Agents", "members": [
+        {"type": "cidr", "value": "10.0.2.64/28", "description": "Gamma2 Mon Subnet"},
+     ]},
+]
+
+SEED_CHG_REQUESTS = [
+    {"chg_id": "CHG10001", "rule_ids": ["R-3001"], "status": "Approved",
+     "description": "Deploy App Alpha to Primary DB rule",
+     "requested_by": "Owner A", "approved_by": "Security Team",
+     "created_at": (datetime.utcnow() + timedelta(days=-31)).isoformat(),
+     "updated_at": (datetime.utcnow() + timedelta(days=-30)).isoformat()},
+]

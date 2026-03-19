@@ -15,7 +15,6 @@ const moduleNav: Record<string, { path: string; label: string }[]> = {
   'ngdc-standardization': [
     { path: '/ngdc-standardization', label: 'Migration Studio' },
     { path: '/ngdc-standardization/import', label: 'Import Rules' },
-    { path: '/ngdc-standardization/mappings', label: 'NGDC Mappings' },
     { path: '/ngdc-standardization/review', label: 'Review & Approval' },
   ],
   'firewall-management': [
