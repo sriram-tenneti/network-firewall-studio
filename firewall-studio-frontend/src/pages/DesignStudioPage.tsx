@@ -273,17 +273,13 @@ export function DesignStudioPage() {
             <option value="Non-Production">Non-Production</option>
             <option value="Pre-Production">Pre-Production</option>
           </select>
-          <div className="flex rounded-md border border-gray-300 overflow-hidden">
-            <button onClick={() => setViewMode('table')} className={'px-3 py-2 text-xs font-medium ' + (viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}>
-              Table View
-            </button>
-            <button onClick={() => setViewMode('builder')} className={'px-3 py-2 text-xs font-medium ' + (viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}>
-              Visual Builder
-            </button>
-          </div>
           <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
             Manage Groups
           </button>
+          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
+            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
+          </div>
           <button onClick={() => createModal.open()} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
             + New Rule
           </button>
@@ -308,10 +304,9 @@ export function DesignStudioPage() {
       </div>
 
       {viewMode === 'builder' ? (
-        <DragDropRuleBuilder
-          applications={applications}
-          onRuleCreated={() => { loadData(); showNotification('Rule created via builder', 'success'); }}
-        />
+        <div className="bg-white border rounded-lg shadow-sm p-4">
+          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
+        </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4">

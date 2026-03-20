@@ -7,6 +7,7 @@ import ReviewPage from '@/pages/ReviewPage';
 import FirewallManagementPage from '@/pages/FirewallManagementPage';
 import DataImportPage from '@/pages/DataImportPage';
 import SettingsPage from '@/pages/SettingsPage';
+import AdminPage from '@/pages/AdminPage';
 
 function App() {
   return (
@@ -44,11 +45,6 @@ function App() {
             <ReviewPage context="ngdc-standardization" />
           </ModuleLayout>
         } />
-        <Route path="/ngdc-standardization/mappings" element={
-          <ModuleLayout module="ngdc-standardization" title="NGDC Standardization">
-            <DataImportPage context="ngdc-mappings" />
-          </ModuleLayout>
-        } />
 
         {/* Network Firewall Request Module */}
         <Route path="/firewall-management" element={
@@ -71,6 +67,13 @@ function App() {
         <Route path="/settings" element={
           <ModuleLayout module="settings" title="Settings">
             <SettingsPage />
+          </ModuleLayout>
+        } />
+
+        {/* Admin */}
+        <Route path="/admin" element={
+          <ModuleLayout module="settings" title="Admin">
+            <AdminPage />
           </ModuleLayout>
         } />
 

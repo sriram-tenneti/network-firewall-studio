@@ -994,3 +994,31 @@ async def get_resolved_matrix(
 async def list_preprod_matrix():
     from app.database import get_preprod_matrix
     return await get_preprod_matrix()
+
+
+# ---- Firewall Devices ----
+
+@router.get("/firewall-devices")
+async def list_firewall_devices():
+    from app.database import get_firewall_devices
+    return get_firewall_devices()
+
+
+@router.get("/firewall-devices/{device_id}")
+async def get_firewall_device_endpoint(device_id: str):
+    from app.database import get_firewall_device
+    device = get_firewall_device(device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Firewall device not found")
+    return device
+
+
+# ---- IP Mappings Import ----
+
+@router.post("/ip-mappings/import")
+async def import_ip_mappings_endpoint(data: dict):
+    """Import multiple IP mappings at once, optionally for a specific app."""
+    from app.database import import_ip_mappings
+    records = data.get("mappings", [])
+    app_id = data.get("app_id")
+    return import_ip_mappings(records, app_id)

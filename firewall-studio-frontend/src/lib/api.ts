@@ -608,7 +608,19 @@ export const getAppEnvAssignments = (appId?: string) => {
   const qs = params.toString();
   return fetchJSON<Record<string, unknown>[]>(`/api/reference/app-env-assignments${qs ? `?${qs}` : ''}`);
 };
-export const updateAppEnvAssignment = (id: string, data: Record<string, unknown>) =>
-  fetchJSON<Record<string, unknown>>(`/api/reference/app-env-assignments/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-export const deleteAppEnvAssignment = (id: string) =>
-  fetchJSON<{ message: string }>(`/api/reference/app-env-assignments/${id}`, { method: 'DELETE' });
+export const updateAppEnvAssignment = (appId: string, environment: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/app-env-assignments/${appId}/${environment}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteAppEnvAssignment = (appId: string, environment: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/app-env-assignments/${appId}/${environment}`, { method: 'DELETE' });
+
+// Firewall Devices
+export const getFirewallDevices = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/firewall-devices');
+export const getFirewallDevice = (deviceId: string) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/firewall-devices/${deviceId}`);
+
+// IP Mappings Import
+export const importIPMappings = (mappings: Record<string, unknown>[], appId?: string) =>
+  fetchJSON<{ added: number; total: number }>('/api/reference/ip-mappings/import', {
+    method: 'POST', body: JSON.stringify({ mappings, app_id: appId }),
+  });

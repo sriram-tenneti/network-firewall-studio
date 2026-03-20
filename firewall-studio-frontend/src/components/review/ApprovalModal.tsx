@@ -18,7 +18,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
   const [compiledRule, setCompiledRule] = useState<CompiledRule | null>(null);
   const [compileVendor, setCompileVendor] = useState('generic');
   const [compiling, setCompiling] = useState(false);
-  // showPolicy toggle removed - compile section is always visible for approvers
+  const [showFullDetails, setShowFullDetails] = useState(false);
 
   const handleCompile = async () => {
     if (!review || !onCompileRule) return;
@@ -46,12 +46,17 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     onClose();
   };
 
-  const rows: [string, string | React.ReactNode][] = [
-    ['Review ID', review.id],
+  // Key context fields always shown at top (minimal)
+  const contextRows: [string, string | React.ReactNode][] = [
     ['Rule ID', review.rule_id],
     ['Request Type', review.request_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())],
     ['Status', <StatusBadge key="s" status={review.status} />],
     ['Requestor', review.requestor],
+  ];
+
+  // Full details (collapsible)
+  const fullRows: [string, string | React.ReactNode][] = [
+    ['Review ID', review.id],
     ['Submitted', review.submitted_at ? new Date(review.submitted_at).toLocaleString() : 'N/A'],
     ['Application', review.rule_summary?.application || 'N/A'],
     ['Source', review.rule_summary?.source || 'N/A'],
@@ -69,20 +74,20 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Review: ${review.rule_id}`} size="xl">
       <div className="max-h-[80vh] overflow-y-auto pr-1 space-y-4">
-      {/* Rule Details */}
-      <div className="divide-y divide-gray-100">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex py-2.5 px-1">
-            <div className="w-36 text-sm font-medium text-gray-500 flex-shrink-0">{label}</div>
-            <div className="text-sm text-gray-900 flex-1">{value}</div>
+      {/* Minimal Context — always visible */}
+      <div className="grid grid-cols-4 gap-3">
+        {contextRows.map(([label, value]) => (
+          <div key={label} className="p-2 bg-gray-50 rounded">
+            <span className="text-xs text-gray-500">{label}</span>
+            <div className="text-sm font-medium text-gray-800">{value}</div>
           </div>
         ))}
       </div>
 
-      {/* Delta View - Full Change Details for Approvers */}
-      {hasDelta && review.delta && (
+      {/* Delta View — PRIMARY section for reviewers: only changed fields */}
+      {hasDelta && review.delta ? (
         <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-          <h3 className="text-sm font-semibold text-blue-800 mb-3">Change Delta (Full Details)</h3>
+          <h3 className="text-sm font-semibold text-blue-800 mb-3">Changes for Review (Delta Only)</h3>
           <div className="space-y-3">
             {Object.keys(review.delta.added).length > 0 && (
               <div>
@@ -125,7 +130,30 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
             )}
           </div>
         </div>
+      ) : (
+        <div className="border border-green-200 rounded-lg p-4 bg-green-50">
+          <h3 className="text-sm font-semibold text-green-800">New Rule — No Prior Version</h3>
+          <p className="text-xs text-green-600 mt-1">This is a new rule submission. Full details available below.</p>
+        </div>
       )}
+
+      {/* Collapsible Full Rule Details */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button onClick={() => setShowFullDetails(!showFullDetails)} className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
+          <span className="text-xs font-semibold text-gray-600">Full Rule Details</span>
+          <span className="text-xs text-gray-400">{showFullDetails ? '▲ Collapse' : '▼ Expand'}</span>
+        </button>
+        {showFullDetails && (
+          <div className="divide-y divide-gray-100 px-4">
+            {fullRows.map(([label, value]) => (
+              <div key={label} className="flex py-2">
+                <div className="w-32 text-xs font-medium text-gray-500 flex-shrink-0">{label}</div>
+                <div className="text-xs text-gray-900 flex-1">{value}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Compile Rule - Prominent for Approvers */}
       <div className="border border-indigo-200 rounded-lg p-4 bg-indigo-50">

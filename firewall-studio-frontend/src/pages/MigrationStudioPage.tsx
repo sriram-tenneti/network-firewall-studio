@@ -10,9 +10,11 @@ import {
   getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups,
-  createMigrationGroup,
+  createMigrationGroup, getApplications, lookupIPMapping,
+  getIPMappings, importIPMappings,
 } from '@/lib/api';
-import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
+import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
+import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -115,6 +117,11 @@ export function MigrationStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
+  const [viewMode, setViewMode] = useState<'table' | 'builder' | 'ip-mappings'>('table');
+  const [allIPMappings, setAllIPMappings] = useState<Record<string, unknown>[]>([]);
+  const [ipMappingsFilter, setIpMappingsFilter] = useState('');
+  const [loadingMappings, setLoadingMappings] = useState(false);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
   const { notification, showNotification } = useNotification();
@@ -145,8 +152,12 @@ export function MigrationStudioPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const rulesData = await getLegacyRules(selectedApp || undefined, true);
+      const [rulesData, appsData] = await Promise.all([
+        getLegacyRules(selectedApp || undefined, true),
+        getApplications(),
+      ]);
       setLegacyRules(rulesData);
+      setApplications(appsData);
     } catch {
       showNotification('Failed to load migration data', 'error');
     }
@@ -154,6 +165,17 @@ export function MigrationStudioPage() {
   }, [selectedApp, showNotification]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const loadIPMappings = useCallback(async (appFilter?: string) => {
+    setLoadingMappings(true);
+    try {
+      const data = await getIPMappings(undefined, appFilter || undefined);
+      setAllIPMappings(data);
+    } catch { setAllIPMappings([]); }
+    setLoadingMappings(false);
+  }, []);
+
+  useEffect(() => { if (viewMode === 'ip-mappings') loadIPMappings(ipMappingsFilter); }, [viewMode, ipMappingsFilter, loadIPMappings]);
 
   const envFilteredRules = legacyRules.filter(r => {
     if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
@@ -215,14 +237,50 @@ export function MigrationStudioPage() {
     setMigrateRule(rule); setLoadingRec(true); setCompiledRule(null);
     setBirthrightResult(null); setMigrateComments(''); setMigrationStep('review');
     try {
-      const rec = await getNGDCRecommendations(rule.id);
+      const [rec, groups] = await Promise.all([
+        getNGDCRecommendations(rule.id),
+        getGroups(String(rule.app_id)).catch(() => [] as FirewallGroup[]),
+      ]);
       setRecommendation(rec);
-      setCustomMappings(rec.source_mappings.map(m => ({ ...m })));
-      setCustomDestMappings(rec.destination_mappings.map(m => ({ ...m })));
       setSelectedNh(rec.recommended_nh); setSelectedSz(rec.recommended_sz);
+      setAppGroups(groups);
+
+      // Enrich mappings with 1-1 IP lookup table for auto-population
+      const enrichMapping = async (m: IPMapping): Promise<IPMapping> => {
+        if (m.mapping_source === 'ngdc_mapping_table' || m.mapping_source === 'existing_group') return m;
+        // For auto-generated mappings, try the 1-1 IP mapping table
+        try {
+          const result = await lookupIPMapping(m.legacy);
+          if (result.found && result.mapping) {
+            const mp = result.mapping as Record<string, string>;
+            return {
+              ...m,
+              ngdc_recommended: mp.ngdc_ip || mp.ngdc_name || m.ngdc_recommended,
+              mapping_source: 'ngdc_mapping_table',
+              mapping_id: mp.id || null,
+              ngdc_nh: mp.ngdc_nh || m.ngdc_nh,
+              ngdc_sz: mp.ngdc_sz || m.ngdc_sz,
+              existing_group: mp.ngdc_group || m.existing_group,
+            };
+          }
+        } catch { /* IP not found in mapping table, keep auto-generated */ }
+        // Also try to match against existing groups
+        const matchingGroup = groups.find(g =>
+          g.members.some(mem => mem.value === m.legacy || m.legacy.includes(mem.value))
+        );
+        if (matchingGroup) {
+          return { ...m, existing_group: matchingGroup.name, mapping_source: 'existing_group', ngdc_recommended: matchingGroup.name };
+        }
+        return m;
+      };
+
+      const [enrichedSrc, enrichedDst] = await Promise.all([
+        Promise.all(rec.source_mappings.map(m => enrichMapping({ ...m }))),
+        Promise.all(rec.destination_mappings.map(m => enrichMapping({ ...m }))),
+      ]);
+      setCustomMappings(enrichedSrc);
+      setCustomDestMappings(enrichedDst);
     } catch { setRecommendation(null); showNotification('Failed to load NGDC recommendations', 'error'); }
-    try { const groups = await getGroups(String(rule.app_id)); setAppGroups(groups); }
-    catch { setAppGroups([]); }
     setLoadingRec(false);
   };
 
@@ -397,6 +455,11 @@ export function MigrationStudioPage() {
             <option value="Non-Production">Non-Production</option>
             <option value="Pre-Production">Pre-Production</option>
           </select>
+          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
+            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
+            <button onClick={() => setViewMode('ip-mappings')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'ip-mappings' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>IP Mappings</button>
+          </div>
           {selectedRuleIds.size > 0 && (
             <>
               <span className="text-sm text-gray-600 font-medium">{selectedRuleIds.size} selected</span>
@@ -426,6 +489,104 @@ export function MigrationStudioPage() {
         ))}
       </div>
 
+      {viewMode === 'ip-mappings' ? (
+        <div className="bg-white border rounded-lg shadow-sm">
+          <div className="px-4 py-3 border-b flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">IP Mappings Reference (Legacy DC &rarr; NGDC)</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Browse all 1-1 IP mappings. Filter by app to find relevant mappings for migration.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={ipMappingsFilter} onChange={e => setIpMappingsFilter(e.target.value)}
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white">
+                <option value="">All Applications</option>
+                {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_id} - {a.name}</option>)}
+              </select>
+              <button onClick={() => loadIPMappings(ipMappingsFilter)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">Refresh</button>
+              <label className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 cursor-pointer">
+                Import CSV
+                <input type="file" accept=".csv,.json" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  try {
+                    const text = await file.text();
+                    let records: Record<string, unknown>[];
+                    if (file.name.endsWith('.json')) { records = JSON.parse(text); }
+                    else {
+                      const lines = text.trim().split('\n');
+                      const headers = lines[0].split(',').map(h => h.trim());
+                      records = lines.slice(1).map(line => {
+                        const vals = line.split(',').map(v => v.trim());
+                        const obj: Record<string, unknown> = {};
+                        headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
+                        return obj;
+                      });
+                    }
+                    const result = await importIPMappings(records, ipMappingsFilter || undefined);
+                    showNotification(`Imported ${result.added} IP mappings (total: ${result.total})`, 'success');
+                    loadIPMappings(ipMappingsFilter);
+                  } catch { showNotification('Failed to import IP mappings', 'error'); }
+                  e.target.value = '';
+                }} />
+              </label>
+            </div>
+          </div>
+          <div className="p-4">
+            {loadingMappings ? (
+              <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
+            ) : allIPMappings.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">App ID</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Legacy IP</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Legacy DC</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">&rarr;</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NGDC IP</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NGDC Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NGDC Group</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NH</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">SZ</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Component</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {allIPMappings.map((m, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 font-medium">{String(m.app_id || '')}</td>
+                        <td className="px-3 py-1.5 font-mono text-red-600">{String(m.legacy_ip || '')}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{String(m.legacy_dc || '')}</td>
+                        <td className="px-3 py-1.5 text-gray-400">&rarr;</td>
+                        <td className="px-3 py-1.5 font-mono text-green-600">{String(m.ngdc_ip || '')}</td>
+                        <td className="px-3 py-1.5 font-mono text-green-700">{String(m.ngdc_name || '')}</td>
+                        <td className="px-3 py-1.5">
+                          {m.ngdc_group ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">{String(m.ngdc_group)}</span> : <span className="text-gray-300">-</span>}
+                        </td>
+                        <td className="px-3 py-1.5">{String(m.ngdc_nh || '')}</td>
+                        <td className="px-3 py-1.5">{String(m.ngdc_sz || '')}</td>
+                        <td className="px-3 py-1.5">{String(m.component || '')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-sm">No IP mappings found{ipMappingsFilter ? ` for app ${ipMappingsFilter}` : ''}.</p>
+                <p className="text-xs mt-1">Import mappings using CSV/JSON or check seeded data.</p>
+              </div>
+            )}
+          </div>
+          <div className="px-4 py-2 border-t bg-gray-50 text-xs text-gray-500">
+            {allIPMappings.length} mapping{allIPMappings.length !== 1 ? 's' : ''} loaded.
+            Naming: svr-xx.xx.xx.xx (IPs), rng-xx.xx.xx.xx-xy (ranges), grp-APP-NH-SZ-TIER (groups)
+          </div>
+        </div>
+      ) : viewMode === 'builder' ? (
+        <div className="bg-white border rounded-lg shadow-sm p-4">
+          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
+        </div>
+      ) : (
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4 flex items-center justify-between">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -447,6 +608,7 @@ export function MigrationStudioPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Detail Modal with Expanded IPs */}
       <Modal isOpen={detailModal.isOpen} onClose={detailModal.close} title={`Rule Details: ${detailModal.data?.id || ''}`} size="xl">
@@ -563,60 +725,143 @@ export function MigrationStudioPage() {
               </div>
             ) : (
               <>
-                {/* Step 1: Review NGDC Recommendations */}
+                {/* Step 1: Side-by-Side Legacy → NGDC Review */}
                 {migrationStep === 'review' && recommendation && (
                   <div className="space-y-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <h3 className="text-sm font-semibold text-blue-800 mb-2">NGDC Recommendations</h3>
-                      {recommendation.nh_sz_source && (
-                        <div className="mb-2 flex items-center gap-2">
-                          <span className={`px-1.5 py-0.5 text-[10px] rounded font-medium ${
-                            recommendation.nh_sz_source === 'app_dc_mapping' ? 'bg-green-100 text-green-700' :
-                            recommendation.nh_sz_source === 'application_config' ? 'bg-blue-100 text-blue-700' :
-                            'bg-gray-100 text-gray-600'
-                          }`}>
-                            {recommendation.nh_sz_source === 'app_dc_mapping' ? 'From App-DC Mapping Table' :
-                             recommendation.nh_sz_source === 'application_config' ? 'From App Config' : 'Default'}
-                          </span>
-                          {recommendation.recommended_dc && (
-                            <span className="text-[10px] text-gray-500">DC: {recommendation.recommended_dc}</span>
-                          )}
+                    {/* Side-by-Side: Legacy (Left) vs NGDC (Right) */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* LEFT: Legacy Rule */}
+                      <div className="border border-red-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-red-50 border-b border-red-200">
+                          <h3 className="text-sm font-semibold text-red-800">Legacy Rule (Current)</h3>
+                          <p className="text-[10px] text-red-600">Source datacenter: {migrateRule.inventory_item}</p>
                         </div>
-                      )}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs text-gray-500">Recommended Neighbourhood</label>
-                          <select value={selectedNh} onChange={e => setSelectedNh(e.target.value)}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md mt-1">
-                            {recommendation.available_nhs.map(nh => (
-                              <option key={nh.nh_id} value={nh.nh_id}>{nh.nh_id} - {nh.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-500">Recommended Security Zone</label>
-                          <select value={selectedSz} onChange={e => setSelectedSz(e.target.value)}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md mt-1">
-                            {recommendation.available_szs.map(sz => (
-                              <option key={sz.code} value={sz.code}>{sz.code} - {sz.name}</option>
-                            ))}
-                          </select>
+                        <div className="p-3 space-y-3 text-xs">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div><span className="text-gray-500">Rule ID:</span> <span className="font-medium">{migrateRule.id}</span></div>
+                            <div><span className="text-gray-500">App:</span> <span className="font-medium">{migrateRule.app_name} ({migrateRule.app_id})</span></div>
+                            <div><span className="text-gray-500">Action:</span> <span className={`font-medium ${migrateRule.rule_action === 'Accept' ? 'text-green-700' : 'text-red-700'}`}>{migrateRule.rule_action}</span></div>
+                            <div><span className="text-gray-500">Policy:</span> <span className="font-medium">{migrateRule.policy_name}</span></div>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-red-700 mb-1">Source ({migrateRule.rule_source_zone})</h4>
+                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
+                              {(migrateRule.rule_source || '').split('\n').filter(Boolean).map((s, i) => (
+                                <div key={i} className="font-mono text-red-400 text-[11px]">{s.trim()}</div>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-red-700 mb-1">Destination ({migrateRule.rule_destination_zone})</h4>
+                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
+                              {(migrateRule.rule_destination || '').split('\n').filter(Boolean).map((d, i) => (
+                                <div key={i} className="font-mono text-red-400 text-[11px]">{d.trim()}</div>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-red-700 mb-1">Service</h4>
+                            <div className="flex flex-wrap gap-1">
+                              {(migrateRule.rule_service || '').split('\n').filter(Boolean).map((s, i) => (
+                                <span key={i} className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-mono text-[10px]">{s.trim()}</span>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-2 text-xs text-gray-600">
-                        <span className="font-medium">Naming Standard:</span> {recommendation.naming_standard}
-                      </div>
-                      {/* Mapping Summary */}
-                      {recommendation.mapping_summary && (
-                        <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-500">
-                          <span>Mappings: {recommendation.mapping_summary.total} total</span>
-                          {recommendation.mapping_summary.from_mapping_table > 0 && <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded">{recommendation.mapping_summary.from_mapping_table} from table</span>}
-                          {recommendation.mapping_summary.from_existing_groups > 0 && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">{recommendation.mapping_summary.from_existing_groups} from groups</span>}
-                          {recommendation.mapping_summary.auto_generated > 0 && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">{recommendation.mapping_summary.auto_generated} auto-generated</span>}
+
+                      {/* RIGHT: NGDC Recommended */}
+                      <div className="border border-green-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-green-50 border-b border-green-200">
+                          <h3 className="text-sm font-semibold text-green-800">NGDC Target (Auto-Populated)</h3>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {recommendation.nh_sz_source && (
+                              <span className={`px-1.5 py-0.5 text-[9px] rounded font-medium ${
+                                recommendation.nh_sz_source === 'app_dc_mapping' ? 'bg-green-100 text-green-700' :
+                                recommendation.nh_sz_source === 'application_config' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
+                                {recommendation.nh_sz_source === 'app_dc_mapping' ? 'App-DC Table' :
+                                 recommendation.nh_sz_source === 'application_config' ? 'App Config' : 'Default'}
+                              </span>
+                            )}
+                            {recommendation.recommended_dc && (
+                              <span className="text-[9px] text-gray-500">DC: {recommendation.recommended_dc}</span>
+                            )}
+                          </div>
                         </div>
-                      )}
+                        <div className="p-3 space-y-3 text-xs">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-gray-500">Neighbourhood</label>
+                              <select value={selectedNh} onChange={e => setSelectedNh(e.target.value)}
+                                className="w-full px-2 py-1 text-xs border border-green-300 rounded bg-green-50 mt-0.5">
+                                {recommendation.available_nhs.map(nh => (
+                                  <option key={nh.nh_id} value={nh.nh_id}>{nh.nh_id} - {nh.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500">Security Zone</label>
+                              <select value={selectedSz} onChange={e => setSelectedSz(e.target.value)}
+                                className="w-full px-2 py-1 text-xs border border-green-300 rounded bg-green-50 mt-0.5">
+                                {recommendation.available_szs.map(sz => (
+                                  <option key={sz.code} value={sz.code}>{sz.code} - {sz.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="font-semibold text-green-700 mb-1">Source (NGDC Mapped)</h4>
+                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
+                              {customMappings.length > 0 ? customMappings.map((m, i) => (
+                                <div key={i} className="flex items-center gap-1 mb-0.5">
+                                  <span className="font-mono text-green-400 text-[11px]">{m.ngdc_recommended}</span>
+                                  <span className={`px-1 py-0 text-[8px] rounded ${
+                                    m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' :
+                                    m.mapping_source === 'existing_group' ? 'bg-blue-900 text-blue-300' :
+                                    'bg-gray-700 text-gray-400'
+                                  }`}>{m.mapping_source === 'ngdc_mapping_table' ? 'table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}</span>
+                                </div>
+                              )) : <span className="text-gray-500 italic text-[10px]">No source entries</span>}
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-green-700 mb-1">Destination (NGDC Mapped)</h4>
+                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
+                              {customDestMappings.length > 0 ? customDestMappings.map((m, i) => (
+                                <div key={i} className="flex items-center gap-1 mb-0.5">
+                                  <span className="font-mono text-green-400 text-[11px]">{m.ngdc_recommended}</span>
+                                  <span className={`px-1 py-0 text-[8px] rounded ${
+                                    m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' :
+                                    m.mapping_source === 'existing_group' ? 'bg-blue-900 text-blue-300' :
+                                    'bg-gray-700 text-gray-400'
+                                  }`}>{m.mapping_source === 'ngdc_mapping_table' ? 'table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}</span>
+                                </div>
+                              )) : <span className="text-gray-500 italic text-[10px]">No destination entries</span>}
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-green-700 mb-1">Naming Standard</h4>
+                            <span className="font-mono text-green-600 text-[10px] bg-green-50 px-1.5 py-0.5 rounded">{recommendation.naming_standard}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
+                    {/* Mapping Summary Bar */}
+                    {recommendation.mapping_summary && (
+                      <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg border text-[10px]">
+                        <span className="font-semibold text-gray-600">IP Mapping Sources:</span>
+                        <span className="text-gray-500">{recommendation.mapping_summary.total} total</span>
+                        {recommendation.mapping_summary.from_mapping_table > 0 && <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">{recommendation.mapping_summary.from_mapping_table} from 1-1 table</span>}
+                        {recommendation.mapping_summary.from_existing_groups > 0 && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">{recommendation.mapping_summary.from_existing_groups} from groups</span>}
+                        {recommendation.mapping_summary.auto_generated > 0 && <span className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded font-medium">{recommendation.mapping_summary.auto_generated} auto-generated</span>}
+                      </div>
+                    )}
+
+                    {/* Available Groups */}
                     {appGroups.length > 0 && (
                       <div className="border rounded-lg p-3">
                         <h4 className="text-xs font-semibold text-gray-700 mb-2">Available Groups for App {migrateRule.app_id}</h4>
@@ -631,6 +876,7 @@ export function MigrationStudioPage() {
                       </div>
                     )}
 
+                    {/* Service/Port Analysis */}
                     <div className="border rounded-lg p-3">
                       <h4 className="text-xs font-semibold text-gray-700 mb-1">Service/Port Analysis</h4>
                       <div className="space-y-1">
@@ -654,6 +900,7 @@ export function MigrationStudioPage() {
                       </div>
                     </div>
 
+                    {/* Birthright Validation */}
                     <div className="flex gap-2">
                       <button onClick={handleValidateBirthright} disabled={validatingBirthright}
                         className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 disabled:opacity-50">
@@ -664,7 +911,7 @@ export function MigrationStudioPage() {
 
                     <div className="flex justify-end">
                       <button onClick={() => setMigrationStep('mapping')} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-                        Next: IP Mapping
+                        Next: IP Mapping Details
                       </button>
                     </div>
                   </div>
@@ -841,67 +1088,74 @@ export function MigrationStudioPage() {
                   </div>
                 )}
 
-                {/* Step 4: Submit for Review */}
+                {/* Step 4: Submit for Review - Delta Only */}
                 {migrationStep === 'submit' && (
                   <div className="space-y-4">
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                      <h3 className="text-sm font-semibold text-amber-800 mb-1">Migration Summary</h3>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div><span className="text-gray-500">Rule:</span> {migrateRule.id}</div>
-                        <div><span className="text-gray-500">App:</span> {migrateRule.app_name} ({migrateRule.app_id})</div>
-                        <div><span className="text-gray-500">Neighbourhood:</span> {selectedNh}</div>
-                        <div><span className="text-gray-500">Security Zone:</span> {selectedSz}</div>
-                        <div><span className="text-gray-500">Source Mappings:</span> {customMappings.length}</div>
-                        <div><span className="text-gray-500">Dest Mappings:</span> {customDestMappings.length}</div>
-                        <div><span className="text-gray-500">Birthright:</span> {birthrightResult ? (birthrightResult.compliant ? 'Compliant' : 'Non-Compliant') : 'Not validated'}</div>
-                        <div><span className="text-gray-500">Compiled:</span> {compiledRule ? 'Yes' : 'No'}</div>
-                      </div>
+                    {/* Compact context header */}
+                    <div className="grid grid-cols-4 gap-2">
+                      {([
+                        ['Rule', migrateRule.id],
+                        ['App', `${migrateRule.app_name} (${migrateRule.app_id})`],
+                        ['NH/SZ', `${selectedNh} / ${selectedSz}`],
+                        ['Birthright', birthrightResult ? (birthrightResult.compliant ? 'Compliant' : 'Non-Compliant') : 'Not validated'],
+                      ] as [string, string][]).map(([label, val]) => (
+                        <div key={label} className="p-2 bg-amber-50 rounded border border-amber-200">
+                          <span className="text-[10px] text-amber-600">{label}</span>
+                          <div className="text-xs font-medium text-amber-900 truncate">{val}</div>
+                        </div>
+                      ))}
                     </div>
 
-                    {/* Migration Delta - Full Details */}
+                    {/* Delta Only - Show ONLY actual changes */}
                     <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                      <h3 className="text-sm font-semibold text-blue-800 mb-3">Migration Change Delta (Legacy &rarr; NGDC)</h3>
+                      <h3 className="text-sm font-semibold text-blue-800 mb-3">Changes Only (Delta Review)</h3>
                       <div className="space-y-3">
-                        {/* Source IP Changes */}
-                        {customMappings.length > 0 && (
-                          <div>
-                            <h4 className="text-xs font-semibold text-green-700 mb-1">Source IP Mapping Changes</h4>
-                            {customMappings.map((m, i) => (
-                              <div key={i} className="ml-2 text-xs flex items-center gap-1 mb-0.5">
-                                <span className="text-red-600 line-through font-mono">{m.legacy}</span>
-                                <span className="text-gray-400 mx-1">&rarr;</span>
-                                <span className="text-green-600 font-mono">{m.ngdc_recommended}</span>
-                                <span className={`ml-1 px-1 py-0.5 text-[9px] rounded ${
-                                  m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-100 text-green-600' :
-                                  m.mapping_source === 'existing_group' ? 'bg-blue-100 text-blue-600' :
-                                  'bg-gray-100 text-gray-500'
-                                }`}>{m.type}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* Destination IP Changes */}
-                        {customDestMappings.length > 0 && (
-                          <div>
-                            <h4 className="text-xs font-semibold text-purple-700 mb-1">Destination IP Mapping Changes</h4>
-                            {customDestMappings.map((m, i) => (
-                              <div key={i} className="ml-2 text-xs flex items-center gap-1 mb-0.5">
-                                <span className="text-red-600 line-through font-mono">{m.legacy}</span>
-                                <span className="text-gray-400 mx-1">&rarr;</span>
-                                <span className="text-green-600 font-mono">{m.ngdc_recommended}</span>
-                                <span className={`ml-1 px-1 py-0.5 text-[9px] rounded ${
-                                  m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-100 text-green-600' :
-                                  m.mapping_source === 'existing_group' ? 'bg-blue-100 text-blue-600' :
-                                  'bg-gray-100 text-gray-500'
-                                }`}>{m.type}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {/* Source IP Changes - only show where legacy !== ngdc */}
+                        {(() => {
+                          const changedSrc = customMappings.filter(m => m.legacy !== m.ngdc_recommended);
+                          return changedSrc.length > 0 ? (
+                            <div>
+                              <h4 className="text-xs font-semibold text-green-700 mb-1">Source IP Changes ({changedSrc.length})</h4>
+                              {changedSrc.map((m, i) => (
+                                <div key={i} className="ml-2 text-xs flex items-center gap-1 mb-0.5">
+                                  <span className="text-red-600 line-through font-mono">{m.legacy}</span>
+                                  <span className="text-gray-400 mx-1">&rarr;</span>
+                                  <span className="text-green-600 font-mono">{m.ngdc_recommended}</span>
+                                  <span className={`ml-1 px-1 py-0.5 text-[9px] rounded ${
+                                    m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-100 text-green-600' :
+                                    m.mapping_source === 'existing_group' ? 'bg-blue-100 text-blue-600' :
+                                    'bg-gray-100 text-gray-500'
+                                  }`}>{m.mapping_source === 'ngdc_mapping_table' ? '1-1 table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
+                        {/* Destination IP Changes - only show where legacy !== ngdc */}
+                        {(() => {
+                          const changedDst = customDestMappings.filter(m => m.legacy !== m.ngdc_recommended);
+                          return changedDst.length > 0 ? (
+                            <div>
+                              <h4 className="text-xs font-semibold text-purple-700 mb-1">Destination IP Changes ({changedDst.length})</h4>
+                              {changedDst.map((m, i) => (
+                                <div key={i} className="ml-2 text-xs flex items-center gap-1 mb-0.5">
+                                  <span className="text-red-600 line-through font-mono">{m.legacy}</span>
+                                  <span className="text-gray-400 mx-1">&rarr;</span>
+                                  <span className="text-green-600 font-mono">{m.ngdc_recommended}</span>
+                                  <span className={`ml-1 px-1 py-0.5 text-[9px] rounded ${
+                                    m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-100 text-green-600' :
+                                    m.mapping_source === 'existing_group' ? 'bg-blue-100 text-blue-600' :
+                                    'bg-gray-100 text-gray-500'
+                                  }`}>{m.mapping_source === 'ngdc_mapping_table' ? '1-1 table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
                         {/* Zone Changes */}
                         {recommendation && (
                           <div>
-                            <h4 className="text-xs font-semibold text-blue-700 mb-1">Zone & Classification Changes</h4>
+                            <h4 className="text-xs font-semibold text-blue-700 mb-1">Zone & Classification</h4>
                             <div className="ml-2 text-xs space-y-0.5">
                               <div>
                                 <span className="text-gray-500">Source Zone:</span>
@@ -915,27 +1169,16 @@ export function MigrationStudioPage() {
                                 <span className="mx-1">&rarr;</span>
                                 <span className="text-green-600">NGDC Standard</span>
                               </div>
-                              <div>
-                                <span className="text-gray-500">Naming Standard:</span>
-                                <span className="text-green-600 ml-1">{recommendation.naming_standard}</span>
-                              </div>
                             </div>
                           </div>
                         )}
-                        {/* Birthright Status */}
-                        {birthrightResult && (
+                        {/* Birthright violations only (not full details) */}
+                        {birthrightResult && !birthrightResult.compliant && birthrightResult.violations.length > 0 && (
                           <div>
-                            <h4 className="text-xs font-semibold mb-1" style={{ color: birthrightResult.compliant ? '#15803d' : '#b91c1c' }}>
-                              Birthright: {birthrightResult.compliant ? 'COMPLIANT' : 'NON-COMPLIANT'}
-                            </h4>
-                            <p className="ml-2 text-xs text-gray-600">{birthrightResult.summary}</p>
-                            {birthrightResult.violations.length > 0 && (
-                              <div className="ml-2 mt-1">
-                                {birthrightResult.violations.map((v, i) => (
-                                  <div key={i} className="text-xs text-red-600">- {v.rule}: {v.reason}</div>
-                                ))}
-                              </div>
-                            )}
+                            <h4 className="text-xs font-semibold text-red-700 mb-1">Birthright Violations</h4>
+                            {birthrightResult.violations.map((v, i) => (
+                              <div key={i} className="ml-2 text-xs text-red-600">- {v.rule}: {v.reason}</div>
+                            ))}
                           </div>
                         )}
                         {/* Compiled Rule Preview */}
@@ -944,6 +1187,11 @@ export function MigrationStudioPage() {
                             <h4 className="text-xs font-semibold text-indigo-700 mb-1">Compiled Rule ({compiledRule.vendor_format})</h4>
                             <pre className="ml-2 text-[10px] text-gray-700 font-mono bg-white rounded p-2 border border-gray-200 max-h-24 overflow-y-auto whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
                           </div>
+                        )}
+                        {/* Show if no changes found */}
+                        {customMappings.filter(m => m.legacy !== m.ngdc_recommended).length === 0 &&
+                         customDestMappings.filter(m => m.legacy !== m.ngdc_recommended).length === 0 && (
+                          <p className="text-xs text-gray-500 italic">No IP mapping changes detected. All legacy entries match their NGDC targets.</p>
                         )}
                       </div>
                     </div>
