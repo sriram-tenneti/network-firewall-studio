@@ -10,9 +10,10 @@ import {
   getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups,
-  createMigrationGroup,
+  createMigrationGroup, getApplications,
 } from '@/lib/api';
-import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup } from '@/types';
+import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
+import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -115,6 +116,8 @@ export function MigrationStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
+  const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
+  const [applications, setApplications] = useState<Application[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
   const { notification, showNotification } = useNotification();
@@ -145,8 +148,12 @@ export function MigrationStudioPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const rulesData = await getLegacyRules(selectedApp || undefined, true);
+      const [rulesData, appsData] = await Promise.all([
+        getLegacyRules(selectedApp || undefined, true),
+        getApplications(),
+      ]);
       setLegacyRules(rulesData);
+      setApplications(appsData);
     } catch {
       showNotification('Failed to load migration data', 'error');
     }
@@ -397,6 +404,10 @@ export function MigrationStudioPage() {
             <option value="Non-Production">Non-Production</option>
             <option value="Pre-Production">Pre-Production</option>
           </select>
+          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
+            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
+          </div>
           {selectedRuleIds.size > 0 && (
             <>
               <span className="text-sm text-gray-600 font-medium">{selectedRuleIds.size} selected</span>
@@ -426,6 +437,11 @@ export function MigrationStudioPage() {
         ))}
       </div>
 
+      {viewMode === 'builder' ? (
+        <div className="bg-white border rounded-lg shadow-sm p-4">
+          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
+        </div>
+      ) : (
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4 flex items-center justify-between">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -447,6 +463,7 @@ export function MigrationStudioPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Detail Modal with Expanded IPs */}
       <Modal isOpen={detailModal.isOpen} onClose={detailModal.close} title={`Rule Details: ${detailModal.data?.id || ''}`} size="xl">
