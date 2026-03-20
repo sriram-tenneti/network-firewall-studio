@@ -858,6 +858,96 @@ export function MigrationStudioPage() {
                       </div>
                     </div>
 
+                    {/* Migration Delta - Full Details */}
+                    <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                      <h3 className="text-sm font-semibold text-blue-800 mb-3">Migration Change Delta (Legacy &rarr; NGDC)</h3>
+                      <div className="space-y-3">
+                        {/* Source IP Changes */}
+                        {customMappings.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-700 mb-1">Source IP Mapping Changes</h4>
+                            {customMappings.map((m, i) => (
+                              <div key={i} className="ml-2 text-xs flex items-center gap-1 mb-0.5">
+                                <span className="text-red-600 line-through font-mono">{m.legacy}</span>
+                                <span className="text-gray-400 mx-1">&rarr;</span>
+                                <span className="text-green-600 font-mono">{m.ngdc_recommended}</span>
+                                <span className={`ml-1 px-1 py-0.5 text-[9px] rounded ${
+                                  m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-100 text-green-600' :
+                                  m.mapping_source === 'existing_group' ? 'bg-blue-100 text-blue-600' :
+                                  'bg-gray-100 text-gray-500'
+                                }`}>{m.type}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Destination IP Changes */}
+                        {customDestMappings.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-purple-700 mb-1">Destination IP Mapping Changes</h4>
+                            {customDestMappings.map((m, i) => (
+                              <div key={i} className="ml-2 text-xs flex items-center gap-1 mb-0.5">
+                                <span className="text-red-600 line-through font-mono">{m.legacy}</span>
+                                <span className="text-gray-400 mx-1">&rarr;</span>
+                                <span className="text-green-600 font-mono">{m.ngdc_recommended}</span>
+                                <span className={`ml-1 px-1 py-0.5 text-[9px] rounded ${
+                                  m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-100 text-green-600' :
+                                  m.mapping_source === 'existing_group' ? 'bg-blue-100 text-blue-600' :
+                                  'bg-gray-100 text-gray-500'
+                                }`}>{m.type}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Zone Changes */}
+                        {recommendation && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-blue-700 mb-1">Zone & Classification Changes</h4>
+                            <div className="ml-2 text-xs space-y-0.5">
+                              <div>
+                                <span className="text-gray-500">Source Zone:</span>
+                                <span className="text-red-600 line-through ml-1">{migrateRule.rule_source_zone || 'N/A'}</span>
+                                <span className="mx-1">&rarr;</span>
+                                <span className="text-green-600">{selectedSz} ({selectedNh})</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Destination Zone:</span>
+                                <span className="text-red-600 line-through ml-1">{migrateRule.rule_destination_zone || 'N/A'}</span>
+                                <span className="mx-1">&rarr;</span>
+                                <span className="text-green-600">NGDC Standard</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Naming Standard:</span>
+                                <span className="text-green-600 ml-1">{recommendation.naming_standard}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {/* Birthright Status */}
+                        {birthrightResult && (
+                          <div>
+                            <h4 className="text-xs font-semibold mb-1" style={{ color: birthrightResult.compliant ? '#15803d' : '#b91c1c' }}>
+                              Birthright: {birthrightResult.compliant ? 'COMPLIANT' : 'NON-COMPLIANT'}
+                            </h4>
+                            <p className="ml-2 text-xs text-gray-600">{birthrightResult.summary}</p>
+                            {birthrightResult.violations.length > 0 && (
+                              <div className="ml-2 mt-1">
+                                {birthrightResult.violations.map((v, i) => (
+                                  <div key={i} className="text-xs text-red-600">- {v.rule}: {v.reason}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* Compiled Rule Preview */}
+                        {compiledRule && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-indigo-700 mb-1">Compiled Rule ({compiledRule.vendor_format})</h4>
+                            <pre className="ml-2 text-[10px] text-gray-700 font-mono bg-white rounded p-2 border border-gray-200 max-h-24 overflow-y-auto whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Migration Comments</label>
                       <textarea value={migrateComments} onChange={e => setMigrateComments(e.target.value)}

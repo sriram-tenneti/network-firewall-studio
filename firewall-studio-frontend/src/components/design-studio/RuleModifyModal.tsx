@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import type { FirewallRule } from '@/types';
+import type { FirewallRule, RuleDelta } from '@/types';
 
 interface EntryItem {
   id: string;
@@ -207,9 +207,35 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
     onClose();
   };
 
-  const hasChanges = sourceEntries.some(e => e.isNew || e.isModified) ||
-    destEntries.some(e => e.isNew || e.isModified) ||
-    ports !== parsePorts(rule);
+  // Compute full delta for display
+  const computeDelta = (): RuleDelta => {
+    const delta: RuleDelta = { added: {}, removed: {}, changed: {} };
+    const origSrc = parseEntries(rule.source);
+    const origDst = parseEntries(rule.destination);
+    const origPorts = parsePorts(rule);
+    const origSrcVals = new Set(origSrc.map(e => e.value));
+    const curSrcVals = new Set(sourceEntries.map(e => e.value));
+    const addedSrc = sourceEntries.filter(e => !origSrcVals.has(e.value)).map(e => e.value);
+    const removedSrc = origSrc.filter(e => !curSrcVals.has(e.value)).map(e => e.value);
+    if (addedSrc.length) delta.added['source'] = addedSrc;
+    if (removedSrc.length) delta.removed['source'] = removedSrc;
+    const origDstVals = new Set(origDst.map(e => e.value));
+    const curDstVals = new Set(destEntries.map(e => e.value));
+    const addedDst = destEntries.filter(e => !origDstVals.has(e.value)).map(e => e.value);
+    const removedDst = origDst.filter(e => !curDstVals.has(e.value)).map(e => e.value);
+    if (addedDst.length) delta.added['destination'] = addedDst;
+    if (removedDst.length) delta.removed['destination'] = removedDst;
+    const modifiedSrc = sourceEntries.filter(e => e.isModified).map(e => e.value);
+    const modifiedDst = destEntries.filter(e => e.isModified).map(e => e.value);
+    if (modifiedSrc.length) delta.changed['source_modified'] = { from: 'original', to: modifiedSrc.join(', ') };
+    if (modifiedDst.length) delta.changed['destination_modified'] = { from: 'original', to: modifiedDst.join(', ') };
+    if (ports !== origPorts) delta.changed['ports'] = { from: origPorts || '(none)', to: ports || '(none)' };
+    if (protocol !== 'TCP') delta.changed['protocol'] = { from: 'TCP', to: protocol };
+    if (action !== 'Allow') delta.changed['action'] = { from: 'Allow', to: action };
+    return delta;
+  };
+  const currentDelta = computeDelta();
+  const hasDeltaChanges = Object.keys(currentDelta.added).length > 0 || Object.keys(currentDelta.removed).length > 0 || Object.keys(currentDelta.changed).length > 0;
 
   const sectionTabs = [
     { id: 'source' as const, label: 'Source', count: sourceEntries.length },
@@ -271,18 +297,57 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
           </div>
         )}
 
-        {hasChanges && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs font-medium text-blue-800">Pending changes detected</p>
-            <ul className="text-xs text-blue-700 mt-1 space-y-0.5">
-              {sourceEntries.filter(e => e.isNew).length > 0 && <li>+ {sourceEntries.filter(e => e.isNew).length} new source entries</li>}
-              {sourceEntries.filter(e => e.isModified).length > 0 && <li>~ {sourceEntries.filter(e => e.isModified).length} modified source entries</li>}
-              {destEntries.filter(e => e.isNew).length > 0 && <li>+ {destEntries.filter(e => e.isNew).length} new destination entries</li>}
-              {destEntries.filter(e => e.isModified).length > 0 && <li>~ {destEntries.filter(e => e.isModified).length} modified destination entries</li>}
-              {ports !== parsePorts(rule) && <li>~ Ports changed</li>}
-            </ul>
-          </div>
-        )}
+        {/* Full Delta View - Always Visible */}
+        <div className={`border rounded-lg p-3 ${hasDeltaChanges ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+          <h4 className={`text-sm font-semibold mb-2 ${hasDeltaChanges ? 'text-blue-800' : 'text-gray-500'}`}>
+            Change Delta {hasDeltaChanges ? '' : '(No changes yet)'}
+          </h4>
+          {hasDeltaChanges ? (
+            <div className="space-y-2">
+              {Object.keys(currentDelta.added).length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-green-700 mb-1">Added</h5>
+                  {Object.entries(currentDelta.added).map(([field, values]) => (
+                    <div key={field} className="ml-2">
+                      <span className="text-xs text-gray-500">{field}:</span>
+                      {values.map((v, i) => (
+                        <div key={i} className="text-xs text-green-700 font-mono ml-2">+ {v}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {Object.keys(currentDelta.removed).length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-red-700 mb-1">Removed</h5>
+                  {Object.entries(currentDelta.removed).map(([field, values]) => (
+                    <div key={field} className="ml-2">
+                      <span className="text-xs text-gray-500">{field}:</span>
+                      {values.map((v, i) => (
+                        <div key={i} className="text-xs text-red-700 font-mono ml-2">- {v}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {Object.keys(currentDelta.changed).length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-blue-700 mb-1">Changed</h5>
+                  {Object.entries(currentDelta.changed).map(([field, change]) => (
+                    <div key={field} className="ml-2 text-xs">
+                      <span className="text-gray-500">{field.replace(/_/g, ' ')}:</span>
+                      <span className="text-red-600 line-through ml-1">{change.from}</span>
+                      <span className="mx-1">&rarr;</span>
+                      <span className="text-green-600">{change.to}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 italic">Make changes to source, destination, or service to see the delta here.</p>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end gap-3 mt-6 pt-4 border-t">

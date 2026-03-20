@@ -18,7 +18,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
   const [compiledRule, setCompiledRule] = useState<CompiledRule | null>(null);
   const [compileVendor, setCompileVendor] = useState('generic');
   const [compiling, setCompiling] = useState(false);
-  const [showPolicy, setShowPolicy] = useState(false);
+  // showPolicy toggle removed - compile section is always visible for approvers
 
   const handleCompile = async () => {
     if (!review || !onCompileRule) return;
@@ -26,7 +26,6 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     try {
       const result = await onCompileRule(review.rule_id, compileVendor);
       setCompiledRule(result);
-      setShowPolicy(true);
     } catch {
       setCompiledRule(null);
     }
@@ -61,9 +60,17 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     ['Environment', review.rule_summary?.environment || 'N/A'],
   ];
 
+  const hasDelta = review.delta && (
+    Object.keys(review.delta.added).length > 0 ||
+    Object.keys(review.delta.removed).length > 0 ||
+    Object.keys(review.delta.changed).length > 0
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Review: ${review.rule_id}`} size="lg">
-      <div className="divide-y divide-gray-100 mb-4">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Review: ${review.rule_id}`} size="xl">
+      <div className="max-h-[80vh] overflow-y-auto pr-1 space-y-4">
+      {/* Rule Details */}
+      <div className="divide-y divide-gray-100">
         {rows.map(([label, value]) => (
           <div key={label} className="flex py-2.5 px-1">
             <div className="w-36 text-sm font-medium text-gray-500 flex-shrink-0">{label}</div>
@@ -72,21 +79,64 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
         ))}
       </div>
 
-      {/* Deployable Policy / Rule View */}
-      <div className="mb-4">
+      {/* Delta View - Full Change Details for Approvers */}
+      {hasDelta && review.delta && (
+        <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+          <h3 className="text-sm font-semibold text-blue-800 mb-3">Change Delta (Full Details)</h3>
+          <div className="space-y-3">
+            {Object.keys(review.delta.added).length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-green-700 mb-1">Added</h4>
+                {Object.entries(review.delta.added).map(([field, values]) => (
+                  <div key={field} className="ml-2">
+                    <span className="text-xs text-gray-500">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                    {values.map((v, i) => (
+                      <div key={i} className="text-xs text-green-700 font-mono ml-2">+ {v}</div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            {Object.keys(review.delta.removed).length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-red-700 mb-1">Removed</h4>
+                {Object.entries(review.delta.removed).map(([field, values]) => (
+                  <div key={field} className="ml-2">
+                    <span className="text-xs text-gray-500">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                    {values.map((v, i) => (
+                      <div key={i} className="text-xs text-red-700 font-mono ml-2">- {v}</div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            {Object.keys(review.delta.changed).length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-blue-700 mb-1">Changed</h4>
+                {Object.entries(review.delta.changed).map(([field, change]) => (
+                  <div key={field} className="ml-2 text-xs">
+                    <span className="text-gray-500">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                    <span className="text-red-600 line-through ml-1">{change.from}</span>
+                    <span className="mx-1">&rarr;</span>
+                    <span className="text-green-600">{change.to}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Compile Rule - Prominent for Approvers */}
+      <div className="border border-indigo-200 rounded-lg p-4 bg-indigo-50">
         <div className="flex items-center justify-between mb-2">
-          <button
-            onClick={() => setShowPolicy(!showPolicy)}
-            className="text-sm font-semibold text-indigo-700 hover:text-indigo-800 flex items-center gap-1"
-          >
-            {showPolicy ? '▼' : '▶'} Deployable Rule / Policy
-          </button>
-          {showPolicy && onCompileRule && (
+          <h3 className="text-sm font-semibold text-indigo-800">Compile to Device-Deployable Rule</h3>
+          {onCompileRule && (
             <div className="flex items-center gap-2">
               <select
                 value={compileVendor}
                 onChange={e => setCompileVendor(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-300 rounded-md"
+                className="px-2 py-1 text-xs border border-indigo-300 rounded-md bg-white"
               >
                 <option value="generic">Generic</option>
                 <option value="palo_alto">Palo Alto</option>
@@ -96,14 +146,14 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
               <button
                 onClick={handleCompile}
                 disabled={compiling}
-                className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
               >
-                {compiling ? 'Compiling...' : 'Compile'}
+                {compiling ? 'Compiling...' : 'Compile Rule'}
               </button>
             </div>
           )}
         </div>
-        {showPolicy && compiledRule && (
+        {compiledRule ? (
           <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-gray-400 font-medium">Format: {compiledRule.vendor_format}</span>
@@ -111,7 +161,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
                 onClick={() => navigator.clipboard.writeText(compiledRule.compiled_text)}
                 className="text-xs text-blue-400 hover:text-blue-300"
               >
-                Copy
+                Copy to Clipboard
               </button>
             </div>
             <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
@@ -122,14 +172,13 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
               <div><span className="text-gray-500">Action:</span> <span className="text-gray-300">{compiledRule.action}</span></div>
             </div>
           </div>
-        )}
-        {showPolicy && !compiledRule && !compiling && (
-          <p className="text-xs text-gray-500 italic">Click "Compile" to generate the deployable rule in vendor-specific format.</p>
+        ) : (
+          <p className="text-xs text-indigo-600 italic">Select a vendor format and click &quot;Compile Rule&quot; to generate device-specific deployable output (Palo Alto, Check Point, Cisco ASA, or Generic).</p>
         )}
       </div>
 
       {review.comments && (
-        <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg mb-4">
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
           <h4 className="text-xs font-semibold text-blue-700 mb-1">Requestor Comments</h4>
           <p className="text-sm text-blue-800">{review.comments}</p>
         </div>
@@ -184,10 +233,11 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
       )}
 
       {review.status !== 'Pending' && (
-        <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
+        <div className="flex justify-end gap-3 pt-4 border-t">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Close</button>
         </div>
       )}
+      </div>
     </Modal>
   );
 }

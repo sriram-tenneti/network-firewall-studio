@@ -920,3 +920,77 @@ async def create_mig_group(data: dict):
     if not name:
         raise HTTPException(status_code=400, detail="Group name required")
     return await create_migration_group(name, app_id, members, nh, sz)
+
+
+# ---- IP Mappings (Legacy DC <-> NGDC one-to-one) ----
+
+@router.get("/ip-mappings")
+async def list_ip_mappings(legacy_dc: str | None = None, app_id: str | None = None):
+    from app.database import get_ip_mappings
+    return await get_ip_mappings(legacy_dc, app_id)
+
+
+@router.post("/ip-mappings")
+async def create_ip_mapping(data: dict):
+    from app.database import add_ip_mapping
+    return await add_ip_mapping(data)
+
+
+@router.put("/ip-mappings/{mapping_id}")
+async def update_ip_mapping_endpoint(mapping_id: str, data: dict):
+    from app.database import update_ip_mapping
+    result = await update_ip_mapping(mapping_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="IP mapping not found")
+    return result
+
+
+@router.delete("/ip-mappings/{mapping_id}")
+async def delete_ip_mapping_endpoint(mapping_id: str):
+    from app.database import delete_ip_mapping
+    if not await delete_ip_mapping(mapping_id):
+        raise HTTPException(status_code=404, detail="IP mapping not found")
+    return {"message": "IP mapping deleted"}
+
+
+@router.post("/ip-mappings/lookup")
+async def lookup_ip_mapping(data: dict):
+    """Look up the NGDC equivalent for a legacy IP address."""
+    from app.database import lookup_ngdc_ip
+    legacy_ip = data.get("legacy_ip", "")
+    legacy_dc = data.get("legacy_dc", "")
+    result = await lookup_ngdc_ip(legacy_ip, legacy_dc)
+    if not result:
+        return {"found": False, "message": f"No NGDC mapping found for {legacy_ip}"}
+    return {"found": True, "mapping": result}
+
+
+# ---- Egress/Ingress Compilation ----
+
+@router.post("/compile/egress-ingress/{rule_id}")
+async def compile_egress_ingress_endpoint(rule_id: str, vendor: str = "generic"):
+    """Compile separate egress and ingress rules for blocked SZ combinations."""
+    from app.database import compile_egress_ingress
+    result = await compile_egress_ingress(rule_id, vendor)
+    if not result:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return result
+
+
+# ---- Resolved Policy Matrix ----
+
+@router.get("/policy-matrix/resolved")
+async def get_resolved_matrix(
+    src_dc: str = "", src_nh: str = "", src_sz: str = "",
+    dst_dc: str = "", dst_nh: str = "", dst_sz: str = "",
+    environment: str = "Production",
+):
+    """Return policy matrix with Same/Any/Different resolved to real NH/SZ names."""
+    from app.database import get_resolved_policy_matrix
+    return await get_resolved_policy_matrix(src_dc, src_nh, src_sz, dst_dc, dst_nh, dst_sz, environment)
+
+
+@router.get("/policy-matrix/preprod")
+async def list_preprod_matrix():
+    from app.database import get_preprod_matrix
+    return await get_preprod_matrix()

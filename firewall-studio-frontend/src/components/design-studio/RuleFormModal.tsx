@@ -290,7 +290,46 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
+          <div>
+            <label className={labelClass}>Service Preset</label>
+            <select className={inputClass} onChange={e => {
+              const presets: Record<string, { port: string; protocol: string }> = {
+                'HTTPS': { port: '443', protocol: 'TCP' },
+                'HTTP': { port: '80', protocol: 'TCP' },
+                'SSH': { port: '22', protocol: 'TCP' },
+                'RDP': { port: '3389', protocol: 'TCP' },
+                'DNS': { port: '53', protocol: 'UDP' },
+                'SMTP': { port: '25', protocol: 'TCP' },
+                'LDAP': { port: '389', protocol: 'TCP' },
+                'LDAPS': { port: '636', protocol: 'TCP' },
+                'SQL': { port: '1433', protocol: 'TCP' },
+                'Oracle': { port: '1521', protocol: 'TCP' },
+                'MySQL': { port: '3306', protocol: 'TCP' },
+                'PostgreSQL': { port: '5432', protocol: 'TCP' },
+                'MQ': { port: '1414', protocol: 'TCP' },
+                'Kafka': { port: '9092', protocol: 'TCP' },
+              };
+              const p = presets[e.target.value];
+              if (p) setForm({ ...form, port: p.port, protocol: p.protocol });
+            }}>
+              <option value="">Custom</option>
+              <option value="HTTPS">HTTPS (443)</option>
+              <option value="HTTP">HTTP (80)</option>
+              <option value="SSH">SSH (22)</option>
+              <option value="RDP">RDP (3389)</option>
+              <option value="DNS">DNS (53)</option>
+              <option value="SMTP">SMTP (25)</option>
+              <option value="LDAP">LDAP (389)</option>
+              <option value="LDAPS">LDAPS (636)</option>
+              <option value="SQL">SQL Server (1433)</option>
+              <option value="Oracle">Oracle (1521)</option>
+              <option value="MySQL">MySQL (3306)</option>
+              <option value="PostgreSQL">PostgreSQL (5432)</option>
+              <option value="MQ">MQ (1414)</option>
+              <option value="Kafka">Kafka (9092)</option>
+            </select>
+          </div>
           <div>
             <label className={labelClass}>Port</label>
             <input className={inputClass} placeholder="e.g. 443, 8080-8090" value={form.port} onChange={e => setForm({ ...form, port: e.target.value })} />
