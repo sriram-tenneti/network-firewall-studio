@@ -587,7 +587,6 @@ export default function FirewallManagementPage() {
     setModifyState({ ...state });
     setOriginalState({ ...state });
     setModifyComments('');
-    setShowDelta(false);
     setCompiledRule(null);
     let groups: FirewallGroup[] = [];
     try {
@@ -606,7 +605,6 @@ export default function FirewallManagementPage() {
     setModifyRule(null);
     setModifyState(null);
     setOriginalState(null);
-    setShowDelta(false);
     setAppGroups([]);
   };
 

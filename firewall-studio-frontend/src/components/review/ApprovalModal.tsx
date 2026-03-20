@@ -26,7 +26,6 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     try {
       const result = await onCompileRule(review.rule_id, compileVendor);
       setCompiledRule(result);
-      setShowPolicy(true);
     } catch {
       setCompiledRule(null);
     }

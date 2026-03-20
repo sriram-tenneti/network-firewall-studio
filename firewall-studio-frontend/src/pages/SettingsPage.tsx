@@ -205,9 +205,9 @@ export default function SettingsPage() {
                 </div>
                 <div className="grid grid-cols-4 gap-4">
                   <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label><p className="text-sm text-gray-800">{selectedAppData.owner || 'N/A'}</p></div>
-                  <div><label className="block text-xs font-medium text-gray-500 mb-1">Criticality</label><p className="text-sm text-gray-800">{selectedAppData.criticality || 'N/A'}</p></div>
-                  <div><label className="block text-xs font-medium text-gray-500 mb-1">Environment</label><p className="text-sm text-gray-800">{selectedAppData.environment || 'Production'}</p></div>
-                  <div><label className="block text-xs font-medium text-gray-500 mb-1">Datacenter</label><p className="text-sm font-mono text-gray-800">{selectedAppData.datacenter || 'N/A'}</p></div>
+                  <div><label className="block text-xs font-medium text-gray-500 mb-1">Criticality</label><p className="text-sm text-gray-800">{selectedAppData.criticality ?? 'N/A'}</p></div>
+                  <div><label className="block text-xs font-medium text-gray-500 mb-1">PCI Scope</label><p className="text-sm text-gray-800">{selectedAppData.pci_scope ? 'Yes' : 'No'}</p></div>
+                  <div><label className="block text-xs font-medium text-gray-500 mb-1">Dist ID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.app_distributed_id ?? 'N/A'}</p></div>
                 </div>
               </div>
             )}
@@ -232,7 +232,7 @@ export default function SettingsPage() {
                           <td className="px-4 py-2 text-gray-800">{app.name}</td>
                           <td className="px-4 py-2 font-mono text-gray-600">{app.nh || '-'}</td>
                           <td className="px-4 py-2 font-mono text-gray-600">{app.sz || '-'}</td>
-                          <td className="px-4 py-2 font-mono text-gray-600">{app.datacenter || '-'}</td>
+                          <td className="px-4 py-2 font-mono text-gray-600">{app.criticality ?? '-'}</td>
                           <td className="px-4 py-2 text-gray-600">{app.owner || '-'}</td>
                         </tr>
                       ))}
