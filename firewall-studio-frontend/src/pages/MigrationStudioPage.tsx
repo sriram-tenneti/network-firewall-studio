@@ -13,7 +13,6 @@ import {
   createMigrationGroup, getApplications, lookupIPMapping,
   getIPMappings, importIPMappings,
 } from '@/lib/api';
-import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -457,7 +456,6 @@ export function MigrationStudioPage() {
           </select>
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
-            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
             <button onClick={() => setViewMode('ip-mappings')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'ip-mappings' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>IP Mappings</button>
           </div>
           {selectedRuleIds.size > 0 && (
@@ -581,10 +579,6 @@ export function MigrationStudioPage() {
             {allIPMappings.length} mapping{allIPMappings.length !== 1 ? 's' : ''} loaded.
             Naming: svr-xx.xx.xx.xx (IPs), rng-xx.xx.xx.xx-xy (ranges), grp-APP-NH-SZ-TIER (groups)
           </div>
-        </div>
-      ) : viewMode === 'builder' ? (
-        <div className="bg-white border rounded-lg shadow-sm p-4">
-          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
         </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">

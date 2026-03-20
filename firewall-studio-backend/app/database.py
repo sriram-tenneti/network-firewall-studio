@@ -163,10 +163,9 @@ def _build_seed_rules() -> list[dict[str, Any]]:
 # ============================================================
 
 async def seed_database() -> None:
-    """Seed JSON files with initial data if they don't exist."""
+    """Seed JSON files with initial data. Always re-seeds to ensure fresh data."""
     _ensure_dir()
-    if _load("neighbourhoods") is not None:
-        return
+    # Always reseed — wipe old data so seed data is the single source of truth
     _save("neighbourhoods", deepcopy(SEED_NEIGHBOURHOODS))
     _save("security_zones", deepcopy(SEED_SECURITY_ZONES))
     _save("ngdc_datacenters", deepcopy(SEED_NGDC_DATACENTERS))
