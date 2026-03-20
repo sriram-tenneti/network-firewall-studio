@@ -11,6 +11,7 @@ import {
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups,
   createMigrationGroup, getApplications, lookupIPMapping,
+  getIPMappings, importIPMappings,
 } from '@/lib/api';
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application } from '@/types';
@@ -116,7 +117,10 @@ export function MigrationStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
-  const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'builder' | 'ip-mappings'>('table');
+  const [allIPMappings, setAllIPMappings] = useState<Record<string, unknown>[]>([]);
+  const [ipMappingsFilter, setIpMappingsFilter] = useState('');
+  const [loadingMappings, setLoadingMappings] = useState(false);
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
@@ -161,6 +165,17 @@ export function MigrationStudioPage() {
   }, [selectedApp, showNotification]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const loadIPMappings = useCallback(async (appFilter?: string) => {
+    setLoadingMappings(true);
+    try {
+      const data = await getIPMappings(undefined, appFilter || undefined);
+      setAllIPMappings(data);
+    } catch { setAllIPMappings([]); }
+    setLoadingMappings(false);
+  }, []);
+
+  useEffect(() => { if (viewMode === 'ip-mappings') loadIPMappings(ipMappingsFilter); }, [viewMode, ipMappingsFilter, loadIPMappings]);
 
   const envFilteredRules = legacyRules.filter(r => {
     if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
@@ -443,6 +458,7 @@ export function MigrationStudioPage() {
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
             <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
+            <button onClick={() => setViewMode('ip-mappings')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'ip-mappings' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>IP Mappings</button>
           </div>
           {selectedRuleIds.size > 0 && (
             <>
@@ -473,7 +489,100 @@ export function MigrationStudioPage() {
         ))}
       </div>
 
-      {viewMode === 'builder' ? (
+      {viewMode === 'ip-mappings' ? (
+        <div className="bg-white border rounded-lg shadow-sm">
+          <div className="px-4 py-3 border-b flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">IP Mappings Reference (Legacy DC &rarr; NGDC)</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Browse all 1-1 IP mappings. Filter by app to find relevant mappings for migration.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={ipMappingsFilter} onChange={e => setIpMappingsFilter(e.target.value)}
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white">
+                <option value="">All Applications</option>
+                {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_id} - {a.name}</option>)}
+              </select>
+              <button onClick={() => loadIPMappings(ipMappingsFilter)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">Refresh</button>
+              <label className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 cursor-pointer">
+                Import CSV
+                <input type="file" accept=".csv,.json" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  try {
+                    const text = await file.text();
+                    let records: Record<string, unknown>[];
+                    if (file.name.endsWith('.json')) { records = JSON.parse(text); }
+                    else {
+                      const lines = text.trim().split('\n');
+                      const headers = lines[0].split(',').map(h => h.trim());
+                      records = lines.slice(1).map(line => {
+                        const vals = line.split(',').map(v => v.trim());
+                        const obj: Record<string, unknown> = {};
+                        headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
+                        return obj;
+                      });
+                    }
+                    const result = await importIPMappings(records, ipMappingsFilter || undefined);
+                    showNotification(`Imported ${result.added} IP mappings (total: ${result.total})`, 'success');
+                    loadIPMappings(ipMappingsFilter);
+                  } catch { showNotification('Failed to import IP mappings', 'error'); }
+                  e.target.value = '';
+                }} />
+              </label>
+            </div>
+          </div>
+          <div className="p-4">
+            {loadingMappings ? (
+              <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
+            ) : allIPMappings.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">App ID</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Legacy IP</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Legacy DC</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">&rarr;</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NGDC IP</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NGDC Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NGDC Group</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NH</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">SZ</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Component</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {allIPMappings.map((m, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 font-medium">{String(m.app_id || '')}</td>
+                        <td className="px-3 py-1.5 font-mono text-red-600">{String(m.legacy_ip || '')}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{String(m.legacy_dc || '')}</td>
+                        <td className="px-3 py-1.5 text-gray-400">&rarr;</td>
+                        <td className="px-3 py-1.5 font-mono text-green-600">{String(m.ngdc_ip || '')}</td>
+                        <td className="px-3 py-1.5 font-mono text-green-700">{String(m.ngdc_name || '')}</td>
+                        <td className="px-3 py-1.5">
+                          {m.ngdc_group ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">{String(m.ngdc_group)}</span> : <span className="text-gray-300">-</span>}
+                        </td>
+                        <td className="px-3 py-1.5">{String(m.ngdc_nh || '')}</td>
+                        <td className="px-3 py-1.5">{String(m.ngdc_sz || '')}</td>
+                        <td className="px-3 py-1.5">{String(m.component || '')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-sm">No IP mappings found{ipMappingsFilter ? ` for app ${ipMappingsFilter}` : ''}.</p>
+                <p className="text-xs mt-1">Import mappings using CSV/JSON or check seeded data.</p>
+              </div>
+            )}
+          </div>
+          <div className="px-4 py-2 border-t bg-gray-50 text-xs text-gray-500">
+            {allIPMappings.length} mapping{allIPMappings.length !== 1 ? 's' : ''} loaded.
+            Naming: svr-xx.xx.xx.xx (IPs), rng-xx.xx.xx.xx-xy (ranges), grp-APP-NH-SZ-TIER (groups)
+          </div>
+        </div>
+      ) : viewMode === 'builder' ? (
         <div className="bg-white border rounded-lg shadow-sm p-4">
           <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
         </div>
