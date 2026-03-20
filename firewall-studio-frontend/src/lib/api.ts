@@ -552,3 +552,49 @@ export const getExpandedRule = (ruleId: string) =>
 // Create Migration Group
 export const createMigrationGroup = (data: { name: string; app_id: string; members: { type: string; value: string }[]; nh?: string; sz?: string }) =>
   fetchJSON<Record<string, unknown>>('/api/reference/migration-groups', { method: 'POST', body: JSON.stringify(data) });
+
+// IP Mappings (Legacy DC <-> NGDC one-to-one)
+export const getIPMappings = (legacyDc?: string, appId?: string) => {
+  const params = new URLSearchParams();
+  if (legacyDc) params.set('legacy_dc', legacyDc);
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/ip-mappings${qs ? `?${qs}` : ''}`);
+};
+export const createIPMapping = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/ip-mappings', { method: 'POST', body: JSON.stringify(data) });
+export const updateIPMapping = (id: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/ip-mappings/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteIPMapping = (id: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/ip-mappings/${id}`, { method: 'DELETE' });
+export const lookupIPMapping = (legacyIp: string, legacyDc?: string) =>
+  fetchJSON<{ found: boolean; mapping?: Record<string, unknown>; message?: string }>(
+    '/api/reference/ip-mappings/lookup',
+    { method: 'POST', body: JSON.stringify({ legacy_ip: legacyIp, legacy_dc: legacyDc || '' }) }
+  );
+
+// Egress/Ingress Compilation
+export const compileEgressIngress = (ruleId: string, vendor = 'generic') =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/compile/egress-ingress/${ruleId}?vendor=${vendor}`, { method: 'POST' });
+
+// Resolved Policy Matrix
+export const getResolvedPolicyMatrix = (params?: {
+  src_dc?: string; src_nh?: string; src_sz?: string;
+  dst_dc?: string; dst_nh?: string; dst_sz?: string;
+  environment?: string;
+}) => {
+  const sp = new URLSearchParams();
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => { if (v) sp.set(k, v); });
+  }
+  const qs = sp.toString();
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/policy-matrix/resolved${qs ? `?${qs}` : ''}`);
+};
+
+// Pre-Prod Policy Matrix
+export const getPreprodMatrix = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/preprod');
+
+// All Policy Matrices (heritage, ngdc_prod, nonprod, combined)
+export const getAllPolicyMatrices = () =>
+  fetchJSON<{ heritage_dc: Record<string, unknown>[]; ngdc_prod: Record<string, unknown>[]; nonprod: Record<string, unknown>[]; combined: Record<string, unknown>[] }>('/api/reference/policy-matrix/all');

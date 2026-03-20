@@ -14,6 +14,28 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.seed_data import (
+    SEED_NEIGHBOURHOODS as _SD_NH,
+    SEED_SECURITY_ZONES as _SD_SZ,
+    SEED_NGDC_DATACENTERS as _SD_NGDC_DC,
+    SEED_LEGACY_DATACENTERS as _SD_LEGACY_DC,
+    SEED_APPLICATIONS as _SD_APPS,
+    SEED_ENVIRONMENTS as _SD_ENVS,
+    SEED_PREDEFINED_DESTINATIONS as _SD_PREDEFS,
+    SEED_NAMING_STANDARDS as _SD_NAMING,
+    SEED_HERITAGE_DC_MATRIX as _SD_HDC_MTX,
+    SEED_NGDC_PROD_MATRIX as _SD_PROD_MTX,
+    SEED_NONPROD_MATRIX as _SD_NP_MTX,
+    SEED_PREPROD_MATRIX as _SD_PP_MTX,
+    SEED_POLICY_MATRIX as _SD_POLICY,
+    SEED_ORG_CONFIG as _SD_ORG,
+    SEED_GROUPS as _SD_GROUPS,
+    SEED_LEGACY_RULES as _SD_LEGACY_RULES,
+    SEED_IP_MAPPINGS as _SD_IP_MAPPINGS,
+    build_seed_migrations as _sd_build_migrations,
+    build_seed_chg_requests as _sd_build_chg_requests,
+)
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 
@@ -1307,6 +1329,7 @@ async def seed_database() -> None:
     _save("chg_requests", deepcopy(SEED_CHG_REQUESTS))
     _save("groups", deepcopy(SEED_GROUPS))
     _save("legacy_rules", deepcopy(SEED_LEGACY_RULES))
+    _save("ip_mappings", deepcopy(_SD_IP_MAPPINGS))
 
 
 # ============================================================
@@ -3432,6 +3455,255 @@ async def expand_groups_in_rule(rule: dict[str, Any]) -> dict[str, Any]:
         rule["rule_service_expanded"] = "\n".join(expanded_svc)
 
     return rule
+
+
+# ============================================================
+# IP Mapping CRUD (Legacy DC <-> NGDC one-to-one)
+# ============================================================
+
+async def get_ip_mappings(legacy_dc: str | None = None, app_id: str | None = None) -> list[dict[str, Any]]:
+    """Get IP mappings, optionally filtered by legacy DC or app."""
+    mappings = _load("ip_mappings") or []
+    if legacy_dc:
+        mappings = [m for m in mappings if m.get("legacy_dc") == legacy_dc]
+    if app_id:
+        mappings = [m for m in mappings if m.get("app_id") == app_id]
+    return mappings
+
+
+async def add_ip_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
+    mappings = _load("ip_mappings") or []
+    mapping["id"] = mapping.get("id", _id())
+    mapping["created_at"] = _now()
+    mappings.append(mapping)
+    _save("ip_mappings", mappings)
+    return mapping
+
+
+async def update_ip_mapping(mapping_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    mappings = _load("ip_mappings") or []
+    for m in mappings:
+        if m.get("id") == mapping_id:
+            m.update(data)
+            m["updated_at"] = _now()
+            _save("ip_mappings", mappings)
+            return m
+    return None
+
+
+async def delete_ip_mapping(mapping_id: str) -> bool:
+    mappings = _load("ip_mappings") or []
+    filtered = [m for m in mappings if m.get("id") != mapping_id]
+    if len(filtered) == len(mappings):
+        return False
+    _save("ip_mappings", filtered)
+    return True
+
+
+async def lookup_ngdc_ip(legacy_ip: str, legacy_dc: str = "") -> dict[str, Any] | None:
+    """Look up the NGDC equivalent for a legacy IP address."""
+    mappings = _load("ip_mappings") or []
+    for m in mappings:
+        if m.get("legacy_ip") == legacy_ip:
+            if not legacy_dc or m.get("legacy_dc") == legacy_dc:
+                return m
+    return None
+
+
+# ============================================================
+# Egress/Ingress Compile for Blocked SZ Combinations
+# ============================================================
+
+async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[str, Any] | None:
+    """Compile separate egress (at source device) and ingress (at destination device)
+    rules for blocked SZ combinations that require a firewall request."""
+    # Try studio rules first, then legacy
+    rule = await get_rule(rule_id)
+    if not rule:
+        legacy = _load("legacy_rules") or []
+        rule = next((r for r in legacy if r.get("id") == rule_id), None)
+    if not rule:
+        return None
+
+    src = rule.get("source", rule.get("rule_source", ""))
+    dst = rule.get("destination", rule.get("rule_destination", ""))
+    src_zone = rule.get("source_zone", rule.get("rule_source_zone", "any"))
+    dst_zone = rule.get("destination_zone", rule.get("rule_destination_zone", "any"))
+    svc = rule.get("port", rule.get("rule_service", "any"))
+    proto = rule.get("protocol", "TCP")
+    action = rule.get("action", rule.get("rule_action", "Allow"))
+    desc = rule.get("description", rule.get("app_name", rule_id))
+    rid = rule.get("rule_id", rule.get("id", rule_id))
+
+    src_objs = [s.strip() for s in str(src).split("\n") if s.strip()] or ["any"]
+    dst_objs = [d.strip() for d in str(dst).split("\n") if d.strip()] or ["any"]
+
+    egress_lines: list[str] = []
+    ingress_lines: list[str] = []
+
+    if vendor == "palo_alto":
+        egress_lines.append(f"# EGRESS Rule (Source Device) - {desc}")
+        for s in src_objs:
+            egress_lines.append(
+                f'set rulebase security rules "{rid}-EGRESS" from {src_zone}\n'
+                f'set rulebase security rules "{rid}-EGRESS" to {dst_zone}\n'
+                f'set rulebase security rules "{rid}-EGRESS" source [{s}]\n'
+                f'set rulebase security rules "{rid}-EGRESS" destination [any]\n'
+                f'set rulebase security rules "{rid}-EGRESS" service [{proto.lower()}-{svc}]\n'
+                f'set rulebase security rules "{rid}-EGRESS" action allow\n'
+                f'set rulebase security rules "{rid}-EGRESS" log-start yes'
+            )
+        ingress_lines.append(f"# INGRESS Rule (Destination Device) - {desc}")
+        for d in dst_objs:
+            ingress_lines.append(
+                f'set rulebase security rules "{rid}-INGRESS" from {src_zone}\n'
+                f'set rulebase security rules "{rid}-INGRESS" to {dst_zone}\n'
+                f'set rulebase security rules "{rid}-INGRESS" source [any]\n'
+                f'set rulebase security rules "{rid}-INGRESS" destination [{d}]\n'
+                f'set rulebase security rules "{rid}-INGRESS" service [{proto.lower()}-{svc}]\n'
+                f'set rulebase security rules "{rid}-INGRESS" action allow\n'
+                f'set rulebase security rules "{rid}-INGRESS" log-start yes'
+            )
+    elif vendor == "checkpoint":
+        egress_lines.append(f"# EGRESS Rule (Source Device) - {desc}")
+        egress_lines.append(
+            f'mgmt_cli add access-rule layer "Network" position top \\\n'
+            f'  name "{rid}-EGRESS" \\\n'
+            f'  source "{src}" \\\n'
+            f'  destination "any" \\\n'
+            f'  service "{proto}_{svc}" \\\n'
+            f'  action "Accept" \\\n'
+            f'  track "Log" \\\n'
+            f'  comments "Egress: {desc}"'
+        )
+        ingress_lines.append(f"# INGRESS Rule (Destination Device) - {desc}")
+        ingress_lines.append(
+            f'mgmt_cli add access-rule layer "Network" position top \\\n'
+            f'  name "{rid}-INGRESS" \\\n'
+            f'  source "any" \\\n'
+            f'  destination "{dst}" \\\n'
+            f'  service "{proto}_{svc}" \\\n'
+            f'  action "Accept" \\\n'
+            f'  track "Log" \\\n'
+            f'  comments "Ingress: {desc}"'
+        )
+    elif vendor == "cisco_asa":
+        egress_lines.append(f"! EGRESS Rule (Source Device) - {desc}")
+        for s in src_objs:
+            egress_lines.append(
+                f"access-list ACL_EGRESS extended permit "
+                f"{proto.lower()} object-group {s} any eq {svc}"
+            )
+        ingress_lines.append(f"! INGRESS Rule (Destination Device) - {desc}")
+        for d in dst_objs:
+            ingress_lines.append(
+                f"access-list ACL_INGRESS extended permit "
+                f"{proto.lower()} any object-group {d} eq {svc}"
+            )
+    else:
+        egress_lines.append(f"# EGRESS Rule (Source Firewall Device) - {rid}")
+        egress_lines.append(f"# Description: {desc}")
+        egress_lines.append(f"---")
+        egress_lines.append(f"egress_rule:")
+        egress_lines.append(f"  id: {rid}-EGRESS")
+        egress_lines.append(f"  direction: outbound")
+        egress_lines.append(f"  device: source_firewall")
+        egress_lines.append(f"  source: [{', '.join(src_objs)}]")
+        egress_lines.append(f"  source_zone: {src_zone}")
+        egress_lines.append(f"  destination: [any]")
+        egress_lines.append(f"  destination_zone: {dst_zone}")
+        egress_lines.append(f"  service: {svc}")
+        egress_lines.append(f"  action: allow")
+        egress_lines.append(f"  logging: true")
+
+        ingress_lines.append(f"# INGRESS Rule (Destination Firewall Device) - {rid}")
+        ingress_lines.append(f"# Description: {desc}")
+        ingress_lines.append(f"---")
+        ingress_lines.append(f"ingress_rule:")
+        ingress_lines.append(f"  id: {rid}-INGRESS")
+        ingress_lines.append(f"  direction: inbound")
+        ingress_lines.append(f"  device: destination_firewall")
+        ingress_lines.append(f"  source: [any]")
+        ingress_lines.append(f"  source_zone: {src_zone}")
+        ingress_lines.append(f"  destination: [{', '.join(dst_objs)}]")
+        ingress_lines.append(f"  destination_zone: {dst_zone}")
+        ingress_lines.append(f"  service: {svc}")
+        ingress_lines.append(f"  action: allow")
+        ingress_lines.append(f"  logging: true")
+
+    return {
+        "rule_id": rid,
+        "vendor_format": vendor,
+        "egress_compiled": "\n".join(egress_lines),
+        "ingress_compiled": "\n".join(ingress_lines),
+        "source_zone": src_zone,
+        "destination_zone": dst_zone,
+        "source_objects": src_objs,
+        "destination_objects": dst_objs,
+        "service": svc,
+        "requires_separate_devices": True,
+        "note": "This rule crosses blocked SZ boundaries. Egress rule goes on source device, ingress rule goes on destination device.",
+    }
+
+
+# ============================================================
+# Policy Matrix Resolution (resolve Same/Any/Different to real names)
+# ============================================================
+
+async def get_resolved_policy_matrix(src_dc: str = "", src_nh: str = "", src_sz: str = "",
+                                      dst_dc: str = "", dst_nh: str = "", dst_sz: str = "",
+                                      environment: str = "Production") -> list[dict[str, Any]]:
+    """Return policy matrix with Same/Any/Different resolved to actual NH/SZ names."""
+    env_lower = environment.lower()
+    if "pre" in env_lower:
+        matrix = _load("preprod_matrix") or []
+        env_label = "Pre-Prod"
+    elif "non" in env_lower:
+        matrix = _load("nonprod_matrix") or []
+        env_label = "Non-Prod"
+    else:
+        matrix = _load("ngdc_prod_matrix") or []
+        env_label = "Prod"
+
+    nhs = _load("neighbourhoods") or []
+    szs = _load("security_zones") or []
+    nh_names = {nh.get("nh_id", ""): nh.get("name", "") for nh in nhs}
+    sz_names = {sz.get("code", ""): sz.get("name", "") for sz in szs}
+
+    resolved: list[dict[str, Any]] = []
+    for entry in matrix:
+        row = dict(entry)
+        row["environment"] = env_label
+
+        # For prod matrix: resolve Same/Any/Different
+        if env_label == "Prod":
+            for field in ["src_dc", "dst_dc", "src_nh", "dst_nh", "src_sz", "dst_sz"]:
+                val = row.get(field, "")
+                if val == "Same":
+                    row[f"{field}_resolved"] = "(Same as counterpart)"
+                elif val == "Different":
+                    row[f"{field}_resolved"] = "(Different from counterpart)"
+                elif val == "Any":
+                    row[f"{field}_resolved"] = "(Any)"
+                else:
+                    if "nh" in field:
+                        row[f"{field}_resolved"] = nh_names.get(val, val)
+                    elif "sz" in field:
+                        row[f"{field}_resolved"] = sz_names.get(val, val)
+                    else:
+                        row[f"{field}_resolved"] = val
+        else:
+            # For non-prod / pre-prod: resolve zone codes to names
+            for field in ["source_zone", "dest_zone"]:
+                val = row.get(field, "")
+                if val == "Any":
+                    row[f"{field}_resolved"] = "(Any)"
+                else:
+                    row[f"{field}_resolved"] = sz_names.get(val, val)
+
+        resolved.append(row)
+
+    return resolved
 
 
 async def create_migration_group(name: str, app_id: str, members: list[dict[str, str]],
