@@ -362,10 +362,11 @@ export const removeGroupMember = (groupName: string, memberValue: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
 
 // Legacy Rules (for Migration Studio & Firewall Management)
-export const getLegacyRules = (appId?: string, excludeMigrated?: boolean) => {
+export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
   if (excludeMigrated) params.set('exclude_migrated', 'true');
+  if (environment) params.set('environment', environment);
   const qs = params.toString();
   return fetchJSON<LegacyRule[]>(`/api/reference/legacy-rules${qs ? `?${qs}` : ''}`);
 };
@@ -377,9 +378,10 @@ export const deleteLegacyRule = (ruleId: string) =>
   fetchJSON<{ message: string }>(`/api/reference/legacy-rules/${ruleId}`, { method: 'DELETE' });
 
 // Excel import for legacy rules
-export const importLegacyRulesExcel = async (file: File): Promise<{ added: number; duplicates: number; total: number }> => {
+export const importLegacyRulesExcel = async (file: File, environment?: string): Promise<{ added: number; duplicates: number; total: number }> => {
   const formData = new FormData();
   formData.append('file', file);
+  if (environment) formData.append('environment', environment);
   const res = await fetch(`${API_BASE}/api/reference/legacy-rules/import`, {
     method: 'POST',
     body: formData,
@@ -532,10 +534,10 @@ export const checkDuplicates = (source: string, destination: string, service: st
   );
 
 // Import Rules to NGDC Standardization from Network Firewall Request
-export const importRulesToNGDC = (appIds: string[]) =>
+export const importRulesToNGDC = (appIds: string[], environment?: string) =>
   fetchJSON<{ imported: number; rules: LegacyRule[] }>(
     '/api/reference/legacy-rules/import-to-ngdc',
-    { method: 'POST', body: JSON.stringify({ app_ids: appIds }) }
+    { method: 'POST', body: JSON.stringify({ app_ids: appIds, environment }) }
   );
 
 // Auto-Import Compliant Rules to Firewall Studio
@@ -598,3 +600,15 @@ export const getPreprodMatrix = () =>
 // All Policy Matrices (heritage, ngdc_prod, nonprod, combined)
 export const getAllPolicyMatrices = () =>
   fetchJSON<{ heritage_dc: Record<string, unknown>[]; ngdc_prod: Record<string, unknown>[]; nonprod: Record<string, unknown>[]; combined: Record<string, unknown>[] }>('/api/reference/policy-matrix/all');
+
+// App Environment Assignments
+export const getAppEnvAssignments = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/app-env-assignments${qs ? `?${qs}` : ''}`);
+};
+export const updateAppEnvAssignment = (id: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/app-env-assignments/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteAppEnvAssignment = (id: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/app-env-assignments/${id}`, { method: 'DELETE' });
