@@ -965,11 +965,31 @@ async def lookup_ip_mapping(data: dict):
     return {"found": True, "mapping": result}
 
 
+# ---- Firewall Boundary Analysis ----
+
+@router.get("/firewall-boundaries")
+async def get_firewall_boundaries(
+    src_nh: str = "", src_sz: str = "", dst_nh: str = "", dst_sz: str = ""
+):
+    """Determine how many firewall boundaries a rule must cross based on
+    the Logical Data Flow rules (NH/SZ placement)."""
+    from app.database import determine_firewall_boundaries
+    return await determine_firewall_boundaries(src_nh, src_sz, dst_nh, dst_sz)
+
+
+@router.get("/logical-flow-rules")
+async def get_logical_flow_rules():
+    """Return the Logical Data Flow rule definitions."""
+    from app.seed_data import LOGICAL_FLOW_RULES, SEGMENTED_ZONES
+    return {"rules": LOGICAL_FLOW_RULES, "segmented_zones": list(SEGMENTED_ZONES)}
+
+
 # ---- Egress/Ingress Compilation ----
 
 @router.post("/compile/egress-ingress/{rule_id}")
 async def compile_egress_ingress_endpoint(rule_id: str, vendor: str = "generic"):
-    """Compile separate egress and ingress rules for blocked SZ combinations."""
+    """Compile separate egress and ingress rules for cross-SZ combinations.
+    Uses Logical Data Flow boundary analysis for device-specific compilation."""
     from app.database import compile_egress_ingress
     result = await compile_egress_ingress(rule_id, vendor)
     if not result:
@@ -1001,16 +1021,40 @@ async def list_preprod_matrix():
 @router.get("/firewall-devices")
 async def list_firewall_devices():
     from app.database import get_firewall_devices
-    return get_firewall_devices()
+    return await get_firewall_devices()
 
 
 @router.get("/firewall-devices/{device_id}")
 async def get_firewall_device_endpoint(device_id: str):
     from app.database import get_firewall_device
-    device = get_firewall_device(device_id)
+    device = await get_firewall_device(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Firewall device not found")
     return device
+
+
+@router.post("/firewall-devices")
+async def create_firewall_device_endpoint(data: dict):
+    from app.database import create_firewall_device
+    return await create_firewall_device(data)
+
+
+@router.put("/firewall-devices/{device_id}")
+async def update_firewall_device_endpoint(device_id: str, data: dict):
+    from app.database import update_firewall_device
+    result = await update_firewall_device(device_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Firewall device not found")
+    return result
+
+
+@router.delete("/firewall-devices/{device_id}")
+async def delete_firewall_device_endpoint(device_id: str):
+    from app.database import delete_firewall_device
+    ok = await delete_firewall_device(device_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Firewall device not found")
+    return {"message": "Deleted"}
 
 
 # ---- IP Mappings Import ----

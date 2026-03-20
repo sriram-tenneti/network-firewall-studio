@@ -575,7 +575,20 @@ export const lookupIPMapping = (legacyIp: string, legacyDc?: string) =>
     { method: 'POST', body: JSON.stringify({ legacy_ip: legacyIp, legacy_dc: legacyDc || '' }) }
   );
 
-// Egress/Ingress Compilation
+// Firewall Boundary Analysis
+export const getFirewallBoundaries = (srcNh: string, srcSz: string, dstNh: string, dstSz: string) => {
+  const sp = new URLSearchParams({ src_nh: srcNh, src_sz: srcSz, dst_nh: dstNh, dst_sz: dstSz });
+  return fetchJSON<{
+    boundaries: number; flow_rule: string; note: string;
+    requires_egress: boolean; requires_ingress: boolean;
+    devices: { role: string; direction: string; device_id: string; device_name: string; nh: string; sz: string }[];
+  }>(`/api/reference/firewall-boundaries?${sp.toString()}`);
+};
+
+export const getLogicalFlowRules = () =>
+  fetchJSON<{ rules: Record<string, unknown>[]; segmented_zones: string[] }>('/api/reference/logical-flow-rules');
+
+// Egress/Ingress Compilation (with boundary analysis)
 export const compileEgressIngress = (ruleId: string, vendor = 'generic') =>
   fetchJSON<Record<string, unknown>>(`/api/reference/compile/egress-ingress/${ruleId}?vendor=${vendor}`, { method: 'POST' });
 
@@ -618,6 +631,12 @@ export const getFirewallDevices = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/firewall-devices');
 export const getFirewallDevice = (deviceId: string) =>
   fetchJSON<Record<string, unknown>>(`/api/reference/firewall-devices/${deviceId}`);
+export const createFirewallDevice = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/firewall-devices', { method: 'POST', body: JSON.stringify(data) });
+export const updateFirewallDevice = (deviceId: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/firewall-devices/${deviceId}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteFirewallDevice = (deviceId: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/firewall-devices/${deviceId}`, { method: 'DELETE' });
 
 // IP Mappings Import
 export const importIPMappings = (mappings: Record<string, unknown>[], appId?: string) =>

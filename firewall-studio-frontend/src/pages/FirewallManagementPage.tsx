@@ -6,7 +6,6 @@ import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications } from '@/lib/api';
-import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -515,9 +514,8 @@ export default function FirewallManagementPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('all');
-  const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
   const [modifyViewMode, setModifyViewMode] = useState<'edit' | 'preview'>('edit');
-  const [applications, setApplications] = useState<Application[]>([]);
+  const [, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const { notification, showNotification, clearNotification } = useNotification();
   const detailModal = useModal<LegacyRule>();
@@ -789,10 +787,6 @@ export default function FirewallManagementPage() {
             <option value="Non-Production">Non-Production</option>
             <option value="Pre-Production">Pre-Production</option>
           </select>
-          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
-            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
-            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
-          </div>
           <button onClick={() => { setSelectedExportApps(selectedApp ? new Set([selectedApp]) : new Set()); setShowExportModal(true); }} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
             Export Rules
           </button>
@@ -815,11 +809,6 @@ export default function FirewallManagementPage() {
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-      {viewMode === 'builder' ? (
-        <div className="mt-4 bg-white border rounded-lg shadow-sm p-4">
-          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
-        </div>
-      ) : (
       <div className="mt-4">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -838,8 +827,6 @@ export default function FirewallManagementPage() {
           />
         )}
       </div>
-      )}
-
 
       {/* Export Rules Modal */}
       <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Rules" size="lg">

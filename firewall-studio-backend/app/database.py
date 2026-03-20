@@ -32,6 +32,7 @@ from app.seed_data import (
     SEED_GROUPS as _SD_GROUPS,
     SEED_LEGACY_RULES as _SD_LEGACY_RULES,
     SEED_IP_MAPPINGS as _SD_IP_MAPPINGS,
+    SEED_FIREWALL_DEVICES as _SD_FW_DEVICES,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
 )
@@ -95,57 +96,273 @@ SEED_CHG_REQUESTS = _sd_build_chg_requests()
 
 
 def _build_seed_rules() -> list[dict[str, Any]]:
-    """Build NGDC firewall rules from seed data groups."""
+    """Build NGDC firewall rules from seed data groups.
+
+    Comprehensive test data covering ALL six Logical Data Flow scenarios:
+
+    LDF-001: GEN/STD zones across NHs → 0 boundaries (no firewall)
+    LDF-002: Same NH, same SZ → 0 boundaries (no firewall)
+    LDF-003: Segmented zone → different zone, different NHs → 1 boundary (egress)
+    LDF-004: Same segmented zone, different NHs → 2 boundaries (egress+ingress)
+    LDF-005: Same NH, different segmented zones → 1 boundary
+    LDF-006: PAA flow (internet → PAA → internal) → 2 boundaries
+    """
     rules: list[dict[str, Any]] = []
     base = datetime.utcnow()
     seq = 3000
+
+    # Each tuple: (source_group, source_zone, source_nh,
+    #              dest_group, dest_zone, dest_nh,
+    #              port, description, application, status, g2g, days_ago,
+    #              environment, ldf_scenario)
     app_rules = [
-        ("grp-CRM-NH02-CDE-WEB","CDE","grp-CRM-NH02-CDE-APP","CDE","TCP 443","CRM Web to App","CRM","Deployed",True,-30),
-        ("grp-CRM-NH02-CDE-APP","CDE","grp-CRM-NH02-CDE-DB","CDE","TCP 1521","CRM App to DB","CRM","Deployed",True,-30),
-        ("grp-CRM-NH02-CDE-BAT","CDE","grp-CRM-NH02-CDE-DB","CDE","TCP 1521","CRM Batch to DB","CRM","Certified",True,-20),
-        ("grp-CRM-NH02-CDE-API","CDE","grp-CRM-NH02-CDE-APP","CDE","TCP 8443","CRM API to App","CRM","Deployed",True,-25),
-        ("grp-HRM-NH01-GEN-WEB","GEN","grp-HRM-NH01-GEN-APP","GEN","TCP 8443","HRM Web to App","HRM","Deployed",True,-90),
-        ("grp-HRM-NH01-GEN-APP","GEN","grp-HRM-NH01-GEN-DB","GEN","TCP 5432","HRM App to DB","HRM","Deployed",True,-90),
-        ("grp-HRM-NH01-GEN-BAT","GEN","grp-HRM-NH01-GEN-DB","GEN","TCP 5432","HRM Batch to DB","HRM","Certified",True,-60),
-        ("grp-TRD-NH06-CDE-WEB","CDE","grp-TRD-NH06-CDE-APP","CDE","TCP 8443","TRD Web to App","TRD","Deployed",True,-120),
-        ("grp-TRD-NH06-CDE-APP","CDE","grp-TRD-NH06-CDE-DB","CDE","TCP 1521","TRD App to DB","TRD","Deployed",True,-120),
-        ("grp-TRD-NH06-CDE-APP","CDE","grp-TRD-NH06-CDE-MQ","CDE","TCP 9092","TRD App to MQ","TRD","Certified",True,-80),
-        ("grp-TRD-NH06-CDE-API","CDE","grp-TRD-NH06-CDE-APP","CDE","TCP 8443","TRD API to App","TRD","Deployed",True,-100),
-        ("grp-PAY-NH07-CPA-APP","CPA","grp-PAY-NH07-CPA-DB","CPA","TCP 1521","PAY App to DB","PAY","Deployed",True,-150),
-        ("grp-PAY-NH07-CPA-APP","CPA","grp-PAY-NH07-CPA-MQ","CPA","TCP 5672","PAY App to MQ","PAY","Certified",True,-100),
-        ("grp-PAY-NH07-CPA-API","CPA","grp-PAY-NH07-CPA-APP","CPA","TCP 8443","PAY API to App","PAY","Deployed",True,-140),
-        ("grp-INS-NH04-GEN-WEB","GEN","grp-INS-NH04-GEN-APP","GEN","TCP 8443","INS Web to App","INS","Deployed",True,-85),
-        ("grp-INS-NH04-GEN-APP","GEN","grp-INS-NH04-GEN-DB","GEN","TCP 5432","INS App to DB","INS","Deployed",True,-85),
-        ("grp-KYC-NH05-GEN-WEB","GEN","grp-KYC-NH05-GEN-APP","GEN","TCP 8443","KYC Web to App","KYC","Deployed",True,-95),
-        ("grp-KYC-NH05-GEN-APP","GEN","grp-KYC-NH05-GEN-DB","GEN","TCP 5432","KYC App to DB","KYC","Deployed",True,-95),
-        ("grp-KYC-NH05-GEN-API","GEN","grp-KYC-NH05-GEN-APP","GEN","TCP 8443","KYC API to App","KYC","Certified",True,-70),
-        ("grp-FRD-NH02-CDE-APP","CDE","grp-FRD-NH02-CDE-DB","CDE","TCP 1521","FRD Engine to DB","FRD","Deployed",True,-100),
-        ("grp-FRD-NH02-CDE-APP","CDE","grp-FRD-NH02-CDE-MQ","CDE","TCP 9092","FRD App to Kafka","FRD","Deployed",True,-90),
-        ("grp-FRD-NH02-CDE-API","CDE","grp-FRD-NH02-CDE-APP","CDE","TCP 8443","FRD API to Engine","FRD","Certified",True,-50),
-        ("grp-LND-NH09-CCS-WEB","CCS","grp-LND-NH09-CCS-APP","CCS","TCP 8443","LND Web to App","LND","Deployed",True,-110),
-        ("grp-LND-NH09-CCS-APP","CCS","grp-LND-NH09-CCS-DB","CCS","TCP 1521","LND App to DB","LND","Deployed",True,-110),
-        ("grp-LND-NH09-CCS-BAT","CCS","grp-LND-NH09-CCS-DB","CCS","TCP 1521","LND Batch to DB","LND","Certified",True,-80),
-        ("grp-WLT-NH10-CDE-WEB","CDE","grp-WLT-NH10-CDE-APP","CDE","TCP 8443","WLT Web to App","WLT","Deployed",True,-130),
-        ("grp-WLT-NH10-CDE-APP","CDE","grp-WLT-NH10-CDE-DB","CDE","TCP 1521","WLT App to DB","WLT","Deployed",True,-130),
-        ("grp-WLT-NH10-CDE-API","CDE","grp-WLT-NH10-CDE-APP","CDE","TCP 8443","WLT API to App","WLT","Certified",True,-60),
-        ("grp-CBK-NH08-CCS-APP","CCS","grp-CBK-NH08-CCS-DB","CCS","TCP 1521","CBK App to DB","CBK","Deployed",True,-200),
-        ("grp-CBK-NH08-CCS-APP","CCS","grp-CBK-NH08-CCS-MQ","CCS","TCP 5672","CBK App to MQ","CBK","Deployed",True,-180),
-        ("grp-CBK-NH08-CCS-API","CCS","grp-CBK-NH08-CCS-APP","CCS","TCP 8443","CBK API to App","CBK","Certified",True,-150),
-        ("grp-CBK-NH08-CCS-BAT","CCS","grp-CBK-NH08-CCS-DB","CCS","TCP 1521","CBK Batch to DB","CBK","Deployed",True,-160),
-        ("grp-CRM-NH02-CDE-APP","CDE","grp-FRD-NH02-CDE-API","CDE","TCP 8443","CRM to Fraud Check","CRM","Certified",True,-40),
-        ("grp-PAY-NH07-CPA-APP","CPA","grp-FRD-NH02-CDE-API","CDE","TCP 8443","PAY to Fraud Check","PAY","Pending Review",False,-10),
-        ("grp-CBK-NH08-CCS-APP","CCS","grp-PAY-NH07-CPA-API","CPA","TCP 8443","CBK to Payment","CBK","Pending Review",False,-5),
-        ("grp-LND-NH09-CCS-APP","CCS","grp-KYC-NH05-GEN-API","GEN","TCP 8443","LND to KYC Check","LND","Certified",True,-35),
-        ("grp-WLT-NH10-CDE-APP","CDE","grp-TRD-NH06-CDE-API","CDE","TCP 8443","WLT to Trading","WLT","Certified",True,-45),
+        # ================================================================
+        # LDF-002: Same NH, same SZ — 0 boundaries (intra-NH, intra-SZ)
+        # ================================================================
+
+        # CRM internal (NH02, CDE)
+        ("grp-CRM-NH02-CDE-WEB", "CDE", "NH02", "grp-CRM-NH02-CDE-APP", "CDE", "NH02",
+         "TCP 443", "CRM Web to App (same NH/SZ)", "CRM", "Deployed", True, -30, "Production", "LDF-002"),
+        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-CRM-NH02-CDE-DB", "CDE", "NH02",
+         "TCP 1521", "CRM App to DB (same NH/SZ)", "CRM", "Deployed", True, -30, "Production", "LDF-002"),
+        ("grp-CRM-NH02-CDE-BAT", "CDE", "NH02", "grp-CRM-NH02-CDE-DB", "CDE", "NH02",
+         "TCP 1521", "CRM Batch to DB (same NH/SZ)", "CRM", "Certified", True, -20, "Production", "LDF-002"),
+        ("grp-CRM-NH02-CDE-API", "CDE", "NH02", "grp-CRM-NH02-CDE-APP", "CDE", "NH02",
+         "TCP 8443", "CRM API to App (same NH/SZ)", "CRM", "Deployed", True, -25, "Production", "LDF-002"),
+
+        # TRD internal (NH06, CDE)
+        ("grp-TRD-NH06-CDE-WEB", "CDE", "NH06", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
+         "TCP 8443", "TRD Web to App (same NH/SZ)", "TRD", "Deployed", True, -120, "Production", "LDF-002"),
+        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-TRD-NH06-CDE-DB", "CDE", "NH06",
+         "TCP 1521", "TRD App to DB (same NH/SZ)", "TRD", "Deployed", True, -120, "Production", "LDF-002"),
+        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-TRD-NH06-CDE-MQ", "CDE", "NH06",
+         "TCP 9092", "TRD App to MQ (same NH/SZ)", "TRD", "Certified", True, -80, "Production", "LDF-002"),
+        ("grp-TRD-NH06-CDE-API", "CDE", "NH06", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
+         "TCP 8443", "TRD API to App (same NH/SZ)", "TRD", "Deployed", True, -100, "Production", "LDF-002"),
+
+        # PAY internal (NH07, CPA)
+        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-PAY-NH07-CPA-DB", "CPA", "NH07",
+         "TCP 1521", "PAY App to DB (same NH/SZ)", "PAY", "Deployed", True, -150, "Production", "LDF-002"),
+        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-PAY-NH07-CPA-MQ", "CPA", "NH07",
+         "TCP 5672", "PAY App to MQ (same NH/SZ)", "PAY", "Certified", True, -100, "Production", "LDF-002"),
+        ("grp-PAY-NH07-CPA-API", "CPA", "NH07", "grp-PAY-NH07-CPA-APP", "CPA", "NH07",
+         "TCP 8443", "PAY API to App (same NH/SZ)", "PAY", "Deployed", True, -140, "Production", "LDF-002"),
+
+        # FRD internal (NH02, CDE)
+        ("grp-FRD-NH02-CDE-APP", "CDE", "NH02", "grp-FRD-NH02-CDE-DB", "CDE", "NH02",
+         "TCP 1521", "FRD Engine to DB (same NH/SZ)", "FRD", "Deployed", True, -100, "Production", "LDF-002"),
+        ("grp-FRD-NH02-CDE-APP", "CDE", "NH02", "grp-FRD-NH02-CDE-MQ", "CDE", "NH02",
+         "TCP 9092", "FRD App to Kafka (same NH/SZ)", "FRD", "Deployed", True, -90, "Production", "LDF-002"),
+        ("grp-FRD-NH02-CDE-API", "CDE", "NH02", "grp-FRD-NH02-CDE-APP", "CDE", "NH02",
+         "TCP 8443", "FRD API to Engine (same NH/SZ)", "FRD", "Certified", True, -50, "Production", "LDF-002"),
+
+        # CBK internal (NH08, CCS)
+        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-CBK-NH08-CCS-DB", "CCS", "NH08",
+         "TCP 1521", "CBK App to DB (same NH/SZ)", "CBK", "Deployed", True, -200, "Production", "LDF-002"),
+        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-CBK-NH08-CCS-MQ", "CCS", "NH08",
+         "TCP 5672", "CBK App to MQ (same NH/SZ)", "CBK", "Deployed", True, -180, "Production", "LDF-002"),
+        ("grp-CBK-NH08-CCS-API", "CCS", "NH08", "grp-CBK-NH08-CCS-APP", "CCS", "NH08",
+         "TCP 8443", "CBK API to App (same NH/SZ)", "CBK", "Certified", True, -150, "Production", "LDF-002"),
+        ("grp-CBK-NH08-CCS-BAT", "CCS", "NH08", "grp-CBK-NH08-CCS-DB", "CCS", "NH08",
+         "TCP 1521", "CBK Batch to DB (same NH/SZ)", "CBK", "Deployed", True, -160, "Production", "LDF-002"),
+
+        # LND internal (NH09, CCS)
+        ("grp-LND-NH09-CCS-WEB", "CCS", "NH09", "grp-LND-NH09-CCS-APP", "CCS", "NH09",
+         "TCP 8443", "LND Web to App (same NH/SZ)", "LND", "Deployed", True, -110, "Production", "LDF-002"),
+        ("grp-LND-NH09-CCS-APP", "CCS", "NH09", "grp-LND-NH09-CCS-DB", "CCS", "NH09",
+         "TCP 1521", "LND App to DB (same NH/SZ)", "LND", "Deployed", True, -110, "Production", "LDF-002"),
+        ("grp-LND-NH09-CCS-BAT", "CCS", "NH09", "grp-LND-NH09-CCS-DB", "CCS", "NH09",
+         "TCP 1521", "LND Batch to DB (same NH/SZ)", "LND", "Certified", True, -80, "Production", "LDF-002"),
+
+        # WLT internal (NH10, CDE)
+        ("grp-WLT-NH10-CDE-WEB", "CDE", "NH10", "grp-WLT-NH10-CDE-APP", "CDE", "NH10",
+         "TCP 8443", "WLT Web to App (same NH/SZ)", "WLT", "Deployed", True, -130, "Production", "LDF-002"),
+        ("grp-WLT-NH10-CDE-APP", "CDE", "NH10", "grp-WLT-NH10-CDE-DB", "CDE", "NH10",
+         "TCP 1521", "WLT App to DB (same NH/SZ)", "WLT", "Deployed", True, -130, "Production", "LDF-002"),
+        ("grp-WLT-NH10-CDE-API", "CDE", "NH10", "grp-WLT-NH10-CDE-APP", "CDE", "NH10",
+         "TCP 8443", "WLT API to App (same NH/SZ)", "WLT", "Certified", True, -60, "Production", "LDF-002"),
+
+        # MBK internal (NH07, CPA)
+        ("grp-MBK-NH07-CPA-WEB", "CPA", "NH07", "grp-MBK-NH07-CPA-APP", "CPA", "NH07",
+         "TCP 443", "MBK Web to App (same NH/SZ)", "MBK", "Deployed", True, -40, "Production", "LDF-002"),
+        ("grp-MBK-NH07-CPA-APP", "CPA", "NH07", "grp-MBK-NH07-CPA-DB", "CPA", "NH07",
+         "TCP 1521", "MBK App to DB (same NH/SZ)", "MBK", "Deployed", True, -40, "Production", "LDF-002"),
+
+        # ================================================================
+        # LDF-001: GEN/STD zones across NHs — 0 boundaries (no firewall)
+        # ================================================================
+
+        # HRM (NH01/GEN) -> INS (NH04/GEN)
+        ("grp-HRM-NH01-GEN-WEB", "GEN", "NH01", "grp-HRM-NH01-GEN-APP", "GEN", "NH01",
+         "TCP 8443", "HRM Web to App", "HRM", "Deployed", True, -90, "Production", "LDF-002"),
+        ("grp-HRM-NH01-GEN-APP", "GEN", "NH01", "grp-HRM-NH01-GEN-DB", "GEN", "NH01",
+         "TCP 5432", "HRM App to DB", "HRM", "Deployed", True, -90, "Production", "LDF-002"),
+        ("grp-HRM-NH01-GEN-BAT", "GEN", "NH01", "grp-HRM-NH01-GEN-DB", "GEN", "NH01",
+         "TCP 5432", "HRM Batch to DB", "HRM", "Certified", True, -60, "Production", "LDF-002"),
+        ("grp-HRM-NH01-GEN-APP", "GEN", "NH01", "grp-INS-NH04-GEN-API", "GEN", "NH04",
+         "TCP 8443", "HRM to INS API (GEN→GEN cross-NH, no FW)", "HRM", "Deployed", True, -85, "Production", "LDF-001"),
+        ("grp-INS-NH04-GEN-APP", "GEN", "NH04", "grp-KYC-NH05-GEN-API", "GEN", "NH05",
+         "TCP 8443", "INS to KYC API (GEN→GEN cross-NH, no FW)", "INS", "Certified", True, -75, "Production", "LDF-001"),
+        ("grp-KYC-NH05-GEN-APP", "GEN", "NH05", "grp-HRM-NH01-GEN-APP", "GEN", "NH01",
+         "TCP 8443", "KYC to HRM callback (GEN→GEN cross-NH, no FW)", "KYC", "Deployed", True, -65, "Production", "LDF-001"),
+
+        # INS internal (NH04, GEN)
+        ("grp-INS-NH04-GEN-WEB", "GEN", "NH04", "grp-INS-NH04-GEN-APP", "GEN", "NH04",
+         "TCP 8443", "INS Web to App", "INS", "Deployed", True, -85, "Production", "LDF-002"),
+        ("grp-INS-NH04-GEN-APP", "GEN", "NH04", "grp-INS-NH04-GEN-DB", "GEN", "NH04",
+         "TCP 5432", "INS App to DB", "INS", "Deployed", True, -85, "Production", "LDF-002"),
+
+        # KYC internal (NH05, GEN)
+        ("grp-KYC-NH05-GEN-WEB", "GEN", "NH05", "grp-KYC-NH05-GEN-APP", "GEN", "NH05",
+         "TCP 8443", "KYC Web to App", "KYC", "Deployed", True, -95, "Production", "LDF-002"),
+        ("grp-KYC-NH05-GEN-APP", "GEN", "NH05", "grp-KYC-NH05-GEN-DB", "GEN", "NH05",
+         "TCP 5432", "KYC App to DB", "KYC", "Deployed", True, -95, "Production", "LDF-002"),
+        ("grp-KYC-NH05-GEN-API", "GEN", "NH05", "grp-KYC-NH05-GEN-APP", "GEN", "NH05",
+         "TCP 8443", "KYC API to App", "KYC", "Certified", True, -70, "Production", "LDF-002"),
+
+        # ================================================================
+        # LDF-003: Segmented → different zone, different NHs — 1 boundary (egress)
+        # Egress through source NH's SZ firewall only
+        # ================================================================
+
+        # PAY(NH07/CPA) → FRD(NH02/CDE): 1 boundary, egress via fw-PA-NH07-CPA
+        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
+         "TCP 8443", "PAY to Fraud Check (CPA→CDE, 1 FW egress)", "PAY", "Pending Review", False, -10, "Production", "LDF-003"),
+
+        # CBK(NH08/CCS) → PAY(NH07/CPA): 1 boundary, egress via fw-PA-NH08-CCS
+        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-PAY-NH07-CPA-API", "CPA", "NH07",
+         "TCP 8443", "CBK to Payment (CCS→CPA, 1 FW egress)", "CBK", "Pending Review", False, -5, "Production", "LDF-003"),
+
+        # LND(NH09/CCS) → KYC(NH05/GEN): 1 boundary, egress via fw-PA-NH09-CCS
+        ("grp-LND-NH09-CCS-APP", "CCS", "NH09", "grp-KYC-NH05-GEN-API", "GEN", "NH05",
+         "TCP 8443", "LND to KYC Check (CCS→GEN, 1 FW egress)", "LND", "Certified", True, -35, "Production", "LDF-003"),
+
+        # FRD(NH02/CDE) → HRM(NH01/GEN): 1 boundary, egress via fw-PA-NH02-CDE
+        ("grp-FRD-NH02-CDE-APP", "CDE", "NH02", "grp-HRM-NH01-GEN-APP", "GEN", "NH01",
+         "TCP 8443", "FRD to HRM lookup (CDE→GEN, 1 FW egress)", "FRD", "Certified", True, -45, "Production", "LDF-003"),
+
+        # TRD(NH06/CDE) → INS(NH04/GEN): 1 boundary, egress via fw-PA-NH06-CDE
+        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-INS-NH04-GEN-APP", "GEN", "NH04",
+         "TCP 8443", "TRD to INS policy (CDE→GEN, 1 FW egress)", "TRD", "Pending Review", False, -8, "Production", "LDF-003"),
+
+        # MBK(NH07/CPA) → CBK(NH08/CCS): 1 boundary, egress via fw-PA-NH07-CPA
+        ("grp-MBK-NH07-CPA-APP", "CPA", "NH07", "grp-CBK-NH08-CCS-API", "CCS", "NH08",
+         "TCP 8443", "MBK to Core Banking (CPA→CCS, 1 FW egress)", "MBK", "Certified", True, -30, "Production", "LDF-003"),
+
+        # ================================================================
+        # LDF-004: Same segmented zone, different NHs — 2 boundaries (egress+ingress)
+        # Egress via source NH's SZ firewall + Ingress via dest NH's SZ firewall
+        # ================================================================
+
+        # CRM(NH02/CDE) → WLT(NH10/CDE): 2 boundaries (NH02-CDE egress, NH10-CDE ingress)
+        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-WLT-NH10-CDE-API", "CDE", "NH10",
+         "TCP 8443", "CRM to WLT portfolio (CDE→CDE cross-NH, 2 FW)", "CRM", "Certified", True, -25, "Production", "LDF-004"),
+
+        # WLT(NH10/CDE) → TRD(NH06/CDE): 2 boundaries (NH10-CDE egress, NH06-CDE ingress)
+        ("grp-WLT-NH10-CDE-APP", "CDE", "NH10", "grp-TRD-NH06-CDE-API", "CDE", "NH06",
+         "TCP 8443", "WLT to Trading (CDE→CDE cross-NH, 2 FW)", "WLT", "Certified", True, -45, "Production", "LDF-004"),
+
+        # FRD(NH02/CDE) → TRD(NH06/CDE): 2 boundaries (NH02-CDE egress, NH06-CDE ingress)
+        ("grp-FRD-NH02-CDE-API", "CDE", "NH02", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
+         "TCP 8443", "FRD alert to TRD (CDE→CDE cross-NH, 2 FW)", "FRD", "Pending Review", False, -7, "Production", "LDF-004"),
+
+        # CRM(NH02/CDE) → FRD(NH02/CDE): same NH — should be LDF-002, 0 boundaries
+        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
+         "TCP 8443", "CRM to Fraud (same NH02/CDE, 0 FW)", "CRM", "Certified", True, -40, "Production", "LDF-002"),
+
+        # CBK(NH08/CCS) → LND(NH09/CCS): 2 boundaries (NH08-CCS egress, NH09-CCS ingress)
+        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-LND-NH09-CCS-APP", "CCS", "NH09",
+         "TCP 8443", "CBK to LND transfer (CCS→CCS cross-NH, 2 FW)", "CBK", "Pending Review", False, -3, "Production", "LDF-004"),
+
+        # PAY(NH07/CPA) → MBK(NH07/CPA): same NH — should be LDF-002, 0 boundaries
+        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-MBK-NH07-CPA-API", "CPA", "NH07",
+         "TCP 8443", "PAY to Mobile Banking (same NH07/CPA, 0 FW)", "PAY", "Deployed", True, -20, "Production", "LDF-002"),
+
+        # ================================================================
+        # LDF-005: Same NH, different segmented zones — 1 boundary
+        # ================================================================
+
+        # CRM(NH02/CDE) → within NH02 but to CPA zone (hypothetical cross-zone)
+        # Need a CPA group in NH02 — use PAA or create a scenario
+        # PAY data feed to FRD within NH07: CPA → CDE cross-zone within NH07
+        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-MBK-NH07-CPA-DB", "CPA", "NH07",
+         "TCP 1521", "PAY to MBK DB within NH07 (same NH/SZ, 0 FW)", "PAY", "Deployed", True, -15, "Production", "LDF-002"),
+
+        # ================================================================
+        # LDF-006: PAA flow — 2 boundaries (PAA perimeter + internal NH firewall)
+        # ================================================================
+
+        # EPT(NH01/PAA) → CRM(NH02/CDE): PAA perimeter + NH02 CDE firewall
+        ("grp-EPT-NH01-PAA-WEB", "PAA", "NH01", "grp-CRM-NH02-CDE-API", "CDE", "NH02",
+         "TCP 443", "EPT Portal to CRM API (PAA→CDE, 2 FW)", "EPT", "Pending Review", False, -4, "Production", "LDF-006"),
+
+        # EPT(NH01/PAA) → CBK(NH08/CCS): PAA perimeter + NH08 CCS firewall
+        ("grp-EPT-NH01-PAA-APP", "PAA", "NH01", "grp-CBK-NH08-CCS-API", "CCS", "NH08",
+         "TCP 8443", "EPT to Core Banking (PAA→CCS, 2 FW)", "EPT", "Pending Review", False, -3, "Production", "LDF-006"),
+
+        # EPT(NH01/PAA) → PAY(NH07/CPA): PAA perimeter + NH07 CPA firewall
+        ("grp-EPT-NH01-PAA-API", "PAA", "NH01", "grp-PAY-NH07-CPA-API", "CPA", "NH07",
+         "TCP 8443", "EPT to Payment (PAA→CPA, 2 FW)", "EPT", "Pending Review", False, -2, "Production", "LDF-006"),
+
+        # EPT(NH01/PAA) internal (same NH/SZ)
+        ("grp-EPT-NH01-PAA-WEB", "PAA", "NH01", "grp-EPT-NH01-PAA-APP", "PAA", "NH01",
+         "TCP 443", "EPT Web to App (same NH/SZ)", "EPT", "Deployed", True, -10, "Production", "LDF-002"),
+        ("grp-EPT-NH01-PAA-APP", "PAA", "NH01", "grp-EPT-NH01-PAA-API", "PAA", "NH01",
+         "TCP 8443", "EPT App to API (same NH/SZ)", "EPT", "Deployed", True, -10, "Production", "LDF-002"),
+
+        # ================================================================
+        # Non-Production environment rules (replicating key scenarios)
+        # ================================================================
+
+        # CRM Non-Prod (NH02, CDE)
+        ("grp-CRM-NH02-CDE-WEB", "CDE", "NH02", "grp-CRM-NH02-CDE-APP", "CDE", "NH02",
+         "TCP 443", "CRM Web to App (Non-Prod)", "CRM", "Deployed", True, -60, "Non-Production", "LDF-002"),
+        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-CRM-NH02-CDE-DB", "CDE", "NH02",
+         "TCP 1521", "CRM App to DB (Non-Prod)", "CRM", "Deployed", True, -60, "Non-Production", "LDF-002"),
+
+        # TRD Non-Prod (NH06, CDE)
+        ("grp-TRD-NH06-CDE-WEB", "CDE", "NH06", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
+         "TCP 8443", "TRD Web to App (Non-Prod)", "TRD", "Deployed", True, -90, "Non-Production", "LDF-002"),
+        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-TRD-NH06-CDE-DB", "CDE", "NH06",
+         "TCP 1521", "TRD App to DB (Non-Prod)", "TRD", "Certified", True, -90, "Non-Production", "LDF-002"),
+
+        # PAY Pre-Prod (NH07, CPA) — cross-SZ test in pre-prod
+        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
+         "TCP 8443", "PAY to FRD Check (Pre-Prod, CPA→CDE, 1 FW)", "PAY", "Certified", True, -50, "Pre-Production", "LDF-003"),
+
+        # CBK Non-Prod (NH08, CCS)
+        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-CBK-NH08-CCS-DB", "CCS", "NH08",
+         "TCP 1521", "CBK App to DB (Non-Prod)", "CBK", "Deployed", True, -120, "Non-Production", "LDF-002"),
+        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-LND-NH09-CCS-APP", "CCS", "NH09",
+         "TCP 8443", "CBK to LND (Non-Prod, CCS→CCS, 2 FW)", "CBK", "Pending Review", False, -14, "Non-Production", "LDF-004"),
+
+        # HRM UAT (NH01, GEN) — GEN cross-NH
+        ("grp-HRM-NH01-GEN-APP", "GEN", "NH01", "grp-KYC-NH05-GEN-API", "GEN", "NH05",
+         "TCP 8443", "HRM to KYC (UAT, GEN→GEN, no FW)", "HRM", "Certified", True, -40, "UAT", "LDF-001"),
+
+        # INS SIT (NH04, GEN)
+        ("grp-INS-NH04-GEN-WEB", "GEN", "NH04", "grp-INS-NH04-GEN-APP", "GEN", "NH04",
+         "TCP 8443", "INS Web to App (SIT)", "INS", "Deployed", True, -55, "SIT", "LDF-002"),
+
+        # WLT DR (NH10, CDE) — cross-NH CDE in DR
+        ("grp-WLT-NH10-CDE-APP", "CDE", "NH10", "grp-CRM-NH02-CDE-API", "CDE", "NH02",
+         "TCP 8443", "WLT to CRM (DR, CDE→CDE, 2 FW)", "WLT", "Pending Review", False, -5, "DR", "LDF-004"),
+
+        # EPT Non-Prod PAA flow
+        ("grp-EPT-NH01-PAA-WEB", "PAA", "NH01", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
+         "TCP 443", "EPT to FRD (Non-Prod, PAA→CDE, 2 FW)", "EPT", "Certified", True, -20, "Non-Production", "LDF-006"),
     ]
-    for src, sz_s, dst, sz_d, port, desc, app, st, g2g, days in app_rules:
+
+    for src, sz_s, src_nh, dst, sz_d, dst_nh, port, desc, app, st, g2g, days, env, ldf in app_rules:
         seq += 1
         ct = (base + timedelta(days=days)).isoformat()
         rules.append({
-            "rule_id": f"R-{seq}", "source": src, "source_zone": sz_s, "destination": dst,
-            "destination_zone": sz_d, "port": port, "protocol": port.split(" ")[0],
+            "rule_id": f"R-{seq}", "source": src, "source_zone": sz_s, "source_nh": src_nh,
+            "destination": dst, "destination_zone": sz_d, "destination_nh": dst_nh,
+            "port": port, "protocol": port.split(" ")[0],
             "action": "Allow", "description": desc, "application": app, "status": st,
-            "is_group_to_group": g2g, "environment": "Production", "datacenter": "ALPHA_NGDC",
+            "is_group_to_group": g2g, "environment": env, "datacenter": "ALPHA_NGDC",
+            "ldf_scenario": ldf,
             "created_at": ct, "updated_at": ct,
             "certified_date": ct if st in ("Certified", "Deployed") else None,
             "expiry_date": (base + timedelta(days=365)).isoformat() if st in ("Certified", "Deployed") else None,
@@ -163,10 +380,9 @@ def _build_seed_rules() -> list[dict[str, Any]]:
 # ============================================================
 
 async def seed_database() -> None:
-    """Seed JSON files with initial data if they don't exist."""
+    """Seed JSON files with initial data. Always re-seeds to ensure fresh data."""
     _ensure_dir()
-    if _load("neighbourhoods") is not None:
-        return
+    # Always reseed — wipe old data so seed data is the single source of truth
     _save("neighbourhoods", deepcopy(SEED_NEIGHBOURHOODS))
     _save("security_zones", deepcopy(SEED_SECURITY_ZONES))
     _save("ngdc_datacenters", deepcopy(SEED_NGDC_DATACENTERS))
@@ -189,7 +405,7 @@ async def seed_database() -> None:
     _save("groups", deepcopy(SEED_GROUPS))
     _save("legacy_rules", deepcopy(SEED_LEGACY_RULES))
     _save("ip_mappings", deepcopy(SEED_IP_MAPPINGS))
-    _save("firewall_devices", get_firewall_devices())
+    _save("firewall_devices", deepcopy(_SD_FW_DEVICES))
 
 
 # ============================================================
@@ -859,6 +1075,48 @@ async def delete_environment(code: str) -> bool:
     if len(new_items) == len(items):
         return False
     _save("environments", new_items)
+    return True
+
+
+# ============================================================
+# Firewall Devices CRUD
+# ============================================================
+
+async def get_firewall_devices() -> list[dict[str, Any]]:
+    return _load("firewall_devices") or []
+
+
+async def get_firewall_device(device_id: str) -> dict[str, Any] | None:
+    devices = _load("firewall_devices") or []
+    for d in devices:
+        if d.get("device_id") == device_id:
+            return d
+    return None
+
+
+async def create_firewall_device(data: dict[str, Any]) -> dict[str, Any]:
+    devices = _load("firewall_devices") or []
+    devices.append(dict(data))
+    _save("firewall_devices", devices)
+    return data
+
+
+async def update_firewall_device(device_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    devices = _load("firewall_devices") or []
+    for i, d in enumerate(devices):
+        if d.get("device_id") == device_id:
+            devices[i] = {**d, **data, "device_id": device_id}
+            _save("firewall_devices", devices)
+            return devices[i]
+    return None
+
+
+async def delete_firewall_device(device_id: str) -> bool:
+    devices = _load("firewall_devices") or []
+    new_devices = [d for d in devices if d.get("device_id") != device_id]
+    if len(new_devices) == len(devices):
+        return False
+    _save("firewall_devices", new_devices)
     return True
 
 
@@ -2381,12 +2639,191 @@ async def lookup_ngdc_ip(legacy_ip: str, legacy_dc: str = "") -> dict[str, Any] 
 
 
 # ============================================================
-# Egress/Ingress Compile for Blocked SZ Combinations
+# Logical Data Flow — Firewall Boundary Determination
+# Based on NH/SZ placement per the NGDC Logical Data Flows doc.
+# ============================================================
+
+SEGMENTED_ZONES = {"CPA", "CDE", "CCS", "PAA"}
+
+def _find_device(nh: str, sz: str) -> dict[str, Any] | None:
+    """Find the NH-specific segmentation firewall device for a given NH+SZ."""
+    devices = _load("firewall_devices") or []
+    for d in devices:
+        if d.get("nh") == nh and d.get("sz") == sz and d.get("type") == "segmentation":
+            return d
+    # Fallback: any segmentation device matching the SZ
+    for d in devices:
+        if d.get("sz") == sz and d.get("type") == "segmentation":
+            return d
+    # Fallback: first perimeter device
+    for d in devices:
+        if d.get("type") == "perimeter":
+            return d
+    return None
+
+
+def _find_paa_device() -> dict[str, Any] | None:
+    """Find the PAA perimeter firewall device."""
+    devices = _load("firewall_devices") or []
+    for d in devices:
+        if d.get("type") == "paa":
+            return d
+    return None
+
+
+async def determine_firewall_boundaries(
+    src_nh: str, src_sz: str, dst_nh: str, dst_sz: str
+) -> dict[str, Any]:
+    """Determine how many firewall boundaries a rule must cross and which
+    devices handle egress / ingress, based on the Logical Data Flows.
+
+    Returns a dict with:
+      boundaries      – int (0, 1, or 2)
+      flow_rule       – which LDF rule matched
+      devices         – list of {role, device_id, device_name, nh, sz, direction}
+      requires_egress – bool
+      requires_ingress– bool
+      note            – human-readable explanation
+    """
+    src_sz_upper = (src_sz or "").upper()
+    dst_sz_upper = (dst_sz or "").upper()
+    src_segmented = src_sz_upper in SEGMENTED_ZONES
+    dst_segmented = dst_sz_upper in SEGMENTED_ZONES
+    same_nh = (src_nh == dst_nh) and src_nh
+    same_sz = (src_sz_upper == dst_sz_upper)
+
+    # ---- LDF-001: STD/GEN ↔ STD/GEN (any NHs) — no firewall ----
+    if not src_segmented and not dst_segmented:
+        return {
+            "boundaries": 0, "flow_rule": "LDF-001",
+            "devices": [],
+            "requires_egress": False, "requires_ingress": False,
+            "note": (f"STD/GEN zone traffic ({src_sz_upper} → {dst_sz_upper}) "
+                     f"flows directly between {src_nh} and {dst_nh} — no firewall needed."),
+        }
+
+    # ---- LDF-002: Same NH + same SZ — no firewall ----
+    if same_nh and same_sz:
+        return {
+            "boundaries": 0, "flow_rule": "LDF-002",
+            "devices": [],
+            "requires_egress": False, "requires_ingress": False,
+            "note": (f"Intra-NH ({src_nh}), intra-SZ ({src_sz_upper}) traffic — "
+                     f"permitted by default, no firewall boundary."),
+        }
+
+    # ---- LDF-006: PAA flow ----
+    if src_sz_upper == "PAA" or dst_sz_upper == "PAA":
+        paa_dev = _find_paa_device()
+        internal_nh = dst_nh if dst_sz_upper != "PAA" else src_nh
+        internal_sz = dst_sz_upper if dst_sz_upper != "PAA" else src_sz_upper
+        int_dev = _find_device(internal_nh, internal_sz)
+        devs = []
+        if paa_dev:
+            devs.append({"role": "paa_perimeter", "direction": "egress",
+                         "device_id": paa_dev["device_id"], "device_name": paa_dev["name"],
+                         "nh": "PAA", "sz": "PAA"})
+        if int_dev:
+            devs.append({"role": "internal", "direction": "ingress",
+                         "device_id": int_dev["device_id"], "device_name": int_dev["name"],
+                         "nh": internal_nh, "sz": internal_sz})
+        return {
+            "boundaries": len(devs), "flow_rule": "LDF-006",
+            "devices": devs,
+            "requires_egress": True, "requires_ingress": True,
+            "note": (f"PAA flow — traffic crosses PAA perimeter firewall then "
+                     f"{internal_nh} {internal_sz} internal firewall."),
+        }
+
+    # ---- LDF-005: Same NH, different SZs (at least one segmented) — 1 boundary ----
+    if same_nh and not same_sz:
+        higher_sz = src_sz_upper if src_segmented else dst_sz_upper
+        dev = _find_device(src_nh, higher_sz)
+        devs = []
+        if dev:
+            devs.append({"role": "boundary", "direction": "both",
+                         "device_id": dev["device_id"], "device_name": dev["name"],
+                         "nh": src_nh, "sz": higher_sz})
+        return {
+            "boundaries": 1, "flow_rule": "LDF-005",
+            "devices": devs,
+            "requires_egress": True, "requires_ingress": False,
+            "note": (f"Cross-zone within {src_nh} ({src_sz_upper} → {dst_sz_upper}) — "
+                     f"traverses {src_nh} {higher_sz} segmentation firewall."),
+        }
+
+    # ---- LDF-004: Same segmented SZ, different NHs — 2 boundaries ----
+    if same_sz and src_segmented and not same_nh:
+        eg_dev = _find_device(src_nh, src_sz_upper)
+        in_dev = _find_device(dst_nh, dst_sz_upper)
+        devs = []
+        if eg_dev:
+            devs.append({"role": "egress", "direction": "egress",
+                         "device_id": eg_dev["device_id"], "device_name": eg_dev["name"],
+                         "nh": src_nh, "sz": src_sz_upper})
+        if in_dev:
+            devs.append({"role": "ingress", "direction": "ingress",
+                         "device_id": in_dev["device_id"], "device_name": in_dev["name"],
+                         "nh": dst_nh, "sz": dst_sz_upper})
+        return {
+            "boundaries": 2, "flow_rule": "LDF-004",
+            "devices": devs,
+            "requires_egress": True, "requires_ingress": True,
+            "note": (f"Same segmented zone ({src_sz_upper}), different NHs "
+                     f"({src_nh} → {dst_nh}) — egress through {src_nh} {src_sz_upper} firewall, "
+                     f"ingress through {dst_nh} {dst_sz_upper} firewall."),
+        }
+
+    # ---- LDF-003: Segmented zone → different zone, different NHs — 1 boundary ----
+    if src_segmented and not same_sz and not same_nh:
+        eg_dev = _find_device(src_nh, src_sz_upper)
+        devs = []
+        if eg_dev:
+            devs.append({"role": "egress", "direction": "egress",
+                         "device_id": eg_dev["device_id"], "device_name": eg_dev["name"],
+                         "nh": src_nh, "sz": src_sz_upper})
+        return {
+            "boundaries": 1, "flow_rule": "LDF-003",
+            "devices": devs,
+            "requires_egress": True, "requires_ingress": False,
+            "note": (f"Segmented zone ({src_sz_upper}) in {src_nh} to {dst_sz_upper} in {dst_nh} — "
+                     f"egress through {src_nh} {src_sz_upper} firewall only."),
+        }
+
+    # ---- Fallback: destination is segmented, source is not, different NHs ----
+    if dst_segmented and not same_nh:
+        in_dev = _find_device(dst_nh, dst_sz_upper)
+        devs = []
+        if in_dev:
+            devs.append({"role": "ingress", "direction": "ingress",
+                         "device_id": in_dev["device_id"], "device_name": in_dev["name"],
+                         "nh": dst_nh, "sz": dst_sz_upper})
+        return {
+            "boundaries": 1, "flow_rule": "LDF-003-reverse",
+            "devices": devs,
+            "requires_egress": False, "requires_ingress": True,
+            "note": (f"Non-segmented zone ({src_sz_upper}) in {src_nh} to segmented "
+                     f"({dst_sz_upper}) in {dst_nh} — ingress through {dst_nh} {dst_sz_upper} firewall."),
+        }
+
+    # ---- Default: no firewall needed ----
+    return {
+        "boundaries": 0, "flow_rule": "LDF-DEFAULT",
+        "devices": [],
+        "requires_egress": False, "requires_ingress": False,
+        "note": "No firewall boundary required for this traffic flow.",
+    }
+
+
+# ============================================================
+# Egress/Ingress Compile for Cross-SZ Rules
+# Uses determine_firewall_boundaries() for device-specific compilation.
 # ============================================================
 
 async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[str, Any] | None:
-    """Compile separate egress (at source device) and ingress (at destination device)
-    rules for blocked SZ combinations that require a firewall request."""
+    """Compile separate egress/ingress rules for cross-SZ combinations,
+    using the Logical Data Flow boundary analysis to determine which
+    NH-specific firewall devices receive each compiled rule."""
     # Try studio rules first, then legacy
     rule = await get_rule(rule_id)
     if not rule:
@@ -2399,120 +2836,131 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
     dst = rule.get("destination", rule.get("rule_destination", ""))
     src_zone = rule.get("source_zone", rule.get("rule_source_zone", "any"))
     dst_zone = rule.get("destination_zone", rule.get("rule_destination_zone", "any"))
+    src_nh = rule.get("source_nh", rule.get("nh", ""))
+    dst_nh = rule.get("destination_nh", rule.get("dst_nh", ""))
     svc = rule.get("port", rule.get("rule_service", "any"))
     proto = rule.get("protocol", "TCP")
-    action = rule.get("action", rule.get("rule_action", "Allow"))
     desc = rule.get("description", rule.get("app_name", rule_id))
     rid = rule.get("rule_id", rule.get("id", rule_id))
+
+    # Determine firewall boundaries
+    boundary_info = await determine_firewall_boundaries(src_nh, src_zone, dst_nh, dst_zone)
 
     src_objs = [s.strip() for s in str(src).split("\n") if s.strip()] or ["any"]
     dst_objs = [d.strip() for d in str(dst).split("\n") if d.strip()] or ["any"]
 
-    egress_lines: list[str] = []
-    ingress_lines: list[str] = []
+    compiled_devices: list[dict[str, Any]] = []
 
-    if vendor == "palo_alto":
-        egress_lines.append(f"# EGRESS Rule (Source Device) - {desc}")
-        for s in src_objs:
-            egress_lines.append(
-                f'set rulebase security rules "{rid}-EGRESS" from {src_zone}\n'
-                f'set rulebase security rules "{rid}-EGRESS" to {dst_zone}\n'
-                f'set rulebase security rules "{rid}-EGRESS" source [{s}]\n'
-                f'set rulebase security rules "{rid}-EGRESS" destination [any]\n'
-                f'set rulebase security rules "{rid}-EGRESS" service [{proto.lower()}-{svc}]\n'
-                f'set rulebase security rules "{rid}-EGRESS" action allow\n'
-                f'set rulebase security rules "{rid}-EGRESS" log-start yes'
-            )
-        ingress_lines.append(f"# INGRESS Rule (Destination Device) - {desc}")
-        for d in dst_objs:
-            ingress_lines.append(
-                f'set rulebase security rules "{rid}-INGRESS" from {src_zone}\n'
-                f'set rulebase security rules "{rid}-INGRESS" to {dst_zone}\n'
-                f'set rulebase security rules "{rid}-INGRESS" source [any]\n'
-                f'set rulebase security rules "{rid}-INGRESS" destination [{d}]\n'
-                f'set rulebase security rules "{rid}-INGRESS" service [{proto.lower()}-{svc}]\n'
-                f'set rulebase security rules "{rid}-INGRESS" action allow\n'
-                f'set rulebase security rules "{rid}-INGRESS" log-start yes'
-            )
-    elif vendor == "checkpoint":
-        egress_lines.append(f"# EGRESS Rule (Source Device) - {desc}")
-        egress_lines.append(
-            f'mgmt_cli add access-rule layer "Network" position top \\\n'
-            f'  name "{rid}-EGRESS" \\\n'
-            f'  source "{src}" \\\n'
-            f'  destination "any" \\\n'
-            f'  service "{proto}_{svc}" \\\n'
-            f'  action "Accept" \\\n'
-            f'  track "Log" \\\n'
-            f'  comments "Egress: {desc}"'
-        )
-        ingress_lines.append(f"# INGRESS Rule (Destination Device) - {desc}")
-        ingress_lines.append(
-            f'mgmt_cli add access-rule layer "Network" position top \\\n'
-            f'  name "{rid}-INGRESS" \\\n'
-            f'  source "any" \\\n'
-            f'  destination "{dst}" \\\n'
-            f'  service "{proto}_{svc}" \\\n'
-            f'  action "Accept" \\\n'
-            f'  track "Log" \\\n'
-            f'  comments "Ingress: {desc}"'
-        )
-    elif vendor == "cisco_asa":
-        egress_lines.append(f"! EGRESS Rule (Source Device) - {desc}")
-        for s in src_objs:
-            egress_lines.append(
-                f"access-list ACL_EGRESS extended permit "
-                f"{proto.lower()} object-group {s} any eq {svc}"
-            )
-        ingress_lines.append(f"! INGRESS Rule (Destination Device) - {desc}")
-        for d in dst_objs:
-            ingress_lines.append(
-                f"access-list ACL_INGRESS extended permit "
-                f"{proto.lower()} any object-group {d} eq {svc}"
-            )
-    else:
-        egress_lines.append(f"# EGRESS Rule (Source Firewall Device) - {rid}")
-        egress_lines.append(f"# Description: {desc}")
-        egress_lines.append(f"---")
-        egress_lines.append(f"egress_rule:")
-        egress_lines.append(f"  id: {rid}-EGRESS")
-        egress_lines.append(f"  direction: outbound")
-        egress_lines.append(f"  device: source_firewall")
-        egress_lines.append(f"  source: [{', '.join(src_objs)}]")
-        egress_lines.append(f"  source_zone: {src_zone}")
-        egress_lines.append(f"  destination: [any]")
-        egress_lines.append(f"  destination_zone: {dst_zone}")
-        egress_lines.append(f"  service: {svc}")
-        egress_lines.append(f"  action: allow")
-        egress_lines.append(f"  logging: true")
+    for dev_info in boundary_info.get("devices", []):
+        dev_id = dev_info.get("device_id", "unknown")
+        dev_name = dev_info.get("device_name", "Unknown Device")
+        direction = dev_info.get("direction", "egress")
+        role = dev_info.get("role", direction)
+        dev_nh = dev_info.get("nh", "")
+        dev_sz = dev_info.get("sz", "")
 
-        ingress_lines.append(f"# INGRESS Rule (Destination Firewall Device) - {rid}")
-        ingress_lines.append(f"# Description: {desc}")
-        ingress_lines.append(f"---")
-        ingress_lines.append(f"ingress_rule:")
-        ingress_lines.append(f"  id: {rid}-INGRESS")
-        ingress_lines.append(f"  direction: inbound")
-        ingress_lines.append(f"  device: destination_firewall")
-        ingress_lines.append(f"  source: [any]")
-        ingress_lines.append(f"  source_zone: {src_zone}")
-        ingress_lines.append(f"  destination: [{', '.join(dst_objs)}]")
-        ingress_lines.append(f"  destination_zone: {dst_zone}")
-        ingress_lines.append(f"  service: {svc}")
-        ingress_lines.append(f"  action: allow")
-        ingress_lines.append(f"  logging: true")
+        lines: list[str] = []
+        suffix = direction.upper()
+
+        if vendor == "palo_alto":
+            lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
+            objs = src_objs if direction == "egress" else dst_objs
+            far_side = "any" if direction == "egress" else "any"
+            for obj in objs:
+                s_val = obj if direction == "egress" else "any"
+                d_val = "any" if direction == "egress" else obj
+                lines.append(
+                    f'set rulebase security rules "{rid}-{suffix}" from {src_zone}\n'
+                    f'set rulebase security rules "{rid}-{suffix}" to {dst_zone}\n'
+                    f'set rulebase security rules "{rid}-{suffix}" source [{s_val}]\n'
+                    f'set rulebase security rules "{rid}-{suffix}" destination [{d_val}]\n'
+                    f'set rulebase security rules "{rid}-{suffix}" service [{proto.lower()}-{svc}]\n'
+                    f'set rulebase security rules "{rid}-{suffix}" action allow\n'
+                    f'set rulebase security rules "{rid}-{suffix}" log-start yes'
+                )
+        elif vendor == "checkpoint":
+            s_val = src if direction == "egress" else "any"
+            d_val = "any" if direction == "egress" else dst
+            lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
+            lines.append(
+                f'mgmt_cli add access-rule layer "Network" position top \\\n'
+                f'  name "{rid}-{suffix}" \\\n'
+                f'  source "{s_val}" \\\n'
+                f'  destination "{d_val}" \\\n'
+                f'  service "{proto}_{svc}" \\\n'
+                f'  action "Accept" \\\n'
+                f'  track "Log" \\\n'
+                f'  comments "{suffix}: {desc}"'
+            )
+        elif vendor == "cisco_asa":
+            objs = src_objs if direction == "egress" else dst_objs
+            lines.append(f"! {suffix} Rule — Device: {dev_name} ({dev_id})")
+            for obj in objs:
+                if direction == "egress":
+                    lines.append(f"access-list ACL_{suffix} extended permit "
+                                 f"{proto.lower()} object-group {obj} any eq {svc}")
+                else:
+                    lines.append(f"access-list ACL_{suffix} extended permit "
+                                 f"{proto.lower()} any object-group {obj} eq {svc}")
+        else:
+            lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
+            lines.append(f"# NH: {dev_nh}  SZ: {dev_sz}  Role: {role}")
+            lines.append(f"# Description: {desc}")
+            lines.append("---")
+            lines.append(f"{direction}_rule:")
+            lines.append(f"  id: {rid}-{suffix}")
+            lines.append(f"  direction: {'outbound' if direction == 'egress' else 'inbound'}")
+            lines.append(f"  device: {dev_id}")
+            lines.append(f"  device_name: {dev_name}")
+            if direction == "egress":
+                lines.append(f"  source: [{', '.join(src_objs)}]")
+                lines.append(f"  destination: [any]")
+            else:
+                lines.append(f"  source: [any]")
+                lines.append(f"  destination: [{', '.join(dst_objs)}]")
+            lines.append(f"  source_zone: {src_zone}")
+            lines.append(f"  destination_zone: {dst_zone}")
+            lines.append(f"  service: {svc}")
+            lines.append(f"  action: allow")
+            lines.append(f"  logging: true")
+
+        compiled_devices.append({
+            "device_id": dev_id,
+            "device_name": dev_name,
+            "nh": dev_nh,
+            "sz": dev_sz,
+            "role": role,
+            "direction": direction,
+            "compiled": "\n".join(lines),
+        })
+
+    # Build legacy egress/ingress strings for backward compatibility
+    egress_compiled = "\n\n".join(
+        d["compiled"] for d in compiled_devices if d["direction"] in ("egress", "both")
+    )
+    ingress_compiled = "\n\n".join(
+        d["compiled"] for d in compiled_devices if d["direction"] in ("ingress", "both")
+    )
 
     return {
         "rule_id": rid,
         "vendor_format": vendor,
-        "egress_compiled": "\n".join(egress_lines),
-        "ingress_compiled": "\n".join(ingress_lines),
+        "boundary_analysis": boundary_info,
+        "boundaries": boundary_info["boundaries"],
+        "flow_rule": boundary_info["flow_rule"],
+        "devices": compiled_devices,
+        "egress_compiled": egress_compiled,
+        "ingress_compiled": ingress_compiled,
         "source_zone": src_zone,
         "destination_zone": dst_zone,
+        "source_nh": src_nh,
+        "destination_nh": dst_nh,
         "source_objects": src_objs,
         "destination_objects": dst_objs,
         "service": svc,
-        "requires_separate_devices": True,
-        "note": "This rule crosses blocked SZ boundaries. Egress rule goes on source device, ingress rule goes on destination device.",
+        "requires_egress": boundary_info["requires_egress"],
+        "requires_ingress": boundary_info["requires_ingress"],
+        "note": boundary_info["note"],
     }
 
 
