@@ -575,7 +575,20 @@ export const lookupIPMapping = (legacyIp: string, legacyDc?: string) =>
     { method: 'POST', body: JSON.stringify({ legacy_ip: legacyIp, legacy_dc: legacyDc || '' }) }
   );
 
-// Egress/Ingress Compilation
+// Firewall Boundary Analysis
+export const getFirewallBoundaries = (srcNh: string, srcSz: string, dstNh: string, dstSz: string) => {
+  const sp = new URLSearchParams({ src_nh: srcNh, src_sz: srcSz, dst_nh: dstNh, dst_sz: dstSz });
+  return fetchJSON<{
+    boundaries: number; flow_rule: string; note: string;
+    requires_egress: boolean; requires_ingress: boolean;
+    devices: { role: string; direction: string; device_id: string; device_name: string; nh: string; sz: string }[];
+  }>(`/api/reference/firewall-boundaries?${sp.toString()}`);
+};
+
+export const getLogicalFlowRules = () =>
+  fetchJSON<{ rules: Record<string, unknown>[]; segmented_zones: string[] }>('/api/reference/logical-flow-rules');
+
+// Egress/Ingress Compilation (with boundary analysis)
 export const compileEgressIngress = (ruleId: string, vendor = 'generic') =>
   fetchJSON<Record<string, unknown>>(`/api/reference/compile/egress-ingress/${ruleId}?vendor=${vendor}`, { method: 'POST' });
 

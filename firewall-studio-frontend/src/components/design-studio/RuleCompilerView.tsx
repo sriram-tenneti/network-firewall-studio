@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import { compileRule } from '@/lib/api';
+import { compileRule, compileEgressIngress } from '@/lib/api';
 import type { CompiledRule } from '@/types';
 
 interface GroupProvisioningResult {
@@ -10,6 +10,20 @@ interface GroupProvisioningResult {
   violations?: string[];
   total_groups?: number;
   provisioned_count?: number;
+}
+
+interface BoundaryDevice {
+  device_id: string; device_name: string; nh: string; sz: string;
+  role: string; direction: string; compiled: string;
+}
+interface EgressIngressResult {
+  rule_id: string; vendor_format: string; boundaries: number;
+  flow_rule: string; note: string;
+  requires_egress: boolean; requires_ingress: boolean;
+  devices: BoundaryDevice[];
+  egress_compiled: string; ingress_compiled: string;
+  source_zone: string; destination_zone: string;
+  source_nh: string; destination_nh: string;
 }
 
 interface CompiledRuleWithGroups extends CompiledRule {
@@ -27,10 +41,13 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
   const [vendor, setVendor] = useState('generic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [egressIngress, setEgressIngress] = useState<EgressIngressResult | null>(null);
+  const [eiLoading, setEiLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && ruleId) {
       doCompile(ruleId, vendor);
+      loadBoundaryAnalysis(ruleId, vendor);
     }
   }, [isOpen, ruleId]);
 
@@ -47,9 +64,21 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
     }
   };
 
+  const loadBoundaryAnalysis = async (id: string, v: string) => {
+    setEiLoading(true);
+    try {
+      const data = await compileEgressIngress(id, v);
+      setEgressIngress(data as unknown as EgressIngressResult);
+    } catch { setEgressIngress(null); }
+    setEiLoading(false);
+  };
+
   const handleVendorChange = (v: string) => {
     setVendor(v);
-    if (ruleId) doCompile(ruleId, v);
+    if (ruleId) {
+      doCompile(ruleId, v);
+      loadBoundaryAnalysis(ruleId, v);
+    }
   };
 
   const handleCopy = () => {
@@ -209,6 +238,65 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
                 </div>
               ) : (
                 <p className="text-xs text-gray-500 italic">No groups associated with this rule&apos;s application for device submission.</p>
+              )}
+            </div>
+
+            {/* Firewall Boundary Analysis (Egress/Ingress) */}
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
+                Firewall Boundary Analysis
+              </h3>
+              {eiLoading && <p className="text-xs text-gray-400 animate-pulse">Analyzing boundaries...</p>}
+              {egressIngress && !eiLoading && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      egressIngress.boundaries === 0 ? 'bg-green-100 text-green-700' :
+                      egressIngress.boundaries === 1 ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {egressIngress.boundaries} Firewall {egressIngress.boundaries === 1 ? 'Boundary' : 'Boundaries'}
+                    </span>
+                    <span className="text-xs text-gray-500">{egressIngress.flow_rule}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 bg-blue-50 rounded border border-blue-200">
+                      <span className="text-blue-600 font-medium">Source:</span> {egressIngress.source_nh}/{egressIngress.source_zone}
+                    </div>
+                    <div className="p-2 bg-purple-50 rounded border border-purple-200">
+                      <span className="text-purple-600 font-medium">Dest:</span> {egressIngress.destination_nh}/{egressIngress.destination_zone}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 italic">{egressIngress.note}</p>
+                  {egressIngress.devices.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-medium text-gray-600">Device-Specific Compiled Rules</h4>
+                      {egressIngress.devices.map((dev, i) => (
+                        <div key={i} className="bg-white border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase rounded ${
+                              dev.direction === 'egress' ? 'bg-orange-100 text-orange-700' :
+                              dev.direction === 'ingress' ? 'bg-cyan-100 text-cyan-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>{dev.direction}</span>
+                            <span className="text-xs font-medium text-gray-800">{dev.device_name}</span>
+                            <span className="text-[10px] text-gray-400">({dev.device_id})</span>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mb-1">{dev.nh} / {dev.sz} — {dev.role}</div>
+                          <div className="relative">
+                            <pre className="text-xs text-green-600 font-mono bg-gray-50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap">{dev.compiled}</pre>
+                            <button onClick={() => navigator.clipboard.writeText(dev.compiled)}
+                              className="absolute top-1 right-1 text-[10px] text-blue-500 hover:text-blue-700">Copy</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!egressIngress && !eiLoading && (
+                <p className="text-xs text-gray-500 italic">Boundary analysis not available for this rule.</p>
               )}
             </div>
           </>

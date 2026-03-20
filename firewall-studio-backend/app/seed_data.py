@@ -251,6 +251,14 @@ SEED_APPLICATIONS = [
      "owner": "Team Theta", "nh": "NH08", "sz": "CCS", "criticality": "Critical", "pci_scope": True,
      "components": ["APP", "DB", "MQ", "API", "BAT"],
      "description": "Core banking transaction engine"},
+    {"app_id": "EPT", "name": "Enterprise Portal", "app_distributed_id": "AD-1011",
+     "owner": "Team Platform", "nh": "NH01", "sz": "PAA", "criticality": "High", "pci_scope": False,
+     "components": ["WEB", "APP", "API"],
+     "description": "Internet-facing enterprise portal (PAA zone)"},
+    {"app_id": "MBK", "name": "Mobile Banking", "app_distributed_id": "AD-1012",
+     "owner": "Team Epsilon", "nh": "NH07", "sz": "CPA", "criticality": "Critical", "pci_scope": True,
+     "components": ["WEB", "APP", "DB", "API"],
+     "description": "Mobile banking application"},
 ]
 
 
@@ -321,12 +329,10 @@ SEED_NAMING_STANDARDS = [
 # ============================================================
 
 SEED_FIREWALL_DEVICES = [
+    # --- Perimeter / DC-level devices ---
     {"device_id": "fw-PA-ALPHA-001", "name": "Palo Alto Alpha Primary", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "type": "perimeter", "status": "Active",
      "capabilities": ["L7 inspection", "URL filtering", "Threat prevention"]},
-    {"device_id": "fw-PA-ALPHA-002", "name": "Palo Alto Alpha Internal", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "type": "internal", "status": "Active",
-     "capabilities": ["L7 inspection", "Micro-segmentation"]},
     {"device_id": "fw-CP-BETA-001", "name": "Check Point Beta Primary", "vendor": "checkpoint",
      "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
      "capabilities": ["Stateful inspection", "IPS", "VPN"]},
@@ -336,9 +342,151 @@ SEED_FIREWALL_DEVICES = [
     {"device_id": "fw-PA-ALPHA-DMZ", "name": "Palo Alto Alpha DMZ", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "type": "dmz", "status": "Active",
      "capabilities": ["L7 inspection", "SSL decryption", "WAF integration"]},
-    {"device_id": "fw-CP-ALPHA-INT", "name": "Check Point Alpha East-West", "vendor": "checkpoint",
-     "dc": "ALPHA_NGDC", "type": "internal", "status": "Active",
-     "capabilities": ["Micro-segmentation", "East-West traffic"]},
+
+    # --- NH-specific segmentation firewalls (per NH per SZ) ---
+    # Each NH that hosts a segmented zone (CPA, CDE, CCS) gets its own firewall.
+    # GEN/STD zones do NOT have per-NH firewalls.
+
+    # NH01 — CPA, CDE, CCS
+    {"device_id": "fw-PA-NH01-CPA", "name": "NH01 CPA Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
+    {"device_id": "fw-PA-NH01-CDE", "name": "NH01 CDE Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+    {"device_id": "fw-PA-NH01-CCS", "name": "NH01 CCS Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH02 — CPA, CDE, CCS
+    {"device_id": "fw-PA-NH02-CPA", "name": "NH02 CPA Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
+    {"device_id": "fw-PA-NH02-CDE", "name": "NH02 CDE Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+    {"device_id": "fw-PA-NH02-CCS", "name": "NH02 CCS Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH03 — CPA, CDE, CCS (from NH SZ definition)
+    {"device_id": "fw-PA-NH03-CDE", "name": "NH03 CDE Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+    {"device_id": "fw-PA-NH03-CCS", "name": "NH03 CCS Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH04 — CCS (only segmented zone in NH04)
+    {"device_id": "fw-CP-NH04-CCS", "name": "NH04 CCS Firewall", "vendor": "checkpoint",
+     "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
+
+    # NH05 — CCS (only segmented zone in NH05)
+    {"device_id": "fw-CP-NH05-CCS", "name": "NH05 CCS Firewall", "vendor": "checkpoint",
+     "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
+
+    # NH06 — CPA, CDE, CCS
+    {"device_id": "fw-PA-NH06-CPA", "name": "NH06 CPA Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
+    {"device_id": "fw-PA-NH06-CDE", "name": "NH06 CDE Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+    {"device_id": "fw-PA-NH06-CCS", "name": "NH06 CCS Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH07 — CPA, CDE
+    {"device_id": "fw-PA-NH07-CPA", "name": "NH07 CPA Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
+    {"device_id": "fw-PA-NH07-CDE", "name": "NH07 CDE Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+
+    # NH08 — CCS, CDE
+    {"device_id": "fw-PA-NH08-CCS", "name": "NH08 CCS Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+    {"device_id": "fw-PA-NH08-CDE", "name": "NH08 CDE Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+
+    # NH09 — CCS
+    {"device_id": "fw-PA-NH09-CCS", "name": "NH09 CCS Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH10 — CDE
+    {"device_id": "fw-PA-NH10-CDE", "name": "NH10 CDE Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+
+    # --- PAA devices ---
+    {"device_id": "fw-PA-PAA-001", "name": "PAA Perimeter Firewall", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "type": "paa", "status": "Active",
+     "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
+]
+
+
+# ============================================================
+# Logical Data Flow Rules
+# Determines how many firewall boundaries a rule must cross
+# based on source/destination NH and SZ placement.
+# ============================================================
+
+SEGMENTED_ZONES = {"CPA", "CDE", "CCS", "PAA"}
+# STD/GEN zones do NOT have per-NH firewalls
+
+LOGICAL_FLOW_RULES = [
+    {
+        "id": "LDF-001",
+        "description": "STD/GEN zone workloads between NHs (same or different data halls) - no firewall needed",
+        "condition": "src_sz in (STD, GEN) AND dst_sz in (STD, GEN)",
+        "boundaries": 0,
+        "note": "Standard zone workloads communicate directly between neighborhoods",
+    },
+    {
+        "id": "LDF-002",
+        "description": "Same NH, same SZ (any zone) - no firewall needed",
+        "condition": "src_nh == dst_nh AND src_sz == dst_sz",
+        "boundaries": 0,
+        "note": "Intra-NH, intra-SZ traffic is permitted by default",
+    },
+    {
+        "id": "LDF-003",
+        "description": "Segmented zone to different zone, different NHs - 1 firewall (egress from source NH SZ)",
+        "condition": "src_sz in SEGMENTED AND dst_sz != src_sz AND src_nh != dst_nh",
+        "boundaries": 1,
+        "devices": ["egress: src_nh src_sz firewall"],
+        "note": "App in segmented zone egresses through its NH's SZ firewall to reach a different zone in another NH",
+    },
+    {
+        "id": "LDF-004",
+        "description": "Same segmented zone, different NHs - 2 firewalls (egress src NH + ingress dst NH)",
+        "condition": "src_sz in SEGMENTED AND dst_sz == src_sz AND src_nh != dst_nh",
+        "boundaries": 2,
+        "devices": ["egress: src_nh src_sz firewall", "ingress: dst_nh dst_sz firewall"],
+        "note": "Both NHs have their own SZ firewall; traffic must exit one and enter the other",
+    },
+    {
+        "id": "LDF-005",
+        "description": "Same NH, different segmented zones - 1 firewall (NH SZ boundary)",
+        "condition": "src_nh == dst_nh AND src_sz != dst_sz AND (src_sz in SEGMENTED OR dst_sz in SEGMENTED)",
+        "boundaries": 1,
+        "devices": ["boundary: src_nh firewall (higher-security SZ)"],
+        "note": "Cross-zone within same NH requires traversing the segmentation firewall",
+    },
+    {
+        "id": "LDF-006",
+        "description": "PAA flow (internet → PAA → internal NH) - multiple boundaries",
+        "condition": "src_sz == PAA OR dst_sz == PAA",
+        "boundaries": 2,
+        "devices": ["paa_perimeter: PAA firewall", "internal: dst_nh dst_sz firewall"],
+        "note": "PAA traffic crosses the PAA perimeter and then the destination NH's internal firewall",
+    },
 ]
 
 
@@ -673,6 +821,41 @@ SEED_GROUPS = [
         {"type": "ip", "value": "svr-10.7.1.50", "description": "CBK Batch 1"},
         {"type": "ip", "value": "svr-10.7.1.51", "description": "CBK Batch 2"},
      ]},
+
+    # --- EPT (NH01, PAA) - Enterprise Portal (PAA zone, internet-facing) ---
+    {"name": "grp-EPT-NH01-PAA-WEB", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "WEB",
+     "description": "EPT Web Frontend (PAA)", "members": [
+        {"type": "ip", "value": "svr-10.0.3.10", "description": "EPT Web 1"},
+        {"type": "ip", "value": "svr-10.0.3.11", "description": "EPT Web 2"},
+     ]},
+    {"name": "grp-EPT-NH01-PAA-APP", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "APP",
+     "description": "EPT App Backend (PAA)", "members": [
+        {"type": "ip", "value": "svr-10.0.3.20", "description": "EPT App 1"},
+        {"type": "ip", "value": "svr-10.0.3.21", "description": "EPT App 2"},
+     ]},
+    {"name": "grp-EPT-NH01-PAA-API", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "API",
+     "description": "EPT API Gateway (PAA)", "members": [
+        {"type": "ip", "value": "svr-10.0.3.30", "description": "EPT API 1"},
+     ]},
+
+    # --- MBK (NH07, CPA) - Mobile Banking ---
+    {"name": "grp-MBK-NH07-CPA-WEB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "WEB",
+     "description": "MBK Mobile Web", "members": [
+        {"type": "ip", "value": "svr-10.6.1.170", "description": "MBK Web 1"},
+     ]},
+    {"name": "grp-MBK-NH07-CPA-APP", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "APP",
+     "description": "MBK App Engine", "members": [
+        {"type": "ip", "value": "svr-10.6.1.180", "description": "MBK App 1"},
+        {"type": "ip", "value": "svr-10.6.1.181", "description": "MBK App 2"},
+     ]},
+    {"name": "grp-MBK-NH07-CPA-DB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "DB",
+     "description": "MBK Database", "members": [
+        {"type": "ip", "value": "svr-10.6.1.190", "description": "MBK DB Primary"},
+     ]},
+    {"name": "grp-MBK-NH07-CPA-API", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "API",
+     "description": "MBK API Gateway", "members": [
+        {"type": "ip", "value": "svr-10.6.1.200", "description": "MBK API 1"},
+     ]},
 ]
 
 
@@ -939,6 +1122,22 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
             ("10.25.21.10", "svr-10.7.1.20", "grp-CBK-NH08-CCS-DB", "CBK DB Primary"),
             ("10.25.21.11", "svr-10.7.1.21", "grp-CBK-NH08-CCS-DB", "CBK DB Standby"),
             ("10.25.22.10", "svr-10.7.1.30", "grp-CBK-NH08-CCS-MQ", "CBK MQ 1"),
+        ]),
+        # EPT: DC_LEGACY_B -> ALPHA_NGDC (PAA zone)
+        ("EPT", "DC_LEGACY_B", "ALPHA_NGDC", "NH01", "PAA", "10.26", [
+            ("10.26.30.10", "svr-10.0.3.10", "grp-EPT-NH01-PAA-WEB", "EPT Web 1"),
+            ("10.26.30.11", "svr-10.0.3.11", "grp-EPT-NH01-PAA-WEB", "EPT Web 2"),
+            ("10.26.31.10", "svr-10.0.3.20", "grp-EPT-NH01-PAA-APP", "EPT App 1"),
+            ("10.26.31.11", "svr-10.0.3.21", "grp-EPT-NH01-PAA-APP", "EPT App 2"),
+            ("10.26.32.10", "svr-10.0.3.30", "grp-EPT-NH01-PAA-API", "EPT API 1"),
+        ]),
+        # MBK: DC_LEGACY_C -> ALPHA_NGDC
+        ("MBK", "DC_LEGACY_C", "ALPHA_NGDC", "NH07", "CPA", "10.27", [
+            ("10.27.30.10", "svr-10.6.1.170", "grp-MBK-NH07-CPA-WEB", "MBK Web 1"),
+            ("10.27.31.10", "svr-10.6.1.180", "grp-MBK-NH07-CPA-APP", "MBK App 1"),
+            ("10.27.31.11", "svr-10.6.1.181", "grp-MBK-NH07-CPA-APP", "MBK App 2"),
+            ("10.27.32.10", "svr-10.6.1.190", "grp-MBK-NH07-CPA-DB", "MBK DB Primary"),
+            ("10.27.33.10", "svr-10.6.1.200", "grp-MBK-NH07-CPA-API", "MBK API 1"),
         ]),
     ]
 

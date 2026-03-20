@@ -11,7 +11,7 @@ import {
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups,
   createMigrationGroup, getApplications, lookupIPMapping,
-  getIPMappings, importIPMappings,
+  getIPMappings, importIPMappings, compileEgressIngress,
 } from '@/lib/api';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
@@ -142,6 +142,8 @@ export function MigrationStudioPage() {
   const [submittingMigration, setSubmittingMigration] = useState(false);
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
   const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit'>('review');
+  const [boundaryAnalysis, setBoundaryAnalysis] = useState<Record<string, unknown> | null>(null);
+  const [boundaryLoading, setBoundaryLoading] = useState(false);
 
   // New group creation during migration
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
@@ -293,6 +295,13 @@ export function MigrationStudioPage() {
     try {
       const result = await compileLegacyRule(migrateRule.id, compileVendor);
       setCompiledRule(result); setMigrationStep('compile');
+      // Also load boundary analysis
+      setBoundaryLoading(true);
+      try {
+        const ba = await compileEgressIngress(migrateRule.id, compileVendor);
+        setBoundaryAnalysis(ba as Record<string, unknown>);
+      } catch { setBoundaryAnalysis(null); }
+      setBoundaryLoading(false);
     } catch { showNotification('Failed to compile rule', 'error'); }
     setCompiling(false);
   };
@@ -1070,6 +1079,56 @@ export function MigrationStudioPage() {
                         <p className="text-xs text-gray-500 italic">Click &quot;Compile Rule&quot; to generate vendor-specific output and submit groups to firewall device.</p>
                       )}
                     </div>
+
+                    {/* Firewall Boundary Analysis (Egress/Ingress) */}
+                    {(boundaryAnalysis || boundaryLoading) && (
+                      <div className="border rounded-lg p-3 bg-purple-50 border-purple-200">
+                        <h4 className="text-xs font-semibold text-purple-800 mb-2 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
+                          Firewall Boundary Analysis
+                        </h4>
+                        {boundaryLoading && <p className="text-xs text-gray-400 animate-pulse">Analyzing boundaries...</p>}
+                        {boundaryAnalysis && !boundaryLoading && (() => {
+                          const ba = boundaryAnalysis as Record<string, unknown>;
+                          const boundaries = ba.boundaries as number;
+                          const devices = (ba.devices || []) as Array<Record<string, string>>;
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  boundaries === 0 ? 'bg-green-100 text-green-700' :
+                                  boundaries === 1 ? 'bg-amber-100 text-amber-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {boundaries} {boundaries === 1 ? 'Boundary' : 'Boundaries'}
+                                </span>
+                                <span className="text-[10px] text-gray-500">{ba.flow_rule as string}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1 text-[10px]">
+                                <div className="p-1 bg-blue-50 rounded"><span className="text-blue-600 font-medium">Src:</span> {ba.source_nh as string}/{ba.source_zone as string}</div>
+                                <div className="p-1 bg-purple-50 rounded"><span className="text-purple-600 font-medium">Dst:</span> {ba.destination_nh as string}/{ba.destination_zone as string}</div>
+                              </div>
+                              <p className="text-[10px] text-gray-500 italic">{ba.note as string}</p>
+                              {devices.length > 0 && devices.map((dev, i) => (
+                                <div key={i} className="bg-white border border-gray-200 rounded p-2">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <span className={`px-1 py-0.5 text-[9px] font-bold uppercase rounded ${
+                                      dev.direction === 'egress' ? 'bg-orange-100 text-orange-700' :
+                                      dev.direction === 'ingress' ? 'bg-cyan-100 text-cyan-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>{dev.direction}</span>
+                                    <span className="text-[10px] font-medium text-gray-800">{dev.device_name}</span>
+                                  </div>
+                                  <pre className="text-[10px] text-green-600 font-mono bg-gray-50 rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap">{dev.compiled}</pre>
+                                  <button onClick={() => navigator.clipboard.writeText(dev.compiled)}
+                                    className="text-[9px] text-blue-500 hover:text-blue-700 mt-0.5">Copy</button>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
 
                     <div className="flex justify-between">
                       <button onClick={() => setMigrationStep('mapping')} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">

@@ -1,7 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
+import { compileEgressIngress } from '@/lib/api';
 import type { ReviewRequest, CompiledRule } from '@/types';
+
+interface BoundaryDevice {
+  device_id: string; device_name: string; nh: string; sz: string;
+  role: string; direction: string; compiled: string;
+}
+interface EgressIngressResult {
+  rule_id: string; vendor_format: string; boundaries: number;
+  flow_rule: string; note: string;
+  requires_egress: boolean; requires_ingress: boolean;
+  devices: BoundaryDevice[];
+  egress_compiled: string; ingress_compiled: string;
+  source_zone: string; destination_zone: string;
+  source_nh: string; destination_nh: string;
+}
 
 interface ApprovalModalProps {
   isOpen: boolean;
@@ -19,6 +34,18 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
   const [compileVendor, setCompileVendor] = useState('generic');
   const [compiling, setCompiling] = useState(false);
   const [showFullDetails, setShowFullDetails] = useState(false);
+  const [egressIngress, setEgressIngress] = useState<EgressIngressResult | null>(null);
+  const [eiLoading, setEiLoading] = useState(false);
+
+  // Auto-load egress/ingress boundary analysis when modal opens
+  useEffect(() => {
+    if (!review || !isOpen) return;
+    setEiLoading(true);
+    compileEgressIngress(review.rule_id, compileVendor)
+      .then(data => setEgressIngress(data as unknown as EgressIngressResult))
+      .catch(() => setEgressIngress(null))
+      .finally(() => setEiLoading(false));
+  }, [review, isOpen, compileVendor]);
 
   const handleCompile = async () => {
     if (!review || !onCompileRule) return;
@@ -152,6 +179,63 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Firewall Boundary Analysis */}
+      <div className="border border-amber-200 rounded-lg p-4 bg-amber-50">
+        <h3 className="text-sm font-semibold text-amber-800 mb-2">Firewall Boundary Analysis (Logical Data Flow)</h3>
+        {eiLoading ? (
+          <p className="text-xs text-amber-600 italic">Analyzing firewall boundaries...</p>
+        ) : egressIngress ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                egressIngress.boundaries === 0 ? 'bg-green-100 text-green-800' :
+                egressIngress.boundaries === 1 ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {egressIngress.boundaries} Firewall {egressIngress.boundaries === 1 ? 'Boundary' : 'Boundaries'}
+              </span>
+              <span className="text-xs text-gray-500">Rule: {egressIngress.flow_rule}</span>
+              {egressIngress.requires_egress && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Egress Required</span>}
+              {egressIngress.requires_ingress && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Ingress Required</span>}
+            </div>
+            <p className="text-xs text-amber-700">{egressIngress.note}</p>
+            {egressIngress.source_nh && (
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-gray-500">Source NH:</span> <span className="font-medium">{egressIngress.source_nh}</span></div>
+                <div><span className="text-gray-500">Dest NH:</span> <span className="font-medium">{egressIngress.destination_nh}</span></div>
+                <div><span className="text-gray-500">Source SZ:</span> <span className="font-medium">{egressIngress.source_zone}</span></div>
+                <div><span className="text-gray-500">Dest SZ:</span> <span className="font-medium">{egressIngress.destination_zone}</span></div>
+              </div>
+            )}
+            {egressIngress.devices.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-amber-800">Device-Specific Compiled Rules</h4>
+                {egressIngress.devices.map((dev, idx) => (
+                  <div key={idx} className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                          dev.direction === 'egress' ? 'bg-orange-500 text-white' :
+                          dev.direction === 'ingress' ? 'bg-blue-500 text-white' :
+                          'bg-purple-500 text-white'
+                        }`}>{dev.direction.toUpperCase()}</span>
+                        <span className="text-xs text-gray-300">{dev.device_name}</span>
+                        <span className="text-xs text-gray-500">({dev.device_id})</span>
+                      </div>
+                      <button onClick={() => navigator.clipboard.writeText(dev.compiled)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                    </div>
+                    <div className="text-xs text-gray-400 mb-1">NH: {dev.nh} | SZ: {dev.sz} | Role: {dev.role}</div>
+                    <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{dev.compiled}</pre>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-amber-600 italic">No boundary analysis available for this rule.</p>
         )}
       </div>
 
