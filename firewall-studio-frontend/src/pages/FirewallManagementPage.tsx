@@ -5,7 +5,7 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, compileEgressIngress } from '@/lib/api';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications } from '@/lib/api';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -529,8 +529,6 @@ export default function FirewallManagementPage() {
   const [compileVendor, setCompileVendor] = useState('generic');
   const [compiling, setCompiling] = useState(false);
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
-  const [boundaryAnalysis, setBoundaryAnalysis] = useState<Record<string, unknown> | null>(null);
-  const [boundaryLoading, setBoundaryLoading] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedExportApps, setSelectedExportApps] = useState<Set<string>>(new Set());
   // Resource-based modify state
@@ -666,13 +664,6 @@ export default function FirewallManagementPage() {
     try {
       const result = await compileLegacyRule(ruleId, compileVendor);
       setCompiledRule(result);
-      // Also load boundary analysis
-      setBoundaryLoading(true);
-      try {
-        const ba = await compileEgressIngress(ruleId, compileVendor);
-        setBoundaryAnalysis(ba as Record<string, unknown>);
-      } catch { setBoundaryAnalysis(null); }
-      setBoundaryLoading(false);
     } catch {
       showNotification('Failed to compile rule', 'error');
     }
@@ -1050,50 +1041,6 @@ export default function FirewallManagementPage() {
                       <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
                     </div>
                   )}
-                  {/* Boundary Analysis in Edit Mode */}
-                  {(boundaryAnalysis || boundaryLoading) && (
-                    <div className="mt-2 border rounded p-2 bg-purple-50 border-purple-200">
-                      <h4 className="text-[10px] font-semibold text-purple-800 mb-1 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block" />
-                        Firewall Boundary Analysis
-                      </h4>
-                      {boundaryLoading && <p className="text-[10px] text-gray-400 animate-pulse">Analyzing...</p>}
-                      {boundaryAnalysis && !boundaryLoading && (() => {
-                        const ba = boundaryAnalysis;
-                        const boundaries = ba.boundaries as number;
-                        const devices = (ba.devices || []) as Array<Record<string, string>>;
-                        return (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                                boundaries === 0 ? 'bg-green-100 text-green-700' :
-                                boundaries === 1 ? 'bg-amber-100 text-amber-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>{boundaries} {boundaries === 1 ? 'Boundary' : 'Boundaries'}</span>
-                              <span className="text-[9px] text-gray-500">{ba.flow_rule as string}</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1 text-[9px]">
-                              <div className="p-1 bg-blue-50 rounded"><span className="text-blue-600 font-medium">Src:</span> {ba.source_nh as string}/{ba.source_zone as string}</div>
-                              <div className="p-1 bg-purple-50 rounded"><span className="text-purple-600 font-medium">Dst:</span> {ba.destination_nh as string}/{ba.destination_zone as string}</div>
-                            </div>
-                            {devices.length > 0 && devices.map((dev, i) => (
-                              <div key={i} className="bg-white border border-gray-200 rounded p-1.5">
-                                <div className="flex items-center gap-1 mb-0.5">
-                                  <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${
-                                    dev.direction === 'egress' ? 'bg-orange-100 text-orange-700' :
-                                    dev.direction === 'ingress' ? 'bg-cyan-100 text-cyan-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>{dev.direction}</span>
-                                  <span className="text-[9px] font-medium text-gray-800">{dev.device_name}</span>
-                                </div>
-                                <pre className="text-[9px] text-green-600 font-mono bg-gray-50 rounded px-1.5 py-1 overflow-x-auto whitespace-pre-wrap">{dev.compiled}</pre>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
                 </div>
 
                 {/* Delta inline while editing */}
@@ -1182,51 +1129,6 @@ export default function FirewallManagementPage() {
                         <button onClick={() => navigator.clipboard.writeText(compiledRule.compiled_text)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
                       </div>
                       <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
-                    </div>
-                  )}
-                  {/* Boundary Analysis in Preview Mode */}
-                  {(boundaryAnalysis || boundaryLoading) && (
-                    <div className="mt-2 border rounded p-2 bg-purple-50 border-purple-200">
-                      <h4 className="text-[10px] font-semibold text-purple-800 mb-1 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block" />
-                        Firewall Boundary Analysis
-                      </h4>
-                      {boundaryLoading && <p className="text-[10px] text-gray-400 animate-pulse">Analyzing...</p>}
-                      {boundaryAnalysis && !boundaryLoading && (() => {
-                        const ba = boundaryAnalysis;
-                        const boundaries = ba.boundaries as number;
-                        const devices = (ba.devices || []) as Array<Record<string, string>>;
-                        return (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                                boundaries === 0 ? 'bg-green-100 text-green-700' :
-                                boundaries === 1 ? 'bg-amber-100 text-amber-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>{boundaries} {boundaries === 1 ? 'Boundary' : 'Boundaries'}</span>
-                              <span className="text-[9px] text-gray-500">{ba.flow_rule as string}</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1 text-[9px]">
-                              <div className="p-1 bg-blue-50 rounded"><span className="text-blue-600 font-medium">Src:</span> {ba.source_nh as string}/{ba.source_zone as string}</div>
-                              <div className="p-1 bg-purple-50 rounded"><span className="text-purple-600 font-medium">Dst:</span> {ba.destination_nh as string}/{ba.destination_zone as string}</div>
-                            </div>
-                            <p className="text-[9px] text-gray-500 italic">{ba.note as string}</p>
-                            {devices.length > 0 && devices.map((dev, i) => (
-                              <div key={i} className="bg-white border border-gray-200 rounded p-1.5">
-                                <div className="flex items-center gap-1 mb-0.5">
-                                  <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${
-                                    dev.direction === 'egress' ? 'bg-orange-100 text-orange-700' :
-                                    dev.direction === 'ingress' ? 'bg-cyan-100 text-cyan-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>{dev.direction}</span>
-                                  <span className="text-[9px] font-medium text-gray-800">{dev.device_name}</span>
-                                </div>
-                                <pre className="text-[9px] text-green-600 font-mono bg-gray-50 rounded px-1.5 py-1 overflow-x-auto whitespace-pre-wrap">{dev.compiled}</pre>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
                     </div>
                   )}
                 </div>
