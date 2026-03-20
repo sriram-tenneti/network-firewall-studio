@@ -608,7 +608,7 @@ export const getAppEnvAssignments = (appId?: string) => {
   const qs = params.toString();
   return fetchJSON<Record<string, unknown>[]>(`/api/reference/app-env-assignments${qs ? `?${qs}` : ''}`);
 };
-export const updateAppEnvAssignment = (id: string, data: Record<string, unknown>) =>
-  fetchJSON<Record<string, unknown>>(`/api/reference/app-env-assignments/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-export const deleteAppEnvAssignment = (id: string) =>
-  fetchJSON<{ message: string }>(`/api/reference/app-env-assignments/${id}`, { method: 'DELETE' });
+export const updateAppEnvAssignment = (appId: string, environment: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/app-env-assignments/${appId}/${environment}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteAppEnvAssignment = (appId: string, environment: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/app-env-assignments/${appId}/${environment}`, { method: 'DELETE' });
