@@ -10,6 +10,7 @@ import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
 import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
 import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
+import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
@@ -23,6 +24,7 @@ export function DesignStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
+  const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
 
   const createModal = useModal();
   const editModal = useModal<FirewallRule>();
@@ -274,6 +276,10 @@ export function DesignStudioPage() {
           <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
             Manage Groups
           </button>
+          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
+            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
+          </div>
           <button onClick={() => createModal.open()} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
             + New Rule
           </button>
@@ -297,6 +303,11 @@ export function DesignStudioPage() {
         ))}
       </div>
 
+      {viewMode === 'builder' ? (
+        <div className="bg-white border rounded-lg shadow-sm p-4">
+          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
+        </div>
+      ) : (
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -320,6 +331,7 @@ export function DesignStudioPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Modals */}
       <RuleFormModal isOpen={createModal.isOpen} onClose={createModal.close} onSave={handleCreate} applications={applications} mode="create" existingRules={rules} />

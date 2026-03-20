@@ -7,6 +7,7 @@ import ReviewPage from '@/pages/ReviewPage';
 import FirewallManagementPage from '@/pages/FirewallManagementPage';
 import DataImportPage from '@/pages/DataImportPage';
 import SettingsPage from '@/pages/SettingsPage';
+import AdminPage from '@/pages/AdminPage';
 
 function App() {
   return (
@@ -66,6 +67,13 @@ function App() {
         <Route path="/settings" element={
           <ModuleLayout module="settings" title="Settings">
             <SettingsPage />
+          </ModuleLayout>
+        } />
+
+        {/* Admin */}
+        <Route path="/admin" element={
+          <ModuleLayout module="settings" title="Admin">
+            <AdminPage />
           </ModuleLayout>
         } />
 
