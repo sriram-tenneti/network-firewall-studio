@@ -521,7 +521,7 @@ export default function FirewallManagementPage() {
   const [modifyState, setModifyState] = useState<ModifyState | null>(null);
   const [originalState, setOriginalState] = useState<ModifyState | null>(null);
   const [modifyComments, setModifyComments] = useState('');
-  const [showDelta, setShowDelta] = useState(false);
+  // showDelta toggle removed - delta is always visible
   const [submitting, setSubmitting] = useState(false);
   const [compiledRule, setCompiledRule] = useState<CompiledRule | null>(null);
   const [compileVendor, setCompileVendor] = useState('generic');
@@ -1014,25 +1014,27 @@ export default function FirewallManagementPage() {
               )}
             </div>
 
-            {/* Delta Preview */}
-            {!showDelta ? (
-              <button onClick={() => setShowDelta(true)} className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 w-full">
-                Preview Changes (Delta)
-              </button>
-            ) : (
-              <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                <h3 className="text-sm font-semibold text-blue-800 mb-2">Change Delta</h3>
-                <DeltaView delta={computeLocalDelta(originalState, {
-                  ...modifyState,
-                  rule_source: entriesToRaw(sourceEntries),
-                  rule_destination: entriesToRaw(destEntries),
-                  rule_service: entriesToRaw(serviceEntries),
-                  rule_source_expanded: buildExpandedText(sourceEntries),
-                  rule_destination_expanded: buildExpandedText(destEntries),
-                  rule_service_expanded: buildExpandedText(serviceEntries),
-                })} />
-              </div>
-            )}
+            {/* Delta Preview - Always visible */}
+            {(() => {
+              const currentDelta = computeLocalDelta(originalState, {
+                ...modifyState,
+                rule_source: entriesToRaw(sourceEntries),
+                rule_destination: entriesToRaw(destEntries),
+                rule_service: entriesToRaw(serviceEntries),
+                rule_source_expanded: buildExpandedText(sourceEntries),
+                rule_destination_expanded: buildExpandedText(destEntries),
+                rule_service_expanded: buildExpandedText(serviceEntries),
+              });
+              const hasAnyChange = Object.keys(currentDelta.added).length > 0 || Object.keys(currentDelta.removed).length > 0 || Object.keys(currentDelta.changed).length > 0;
+              return (
+                <div className={`border rounded-lg p-4 ${hasAnyChange ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+                  <h3 className={`text-sm font-semibold mb-2 ${hasAnyChange ? 'text-blue-800' : 'text-gray-600'}`}>
+                    Change Delta {hasAnyChange ? '' : '(No changes yet)'}
+                  </h3>
+                  <DeltaView delta={currentDelta} />
+                </div>
+              );
+            })()}
 
             <div className="flex justify-end gap-3 pt-2 border-t">
               <button onClick={closeModifyModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
