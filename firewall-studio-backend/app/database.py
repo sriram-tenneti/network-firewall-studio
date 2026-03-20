@@ -32,6 +32,7 @@ from app.seed_data import (
     SEED_GROUPS as _SD_GROUPS,
     SEED_LEGACY_RULES as _SD_LEGACY_RULES,
     SEED_IP_MAPPINGS as _SD_IP_MAPPINGS,
+    SEED_FIREWALL_DEVICES as _SD_FW_DEVICES,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
 )
@@ -404,7 +405,7 @@ async def seed_database() -> None:
     _save("groups", deepcopy(SEED_GROUPS))
     _save("legacy_rules", deepcopy(SEED_LEGACY_RULES))
     _save("ip_mappings", deepcopy(SEED_IP_MAPPINGS))
-    _save("firewall_devices", get_firewall_devices())
+    _save("firewall_devices", deepcopy(_SD_FW_DEVICES))
 
 
 # ============================================================
@@ -1074,6 +1075,48 @@ async def delete_environment(code: str) -> bool:
     if len(new_items) == len(items):
         return False
     _save("environments", new_items)
+    return True
+
+
+# ============================================================
+# Firewall Devices CRUD
+# ============================================================
+
+async def get_firewall_devices() -> list[dict[str, Any]]:
+    return _load("firewall_devices") or []
+
+
+async def get_firewall_device(device_id: str) -> dict[str, Any] | None:
+    devices = _load("firewall_devices") or []
+    for d in devices:
+        if d.get("device_id") == device_id:
+            return d
+    return None
+
+
+async def create_firewall_device(data: dict[str, Any]) -> dict[str, Any]:
+    devices = _load("firewall_devices") or []
+    devices.append(dict(data))
+    _save("firewall_devices", devices)
+    return data
+
+
+async def update_firewall_device(device_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    devices = _load("firewall_devices") or []
+    for i, d in enumerate(devices):
+        if d.get("device_id") == device_id:
+            devices[i] = {**d, **data, "device_id": device_id}
+            _save("firewall_devices", devices)
+            return devices[i]
+    return None
+
+
+async def delete_firewall_device(device_id: str) -> bool:
+    devices = _load("firewall_devices") or []
+    new_devices = [d for d in devices if d.get("device_id") != device_id]
+    if len(new_devices) == len(devices):
+        return False
+    _save("firewall_devices", new_devices)
     return True
 
 

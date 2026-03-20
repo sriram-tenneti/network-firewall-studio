@@ -631,6 +631,12 @@ export const getFirewallDevices = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/firewall-devices');
 export const getFirewallDevice = (deviceId: string) =>
   fetchJSON<Record<string, unknown>>(`/api/reference/firewall-devices/${deviceId}`);
+export const createFirewallDevice = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/firewall-devices', { method: 'POST', body: JSON.stringify(data) });
+export const updateFirewallDevice = (deviceId: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/firewall-devices/${deviceId}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteFirewallDevice = (deviceId: string) =>
+  fetchJSON<{ message: string }>(`/api/reference/firewall-devices/${deviceId}`, { method: 'DELETE' });
 
 // IP Mappings Import
 export const importIPMappings = (mappings: Record<string, unknown>[], appId?: string) =>

@@ -329,105 +329,260 @@ SEED_NAMING_STANDARDS = [
 # ============================================================
 
 SEED_FIREWALL_DEVICES = [
+    # ================================================================
+    # ALPHA_NGDC (US-East) — Primary DC
+    # Vendor: Palo Alto (perimeter, segmentation, PAA, DMZ)
+    # ================================================================
+
     # --- Perimeter / DC-level devices ---
     {"device_id": "fw-PA-ALPHA-001", "name": "Palo Alto Alpha Primary", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "10.0.254.1", "ha_pair": "fw-PA-ALPHA-002",
      "capabilities": ["L7 inspection", "URL filtering", "Threat prevention"]},
-    {"device_id": "fw-CP-BETA-001", "name": "Check Point Beta Primary", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
-     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
-    {"device_id": "fw-ASA-GAMMA-001", "name": "Cisco ASA Gamma Primary", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
-     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
+    {"device_id": "fw-PA-ALPHA-002", "name": "Palo Alto Alpha Secondary", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "10.0.254.2", "ha_pair": "fw-PA-ALPHA-001",
+     "capabilities": ["L7 inspection", "URL filtering", "Threat prevention"]},
     {"device_id": "fw-PA-ALPHA-DMZ", "name": "Palo Alto Alpha DMZ", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "type": "dmz", "status": "Active",
+     "mgmt_ip": "10.70.254.1",
      "capabilities": ["L7 inspection", "SSL decryption", "WAF integration"]},
 
-    # --- NH-specific segmentation firewalls (per NH per SZ) ---
+    # --- ALPHA NH-specific segmentation firewalls ---
     # Each NH that hosts a segmented zone (CPA, CDE, CCS) gets its own firewall.
     # GEN/STD zones do NOT have per-NH firewalls.
 
-    # NH01 — CPA, CDE, CCS
-    {"device_id": "fw-PA-NH01-CPA", "name": "NH01 CPA Firewall", "vendor": "palo_alto",
+    # NH01 — CPA, CDE, CCS (Platform Services)
+    {"device_id": "fw-PA-NH01-CPA", "name": "NH01 CPA Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.0.253.11",
      "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH01-CDE", "name": "NH01 CDE Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH01-CDE", "name": "NH01 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.0.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH01-CCS", "name": "NH01 CCS Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH01-CCS", "name": "NH01 CCS Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.0.253.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
 
-    # NH02 — CPA, CDE, CCS
-    {"device_id": "fw-PA-NH02-CPA", "name": "NH02 CPA Firewall", "vendor": "palo_alto",
+    # NH02 — CPA, CDE, CCS (Team Eta / Data Processing)
+    {"device_id": "fw-PA-NH02-CPA", "name": "NH02 CPA Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.1.253.11",
      "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH02-CDE", "name": "NH02 CDE Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH02-CDE", "name": "NH02 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.1.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH02-CCS", "name": "NH02 CCS Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH02-CCS", "name": "NH02 CCS Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.1.253.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
 
-    # NH03 — CPA, CDE, CCS (from NH SZ definition)
-    {"device_id": "fw-PA-NH03-CDE", "name": "NH03 CDE Firewall", "vendor": "palo_alto",
+    # NH03 — CDE, CCS (Team Delta / Web & API)
+    {"device_id": "fw-PA-NH03-CDE", "name": "NH03 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.2.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH03-CCS", "name": "NH03 CCS Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH03-CCS", "name": "NH03 CCS Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.2.253.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
 
-    # NH04 — CCS (only segmented zone in NH04)
-    {"device_id": "fw-CP-NH04-CCS", "name": "NH04 CCS Firewall", "vendor": "checkpoint",
+    # NH04 — CCS (Team Kappa / Insurance)
+    {"device_id": "fw-CP-NH04-CCS", "name": "NH04 CCS Segmentation FW", "vendor": "checkpoint",
      "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.3.253.13",
      "capabilities": ["Micro-segmentation", "CCS enforcement"]},
 
-    # NH05 — CCS (only segmented zone in NH05)
-    {"device_id": "fw-CP-NH05-CCS", "name": "NH05 CCS Firewall", "vendor": "checkpoint",
+    # NH05 — CCS (Team Lambda / Compliance)
+    {"device_id": "fw-CP-NH05-CCS", "name": "NH05 CCS Segmentation FW", "vendor": "checkpoint",
      "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.4.253.13",
      "capabilities": ["Micro-segmentation", "CCS enforcement"]},
 
-    # NH06 — CPA, CDE, CCS
-    {"device_id": "fw-PA-NH06-CPA", "name": "NH06 CPA Firewall", "vendor": "palo_alto",
+    # NH06 — CPA, CDE, CCS (Team Xi / Trading)
+    {"device_id": "fw-PA-NH06-CPA", "name": "NH06 CPA Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.5.253.11",
      "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH06-CDE", "name": "NH06 CDE Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH06-CDE", "name": "NH06 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.5.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH06-CCS", "name": "NH06 CCS Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH06-CCS", "name": "NH06 CCS Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.5.253.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
 
-    # NH07 — CPA, CDE
-    {"device_id": "fw-PA-NH07-CPA", "name": "NH07 CPA Firewall", "vendor": "palo_alto",
+    # NH07 — CPA, CDE (Team Epsilon / Payments)
+    {"device_id": "fw-PA-NH07-CPA", "name": "NH07 CPA Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.6.253.11",
      "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH07-CDE", "name": "NH07 CDE Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH07-CDE", "name": "NH07 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.6.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
 
-    # NH08 — CCS, CDE
-    {"device_id": "fw-PA-NH08-CCS", "name": "NH08 CCS Firewall", "vendor": "palo_alto",
+    # NH08 — CCS, CDE (Team Theta / Core Banking)
+    {"device_id": "fw-PA-NH08-CCS", "name": "NH08 CCS Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.7.253.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-    {"device_id": "fw-PA-NH08-CDE", "name": "NH08 CDE Firewall", "vendor": "palo_alto",
+    {"device_id": "fw-PA-NH08-CDE", "name": "NH08 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.7.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
 
-    # NH09 — CCS
-    {"device_id": "fw-PA-NH09-CCS", "name": "NH09 CCS Firewall", "vendor": "palo_alto",
+    # NH09 — CCS (Team Iota / Lending)
+    {"device_id": "fw-PA-NH09-CCS", "name": "NH09 CCS Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.8.253.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
 
-    # NH10 — CDE
-    {"device_id": "fw-PA-NH10-CDE", "name": "NH10 CDE Firewall", "vendor": "palo_alto",
+    # NH10 — CDE (Team Mu / Wealth)
+    {"device_id": "fw-PA-NH10-CDE", "name": "NH10 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.9.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
 
-    # --- PAA devices ---
-    {"device_id": "fw-PA-PAA-001", "name": "PAA Perimeter Firewall", "vendor": "palo_alto",
+    # --- ALPHA PAA devices ---
+    {"device_id": "fw-PA-PAA-001", "name": "PAA Perimeter FW (Alpha)", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "type": "paa", "status": "Active",
+     "mgmt_ip": "10.0.252.1",
      "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
+
+    # ================================================================
+    # BETA_NGDC (US-West) — Secondary DC
+    # Vendor: Check Point (perimeter), Palo Alto (segmentation)
+    # NHs present in BETA: NH01, NH02, NH03, NH04, NH06
+    # ================================================================
+
+    # --- Perimeter ---
+    {"device_id": "fw-CP-BETA-001", "name": "Check Point Beta Primary", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "172.16.254.1", "ha_pair": "fw-CP-BETA-002",
+     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
+    {"device_id": "fw-CP-BETA-002", "name": "Check Point Beta Secondary", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "172.16.254.2", "ha_pair": "fw-CP-BETA-001",
+     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
+    {"device_id": "fw-CP-BETA-DMZ", "name": "Check Point Beta DMZ", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "type": "dmz", "status": "Active",
+     "mgmt_ip": "172.16.70.1",
+     "capabilities": ["Stateful inspection", "SSL inspection", "IPS"]},
+
+    # --- BETA NH segmentation firewalls ---
+    # NH01 in BETA
+    {"device_id": "fw-CP-BETA-NH01-CPA", "name": "Beta NH01 CPA Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.50.11",
+     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
+    {"device_id": "fw-CP-BETA-NH01-CDE", "name": "Beta NH01 CDE Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.50.12",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+    {"device_id": "fw-CP-BETA-NH01-CCS", "name": "Beta NH01 CCS Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.50.13",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH02 in BETA
+    {"device_id": "fw-CP-BETA-NH02-CDE", "name": "Beta NH02 CDE Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.1.12",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+    {"device_id": "fw-CP-BETA-NH02-CCS", "name": "Beta NH02 CCS Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.1.13",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH03 in BETA
+    {"device_id": "fw-CP-BETA-NH03-CCS", "name": "Beta NH03 CCS Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH03", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.3.13",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH04 in BETA
+    {"device_id": "fw-CP-BETA-NH04-CCS", "name": "Beta NH04 CCS Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH04", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.4.13",
+     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
+
+    # NH06 in BETA
+    {"device_id": "fw-CP-BETA-NH06-CPA", "name": "Beta NH06 CPA Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.6.11",
+     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
+    {"device_id": "fw-CP-BETA-NH06-CDE", "name": "Beta NH06 CDE Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.6.12",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+    {"device_id": "fw-CP-BETA-NH06-CCS", "name": "Beta NH06 CCS Seg FW", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "nh": "NH06", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.6.13",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # --- BETA PAA ---
+    {"device_id": "fw-CP-BETA-PAA-001", "name": "PAA Perimeter FW (Beta)", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "type": "paa", "status": "Active",
+     "mgmt_ip": "172.16.252.1",
+     "capabilities": ["Stateful inspection", "SSL inspection", "PAA enforcement"]},
+
+    # ================================================================
+    # GAMMA_NGDC (US-Central) — Tertiary DC
+    # Vendor: Cisco ASA (perimeter), Palo Alto (segmentation)
+    # NHs present in GAMMA: NH01, NH02, NH06
+    # ================================================================
+
+    # --- Perimeter ---
+    {"device_id": "fw-ASA-GAMMA-001", "name": "Cisco ASA Gamma Primary", "vendor": "cisco_asa",
+     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "10.50.254.1", "ha_pair": "fw-ASA-GAMMA-002",
+     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
+    {"device_id": "fw-ASA-GAMMA-002", "name": "Cisco ASA Gamma Secondary", "vendor": "cisco_asa",
+     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "10.50.254.2", "ha_pair": "fw-ASA-GAMMA-001",
+     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
+    {"device_id": "fw-ASA-GAMMA-DMZ", "name": "Cisco ASA Gamma DMZ", "vendor": "cisco_asa",
+     "dc": "GAMMA_NGDC", "type": "dmz", "status": "Active",
+     "mgmt_ip": "10.50.70.1",
+     "capabilities": ["Stateful inspection", "NAT", "ACL filtering"]},
+
+    # --- GAMMA NH segmentation firewalls ---
+    # NH01 in GAMMA
+    {"device_id": "fw-PA-GAMMA-NH01-CPA", "name": "Gamma NH01 CPA Seg FW", "vendor": "palo_alto",
+     "dc": "GAMMA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.50.50.11",
+     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
+    {"device_id": "fw-PA-GAMMA-NH01-CCS", "name": "Gamma NH01 CCS Seg FW", "vendor": "palo_alto",
+     "dc": "GAMMA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.50.50.13",
+     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
+
+    # NH02 in GAMMA
+    {"device_id": "fw-PA-GAMMA-NH02-CDE", "name": "Gamma NH02 CDE Seg FW", "vendor": "palo_alto",
+     "dc": "GAMMA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "10.50.1.12",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+
+    # NH06 in GAMMA
+    {"device_id": "fw-PA-GAMMA-NH06-CPA", "name": "Gamma NH06 CPA Seg FW", "vendor": "palo_alto",
+     "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.20.11",
+     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
+    {"device_id": "fw-PA-GAMMA-NH06-CDE", "name": "Gamma NH06 CDE Seg FW", "vendor": "palo_alto",
+     "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
+     "mgmt_ip": "172.16.20.12",
+     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
+
+    # --- GAMMA PAA ---
+    {"device_id": "fw-ASA-GAMMA-PAA-001", "name": "PAA Perimeter FW (Gamma)", "vendor": "cisco_asa",
+     "dc": "GAMMA_NGDC", "type": "paa", "status": "Active",
+     "mgmt_ip": "10.50.252.1",
+     "capabilities": ["Stateful inspection", "NAT", "PAA enforcement"]},
 ]
 
 

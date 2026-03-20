@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
 import { compileEgressIngress } from '@/lib/api';
+import { LDFFlowVisualization } from '../design-studio/LDFFlowVisualization';
 import type { ReviewRequest, CompiledRule } from '@/types';
 
 interface BoundaryDevice {
@@ -181,6 +182,11 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
           </div>
         )}
       </div>
+
+      {/* Logical Data Flow Visualization */}
+      {review.rule_id && (
+        <LDFFlowVisualization ruleId={review.rule_id} vendor={compileVendor} boundaryData={egressIngress} />
+      )}
 
       {/* Firewall Boundary Analysis */}
       <div className="border border-amber-200 rounded-lg p-4 bg-amber-50">

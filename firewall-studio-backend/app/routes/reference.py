@@ -1021,16 +1021,40 @@ async def list_preprod_matrix():
 @router.get("/firewall-devices")
 async def list_firewall_devices():
     from app.database import get_firewall_devices
-    return get_firewall_devices()
+    return await get_firewall_devices()
 
 
 @router.get("/firewall-devices/{device_id}")
 async def get_firewall_device_endpoint(device_id: str):
     from app.database import get_firewall_device
-    device = get_firewall_device(device_id)
+    device = await get_firewall_device(device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Firewall device not found")
     return device
+
+
+@router.post("/firewall-devices")
+async def create_firewall_device_endpoint(data: dict):
+    from app.database import create_firewall_device
+    return await create_firewall_device(data)
+
+
+@router.put("/firewall-devices/{device_id}")
+async def update_firewall_device_endpoint(device_id: str, data: dict):
+    from app.database import update_firewall_device
+    result = await update_firewall_device(device_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Firewall device not found")
+    return result
+
+
+@router.delete("/firewall-devices/{device_id}")
+async def delete_firewall_device_endpoint(device_id: str):
+    from app.database import delete_firewall_device
+    ok = await delete_firewall_device(device_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Firewall device not found")
+    return {"message": "Deleted"}
 
 
 # ---- IP Mappings Import ----

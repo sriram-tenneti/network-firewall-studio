@@ -13,6 +13,7 @@ import {
   createMigrationGroup, getApplications, lookupIPMapping,
   getIPMappings, importIPMappings, compileEgressIngress,
 } from '@/lib/api';
+import { LDFFlowVisualization, type EgressIngressResult } from '@/components/design-studio/LDFFlowVisualization';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -1079,6 +1080,11 @@ export function MigrationStudioPage() {
                         <p className="text-xs text-gray-500 italic">Click &quot;Compile Rule&quot; to generate vendor-specific output and submit groups to firewall device.</p>
                       )}
                     </div>
+
+                    {/* Logical Data Flow Visualization */}
+                    {migrateRule?.id && (
+                      <LDFFlowVisualization ruleId={migrateRule.id} vendor={compileVendor} boundaryData={boundaryAnalysis as EgressIngressResult | null} />
+                    )}
 
                     {/* Firewall Boundary Analysis (Egress/Ingress) */}
                     {(boundaryAnalysis || boundaryLoading) && (

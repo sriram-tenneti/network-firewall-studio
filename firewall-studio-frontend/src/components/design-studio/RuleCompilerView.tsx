@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { compileRule, compileEgressIngress } from '@/lib/api';
+import { LDFFlowVisualization } from './LDFFlowVisualization';
 import type { CompiledRule } from '@/types';
 
 interface GroupProvisioningResult {
@@ -240,6 +241,13 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
                 <p className="text-xs text-gray-500 italic">No groups associated with this rule&apos;s application for device submission.</p>
               )}
             </div>
+
+            {/* Logical Data Flow Visualization */}
+            {ruleId && (
+              <div className="border-t pt-4">
+                <LDFFlowVisualization ruleId={ruleId} vendor={vendor} boundaryData={egressIngress} />
+              </div>
+            )}
 
             {/* Firewall Boundary Analysis (Egress/Ingress) */}
             <div className="border-t pt-4">

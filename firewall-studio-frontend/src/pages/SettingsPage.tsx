@@ -55,6 +55,14 @@ export default function SettingsPage() {
   const [namingStandards, setNamingStandards] = useState<Record<string, unknown>>({});
   const [loadingRef, setLoadingRef] = useState(false);
 
+  // Firewall Devices state
+  const [fwDevices, setFwDevices] = useState<Record<string, unknown>[]>([]);
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+  const [editDeviceForm, setEditDeviceForm] = useState<Record<string, unknown>>({});
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [newDeviceForm, setNewDeviceForm] = useState<Record<string, unknown>>({ device_id: '', name: '', vendor: 'palo_alto', dc: 'ALPHA_NGDC', nh: '', sz: '', type: 'segmentation', status: 'Active', mgmt_ip: '', capabilities: '' });
+  const [deviceFilter, setDeviceFilter] = useState({ dc: '', type: '', vendor: '' });
+
   // Edit states for App Management
   const [editingAppId, setEditingAppId] = useState<string | null>(null);
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
@@ -81,14 +89,16 @@ export default function SettingsPage() {
   const loadRefData = useCallback(async () => {
     setLoadingRef(true);
     try {
-      const [appsData, policyData, namingData] = await Promise.all([
+      const [appsData, policyData, namingData, devicesData] = await Promise.all([
         api.getApplications(),
         api.getAllPolicyMatrices(),
         api.getNamingStandards(),
+        api.getFirewallDevices(),
       ]);
       setApplications(appsData);
       setPolicyMatrix(policyData.combined || []);
       setNamingStandards(namingData as unknown as Record<string, unknown>);
+      setFwDevices(devicesData);
     } catch {
       showNotification('Failed to load reference data', 'error');
     }
@@ -235,10 +245,49 @@ export default function SettingsPage() {
   const selectedAppData = applications.find(a => a.app_id === selectedApp);
   const inp = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500';
 
+  const handleSaveDevice = async () => {
+    if (!editingDeviceId) return;
+    try {
+      await api.updateFirewallDevice(editingDeviceId, editDeviceForm);
+      setEditingDeviceId(null);
+      loadRefData();
+      showNotification('Device updated', 'success');
+    } catch { showNotification('Failed to update device', 'error'); }
+  };
+
+  const handleAddDevice = async () => {
+    try {
+      const capsStr = (newDeviceForm.capabilities as string) || '';
+      const caps = capsStr ? capsStr.split(',').map((c: string) => c.trim()) : [];
+      await api.createFirewallDevice({ ...newDeviceForm, capabilities: caps });
+      setShowAddDevice(false);
+      setNewDeviceForm({ device_id: '', name: '', vendor: 'palo_alto', dc: 'ALPHA_NGDC', nh: '', sz: '', type: 'segmentation', status: 'Active', mgmt_ip: '', capabilities: '' });
+      loadRefData();
+      showNotification('Device added', 'success');
+    } catch { showNotification('Failed to add device', 'error'); }
+  };
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    if (!confirm(`Delete device ${deviceId}?`)) return;
+    try {
+      await api.deleteFirewallDevice(deviceId);
+      loadRefData();
+      showNotification('Device deleted', 'success');
+    } catch { showNotification('Failed to delete device', 'error'); }
+  };
+
+  const filteredDevices = fwDevices.filter(d => {
+    if (deviceFilter.dc && d.dc !== deviceFilter.dc) return false;
+    if (deviceFilter.type && d.type !== deviceFilter.type) return false;
+    if (deviceFilter.vendor && d.vendor !== deviceFilter.vendor) return false;
+    return true;
+  });
+
   const tabs = [
     { id: 'app_management', label: 'App Management' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
+    { id: 'fw_devices', label: 'Firewall Devices' },
     { id: 'ad_groups', label: 'User Groups' },
     { id: 'ad_users', label: 'Users' },
     { id: 'ad_config', label: 'AD Configuration' },
@@ -572,6 +621,153 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── Firewall Devices Tab ── */}
+        {activeTab === 'fw_devices' && (
+          <div className="space-y-4">
+            {/* Filters */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white" value={deviceFilter.dc} onChange={e => setDeviceFilter(f => ({ ...f, dc: e.target.value }))}>
+                <option value="">All DCs</option>
+                <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                <option value="BETA_NGDC">BETA_NGDC</option>
+                <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+              </select>
+              <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white" value={deviceFilter.type} onChange={e => setDeviceFilter(f => ({ ...f, type: e.target.value }))}>
+                <option value="">All Types</option>
+                <option value="perimeter">Perimeter</option>
+                <option value="segmentation">Segmentation</option>
+                <option value="dmz">DMZ</option>
+                <option value="paa">PAA</option>
+              </select>
+              <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white" value={deviceFilter.vendor} onChange={e => setDeviceFilter(f => ({ ...f, vendor: e.target.value }))}>
+                <option value="">All Vendors</option>
+                <option value="palo_alto">Palo Alto</option>
+                <option value="checkpoint">Check Point</option>
+                <option value="cisco_asa">Cisco ASA</option>
+              </select>
+              <span className="text-xs text-gray-500 ml-auto">{filteredDevices.length} devices</span>
+              <button onClick={() => setShowAddDevice(!showAddDevice)}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Device</button>
+            </div>
+
+            {/* Add Device Form */}
+            {showAddDevice && (
+              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+                <h4 className="text-sm font-semibold text-indigo-800">Add New Firewall Device</h4>
+                <div className="grid grid-cols-4 gap-3">
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Device ID</label>
+                    <input type="text" className={inp} value={newDeviceForm.device_id as string} onChange={e => setNewDeviceForm(f => ({ ...f, device_id: e.target.value }))} placeholder="fw-PA-NH01-CPA" /></div>
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+                    <input type="text" className={inp} value={newDeviceForm.name as string} onChange={e => setNewDeviceForm(f => ({ ...f, name: e.target.value }))} placeholder="Palo Alto NH01 CPA" /></div>
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Vendor</label>
+                    <select className={inp} value={newDeviceForm.vendor as string} onChange={e => setNewDeviceForm(f => ({ ...f, vendor: e.target.value }))}>
+                      <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="cisco_asa">Cisco ASA</option>
+                    </select></div>
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">DC</label>
+                    <select className={inp} value={newDeviceForm.dc as string} onChange={e => setNewDeviceForm(f => ({ ...f, dc: e.target.value }))}>
+                      <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                    </select></div>
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">NH</label>
+                    <input type="text" className={inp} value={newDeviceForm.nh as string} onChange={e => setNewDeviceForm(f => ({ ...f, nh: e.target.value }))} placeholder="NH01" /></div>
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">SZ</label>
+                    <input type="text" className={inp} value={newDeviceForm.sz as string} onChange={e => setNewDeviceForm(f => ({ ...f, sz: e.target.value }))} placeholder="CPA" /></div>
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                    <select className={inp} value={newDeviceForm.type as string} onChange={e => setNewDeviceForm(f => ({ ...f, type: e.target.value }))}>
+                      <option value="perimeter">Perimeter</option><option value="segmentation">Segmentation</option><option value="dmz">DMZ</option><option value="paa">PAA</option>
+                    </select></div>
+                  <div><label className="block text-xs font-medium text-gray-700 mb-1">Mgmt IP</label>
+                    <input type="text" className={inp} value={newDeviceForm.mgmt_ip as string} onChange={e => setNewDeviceForm(f => ({ ...f, mgmt_ip: e.target.value }))} placeholder="10.x.x.x" /></div>
+                </div>
+                <div><label className="block text-xs font-medium text-gray-700 mb-1">Capabilities (comma-separated)</label>
+                  <input type="text" className={inp} value={newDeviceForm.capabilities as string} onChange={e => setNewDeviceForm(f => ({ ...f, capabilities: e.target.value }))} placeholder="L7 inspection, URL filtering" /></div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setShowAddDevice(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                  <button onClick={handleAddDevice} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Add Device</button>
+                </div>
+              </div>
+            )}
+
+            {/* Devices Table */}
+            {loadingRef ? (
+              <p className="text-sm text-gray-400 animate-pulse">Loading devices...</p>
+            ) : (
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200 text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Device ID</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Vendor</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">DC</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">NH</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">SZ</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Type</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Status</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Mgmt IP</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {filteredDevices.map(dev => {
+                      const devId = dev.device_id as string;
+                      const isEditing = editingDeviceId === devId;
+                      return (
+                        <tr key={devId} className={isEditing ? 'bg-indigo-50' : 'hover:bg-gray-50'}>
+                          <td className="px-3 py-2 font-mono font-medium text-gray-800">{devId}</td>
+                          <td className="px-3 py-2">{isEditing
+                            ? <input type="text" className="px-2 py-1 text-xs border rounded w-full" value={(editDeviceForm.name as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, name: e.target.value }))} />
+                            : (dev.name as string)}</td>
+                          <td className="px-3 py-2">{isEditing
+                            ? <select className="px-2 py-1 text-xs border rounded" value={(editDeviceForm.vendor as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, vendor: e.target.value }))}>
+                                <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="cisco_asa">Cisco ASA</option>
+                              </select>
+                            : <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                dev.vendor === 'palo_alto' ? 'bg-blue-100 text-blue-700' :
+                                dev.vendor === 'checkpoint' ? 'bg-purple-100 text-purple-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>{dev.vendor === 'palo_alto' ? 'Palo Alto' : dev.vendor === 'checkpoint' ? 'Check Point' : 'Cisco ASA'}</span>}</td>
+                          <td className="px-3 py-2">{dev.dc as string}</td>
+                          <td className="px-3 py-2">{isEditing
+                            ? <input type="text" className="px-2 py-1 text-xs border rounded w-16" value={(editDeviceForm.nh as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, nh: e.target.value }))} />
+                            : (dev.nh as string || '-')}</td>
+                          <td className="px-3 py-2">{isEditing
+                            ? <input type="text" className="px-2 py-1 text-xs border rounded w-16" value={(editDeviceForm.sz as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, sz: e.target.value }))} />
+                            : (dev.sz as string || '-')}</td>
+                          <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            dev.type === 'perimeter' ? 'bg-red-100 text-red-700' :
+                            dev.type === 'segmentation' ? 'bg-green-100 text-green-700' :
+                            dev.type === 'dmz' ? 'bg-orange-100 text-orange-700' :
+                            'bg-cyan-100 text-cyan-700'
+                          }`}>{dev.type as string}</span></td>
+                          <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            dev.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                          }`}>{dev.status as string}</span></td>
+                          <td className="px-3 py-2 font-mono text-gray-500">{isEditing
+                            ? <input type="text" className="px-2 py-1 text-xs border rounded w-24" value={(editDeviceForm.mgmt_ip as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, mgmt_ip: e.target.value }))} />
+                            : (dev.mgmt_ip as string || '-')}</td>
+                          <td className="px-3 py-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <button onClick={handleSaveDevice} className="px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700">Save</button>
+                                <button onClick={() => setEditingDeviceId(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-50">Cancel</button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1">
+                                <button onClick={() => { setEditingDeviceId(devId); setEditDeviceForm({ ...dev }); }} className="px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded">Edit</button>
+                                <button onClick={() => handleDeleteDevice(devId)} className="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded">Delete</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
