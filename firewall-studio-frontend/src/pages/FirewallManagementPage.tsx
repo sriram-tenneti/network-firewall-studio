@@ -516,6 +516,7 @@ export default function FirewallManagementPage() {
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('all');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
+  const [modifyViewMode, setModifyViewMode] = useState<'edit' | 'preview'>('edit');
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const { notification, showNotification, clearNotification } = useNotification();
@@ -951,7 +952,18 @@ export default function FirewallManagementPage() {
 
       {/* Modify Rule Modal */}
       <Modal isOpen={!!modifyRule} onClose={closeModifyModal} title={`Modify Rule: ${modifyRule?.id || ''}`} size="xl">
-        {modifyRule && modifyState && originalState && (
+        {modifyRule && modifyState && originalState && (() => {
+          const currentDelta = computeLocalDelta(originalState, {
+            ...modifyState,
+            rule_source: entriesToRaw(sourceEntries),
+            rule_destination: entriesToRaw(destEntries),
+            rule_service: entriesToRaw(serviceEntries),
+            rule_source_expanded: buildExpandedText(sourceEntries),
+            rule_destination_expanded: buildExpandedText(destEntries),
+            rule_service_expanded: buildExpandedText(serviceEntries),
+          });
+          const hasAnyChange = Object.keys(currentDelta.added).length > 0 || Object.keys(currentDelta.removed).length > 0 || Object.keys(currentDelta.changed).length > 0;
+          return (
           <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
             {/* Rule summary header */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
@@ -963,102 +975,188 @@ export default function FirewallManagementPage() {
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-xs text-blue-700">
-                Edit source, destination, and service entries below. For groups, expand to view and edit associated IPs/subnets. You can add new IPs, subnets, or groups and manage group members.
-              </p>
-            </div>
-
-            {/* Source Section */}
-            <ResourceEditor label="Source" entries={sourceEntries} onChange={setSourceEntries} appGroups={appGroups} colorScheme={{ bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', headerBg: 'bg-blue-50' }} />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Source Zone</label>
-                <input type="text" value={modifyState.rule_source_zone} onChange={e => handleModifyField('rule_source_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Destination Zone</label>
-                <input type="text" value={modifyState.rule_destination_zone} onChange={e => handleModifyField('rule_destination_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-
-            {/* Destination Section */}
-            <ResourceEditor label="Destination" entries={destEntries} onChange={setDestEntries} appGroups={appGroups} colorScheme={{ bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', headerBg: 'bg-purple-50' }} />
-
-            {/* Service Section */}
-            <ResourceEditor label="Service / Ports" entries={serviceEntries} onChange={setServiceEntries} appGroups={[]} colorScheme={{ bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', headerBg: 'bg-amber-50' }} />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Rule Action</label>
-                <select value={modifyState.rule_action} onChange={e => handleModifyField('rule_action', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md">
-                  <option value="Accept">Accept</option>
-                  <option value="DROP">DROP</option>
-                  <option value="Reject">Reject</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Modification Comments</label>
-                <textarea value={modifyComments} onChange={e => setModifyComments(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md h-[38px] resize-none" placeholder="Reason for modification..." />
-              </div>
-            </div>
-
-            {/* Compile Option */}
-            <div className="border rounded-lg p-3 bg-gray-50">
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-xs font-medium text-gray-700">Compile Rule:</label>
-                <select value={compileVendor} onChange={e => setCompileVendor(e.target.value)} className="px-2 py-1 text-xs border border-gray-300 rounded-md">
-                  <option value="generic">Generic</option>
-                  <option value="palo_alto">Palo Alto</option>
-                  <option value="checkpoint">Check Point</option>
-                  <option value="cisco_asa">Cisco ASA</option>
-                </select>
-                <button onClick={() => handleCompile(modifyRule.id)} disabled={compiling} className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
-                  {compiling ? 'Compiling...' : 'Compile'}
+            {/* Edit / Preview toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+                <button onClick={() => setModifyViewMode('edit')} className={`px-3 py-1.5 text-xs font-medium ${modifyViewMode === 'edit' ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Edit</button>
+                <button onClick={() => setModifyViewMode('preview')} className={`px-3 py-1.5 text-xs font-medium ${modifyViewMode === 'preview' ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  Preview Changes{hasAnyChange ? ` (${Object.keys(currentDelta.added).length + Object.keys(currentDelta.removed).length + Object.keys(currentDelta.changed).length})` : ''}
                 </button>
               </div>
-              {compiledRule && (
-                <div className="bg-gray-900 rounded p-3 mt-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-400">Format: {compiledRule.vendor_format}</span>
-                    <button onClick={() => navigator.clipboard.writeText(compiledRule.compiled_text)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
-                  </div>
-                  <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
-                </div>
+              {modifyViewMode === 'preview' && !hasAnyChange && (
+                <span className="text-xs text-gray-400 italic">No changes yet</span>
               )}
             </div>
 
-            {/* Delta Preview - Always visible */}
-            {(() => {
-              const currentDelta = computeLocalDelta(originalState, {
-                ...modifyState,
-                rule_source: entriesToRaw(sourceEntries),
-                rule_destination: entriesToRaw(destEntries),
-                rule_service: entriesToRaw(serviceEntries),
-                rule_source_expanded: buildExpandedText(sourceEntries),
-                rule_destination_expanded: buildExpandedText(destEntries),
-                rule_service_expanded: buildExpandedText(serviceEntries),
-              });
-              const hasAnyChange = Object.keys(currentDelta.added).length > 0 || Object.keys(currentDelta.removed).length > 0 || Object.keys(currentDelta.changed).length > 0;
-              return (
+            {modifyViewMode === 'edit' ? (
+              <>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-700">
+                    Edit source, destination, and service entries below. For groups, expand to view and edit associated IPs/subnets. You can add new IPs, subnets, or groups and manage group members.
+                  </p>
+                </div>
+
+                {/* Source Section */}
+                <ResourceEditor label="Source" entries={sourceEntries} onChange={setSourceEntries} appGroups={appGroups} colorScheme={{ bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', headerBg: 'bg-blue-50' }} />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Source Zone</label>
+                    <input type="text" value={modifyState.rule_source_zone} onChange={e => handleModifyField('rule_source_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Destination Zone</label>
+                    <input type="text" value={modifyState.rule_destination_zone} onChange={e => handleModifyField('rule_destination_zone', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+
+                {/* Destination Section */}
+                <ResourceEditor label="Destination" entries={destEntries} onChange={setDestEntries} appGroups={appGroups} colorScheme={{ bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', headerBg: 'bg-purple-50' }} />
+
+                {/* Service Section */}
+                <ResourceEditor label="Service / Ports" entries={serviceEntries} onChange={setServiceEntries} appGroups={[]} colorScheme={{ bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', headerBg: 'bg-amber-50' }} />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Rule Action</label>
+                    <select value={modifyState.rule_action} onChange={e => handleModifyField('rule_action', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md">
+                      <option value="Accept">Accept</option>
+                      <option value="DROP">DROP</option>
+                      <option value="Reject">Reject</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Modification Comments</label>
+                    <textarea value={modifyComments} onChange={e => setModifyComments(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md h-[38px] resize-none" placeholder="Reason for modification..." />
+                  </div>
+                </div>
+
+                {/* Compile Option */}
+                <div className="border rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="text-xs font-medium text-gray-700">Compile Rule:</label>
+                    <select value={compileVendor} onChange={e => setCompileVendor(e.target.value)} className="px-2 py-1 text-xs border border-gray-300 rounded-md">
+                      <option value="generic">Generic</option>
+                      <option value="palo_alto">Palo Alto</option>
+                      <option value="checkpoint">Check Point</option>
+                      <option value="cisco_asa">Cisco ASA</option>
+                    </select>
+                    <button onClick={() => handleCompile(modifyRule.id)} disabled={compiling} className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+                      {compiling ? 'Compiling...' : 'Compile'}
+                    </button>
+                  </div>
+                  {compiledRule && (
+                    <div className="bg-gray-900 rounded p-3 mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-gray-400">Format: {compiledRule.vendor_format}</span>
+                        <button onClick={() => navigator.clipboard.writeText(compiledRule.compiled_text)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                      </div>
+                      <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
+                    </div>
+                  )}
+                </div>
+
+                {/* Delta inline while editing */}
                 <div className={`border rounded-lg p-4 ${hasAnyChange ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
                   <h3 className={`text-sm font-semibold mb-2 ${hasAnyChange ? 'text-blue-800' : 'text-gray-600'}`}>
                     Change Delta {hasAnyChange ? '' : '(No changes yet)'}
                   </h3>
                   <DeltaView delta={currentDelta} />
                 </div>
-              );
-            })()}
+              </>
+            ) : (
+              /* Preview Mode: Delta-only view for reviewers */
+              <div className="space-y-4">
+                {hasAnyChange ? (
+                  <div className="border border-orange-200 rounded-lg p-4 bg-orange-50">
+                    <h3 className="text-sm font-semibold text-orange-800 mb-3">Changes Only (Delta Preview)</h3>
+                    <div className="space-y-3">
+                      {Object.keys(currentDelta.added).length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-green-700 mb-1">Added</h4>
+                          {Object.entries(currentDelta.added).map(([field, values]) => (
+                            <div key={field} className="ml-2">
+                              <span className="text-xs font-medium text-gray-600">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                              {values.map((v, i) => (
+                                <div key={i} className="text-sm text-green-700 font-mono ml-3 bg-green-50 px-2 py-0.5 rounded my-0.5">+ {v}</div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {Object.keys(currentDelta.removed).length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-red-700 mb-1">Removed</h4>
+                          {Object.entries(currentDelta.removed).map(([field, values]) => (
+                            <div key={field} className="ml-2">
+                              <span className="text-xs font-medium text-gray-600">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                              {values.map((v, i) => (
+                                <div key={i} className="text-sm text-red-700 font-mono ml-3 bg-red-50 px-2 py-0.5 rounded my-0.5 line-through">- {v}</div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {Object.keys(currentDelta.changed).length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-blue-700 mb-1">Changed</h4>
+                          {Object.entries(currentDelta.changed).map(([field, change]) => (
+                            <div key={field} className="ml-2 py-1">
+                              <span className="text-xs font-medium text-gray-600">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                              <div className="ml-3 mt-0.5">
+                                <span className="text-sm text-red-600 line-through font-mono">{change.from}</span>
+                                <span className="mx-2 text-gray-400">&rarr;</span>
+                                <span className="text-sm text-green-600 font-mono">{change.to}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg p-6 bg-gray-50 text-center">
+                    <p className="text-sm text-gray-500">No changes to preview yet.</p>
+                    <p className="text-xs text-gray-400 mt-1">Switch to Edit mode to make changes.</p>
+                  </div>
+                )}
+
+                {/* Compile in preview too */}
+                <div className="border rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="text-xs font-medium text-gray-700">Compile Rule:</label>
+                    <select value={compileVendor} onChange={e => setCompileVendor(e.target.value)} className="px-2 py-1 text-xs border border-gray-300 rounded-md">
+                      <option value="generic">Generic</option>
+                      <option value="palo_alto">Palo Alto</option>
+                      <option value="checkpoint">Check Point</option>
+                      <option value="cisco_asa">Cisco ASA</option>
+                    </select>
+                    <button onClick={() => handleCompile(modifyRule.id)} disabled={compiling} className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+                      {compiling ? 'Compiling...' : 'Compile'}
+                    </button>
+                  </div>
+                  {compiledRule && (
+                    <div className="bg-gray-900 rounded p-3 mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-gray-400">Format: {compiledRule.vendor_format}</span>
+                        <button onClick={() => navigator.clipboard.writeText(compiledRule.compiled_text)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                      </div>
+                      <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{compiledRule.compiled_text}</pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-2 border-t">
               <button onClick={closeModifyModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSubmitModification} disabled={submitting} className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:opacity-50">
+              <button onClick={handleSubmitModification} disabled={submitting || !hasAnyChange} className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 {submitting ? 'Submitting...' : 'Submit for Review'}
               </button>
             </div>
           </div>
-        )}
+          );
+        })()}
       </Modal>
     </div>
   );

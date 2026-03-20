@@ -182,6 +182,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
   const [protocol, setProtocol] = useState('TCP');
   const [action, setAction] = useState('Allow');
   const [activeSection, setActiveSection] = useState<'source' | 'destination' | 'service'>('source');
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
 
   useEffect(() => {
     if (rule && isOpen) {
@@ -248,111 +249,185 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Modify Rule: ${rule.rule_id}`} subtitle={`${rule.application} | ${rule.environment}`} size="lg">
       <div className="space-y-4">
-        <div className="flex border-b border-gray-200">
-          {sectionTabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveSection(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeSection === tab.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-            >
-              {tab.label}
-              {tab.count !== null && <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 text-gray-600 rounded-full">{tab.count}</span>}
+        {/* Edit / Preview toggle */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+            <button onClick={() => setViewMode('edit')} className={`px-3 py-1.5 text-xs font-medium ${viewMode === 'edit' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Edit</button>
+            <button onClick={() => setViewMode('preview')} className={`px-3 py-1.5 text-xs font-medium ${viewMode === 'preview' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+              Preview Changes{hasDeltaChanges ? ` (${Object.keys(currentDelta.added).length + Object.keys(currentDelta.removed).length + Object.keys(currentDelta.changed).length})` : ''}
             </button>
-          ))}
-        </div>
-
-        {activeSection === 'source' && (
-          <EntryEditor label="Source Entries" entries={sourceEntries} onChange={setSourceEntries} />
-        )}
-
-        {activeSection === 'destination' && (
-          <EntryEditor label="Destination Entries" entries={destEntries} onChange={setDestEntries} />
-        )}
-
-        {activeSection === 'service' && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ports</label>
-              <input className={inputClass} placeholder="e.g. 443, 8080-8090, 80,443" value={ports} onChange={e => setPorts(e.target.value)} />
-              <p className="text-xs text-gray-400 mt-1">Comma-separated ports or ranges (e.g. 80,443,8080-8090)</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Protocol</label>
-                <select className={inputClass} value={protocol} onChange={e => setProtocol(e.target.value)}>
-                  <option value="TCP">TCP</option>
-                  <option value="UDP">UDP</option>
-                  <option value="ICMP">ICMP</option>
-                  <option value="ANY">ANY</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
-                <select className={inputClass} value={action} onChange={e => setAction(e.target.value)}>
-                  <option value="Allow">Allow</option>
-                  <option value="Deny">Deny</option>
-                </select>
-              </div>
-            </div>
           </div>
-        )}
-
-        {/* Full Delta View - Always Visible */}
-        <div className={`border rounded-lg p-3 ${hasDeltaChanges ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
-          <h4 className={`text-sm font-semibold mb-2 ${hasDeltaChanges ? 'text-blue-800' : 'text-gray-500'}`}>
-            Change Delta {hasDeltaChanges ? '' : '(No changes yet)'}
-          </h4>
-          {hasDeltaChanges ? (
-            <div className="space-y-2">
-              {Object.keys(currentDelta.added).length > 0 && (
-                <div>
-                  <h5 className="text-xs font-semibold text-green-700 mb-1">Added</h5>
-                  {Object.entries(currentDelta.added).map(([field, values]) => (
-                    <div key={field} className="ml-2">
-                      <span className="text-xs text-gray-500">{field}:</span>
-                      {values.map((v, i) => (
-                        <div key={i} className="text-xs text-green-700 font-mono ml-2">+ {v}</div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {Object.keys(currentDelta.removed).length > 0 && (
-                <div>
-                  <h5 className="text-xs font-semibold text-red-700 mb-1">Removed</h5>
-                  {Object.entries(currentDelta.removed).map(([field, values]) => (
-                    <div key={field} className="ml-2">
-                      <span className="text-xs text-gray-500">{field}:</span>
-                      {values.map((v, i) => (
-                        <div key={i} className="text-xs text-red-700 font-mono ml-2">- {v}</div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {Object.keys(currentDelta.changed).length > 0 && (
-                <div>
-                  <h5 className="text-xs font-semibold text-blue-700 mb-1">Changed</h5>
-                  {Object.entries(currentDelta.changed).map(([field, change]) => (
-                    <div key={field} className="ml-2 text-xs">
-                      <span className="text-gray-500">{field.replace(/_/g, ' ')}:</span>
-                      <span className="text-red-600 line-through ml-1">{change.from}</span>
-                      <span className="mx-1">&rarr;</span>
-                      <span className="text-green-600">{change.to}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400 italic">Make changes to source, destination, or service to see the delta here.</p>
+          {viewMode === 'preview' && !hasDeltaChanges && (
+            <span className="text-xs text-gray-400 italic">No changes yet</span>
           )}
         </div>
+
+        {viewMode === 'edit' ? (
+          <>
+            <div className="flex border-b border-gray-200">
+              {sectionTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveSection(tab.id)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeSection === tab.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                >
+                  {tab.label}
+                  {tab.count !== null && <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 text-gray-600 rounded-full">{tab.count}</span>}
+                </button>
+              ))}
+            </div>
+
+            {activeSection === 'source' && (
+              <EntryEditor label="Source Entries" entries={sourceEntries} onChange={setSourceEntries} />
+            )}
+
+            {activeSection === 'destination' && (
+              <EntryEditor label="Destination Entries" entries={destEntries} onChange={setDestEntries} />
+            )}
+
+            {activeSection === 'service' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ports</label>
+                  <input className={inputClass} placeholder="e.g. 443, 8080-8090, 80,443" value={ports} onChange={e => setPorts(e.target.value)} />
+                  <p className="text-xs text-gray-400 mt-1">Comma-separated ports or ranges (e.g. 80,443,8080-8090)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Protocol</label>
+                    <select className={inputClass} value={protocol} onChange={e => setProtocol(e.target.value)}>
+                      <option value="TCP">TCP</option>
+                      <option value="UDP">UDP</option>
+                      <option value="ICMP">ICMP</option>
+                      <option value="ANY">ANY</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
+                    <select className={inputClass} value={action} onChange={e => setAction(e.target.value)}>
+                      <option value="Allow">Allow</option>
+                      <option value="Deny">Deny</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Inline delta while editing */}
+            <div className={`border rounded-lg p-3 ${hasDeltaChanges ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+              <h4 className={`text-sm font-semibold mb-2 ${hasDeltaChanges ? 'text-blue-800' : 'text-gray-500'}`}>
+                Change Delta {hasDeltaChanges ? '' : '(No changes yet)'}
+              </h4>
+              {hasDeltaChanges ? (
+                <div className="space-y-2">
+                  {Object.keys(currentDelta.added).length > 0 && (
+                    <div>
+                      <h5 className="text-xs font-semibold text-green-700 mb-1">Added</h5>
+                      {Object.entries(currentDelta.added).map(([field, values]) => (
+                        <div key={field} className="ml-2">
+                          <span className="text-xs text-gray-500">{field}:</span>
+                          {values.map((v, i) => (
+                            <div key={i} className="text-xs text-green-700 font-mono ml-2">+ {v}</div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {Object.keys(currentDelta.removed).length > 0 && (
+                    <div>
+                      <h5 className="text-xs font-semibold text-red-700 mb-1">Removed</h5>
+                      {Object.entries(currentDelta.removed).map(([field, values]) => (
+                        <div key={field} className="ml-2">
+                          <span className="text-xs text-gray-500">{field}:</span>
+                          {values.map((v, i) => (
+                            <div key={i} className="text-xs text-red-700 font-mono ml-2">- {v}</div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {Object.keys(currentDelta.changed).length > 0 && (
+                    <div>
+                      <h5 className="text-xs font-semibold text-blue-700 mb-1">Changed</h5>
+                      {Object.entries(currentDelta.changed).map(([field, change]) => (
+                        <div key={field} className="ml-2 text-xs">
+                          <span className="text-gray-500">{field.replace(/_/g, ' ')}:</span>
+                          <span className="text-red-600 line-through ml-1">{change.from}</span>
+                          <span className="mx-1">&rarr;</span>
+                          <span className="text-green-600">{change.to}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Make changes to source, destination, or service to see the delta here.</p>
+              )}
+            </div>
+          </>
+        ) : (
+          /* Preview Mode: Delta-only view for reviewers */
+          <div className="space-y-4">
+            {hasDeltaChanges ? (
+              <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                <h3 className="text-sm font-semibold text-blue-800 mb-3">Changes Only (Delta Preview)</h3>
+                <div className="space-y-3">
+                  {Object.keys(currentDelta.added).length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-green-700 mb-1">Added</h4>
+                      {Object.entries(currentDelta.added).map(([field, values]) => (
+                        <div key={field} className="ml-2">
+                          <span className="text-xs font-medium text-gray-600">{field}:</span>
+                          {values.map((v, i) => (
+                            <div key={i} className="text-sm text-green-700 font-mono ml-3 bg-green-50 px-2 py-0.5 rounded my-0.5">+ {v}</div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {Object.keys(currentDelta.removed).length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-red-700 mb-1">Removed</h4>
+                      {Object.entries(currentDelta.removed).map(([field, values]) => (
+                        <div key={field} className="ml-2">
+                          <span className="text-xs font-medium text-gray-600">{field}:</span>
+                          {values.map((v, i) => (
+                            <div key={i} className="text-sm text-red-700 font-mono ml-3 bg-red-50 px-2 py-0.5 rounded my-0.5 line-through">- {v}</div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {Object.keys(currentDelta.changed).length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-blue-700 mb-1">Changed</h4>
+                      {Object.entries(currentDelta.changed).map(([field, change]) => (
+                        <div key={field} className="ml-2 py-1">
+                          <span className="text-xs font-medium text-gray-600">{field.replace(/_/g, ' ')}:</span>
+                          <div className="ml-3 mt-0.5">
+                            <span className="text-sm text-red-600 line-through font-mono">{change.from}</span>
+                            <span className="mx-2 text-gray-400">&rarr;</span>
+                            <span className="text-sm text-green-600 font-mono">{change.to}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg p-6 bg-gray-50 text-center">
+                <p className="text-sm text-gray-500">No changes to preview yet.</p>
+                <p className="text-xs text-gray-400 mt-1">Switch to Edit mode to make changes.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
-        <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+        <button onClick={handleSave} disabled={!hasDeltaChanges} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
           Save Changes
         </button>
       </div>
