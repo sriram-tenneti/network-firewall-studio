@@ -988,7 +988,7 @@ export function MigrationStudioPage() {
                                     </div>
                                   )}
                                 </div>
-                                {/* NGDC side: always show recommended group with associated IPs */}
+                                {/* NGDC side: always show recommended group with NGDC-mapped IPs */}
                                 <div className="bg-green-50 border border-green-200 rounded p-2">
                                   <label className="text-[10px] font-semibold text-green-600 uppercase">NGDC Group</label>
                                   <input type="text" value={cg.ngdc_group}
@@ -1000,9 +1000,9 @@ export function MigrationStudioPage() {
                                     disabled={!cg.customizable}
                                     className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-green-300 mt-0.5 disabled:bg-gray-100" />
                                   <div className="mt-1.5">
-                                    <label className="text-[9px] text-green-600">IPs to be associated:</label>
+                                    <label className="text-[9px] text-green-600">NGDC IPs to be associated:</label>
                                     <div className="flex flex-wrap gap-1 mt-0.5">
-                                      {cg.ips.map((ip, j) => (
+                                      {(cg.ngdc_ips || cg.ips).map((ip, j) => (
                                         <span key={j} className="px-1 py-0.5 text-[9px] font-mono bg-green-100 text-green-700 rounded">{ip}</span>
                                       ))}
                                     </div>
@@ -1062,7 +1062,7 @@ export function MigrationStudioPage() {
                                     </div>
                                   )}
                                 </div>
-                                {/* NGDC side: always show recommended group with associated IPs */}
+                                {/* NGDC side: always show recommended group with NGDC-mapped IPs */}
                                 <div className="bg-green-50 border border-green-200 rounded p-2">
                                   <label className="text-[10px] font-semibold text-green-600 uppercase">NGDC Group</label>
                                   <input type="text" value={cg.ngdc_group}
@@ -1074,9 +1074,9 @@ export function MigrationStudioPage() {
                                     disabled={!cg.customizable}
                                     className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-green-300 mt-0.5 disabled:bg-gray-100" />
                                   <div className="mt-1.5">
-                                    <label className="text-[9px] text-green-600">IPs to be associated:</label>
+                                    <label className="text-[9px] text-green-600">NGDC IPs to be associated:</label>
                                     <div className="flex flex-wrap gap-1 mt-0.5">
-                                      {cg.ips.map((ip, j) => (
+                                      {(cg.ngdc_ips || cg.ips).map((ip, j) => (
                                         <span key={j} className="px-1 py-0.5 text-[9px] font-mono bg-green-100 text-green-700 rounded">{ip}</span>
                                       ))}
                                     </div>

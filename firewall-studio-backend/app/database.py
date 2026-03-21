@@ -2144,6 +2144,9 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     app_components = [m for m in app_dc_mappings if str(m.get("app_id", "")).upper() == app_id.upper()]
     short_app = (app_dist or app_id)[:6].upper()
 
+    # Load IP mappings table for 1-to-1 legacy -> NGDC IP lookups
+    ip_mappings_table = _load("ip_mappings") or []
+
     def _detect_component(ip_str: str) -> str:
         """Detect component type from IP by matching against app_dc_mappings CIDRs."""
         import ipaddress
@@ -2182,6 +2185,20 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         comp = _detect_component(dst)
         dst_component_map.setdefault(comp, []).append(dst)
 
+    def _lookup_ngdc_ip(legacy_ip_raw: str) -> str | None:
+        """Look up the NGDC equivalent IP for a legacy IP from the ip_mappings table."""
+        # Strip svr- / rng- / grp- prefixes for matching
+        clean = legacy_ip_raw.strip()
+        for pfx in ("svr-", "rng-", "grp-"):
+            if clean.startswith(pfx):
+                clean = clean[len(pfx):]
+                break
+        for m in ip_mappings_table:
+            legacy_val = str(m.get("legacy_ip", ""))
+            if legacy_val == clean or legacy_val == legacy_ip_raw:
+                return str(m.get("ngdc_ip", ""))
+        return None
+
     def _build_component_group(comp: str, ips: list[str], direction: str) -> dict[str, Any]:
         """Build a component group mapping entry."""
         comp_mapping = next((c for c in app_components if c.get("component") == comp), None)
@@ -2198,11 +2215,22 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 legacy_group = g["name"]
                 break
 
+        # Build NGDC IPs by looking up 1-to-1 IP mapping table
+        ngdc_ips: list[str] = []
+        for ip in ips:
+            mapped = _lookup_ngdc_ip(ip)
+            if mapped:
+                ngdc_ips.append(mapped)
+            else:
+                # Generate a placeholder NGDC IP based on NH CIDR if available
+                ngdc_ips.append(f"ngdc-{ip}")
+
         ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}"
         return {
             "component": comp,
             "direction": direction,
             "ips": ips,
+            "ngdc_ips": ngdc_ips,
             "ip_count": len(ips),
             "legacy_group": legacy_group,
             "ngdc_group": ngdc_group_name,
@@ -2983,21 +3011,53 @@ async def determine_firewall_boundaries(
         }
 
     # ---- LDF-005: Same NH, different SZs (at least one segmented) — 1 boundary ----
+    # FW device positioned based on which side is segmented:
+    #   Open (STD/GEN) → Segmented: FW on destination side (ingress into segmented zone)
+    #   Segmented → Open (STD/GEN): FW on source side (egress from segmented zone)
+    #   Segmented → Segmented: FW as boundary (higher-risk zone device)
     if same_nh and not same_sz:
-        higher_sz = src_sz_upper if src_segmented else dst_sz_upper
-        dev = _find_device(src_nh, higher_sz)
+        segmented_sz = src_sz_upper if src_segmented else dst_sz_upper
+        dev = _find_device(src_nh, segmented_sz)
         devs = []
-        if dev:
-            devs.append({"role": "boundary", "direction": "both",
-                         "device_id": dev["device_id"], "device_name": dev["name"],
-                         "nh": src_nh, "sz": higher_sz})
-        return {
-            "boundaries": 1, "flow_rule": "LDF-005",
-            "devices": devs,
-            "requires_egress": True, "requires_ingress": False,
-            "note": (f"Cross-zone within {src_nh} ({src_sz_upper} → {dst_sz_upper}) — "
-                     f"traverses {src_nh} {higher_sz} segmentation firewall."),
-        }
+        if src_segmented and not dst_segmented:
+            # Segmented → Open: FW on source side (egress)
+            if dev:
+                devs.append({"role": "egress", "direction": "egress",
+                             "device_id": dev["device_id"], "device_name": dev["name"],
+                             "nh": src_nh, "sz": src_sz_upper})
+            return {
+                "boundaries": 1, "flow_rule": "LDF-005",
+                "devices": devs,
+                "requires_egress": True, "requires_ingress": False,
+                "note": (f"Cross-zone within {src_nh} ({src_sz_upper} → {dst_sz_upper}) — "
+                         f"egress through {src_nh} {src_sz_upper} segmentation firewall."),
+            }
+        elif dst_segmented and not src_segmented:
+            # Open → Segmented: FW on destination side (ingress)
+            if dev:
+                devs.append({"role": "ingress", "direction": "ingress",
+                             "device_id": dev["device_id"], "device_name": dev["name"],
+                             "nh": dst_nh, "sz": dst_sz_upper})
+            return {
+                "boundaries": 1, "flow_rule": "LDF-005",
+                "devices": devs,
+                "requires_egress": False, "requires_ingress": True,
+                "note": (f"Cross-zone within {src_nh} ({src_sz_upper} → {dst_sz_upper}) — "
+                         f"ingress through {dst_nh} {dst_sz_upper} segmentation firewall."),
+            }
+        else:
+            # Both segmented: boundary device at the higher-risk zone
+            if dev:
+                devs.append({"role": "boundary", "direction": "both",
+                             "device_id": dev["device_id"], "device_name": dev["name"],
+                             "nh": src_nh, "sz": segmented_sz})
+            return {
+                "boundaries": 1, "flow_rule": "LDF-005",
+                "devices": devs,
+                "requires_egress": True, "requires_ingress": True,
+                "note": (f"Cross-zone within {src_nh} ({src_sz_upper} → {dst_sz_upper}) — "
+                         f"traverses {src_nh} {segmented_sz} segmentation firewall."),
+            }
 
     # ---- LDF-004: Same segmented SZ, different NHs — 2 boundaries ----
     if same_sz and src_segmented and not same_nh:

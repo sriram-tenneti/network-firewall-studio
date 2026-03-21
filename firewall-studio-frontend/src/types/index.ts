@@ -305,6 +305,7 @@ export interface ComponentGroup {
   component: string;
   direction: 'source' | 'destination';
   ips: string[];
+  ngdc_ips?: string[];
   ip_count: number;
   legacy_group: string | null;
   ngdc_group: string;
