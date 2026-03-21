@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import type { FirewallRule, RuleDelta } from '@/types';
+import type { FirewallRule, RuleDelta, BirthrightValidation } from '@/types';
+import { validateBirthright } from '@/lib/api';
 
 interface EntryItem {
   id: string;
@@ -183,6 +184,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
   const [action, setAction] = useState('Allow');
   const [activeSection, setActiveSection] = useState<'source' | 'destination' | 'service'>('source');
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [fwDeviceInfo, setFwDeviceInfo] = useState<BirthrightValidation | null>(null);
 
   useEffect(() => {
     if (rule && isOpen) {
@@ -192,6 +194,22 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
       setProtocol('TCP');
       setAction('Allow');
       setActiveSection('source');
+      setFwDeviceInfo(null);
+      // Auto-fetch FW device info based on rule's zones
+      const srcZone = getVal(rule.source, 'security_zone');
+      const dstZone = getVal(rule.destination, 'security_zone');
+      const srcNh = getVal(rule.source, 'neighbourhood');
+      const env = rule.environment || 'Production';
+      const dc = rule.datacenter || '';
+      if (srcZone || dstZone) {
+        validateBirthright({
+          source_zone: srcZone, destination_zone: dstZone,
+          source_sz: srcZone, destination_sz: dstZone,
+          source_nh: srcNh, destination_nh: '',
+          source_dc: dc, destination_dc: dc,
+          environment: env,
+        }).then(r => setFwDeviceInfo(r)).catch(() => {});
+      }
     }
   }, [rule, isOpen]);
 
@@ -425,10 +443,81 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
         )}
       </div>
 
+      {/* FW Device Deployment Info */}
+      {fwDeviceInfo && hasDeltaChanges && (
+        <div className="mt-4 border border-indigo-200 rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-indigo-50 border-b border-indigo-200">
+            <h4 className="text-sm font-semibold text-indigo-800">Firewall Device Deployment</h4>
+            <p className="text-[10px] text-indigo-600 mt-0.5">Changes will be deployed to these FW devices</p>
+          </div>
+          <div className="p-3 space-y-2">
+            {fwDeviceInfo.firewall_devices_needed && fwDeviceInfo.firewall_devices_needed.length > 0 ? (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {fwDeviceInfo.firewall_devices_needed.map((dev, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white border border-indigo-200 text-xs font-mono text-indigo-800">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                      {dev}
+                    </span>
+                  ))}
+                </div>
+                {/* Group update commands per device */}
+                <div className="mt-2 bg-gray-900 rounded-lg p-3">
+                  <div className="text-[10px] text-gray-400 font-semibold uppercase mb-2">Group Update Commands</div>
+                  {fwDeviceInfo.firewall_devices_needed.map((dev, i) => {
+                    const addedSrc = sourceEntries.filter(e => e.isNew).map(e => e.value);
+                    const addedDst = destEntries.filter(e => e.isNew).map(e => e.value);
+                    const removedSrcSet = new Set(parseEntries(rule!.source).map(e => e.value));
+                    const removedSrc = [...removedSrcSet].filter(v => !new Set(sourceEntries.map(e => e.value)).has(v));
+                    const removedDstSet = new Set(parseEntries(rule!.destination).map(e => e.value));
+                    const removedDst = [...removedDstSet].filter(v => !new Set(destEntries.map(e => e.value)).has(v));
+                    return (
+                      <div key={i} className="mb-2">
+                        <div className="text-xs text-indigo-400 font-medium mb-1"># {dev}</div>
+                        {addedSrc.map((ip, j) => (
+                          <div key={`as-${j}`} className="text-xs font-mono text-green-400">set address-group source add member {ip}</div>
+                        ))}
+                        {addedDst.map((ip, j) => (
+                          <div key={`ad-${j}`} className="text-xs font-mono text-green-400">set address-group destination add member {ip}</div>
+                        ))}
+                        {removedSrc.map((ip, j) => (
+                          <div key={`rs-${j}`} className="text-xs font-mono text-red-400">set address-group source remove member {ip}</div>
+                        ))}
+                        {removedDst.map((ip, j) => (
+                          <div key={`rd-${j}`} className="text-xs font-mono text-red-400">set address-group destination remove member {ip}</div>
+                        ))}
+                        {addedSrc.length === 0 && addedDst.length === 0 && removedSrc.length === 0 && removedDst.length === 0 && (
+                          <div className="text-xs font-mono text-gray-500"># No group member changes for this device</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : fwDeviceInfo.firewall_path_info && fwDeviceInfo.firewall_path_info.length > 0 ? (
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <div className="text-xs text-blue-700 font-medium mb-1">Traffic Path (informational — no FW rule deployment needed)</div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {fwDeviceInfo.firewall_path_info.map((fw, i) => (
+                    <span key={i} className="inline-flex items-center gap-1">
+                      {i > 0 && <span className="text-gray-400 text-xs">&rarr;</span>}
+                      <span className="px-2 py-0.5 rounded bg-white border border-blue-200 text-xs font-mono text-blue-700">{fw}</span>
+                    </span>
+                  ))}
+                </div>
+                <div className="text-[10px] text-blue-500 mt-1">Permitted per birthright — group changes applied locally only</div>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 italic">No firewall device deployment required — same zone permitted traffic</div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
         <button onClick={handleSave} disabled={!hasDeltaChanges} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          Save Changes
+          {fwDeviceInfo?.firewall_devices_needed?.length ? 'Save & Deploy to FW Devices' : 'Save Changes'}
         </button>
       </div>
     </Modal>
