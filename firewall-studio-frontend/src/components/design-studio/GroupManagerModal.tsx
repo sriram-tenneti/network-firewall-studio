@@ -8,30 +8,38 @@ interface GroupManagerModalProps {
   onClose: () => void;
   appId?: string;
   applications?: { app_id: string; name: string }[];
+  environment?: string;
 }
 
-export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }: GroupManagerModalProps) {
+export function GroupManagerModal({ isOpen, onClose, appId, applications = [], environment }: GroupManagerModalProps) {
   const [groups, setGroups] = useState<FirewallGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<FirewallGroup | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filterAppId, setFilterAppId] = useState(appId || '');
+  const [filterEnv, setFilterEnv] = useState(environment || '');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', nh: '', sz: 'Standard', subtype: 'src', description: '' });
+  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', nh: '', sz: 'Standard', subtype: 'src', description: '', environment: environment || 'Production' });
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
 
   useEffect(() => {
     if (isOpen) {
       setFilterAppId(appId || '');
-      loadGroups(appId || '');
+      setFilterEnv(environment || '');
+      loadGroups(appId || '', environment || '');
     }
-  }, [isOpen, appId]);
+  }, [isOpen, appId, environment]);
 
-  const loadGroups = async (forAppId?: string) => {
+  const loadGroups = async (forAppId?: string, forEnv?: string) => {
     setLoading(true);
     try {
       const data = await getGroups(forAppId || undefined);
-      setGroups(data);
+      // Client-side environment filter since backend groups may have environment field
+      const filtered = forEnv ? data.filter(g => {
+        const gEnv = (g as unknown as Record<string, string>).environment;
+        return !gEnv || gEnv === forEnv;
+      }) : data;
+      setGroups(filtered);
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -39,8 +47,15 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
   const handleAppFilterChange = (newAppId: string) => {
     setFilterAppId(newAppId);
     setSelectedGroup(null);
-    loadGroups(newAppId);
+    loadGroups(newAppId, filterEnv);
     setNewGroup(prev => ({ ...prev, app_id: newAppId }));
+  };
+
+  const handleEnvFilterChange = (newEnv: string) => {
+    setFilterEnv(newEnv);
+    setSelectedGroup(null);
+    loadGroups(filterAppId, newEnv);
+    setNewGroup(prev => ({ ...prev, environment: newEnv || 'Production' }));
   };
 
   const filteredGroups = groups.filter(g => {
@@ -53,7 +68,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
     try {
       await createGroup(newGroup);
       setShowCreate(false);
-      setNewGroup({ name: '', app_id: '', nh: '', sz: 'Standard', subtype: 'src', description: '' });
+      setNewGroup({ name: '', app_id: '', nh: '', sz: 'Standard', subtype: 'src', description: '', environment: filterEnv || 'Production' });
       loadGroups();
     } catch { /* ignore */ }
   };
@@ -80,10 +95,23 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Group Management" subtitle={filterAppId ? `Filtered by ${filterAppId}` : 'All Applications'} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Group Management" subtitle={[filterEnv, filterAppId].filter(Boolean).join(' | ') || 'All Environments & Applications'} size="xl">
       <div className="flex gap-4 min-h-[400px]">
         {/* Left panel - Group list */}
         <div className="w-1/3 border-r pr-4">
+          {/* Environment filter */}
+          <div className="mb-2">
+            <select
+              value={filterEnv}
+              onChange={e => handleEnvFilterChange(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Environments</option>
+              <option value="Production">Production</option>
+              <option value="Non-Production">Non-Production</option>
+              <option value="Pre-Production">Pre-Production</option>
+            </select>
+          </div>
           {/* App ID filter */}
           <div className="mb-3">
             <select
@@ -147,6 +175,11 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
                   <option value="both">Both</option>
                 </select>
               </div>
+              <select className={inputClass} value={newGroup.environment} onChange={e => setNewGroup({ ...newGroup, environment: e.target.value })}>
+                <option value="Production">Production</option>
+                <option value="Non-Production">Non-Production</option>
+                <option value="Pre-Production">Pre-Production</option>
+              </select>
               <input className={inputClass} placeholder="Description" value={newGroup.description} onChange={e => setNewGroup({ ...newGroup, description: e.target.value })} />
               <button onClick={handleCreateGroup} className="w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Create Group</button>
             </div>

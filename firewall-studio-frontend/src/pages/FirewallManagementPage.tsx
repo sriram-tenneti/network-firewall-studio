@@ -753,13 +753,20 @@ export default function FirewallManagementPage() {
         </span>
       ),
     },
-    { key: '_actions', header: 'Actions', width: '100px', sortable: false,
-      render: (_, row) => (
-        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-          <button onClick={() => detailModal.open(row)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
-          <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">Modify</button>
-        </div>
-      ),
+    { key: '_actions', header: 'Actions', width: '140px', sortable: false,
+      render: (_, row) => {
+        const isNGDC = row.migration_status === 'Completed' || (row as unknown as Record<string, unknown>).studio_imported === true;
+        return (
+          <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>
+            <button onClick={() => detailModal.open(row)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
+            {isNGDC ? (
+              <span className="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded" title="This rule is managed in Firewall Studio">Studio</span>
+            ) : (
+              <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">modify</button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 

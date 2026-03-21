@@ -500,7 +500,8 @@ async def delete_legacy_rule(rule_id: str) -> bool:
 
 
 async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:
-    """Import legacy rules from Excel, dedup against existing rules."""
+    """Import legacy rules from Excel, dedup against existing rules.
+    Auto-detects NGDC-compliant rules and promotes them to Firewall Studio."""
     existing = _load("legacy_rules") or []
     existing_keys: set[str] = set()
     for r in existing:
@@ -518,6 +519,7 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
 
     added = 0
     duplicates = 0
+    ngdc_promoted = 0
     for rule in new_rules:
         key = f"{rule.get('app_id')}|{rule.get('app_distributed_id')}|{rule.get('rule_source')}|{rule.get('rule_destination')}|{rule.get('rule_service')}"
         if key in existing_keys:
@@ -532,7 +534,60 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         added += 1
 
     _save("legacy_rules", existing)
-    return {"added": added, "duplicates": duplicates, "total": len(existing)}
+
+    # Auto-detect NGDC-compliant rules and promote to Firewall Studio
+    for rule in existing:
+        if rule.get("studio_imported"):
+            continue
+        try:
+            compliance = await check_ngdc_compliance(rule)
+            if not compliance.get("compliant"):
+                continue
+            # This rule is NGDC-compliant — auto-create in Firewall Studio
+            src = rule.get("rule_source", "")
+            dst = rule.get("rule_destination", "")
+            svc = rule.get("rule_service", "")
+            app_id_str = str(rule.get("app_id", ""))
+
+            # Auto-create groups for any grp- entries
+            for entry_val in [src, dst]:
+                for line in entry_val.split("\n"):
+                    line = line.strip()
+                    if line.startswith("grp-") or line.startswith("g-"):
+                        try:
+                            await create_migration_group(
+                                name=line, app_id=app_id_str, members=[],
+                                nh="", sz="",
+                            )
+                        except Exception:
+                            pass
+
+            await create_rule({
+                "source": {"source_type": "Group", "ip_address": None, "cidr": None,
+                           "group_name": src, "ports": svc, "neighbourhood": "",
+                           "security_zone": rule.get("rule_source_zone", "")},
+                "destination": {"name": dst, "security_zone": rule.get("rule_destination_zone", ""),
+                                "dest_ip": None, "ports": svc, "is_predefined": False},
+                "port": svc.split("/")[0] if "/" in svc else svc,
+                "protocol": svc.split("/")[1] if "/" in svc else "TCP",
+                "action": rule.get("rule_action", "Allow"),
+                "description": f"Auto-imported from FW Management - {rule.get('id', '')}",
+                "application": app_id_str,
+                "environment": rule.get("policy_name", "Production"),
+                "datacenter": "ALPHA_NGDC",
+                "is_group_to_group": True,
+                "source_zone": rule.get("rule_source_zone", ""),
+                "destination_zone": rule.get("rule_destination_zone", ""),
+            })
+            rule["studio_imported"] = True
+            rule["migration_status"] = "Completed"
+            ngdc_promoted += 1
+        except Exception:
+            pass
+
+    _save("legacy_rules", existing)
+    return {"added": added, "duplicates": duplicates, "total": len(existing),
+            "ngdc_promoted": ngdc_promoted}
 
 
 async def get_migration_history() -> list[dict[str, Any]]:
