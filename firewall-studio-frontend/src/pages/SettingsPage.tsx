@@ -4,7 +4,7 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import type { ADUserGroup, ADUser, ADConfig, Application } from '@/types';
+import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping } from '@/types';
 import * as api from '@/lib/api';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
@@ -53,6 +53,19 @@ export default function SettingsPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [policyMatrix, setPolicyMatrix] = useState<Record<string, unknown>[]>([]);
   const [namingStandards, setNamingStandards] = useState<Record<string, unknown>>({});
+
+  // App-DC Mappings state
+  const [appDCMappings, setAppDCMappings] = useState<AppDCMapping[]>([]);
+  const [showAddMapping, setShowAddMapping] = useState(false);
+  const [newMappingForm, setNewMappingForm] = useState<Partial<AppDCMapping>>({ app_id: '', component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
+  const [editingMappingId, setEditingMappingId] = useState<string | null>(null);
+  const [editMappingForm, setEditMappingForm] = useState<Partial<AppDCMapping>>({});
+
+  // Policy matrix environment filter
+  const [policyEnvFilter, setPolicyEnvFilter] = useState<string>('all');
+  const [prodMatrix, setProdMatrix] = useState<Record<string, unknown>[]>([]);
+  const [nonprodMatrix, setNonprodMatrix] = useState<Record<string, unknown>[]>([]);
+  const [preprodMatrix, setPreprodMatrix] = useState<Record<string, unknown>[]>([]);
   const [loadingRef, setLoadingRef] = useState(false);
 
   // Firewall Devices state
@@ -89,16 +102,24 @@ export default function SettingsPage() {
   const loadRefData = useCallback(async () => {
     setLoadingRef(true);
     try {
-      const [appsData, policyData, namingData, devicesData] = await Promise.all([
+      const [appsData, policyData, namingData, devicesData, dcMappings, prodMtx, nprodMtx, pprodMtx] = await Promise.all([
         api.getApplications(),
         api.getAllPolicyMatrices(),
         api.getNamingStandards(),
         api.getFirewallDevices(),
+        api.getAppDCMappings(),
+        api.getNgdcProdMatrix(),
+        api.getNonprodMatrix(),
+        api.getPreprodMatrix(),
       ]);
       setApplications(appsData);
       setPolicyMatrix(policyData.combined || []);
       setNamingStandards(namingData as unknown as Record<string, unknown>);
       setFwDevices(devicesData);
+      setAppDCMappings(dcMappings as unknown as AppDCMapping[]);
+      setProdMatrix(prodMtx);
+      setNonprodMatrix(nprodMtx);
+      setPreprodMatrix(pprodMtx);
     } catch {
       showNotification('Failed to load reference data', 'error');
     }
@@ -244,6 +265,45 @@ export default function SettingsPage() {
 
   const selectedAppData = applications.find(a => a.app_id === selectedApp);
   const inp = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500';
+
+  // App DC Mapping helpers
+  const selectedAppMappings = appDCMappings.filter(m => m.app_id === selectedApp);
+
+  const handleAddMapping = async () => {
+    try {
+      const data = { ...newMappingForm, app_id: selectedApp || newMappingForm.app_id };
+      await api.createAppDCMapping(data as Record<string, unknown>);
+      setShowAddMapping(false);
+      setNewMappingForm({ app_id: '', component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
+      loadRefData();
+      showNotification('Component mapping added', 'success');
+    } catch { showNotification('Failed to add mapping', 'error'); }
+  };
+
+  const handleSaveMapping = async () => {
+    if (!editingMappingId) return;
+    try {
+      await api.updateAppDCMapping(editingMappingId, editMappingForm as Record<string, unknown>);
+      setEditingMappingId(null);
+      loadRefData();
+      showNotification('Mapping updated', 'success');
+    } catch { showNotification('Failed to update mapping', 'error'); }
+  };
+
+  const handleDeleteMapping = async (id: string) => {
+    try {
+      await api.deleteAppDCMapping(id);
+      loadRefData();
+      showNotification('Mapping deleted', 'success');
+    } catch { showNotification('Failed to delete mapping', 'error'); }
+  };
+
+  // Policy matrix filtered by environment
+  const filteredPolicyMatrix = policyEnvFilter === 'all' ? policyMatrix
+    : policyEnvFilter === 'production' ? prodMatrix
+    : policyEnvFilter === 'non_production' ? nonprodMatrix
+    : policyEnvFilter === 'pre_production' ? preprodMatrix
+    : policyMatrix;
 
   const handleSaveDevice = async () => {
     if (!editingDeviceId) return;
@@ -405,6 +465,98 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* DC/SZ Component Mappings for selected app */}
+            {selectedApp && (
+              <div className="p-4 bg-white border border-gray-200 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-800">DC / NH / SZ Component Mappings ({selectedAppMappings.length})</h3>
+                  <button onClick={() => { setShowAddMapping(true); setNewMappingForm({ ...newMappingForm, app_id: selectedApp }); }}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">+ Add Mapping</button>
+                </div>
+                {showAddMapping && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                    <div className="grid grid-cols-7 gap-2">
+                      <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.component || 'APP'} onChange={e => setNewMappingForm({ ...newMappingForm, component: e.target.value as AppDCMapping['component'] })}>
+                        {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.dc || ''} onChange={e => setNewMappingForm({ ...newMappingForm, dc: e.target.value })}>
+                        <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                      </select>
+                      <input className="px-2 py-1 text-xs border rounded" placeholder="NH" value={newMappingForm.nh || ''} onChange={e => setNewMappingForm({ ...newMappingForm, nh: e.target.value })} />
+                      <input className="px-2 py-1 text-xs border rounded" placeholder="SZ" value={newMappingForm.sz || ''} onChange={e => setNewMappingForm({ ...newMappingForm, sz: e.target.value })} />
+                      <input className="px-2 py-1 text-xs border rounded" placeholder="CIDR" value={newMappingForm.cidr || ''} onChange={e => setNewMappingForm({ ...newMappingForm, cidr: e.target.value })} />
+                      <input className="px-2 py-1 text-xs border rounded" placeholder="Notes" value={newMappingForm.notes || ''} onChange={e => setNewMappingForm({ ...newMappingForm, notes: e.target.value })} />
+                      <div className="flex gap-1">
+                        <button onClick={() => setShowAddMapping(false)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
+                        <button onClick={handleAddMapping} className="px-2 py-1 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700">Add</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {selectedAppMappings.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50"><tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Component</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DC</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">NH</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZ</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">CIDR</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Notes</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedAppMappings.map(m => {
+                          const mid = m.id || `${m.app_id}-${m.component}-${m.dc}`;
+                          if (editingMappingId === mid) {
+                            return (
+                              <tr key={mid} className="bg-blue-50">
+                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.component || ''} onChange={e => setEditMappingForm({ ...editMappingForm, component: e.target.value as AppDCMapping['component'] })}>
+                                  {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
+                                </select></td>
+                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.dc || ''} onChange={e => setEditMappingForm({ ...editMappingForm, dc: e.target.value })}>
+                                  <option value="ALPHA_NGDC">ALPHA</option><option value="BETA_NGDC">BETA</option><option value="GAMMA_NGDC">GAMMA</option>
+                                </select></td>
+                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.nh || ''} onChange={e => setEditMappingForm({ ...editMappingForm, nh: e.target.value })} /></td>
+                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.sz || ''} onChange={e => setEditMappingForm({ ...editMappingForm, sz: e.target.value })} /></td>
+                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded font-mono" value={editMappingForm.cidr || ''} onChange={e => setEditMappingForm({ ...editMappingForm, cidr: e.target.value })} /></td>
+                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.status || 'Active'} onChange={e => setEditMappingForm({ ...editMappingForm, status: e.target.value as AppDCMapping['status'] })}>
+                                  <option value="Active">Active</option><option value="Inactive">Inactive</option>
+                                </select></td>
+                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.notes || ''} onChange={e => setEditMappingForm({ ...editMappingForm, notes: e.target.value })} /></td>
+                                <td className="px-3 py-1"><div className="flex gap-1">
+                                  <button onClick={() => setEditingMappingId(null)} className="px-2 py-0.5 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
+                                  <button onClick={handleSaveMapping} className="px-2 py-0.5 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
+                                </div></td>
+                              </tr>
+                            );
+                          }
+                          return (
+                            <tr key={mid} className="hover:bg-gray-50">
+                              <td className="px-3 py-2"><span className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span></td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.dc}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.nh}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.sz}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-600">{m.cidr}</td>
+                              <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs rounded-full ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span></td>
+                              <td className="px-3 py-2 text-xs text-gray-500 max-w-[150px] truncate">{m.notes || ''}</td>
+                              <td className="px-3 py-2"><div className="flex gap-1">
+                                <button onClick={() => { setEditingMappingId(mid); setEditMappingForm({ ...m }); }} className="px-2 py-0.5 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
+                                <button onClick={() => handleDeleteMapping(mid)} className="px-2 py-0.5 text-xs text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
+                              </div></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">No component mappings yet. Click &quot;+ Add Mapping&quot; to define DC/NH/SZ placement for each component.</p>
+                )}
+              </div>
+            )}
+
             {!selectedApp && (
               <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-200">
@@ -452,7 +604,16 @@ export default function SettingsPage() {
         {activeTab === 'policy_matrix' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-800">Combined Policy Matrix ({policyMatrix.length} entries)</h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-sm font-semibold text-gray-800">Policy Matrix ({filteredPolicyMatrix.length} entries)</h3>
+                <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500"
+                  value={policyEnvFilter} onChange={e => setPolicyEnvFilter(e.target.value)}>
+                  <option value="all">All Environments (Combined)</option>
+                  <option value="production">Production</option>
+                  <option value="non_production">Non-Production</option>
+                  <option value="pre_production">Pre-Production</option>
+                </select>
+              </div>
               <button onClick={() => setShowAddPolicy(true)}
                 className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Policy Entry</button>
             </div>
@@ -487,12 +648,13 @@ export default function SettingsPage() {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dest Zone</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dest NH</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Action</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">FW Traversal</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Environment</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Note</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                   </tr></thead>
                   <tbody className="divide-y divide-gray-100">
-                    {policyMatrix.map((entry, idx) => {
+                    {filteredPolicyMatrix.map((entry, idx) => {
                       const isEditing = editingPolicyIdx === idx;
                       const actionStr = String((isEditing ? editPolicyForm.action : entry.action) || entry.rule || '').toLowerCase();
                       const isPermit = actionStr.includes('permit') || actionStr.includes('allow');
@@ -533,6 +695,7 @@ export default function SettingsPage() {
                               {String(entry.action || entry.rule || 'N/A')}
                             </span>
                           </td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{String(entry.firewall_traversal || 'N/A')}</td>
                           <td className="px-3 py-2 text-gray-600">{String(entry.environment || 'All')}</td>
                           <td className="px-3 py-2 text-xs text-gray-500 max-w-[200px] truncate">{String(entry.note || entry.notes || '')}</td>
                           <td className="px-3 py-2">

@@ -643,3 +643,29 @@ export const importIPMappings = (mappings: Record<string, unknown>[], appId?: st
   fetchJSON<{ added: number; total: number }>('/api/reference/ip-mappings/import', {
     method: 'POST', body: JSON.stringify({ mappings, app_id: appId }),
   });
+
+// Bulk Save App-DC Mappings
+export const bulkSaveAppDCMappings = (mappings: Record<string, unknown>[]) =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/app-dc-mappings/bulk', {
+    method: 'POST', body: JSON.stringify({ mappings }),
+  });
+
+// Standalone JSON Seed Export
+export const exportSeedJSON = () =>
+  fetchJSON<{
+    neighbourhoods: Record<string, unknown>[];
+    security_zones: Record<string, unknown>[];
+    datacenters: Record<string, unknown>[];
+    policy_matrix: { production: Record<string, unknown>[]; non_production: Record<string, unknown>[]; pre_production: Record<string, unknown>[] };
+    app_dc_mappings: Record<string, unknown>[];
+    applications: Record<string, unknown>[];
+    firewall_devices: Record<string, unknown>[];
+  }>('/api/reference/export/seed-json');
+
+// NGDC Prod Matrix
+export const getNgdcProdMatrix = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/ngdc-prod');
+
+// NonProd Matrix
+export const getNonprodMatrix = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/nonprod');

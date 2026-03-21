@@ -1066,3 +1066,30 @@ async def import_ip_mappings_endpoint(data: dict):
     records = data.get("mappings", [])
     app_id = data.get("app_id")
     return import_ip_mappings(records, app_id)
+
+
+# ---- Standalone JSON Seed Export ----
+
+@router.get("/export/seed-json")
+async def export_seed_json():
+    """Export all seed reference data as standalone JSON objects suitable for
+    external consumption.  Returns neighbourhoods, security_zones, datacenters,
+    policy_matrix (per environment), and app_dc_mappings in one payload."""
+    from app.database import (
+        get_neighbourhoods, get_security_zones, get_ngdc_datacenters,
+        get_ngdc_prod_matrix, get_nonprod_matrix, get_preprod_matrix,
+        get_app_dc_mappings, get_applications, get_firewall_devices,
+    )
+    return {
+        "neighbourhoods": await get_neighbourhoods(),
+        "security_zones": await get_security_zones(),
+        "datacenters": await get_ngdc_datacenters(),
+        "policy_matrix": {
+            "production": await get_ngdc_prod_matrix(),
+            "non_production": await get_nonprod_matrix(),
+            "pre_production": await get_preprod_matrix(),
+        },
+        "app_dc_mappings": await get_app_dc_mappings(),
+        "applications": await get_applications(),
+        "firewall_devices": await get_firewall_devices(),
+    }

@@ -452,6 +452,19 @@ export interface AsIsRule {
   output_generated: boolean;
 }
 
+// App-to-DC/NH/SZ Component Mapping
+export interface AppDCMapping {
+  id?: string;
+  app_id: string;
+  component: 'WEB' | 'APP' | 'DB' | 'MQ' | 'BAT' | 'API';
+  dc: string;
+  nh: string;
+  sz: string;
+  cidr: string;
+  status: 'Active' | 'Inactive';
+  notes?: string;
+}
+
 // Exception request for individual IPs/subnets
 export interface ExceptionRequest {
   id: string;
