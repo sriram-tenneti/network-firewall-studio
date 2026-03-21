@@ -45,7 +45,7 @@ const LDF_RULE_LABELS: Record<string, string> = {
 
 function determineLDFRule(data: EgressIngressResult): string {
   const { boundaries, source_zone, destination_zone, source_nh, destination_nh } = data;
-  const segmented = new Set(['CPA', 'CDE', 'CCS', 'PAA']);
+  const segmented = new Set(['CPA', 'CDE', 'CCS', 'PAA', '3PY', 'Swift', 'PSE', 'UC', 'UCPA', 'UCDE', 'UCCS', 'UPAA', 'U3PY']);
   const srcSeg = segmented.has(source_zone);
   const dstSeg = segmented.has(destination_zone);
 

@@ -2716,7 +2716,8 @@ async def lookup_ngdc_ip(legacy_ip: str, legacy_dc: str = "") -> dict[str, Any] 
 # Based on NH/SZ placement per the NGDC Logical Data Flows doc.
 # ============================================================
 
-SEGMENTED_ZONES = {"CPA", "CDE", "CCS", "PAA"}
+from .seed_data import SEGMENTED_ZONES as _SEED_SEG_ZONES  # noqa: E402
+_LDF_SEGMENTED_ZONES = _SEED_SEG_ZONES  # CPA, CDE, CCS, PAA, 3PY, Swift, PSE, UC
 
 def _find_device(nh: str, sz: str) -> dict[str, Any] | None:
     """Find the NH-specific segmentation firewall device for a given NH+SZ."""
@@ -2760,8 +2761,8 @@ async def determine_firewall_boundaries(
     """
     src_sz_upper = (src_sz or "").upper()
     dst_sz_upper = (dst_sz or "").upper()
-    src_segmented = src_sz_upper in SEGMENTED_ZONES
-    dst_segmented = dst_sz_upper in SEGMENTED_ZONES
+    src_segmented = src_sz_upper in _LDF_SEGMENTED_ZONES
+    dst_segmented = dst_sz_upper in _LDF_SEGMENTED_ZONES
     same_nh = (src_nh == dst_nh) and src_nh
     same_sz = (src_sz_upper == dst_sz_upper)
 
