@@ -260,11 +260,14 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                      egressIngress.boundaries === 0 ? 'bg-green-100 text-green-700' :
+                      egressIngress.boundaries === 0 && egressIngress.devices.length === 0 ? 'bg-green-100 text-green-700' :
+                      egressIngress.boundaries === 0 && egressIngress.devices.length > 0 ? 'bg-blue-100 text-blue-700' :
                       egressIngress.boundaries === 1 ? 'bg-amber-100 text-amber-700' :
                       'bg-red-100 text-red-700'
                     }`}>
-                      {egressIngress.boundaries} Firewall {egressIngress.boundaries === 1 ? 'Boundary' : 'Boundaries'}
+                      {egressIngress.boundaries === 0 && egressIngress.devices.length > 0
+                        ? 'Rule Active on FW Device'
+                        : `${egressIngress.boundaries} Firewall ${egressIngress.boundaries === 1 ? 'Boundary' : 'Boundaries'}`}
                     </span>
                     <span className="text-xs text-gray-500">{egressIngress.flow_rule}</span>
                   </div>

@@ -941,7 +941,16 @@ export function MigrationStudioPage() {
                 {migrationStep === 'mapping' && (
                   <div className="space-y-4">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                      <h3 className="text-sm font-semibold text-green-800 mb-1">Component Group Mapping (Legacy to NGDC)</h3>
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-sm font-semibold text-green-800">Component Group Mapping (Legacy to NGDC)</h3>
+                        {componentGroups[0]?.environment && (
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                            componentGroups[0].environment === 'Production' ? 'bg-red-100 text-red-700' :
+                            componentGroups[0].environment === 'Pre-Production' ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>{componentGroups[0].environment}</span>
+                        )}
+                      </div>
                       <p className="text-xs text-green-600">All IPs for each component are automatically grouped into NGDC groups. Legacy may or may not have groups — in NGDC, all IPs must be in groups. You can customize group names below.</p>
                     </div>
 

@@ -2122,6 +2122,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     app_id = str(rule.get("app_id", ""))
     app_dist = rule.get("app_distributed_id", "")
     app_name = rule.get("app_name", "")
+    rule_env = rule.get("environment", "Production")
     app_info = next((a for a in apps if str(a.get("app_id")) == app_id or a.get("app_distributed_id") == app_dist), None)
 
     # --- Step 1: Determine NH/SZ using the rule's actual source/dest zones ---
@@ -2180,13 +2181,13 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         prefix = "grp" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
                  "svr" if legacy_name.startswith("svr") else \
                  "rng" if legacy_name.startswith("rng") else "grp"
-        short_app = (app_dist or app_id)[:6].upper()
+        short_app = app_id.upper()
         # Use direction-specific NH/SZ from the rule's actual zones
         if direction == "destination":
             nh, sz = dst_nh, dst_sz
         else:
             nh, sz = src_nh, src_sz
-        return f"{prefix}-{short_app}-{nh}-{sz}-{entry_type}"
+        return f"{prefix}-{short_app}-{entry_type}-{nh}-{sz}"
 
     def _build_mapping(legacy_name: str, entry_type: str, idx: int, direction: str = "source") -> dict[str, Any]:
         obj_type = "group" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
@@ -2287,7 +2288,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     # --- Step 4: Build component-based group mappings ---
     # Get all app_dc_mappings for this app to determine component-level grouping
     app_components = [m for m in app_dc_mappings if str(m.get("app_id", "")).upper() == app_id.upper()]
-    short_app = (app_dist or app_id)[:6].upper()
+    short_app = app_id.upper()
 
     # Load IP mappings table for 1-to-1 legacy -> NGDC IP lookups
     ip_mappings_table = _load("ip_mappings") or []
@@ -2380,7 +2381,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                         break
                 ngdc_ips.append(f"svr-{clean_ip}")
 
-        ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}"
+        ngdc_group_name = f"grp-{short_app}-{comp}-{comp_nh}-{comp_sz}"
         return {
             "component": comp,
             "direction": direction,
@@ -2393,6 +2394,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "sz": comp_sz,
             "dc": comp_dc,
             "cidr": comp_cidr,
+            "environment": rule_env,
             "customizable": True,
         }
 
@@ -2423,7 +2425,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "auto_generated": auto_count,
             "component_group_count": len(component_groups),
         },
-        "naming_standard": f"grp-{short_app}-{{NH}}-{{SZ}}-{{SUBTYPE}}",
+        "naming_standard": f"grp-{short_app}-{{COMPONENT}}-{{NH}}-{{SZ}}",
         "source_nh": src_nh,
         "source_sz": src_sz,
         "source_dc": src_dc,
@@ -3142,8 +3144,27 @@ async def determine_firewall_boundaries(
                      f"flows directly between {src_nh} and {dst_nh} — no firewall needed."),
         }
 
-    # ---- LDF-002: Same NH + same SZ — no firewall ----
+    # ---- LDF-002: Same NH + same SZ ----
     if same_nh and same_sz:
+        # For segmented (non-STD/GEN) zones, the rule IS deployed on the zone's
+        # FW device — show 1 boundary so the device is visible in the flow.
+        # Mark as "existing" so frontend renders in GREEN (rule already active).
+        if src_segmented:
+            seg_dev = _find_device(src_nh, src_sz_upper)
+            devs = []
+            if seg_dev:
+                devs.append({"role": "zone_device", "direction": "local",
+                             "device_id": seg_dev["device_id"], "device_name": seg_dev["name"],
+                             "nh": src_nh, "sz": src_sz_upper})
+            return {
+                "boundaries": 1, "flow_rule": "LDF-002",
+                "devices": devs,
+                "requires_egress": False, "requires_ingress": False,
+                "existing_rule": True,
+                "note": (f"Intra-NH ({src_nh}), intra-SZ ({src_sz_upper}) traffic — "
+                         f"rule is deployed on {src_nh} {src_sz_upper} firewall device. "
+                         f"Permitted per birthright."),
+            }
         return {
             "boundaries": 0, "flow_rule": "LDF-002",
             "devices": [],
@@ -3480,7 +3501,7 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
     if not dst_dc:
         dst_dc = src_dc
 
-    return {
+    result = {
         "rule_id": rid,
         "vendor_format": vendor,
         "boundary_analysis": boundary_info,
@@ -3504,6 +3525,10 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
         "compliant": compliant,
         "compliance_note": compliance_note,
     }
+    # Pass through existing_rule flag for LDF-002 segmented same-SZ same-NH
+    if boundary_info.get("existing_rule"):
+        result["existing_rule"] = True
+    return result
 
 
 # ============================================================

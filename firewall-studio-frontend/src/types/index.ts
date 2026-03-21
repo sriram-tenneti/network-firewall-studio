@@ -313,6 +313,7 @@ export interface ComponentGroup {
   sz: string;
   dc: string;
   cidr: string;
+  environment?: string;
   customizable: boolean;
 }
 

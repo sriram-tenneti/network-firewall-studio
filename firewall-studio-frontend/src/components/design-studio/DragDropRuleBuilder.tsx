@@ -288,8 +288,12 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 <div className="text-[10px] text-gray-400 font-semibold uppercase">Policy</div>
                 {validatingBR && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600" />}
                 {birthrightResult && !validatingBR && (
-                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                    {birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
+                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
+                    birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
+                    birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  )}>
+                    {birthrightResult.firewall_request_required ? 'FW REQUIRED' :
+                     birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
                   </span>
                 )}
                 <div className="w-px h-8 bg-gray-300" />

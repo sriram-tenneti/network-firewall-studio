@@ -18,6 +18,7 @@ export interface EgressIngressResult {
   source_objects?: string[]; destination_objects?: string[];
   service?: string;
   compliant?: boolean; compliance_note?: string;
+  existing_rule?: boolean;
 }
 
 interface FWDevice {
@@ -40,7 +41,7 @@ const VENDOR_LABELS: Record<string, string> = {
 
 const LDF_RULE_LABELS: Record<string, string> = {
   'LDF-001': 'Standard (STD/GEN) zone workloads flow between neighbourhoods without firewall traversal',
-  'LDF-002': 'Same neighbourhood, same security zone — permitted by default, no firewall boundary',
+  'LDF-002': 'Same neighbourhood, same security zone — rule deployed on zone firewall device (permitted per birthright)',
   'LDF-003': 'Segmented to Prod data flow between security zones in different neighbourhoods — egress firewall required',
   'LDF-003-reverse': 'Non-segmented to segmented zone in different neighbourhood — ingress firewall required',
   'LDF-004': 'Segmented applications data flow between similar security zones in different neighbourhoods — 2 policy boundaries (egress + ingress)',
@@ -112,6 +113,7 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
   const egressDevices = data.devices.filter(d => d.direction === 'egress');
   const ingressDevices = data.devices.filter(d => d.direction === 'ingress');
   const boundaryDevices = data.devices.filter(d => d.direction === 'boundary');
+  const localDevices = data.devices.filter(d => d.direction === 'local');
 
   // Look up full device details from allDevices
   const enrichDevice = (dev: BoundaryDevice): BoundaryDevice & Partial<FWDevice> => {
@@ -119,8 +121,9 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
     return { ...dev, ...full };
   };
 
-  const _boundaryColor = data.boundaries === 0 ? 'green' : data.boundaries === 1 ? 'amber' : 'red';
-  void _boundaryColor;
+  // When existing_rule is true (LDF-002 segmented same-SZ same-NH), render in green
+  const isExisting = !!data.existing_rule;
+  const colorScheme = isExisting ? 'green' : data.boundaries === 0 ? 'green' : data.boundaries === 1 ? 'amber' : 'red';
 
   // SVG icons matching Confluence diagrams
   const ServerIcon = () => (
@@ -183,20 +186,21 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
   })();
 
   return (
-    <div className={`border rounded-lg overflow-hidden ${data.boundaries === 0 ? 'border-green-200' : data.boundaries === 1 ? 'border-amber-200' : 'border-red-200'}`}>
+    <div className={`border rounded-lg overflow-hidden ${colorScheme === 'green' ? 'border-green-200' : colorScheme === 'amber' ? 'border-amber-200' : 'border-red-200'}`}>
       {/* Header */}
-      <div className={`px-4 py-3 ${data.boundaries === 0 ? 'bg-green-50' : data.boundaries === 1 ? 'bg-amber-50' : 'bg-red-50'}`}>
+      <div className={`px-4 py-3 ${colorScheme === 'green' ? 'bg-green-50' : colorScheme === 'amber' ? 'bg-amber-50' : 'bg-red-50'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className={`text-sm font-bold ${data.boundaries === 0 ? 'text-green-800' : data.boundaries === 1 ? 'text-amber-800' : 'text-red-800'}`}>
+            <h3 className={`text-sm font-bold ${colorScheme === 'green' ? 'text-green-800' : colorScheme === 'amber' ? 'text-amber-800' : 'text-red-800'}`}>
               Logical Data Flow
             </h3>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              data.boundaries === 0 ? 'bg-green-200 text-green-800' :
-              data.boundaries === 1 ? 'bg-amber-200 text-amber-800' :
+              colorScheme === 'green' ? 'bg-green-200 text-green-800' :
+              colorScheme === 'amber' ? 'bg-amber-200 text-amber-800' :
               'bg-red-200 text-red-800'
             }`}>
               {data.boundaries} {data.boundaries === 1 ? 'Boundary' : 'Boundaries'}
+              {isExisting && ' (Active)'}
             </span>
           </div>
           <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-mono font-bold">{ldfRule}</span>
@@ -218,10 +222,26 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
           <BiArrow />
 
           {data.boundaries === 0 ? (
-            /* Direct connection — no firewall traversal */
-            <div className="flex-shrink-0 px-4 py-2 bg-green-100 border-2 border-green-400 rounded-lg">
-              <span className="text-xs font-bold text-green-800">No Firewall Boundary</span>
-            </div>
+            /* Direct connection — no firewall traversal, but may have zone device */
+            localDevices.length > 0 ? (
+              <div className="flex-shrink-0 text-center">
+                <FirewallIcon />
+                {localDevices.map((dev, i) => {
+                  const enriched = enrichDevice(dev);
+                  return (
+                    <div key={i}>
+                      <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                      <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
+                      <div className="text-[9px] text-blue-600 font-medium mt-0.5">Rule Active</div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex-shrink-0 px-4 py-2 bg-green-100 border-2 border-green-400 rounded-lg">
+                <span className="text-xs font-bold text-green-800">No Firewall Boundary</span>
+              </div>
+            )
           ) : (
             <>
               {/* Egress Firewall Device(s) */}
@@ -335,8 +355,9 @@ function DeviceCompiledRules({ devices, allDevices }: { devices: BoundaryDevice[
                   <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                     dev.direction === 'egress' ? 'bg-orange-500 text-white' :
                     dev.direction === 'ingress' ? 'bg-cyan-500 text-white' :
+                    dev.direction === 'local' ? 'bg-blue-500 text-white' :
                     'bg-purple-500 text-white'
-                  }`}>{dev.direction.toUpperCase()}</span>
+                  }`}>{dev.direction === 'local' ? 'ACTIVE' : dev.direction.toUpperCase()}</span>
                   <span className="text-xs text-gray-200 font-medium">{full?.name || dev.device_name}</span>
                   <span className="text-[10px] text-gray-500">({dev.device_id})</span>
                   {full?.vendor && <span className="text-[10px] text-gray-400 px-1.5 py-0.5 bg-gray-800 rounded">{VENDOR_LABELS[full.vendor] || full.vendor}</span>}
