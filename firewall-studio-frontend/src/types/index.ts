@@ -356,6 +356,8 @@ export interface BirthrightValidation {
   summary: string;
   matrix_used?: string;
   environment?: string;
+  firewall_devices_needed?: string[];
+  firewall_request_required?: boolean;
 }
 
 export interface BirthrightEntry {

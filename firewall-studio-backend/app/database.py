@@ -1768,7 +1768,6 @@ async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
     """
     from .seed_data import OPEN_ZONES, SEGMENTED_ZONES, NON_PROD_SEGMENTED_ZONES
 
-    heritage = _load("heritage_dc_matrix") or []
     ngdc_prod = _load("ngdc_prod_matrix") or []
     nonprod = _load("nonprod_matrix") or []
     preprod = _load("preprod_matrix") or []
@@ -1791,24 +1790,6 @@ async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
     warnings: list[dict[str, str]] = []
     permitted: list[dict[str, str]] = []
     firewall_devices_needed: list[str] = []
-
-    # Check heritage DC matrix
-    for entry in heritage:
-        h_zone = entry.get("heritage_zone", "")
-        new_zone = entry.get("new_dc_zone", "")
-        action = entry.get("action", "")
-        reason = entry.get("reason", "")
-        if (h_zone.lower() in src_zone.lower() or h_zone == "Default") and \
-           (new_zone.lower() in dst_sz.lower() or new_zone == dst_sz):
-            if "Blocked" in action:
-                violations.append({"matrix": "Heritage DC", "rule": f"{h_zone} -> {new_zone}",
-                                   "action": action, "reason": reason})
-            elif "Exception" in action:
-                warnings.append({"matrix": "Heritage DC", "rule": f"{h_zone} -> {new_zone}",
-                                 "action": action, "reason": reason})
-            else:
-                permitted.append({"matrix": "Heritage DC", "rule": f"{h_zone} -> {new_zone}",
-                                  "action": action, "reason": reason})
 
     # Select the correct matrix based on environment
     env_lower = environment.lower()
@@ -2136,6 +2117,86 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     group_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "existing_group")
     auto_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "auto_generated")
 
+    # --- Step 4: Build component-based group mappings ---
+    # Get all app_dc_mappings for this app to determine component-level grouping
+    app_components = [m for m in app_dc_mappings if str(m.get("app_id", "")).upper() == app_id.upper()]
+    short_app = (app_dist or app_id)[:6].upper()
+
+    def _detect_component(ip_str: str) -> str:
+        """Detect component type from IP by matching against app_dc_mappings CIDRs."""
+        import ipaddress
+        ip_clean = ip_str.strip().split("\n")[0].strip()
+        for comp in app_components:
+            cidr = comp.get("cidr", "")
+            if not cidr:
+                continue
+            try:
+                net = ipaddress.ip_network(cidr, strict=False)
+                try:
+                    addr = ipaddress.ip_address(ip_clean)
+                    if addr in net:
+                        return comp.get("component", "UNKNOWN")
+                except ValueError:
+                    # Could be a subnet itself
+                    try:
+                        test_net = ipaddress.ip_network(ip_clean, strict=False)
+                        if test_net.subnet_of(net) or net.subnet_of(test_net):
+                            return comp.get("component", "UNKNOWN")
+                    except (ValueError, TypeError):
+                        pass
+            except (ValueError, TypeError):
+                pass
+        return "UNKNOWN"
+
+    # Group source IPs by component
+    src_component_map: dict[str, list[str]] = {}
+    for src in src_entries:
+        comp = _detect_component(src)
+        src_component_map.setdefault(comp, []).append(src)
+
+    # Group destination IPs by component
+    dst_component_map: dict[str, list[str]] = {}
+    for dst in dst_entries:
+        comp = _detect_component(dst)
+        dst_component_map.setdefault(comp, []).append(dst)
+
+    def _build_component_group(comp: str, ips: list[str], direction: str) -> dict[str, Any]:
+        """Build a component group mapping entry."""
+        comp_mapping = next((c for c in app_components if c.get("component") == comp), None)
+        comp_nh = comp_mapping.get("nh", recommended_nh) if comp_mapping else recommended_nh
+        comp_sz = comp_mapping.get("sz", recommended_sz) if comp_mapping else recommended_sz
+        comp_dc = comp_mapping.get("dc", recommended_dc) if comp_mapping else recommended_dc
+        comp_cidr = comp_mapping.get("cidr", "") if comp_mapping else ""
+
+        # Check if legacy already has a group for these IPs
+        legacy_group = None
+        for g in groups:
+            members = [m.get("value", "") for m in g.get("members", [])]
+            if any(ip in members or any(ip in mem for mem in members) for ip in ips):
+                legacy_group = g["name"]
+                break
+
+        ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}"
+        return {
+            "component": comp,
+            "direction": direction,
+            "ips": ips,
+            "ip_count": len(ips),
+            "legacy_group": legacy_group,
+            "ngdc_group": ngdc_group_name,
+            "nh": comp_nh,
+            "sz": comp_sz,
+            "dc": comp_dc,
+            "cidr": comp_cidr,
+            "customizable": True,
+        }
+
+    component_groups = []
+    for comp, ips in src_component_map.items():
+        component_groups.append(_build_component_group(comp, ips, "source"))
+    for comp, ips in dst_component_map.items():
+        component_groups.append(_build_component_group(comp, ips, "destination"))
+
     return {
         "rule_id": rule_id,
         "rule": rule,
@@ -2147,6 +2208,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         "nh_sz_source": nh_sz_source,
         "source_mappings": source_mappings,
         "destination_mappings": destination_mappings,
+        "component_groups": component_groups,
         "service_entries": svc_entries,
         "service_recommendations": service_recommendations,
         "mapping_summary": {
@@ -2154,8 +2216,9 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "from_mapping_table": table_count,
             "from_existing_groups": group_count,
             "auto_generated": auto_count,
+            "component_group_count": len(component_groups),
         },
-        "naming_standard": f"grp-{(app_dist or app_id)[:6].upper()}-{recommended_nh}-{recommended_sz}-{{SUBTYPE}}",
+        "naming_standard": f"grp-{short_app}-{recommended_nh}-{recommended_sz}-{{SUBTYPE}}",
         "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
         "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
     }
@@ -3000,10 +3063,38 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
     dst_zone = rule.get("destination_zone", rule.get("rule_destination_zone", "any"))
     src_nh = rule.get("source_nh", rule.get("nh", ""))
     dst_nh = rule.get("destination_nh", rule.get("dst_nh", ""))
+    src_dc = rule.get("source_dc", rule.get("datacenter", ""))
+    dst_dc = rule.get("destination_dc", "")
     svc = rule.get("port", rule.get("rule_service", "any"))
     proto = rule.get("protocol", "TCP")
     desc = rule.get("description", rule.get("app_name", rule_id))
     rid = rule.get("rule_id", rule.get("id", rule_id))
+    app_id = str(rule.get("app_id", ""))
+
+    # Look up DC/NH from app_dc_mappings if not directly available on the rule
+    if not src_nh or not src_dc:
+        app_dc_mappings = _load("app_dc_mappings") or []
+        app_maps = [m for m in app_dc_mappings if str(m.get("app_id", "")).upper() == app_id.upper()]
+        if app_maps:
+            if not src_nh:
+                src_nh = app_maps[0].get("nh", "NH01")
+            if not dst_nh:
+                dst_nh = app_maps[0].get("nh", src_nh)
+            if not src_dc:
+                src_dc = app_maps[0].get("dc", "ALPHA_NGDC")
+            if not dst_dc:
+                dst_dc = app_maps[0].get("dc", src_dc)
+            # Try to find specific component-level NH/SZ for more accuracy
+            for m in app_maps:
+                if m.get("sz", "") == src_zone:
+                    src_nh = m.get("nh", src_nh)
+                    src_dc = m.get("dc", src_dc)
+                    break
+            for m in app_maps:
+                if m.get("sz", "") == dst_zone:
+                    dst_nh = m.get("nh", dst_nh)
+                    dst_dc = m.get("dc", dst_dc)
+                    break
 
     # Determine firewall boundaries
     boundary_info = await determine_firewall_boundaries(src_nh, src_zone, dst_nh, dst_zone)
@@ -3104,6 +3195,21 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
         d["compiled"] for d in compiled_devices if d["direction"] in ("ingress", "both")
     )
 
+    # Determine compliancy based on policy matrix
+    compliant = True
+    compliance_note = "Rule is compliant with NGDC policy"
+    if boundary_info["boundaries"] > 0 and not compiled_devices:
+        compliant = False
+        compliance_note = "Firewall devices required but none found for this boundary"
+    elif boundary_info["boundaries"] == 0:
+        compliance_note = "No firewall boundary needed - direct flow allowed"
+
+    # Provide fallback DC values
+    if not src_dc:
+        src_dc = "ALPHA_NGDC"
+    if not dst_dc:
+        dst_dc = src_dc
+
     return {
         "rule_id": rid,
         "vendor_format": vendor,
@@ -3115,14 +3221,18 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
         "ingress_compiled": ingress_compiled,
         "source_zone": src_zone,
         "destination_zone": dst_zone,
-        "source_nh": src_nh,
-        "destination_nh": dst_nh,
+        "source_nh": src_nh or "NH01",
+        "destination_nh": dst_nh or "NH01",
+        "source_dc": src_dc,
+        "destination_dc": dst_dc,
         "source_objects": src_objs,
         "destination_objects": dst_objs,
         "service": svc,
         "requires_egress": boundary_info["requires_egress"],
         "requires_ingress": boundary_info["requires_ingress"],
         "note": boundary_info["note"],
+        "compliant": compliant,
+        "compliance_note": compliance_note,
     }
 
 
