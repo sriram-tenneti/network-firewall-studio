@@ -15,9 +15,9 @@ from typing import Any
 # ============================================================
 
 SEED_NEIGHBOURHOODS = [
-    {"nh_id": "NH01", "name": "Platform Services", "environment": "Production",
+    {"nh_id": "NH01", "name": "Technology Enablement Services", "environment": "Production",
      "cidr": "10.0.0.0/16",
-     "description": "Platform and infrastructure services", "ip_ranges": [
+     "description": "Technology enablement and platform services", "ip_ranges": [
         {"cidr": "10.0.1.0/24", "description": "NH01 East Primary", "dc": "ALPHA_NGDC"},
         {"cidr": "10.0.2.0/24", "description": "NH01 East Secondary", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.50.0/24", "description": "NH01 West Primary", "dc": "BETA_NGDC"},
@@ -29,9 +29,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH01-sz06", "cidr": "10.0.2.0/25", "description": "Critical Payment Applications"},
         {"zone": "GEN", "vrf_id": "NH01-gen", "cidr": "10.0.2.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH02", "name": "Team Eta", "environment": "Production",
+    {"nh_id": "NH02", "name": "Core Banking", "environment": "Production",
      "cidr": "10.1.0.0/16",
-     "description": "Data processing and analytics platforms", "ip_ranges": [
+     "description": "Core banking services and data processing", "ip_ranges": [
         {"cidr": "10.1.1.0/24", "description": "NH02 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "10.1.2.0/24", "description": "NH02 East DB Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.1.0/24", "description": "NH02 West App", "dc": "BETA_NGDC"},
@@ -43,9 +43,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH02-sz06", "cidr": "10.1.2.0/25", "description": "Critical Payment Applications"},
         {"zone": "GEN", "vrf_id": "NH02-gen", "cidr": "10.1.2.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH03", "name": "Team Delta", "environment": "Production",
+    {"nh_id": "NH03", "name": "Digital Channels", "environment": "Production",
      "cidr": "10.2.0.0/16",
-     "description": "Web application and API hosting", "ip_ranges": [
+     "description": "Digital channels, web and API hosting", "ip_ranges": [
         {"cidr": "10.2.1.0/24", "description": "NH03 East Web Servers", "dc": "ALPHA_NGDC"},
         {"cidr": "10.2.2.0/24", "description": "NH03 East App Servers", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.3.0/24", "description": "NH03 West Web", "dc": "BETA_NGDC"},
@@ -55,9 +55,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CDE", "vrf_id": "NH03-sz05", "cidr": "10.2.1.128/25", "description": "Card Holder Data"},
         {"zone": "GEN", "vrf_id": "NH03-gen", "cidr": "10.2.2.0/24", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH04", "name": "Team Kappa", "environment": "Production",
+    {"nh_id": "NH04", "name": "Wealth Management", "environment": "Production",
      "cidr": "10.3.0.0/16",
-     "description": "Insurance and risk management", "ip_ranges": [
+     "description": "Wealth management and insurance", "ip_ranges": [
         {"cidr": "10.3.1.0/24", "description": "NH04 East Primary", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.4.0/24", "description": "NH04 West Primary", "dc": "BETA_NGDC"},
      ],
@@ -65,9 +65,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CCS", "vrf_id": "NH04-sz04", "cidr": "10.3.1.0/25", "description": "Critical Core Services"},
         {"zone": "GEN", "vrf_id": "NH04-gen", "cidr": "10.3.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH05", "name": "Team Lambda", "environment": "Production",
+    {"nh_id": "NH05", "name": "Enterprise Services", "environment": "Production",
      "cidr": "10.4.0.0/16",
-     "description": "Enterprise compliance and KYC", "ip_ranges": [
+     "description": "Enterprise services, compliance, and KYC", "ip_ranges": [
         {"cidr": "10.4.1.0/24", "description": "NH05 East App", "dc": "ALPHA_NGDC"},
         {"cidr": "10.4.2.0/24", "description": "NH05 East DB", "dc": "ALPHA_NGDC"},
      ],
@@ -75,9 +75,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CCS", "vrf_id": "NH05-sz04", "cidr": "10.4.1.0/25", "description": "Critical Core Services"},
         {"zone": "GEN", "vrf_id": "NH05-gen", "cidr": "10.4.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH06", "name": "Team Xi", "environment": "Production",
+    {"nh_id": "NH06", "name": "Wholesale Banking", "environment": "Production",
      "cidr": "10.5.0.0/16",
-     "description": "Trading platforms", "ip_ranges": [
+     "description": "Wholesale banking and trading platforms", "ip_ranges": [
         {"cidr": "10.5.1.0/24", "description": "NH06 East Primary", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.6.0/24", "description": "NH06 West Primary", "dc": "BETA_NGDC"},
         {"cidr": "172.16.20.0/24", "description": "NH06 Central Primary", "dc": "GAMMA_NGDC"},
@@ -88,59 +88,118 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH06-sz06", "cidr": "10.5.1.128/26", "description": "Critical Payment Applications"},
         {"zone": "GEN", "vrf_id": "NH06-gen", "cidr": "10.5.1.192/26", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH07", "name": "Team Epsilon", "environment": "Production",
+    {"nh_id": "NH07", "name": "Global Payments and Liquidity", "environment": "Production",
      "cidr": "10.6.0.0/16",
-     "description": "Payment processing", "ip_ranges": [
+     "description": "Global payments, liquidity, and settlement", "ip_ranges": [
         {"cidr": "10.6.1.0/24", "description": "NH07 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CDE", "vrf_id": "NH07-sz05", "cidr": "10.6.1.0/25", "description": "Card Holder Data"},
         {"zone": "CPA", "vrf_id": "NH07-sz06", "cidr": "10.6.1.128/25", "description": "Critical Payment Applications"},
      ]},
-    {"nh_id": "NH08", "name": "Team Theta", "environment": "Production",
+    {"nh_id": "NH08", "name": "Data and Analytics", "environment": "Production",
      "cidr": "10.7.0.0/16",
-     "description": "Core banking services", "ip_ranges": [
+     "description": "Data analytics and core banking engine", "ip_ranges": [
         {"cidr": "10.7.1.0/24", "description": "NH08 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH08-sz04", "cidr": "10.7.1.0/25", "description": "Critical Core Services"},
         {"zone": "CDE", "vrf_id": "NH08-sz05", "cidr": "10.7.1.128/25", "description": "Card Holder Data"},
      ]},
-    {"nh_id": "NH09", "name": "Team Iota", "environment": "Production",
+    {"nh_id": "NH09", "name": "Assisted Channels", "environment": "Production",
      "cidr": "10.8.0.0/16",
-     "description": "Digital lending", "ip_ranges": [
+     "description": "Assisted channels and digital lending", "ip_ranges": [
         {"cidr": "10.8.1.0/24", "description": "NH09 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH09-sz04", "cidr": "10.8.1.0/25", "description": "Critical Core Services"},
         {"zone": "GEN", "vrf_id": "NH09-gen", "cidr": "10.8.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH10", "name": "Team Mu", "environment": "Production",
+    {"nh_id": "NH10", "name": "Consumer Lending", "environment": "Production",
      "cidr": "10.9.0.0/16",
-     "description": "Wealth management", "ip_ranges": [
+     "description": "Consumer lending and portfolio management", "ip_ranges": [
         {"cidr": "10.9.1.0/24", "description": "NH10 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CDE", "vrf_id": "NH10-sz05", "cidr": "10.9.1.0/25", "description": "Card Holder Data"},
         {"zone": "GEN", "vrf_id": "NH10-gen", "cidr": "10.9.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH14", "name": "DMZ Services", "environment": "Production",
+    # --- Production Mainframe ---
+    {"nh_id": "NH11", "name": "Production Mainframe", "environment": "Production",
+     "cidr": "10.10.0.0/16",
+     "description": "Production mainframe systems", "ip_ranges": [
+        {"cidr": "10.10.1.0/24", "description": "NH11 East Mainframe", "dc": "ALPHA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "CCS", "vrf_id": "NH11-sz04", "cidr": "10.10.1.0/25", "description": "Critical Core Services"},
+        {"zone": "GEN", "vrf_id": "NH11-gen", "cidr": "10.10.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
+     ]},
+    # --- Non-Production Mainframe ---
+    {"nh_id": "NH12", "name": "Non-Production Mainframe", "environment": "Non-Production",
+     "cidr": "10.11.0.0/16",
+     "description": "Non-production mainframe systems", "ip_ranges": [
+        {"cidr": "10.11.1.0/24", "description": "NH12 East NP Mainframe", "dc": "ALPHA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "UCCS", "vrf_id": "NH12-sz04", "cidr": "10.11.1.0/25", "description": "Non-Prod Critical Core Services"},
+        {"zone": "USTD", "vrf_id": "NH12-gen", "cidr": "10.11.1.128/25", "description": "Non-Prod Standard"},
+     ]},
+    # --- Non-Production Shared ---
+    {"nh_id": "NH13", "name": "Non-Production Shared", "environment": "Non-Production",
+     "cidr": "10.12.0.0/16",
+     "description": "Shared non-production workloads (DEV/SIT/UAT/CTE)", "ip_ranges": [
+        {"cidr": "10.12.1.0/24", "description": "NH13 East NP Shared", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.12.2.0/24", "description": "NH13 East NP DB", "dc": "ALPHA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "USTD", "vrf_id": "NH13-gen", "cidr": "10.12.1.0/25", "description": "Non-Prod Standard"},
+        {"zone": "UCCS", "vrf_id": "NH13-sz04", "cidr": "10.12.1.128/25", "description": "Non-Prod Critical Core Services"},
+        {"zone": "UCDE", "vrf_id": "NH13-sz05", "cidr": "10.12.2.0/25", "description": "Non-Prod CDE"},
+        {"zone": "UCPA", "vrf_id": "NH13-sz06", "cidr": "10.12.2.128/25", "description": "Non-Prod CPA"},
+     ]},
+    # --- DMZ ---
+    {"nh_id": "NH14", "name": "DMZ", "environment": "Production",
      "cidr": "10.70.0.0/16",
-     "description": "External-facing DMZ", "ip_ranges": [
+     "description": "External-facing DMZ / Publicly Accessible Applications", "ip_ranges": [
         {"cidr": "10.70.1.0/24", "description": "NH14 East DMZ", "dc": "ALPHA_NGDC"},
         {"cidr": "10.70.2.0/24", "description": "NH14 East External", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
-        {"zone": "DMZ", "vrf_id": "NH14-sz01", "cidr": "10.70.1.0/24", "description": "Demilitarized Zone"},
+        {"zone": "PAA", "vrf_id": "NH14-sz02", "cidr": "10.70.1.0/24", "description": "Publicly Accessible Applications"},
         {"zone": "GEN", "vrf_id": "NH14-gen", "cidr": "10.70.2.0/24", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH15", "name": "Management Zone", "environment": "Production",
+    # --- Non-Production DMZ ---
+    {"nh_id": "NH15", "name": "Non-Production DMZ", "environment": "Non-Production",
      "cidr": "10.80.0.0/16",
-     "description": "Network management and monitoring", "ip_ranges": [
-        {"cidr": "10.80.1.0/24", "description": "NH15 East Mgmt", "dc": "ALPHA_NGDC"},
+     "description": "Non-production DMZ and management", "ip_ranges": [
+        {"cidr": "10.80.1.0/24", "description": "NH15 East NP DMZ", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
-        {"zone": "MGT", "vrf_id": "NH15-sz02", "cidr": "10.80.1.0/24", "description": "Management Zone"},
+        {"zone": "UPAA", "vrf_id": "NH15-sz02", "cidr": "10.80.1.0/25", "description": "Non-Prod PAA"},
+        {"zone": "USTD", "vrf_id": "NH15-gen", "cidr": "10.80.1.128/25", "description": "Non-Prod Standard"},
+     ]},
+    # --- Pre-Production (Non-Prod Shared) ---
+    {"nh_id": "NH16", "name": "Pre-Production", "environment": "Pre-Production",
+     "cidr": "10.13.0.0/16",
+     "description": "Pre-production / staging shared workloads", "ip_ranges": [
+        {"cidr": "10.13.1.0/24", "description": "NH16 East Pre-Prod", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.13.2.0/24", "description": "NH16 East Pre-Prod DB", "dc": "ALPHA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "USTD", "vrf_id": "NH16-gen", "cidr": "10.13.1.0/25", "description": "Pre-Prod Standard"},
+        {"zone": "UCCS", "vrf_id": "NH16-sz04", "cidr": "10.13.1.128/25", "description": "Pre-Prod CCS"},
+        {"zone": "UCDE", "vrf_id": "NH16-sz05", "cidr": "10.13.2.0/25", "description": "Pre-Prod CDE"},
+        {"zone": "UCPA", "vrf_id": "NH16-sz06", "cidr": "10.13.2.128/25", "description": "Pre-Prod CPA"},
+     ]},
+    # --- Pre-Production DMZ ---
+    {"nh_id": "NH17", "name": "Pre-Production DMZ", "environment": "Pre-Production",
+     "cidr": "10.14.0.0/16",
+     "description": "Pre-production DMZ", "ip_ranges": [
+        {"cidr": "10.14.1.0/24", "description": "NH17 East Pre-Prod DMZ", "dc": "ALPHA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "UPAA", "vrf_id": "NH17-sz02", "cidr": "10.14.1.0/25", "description": "Pre-Prod PAA"},
+        {"zone": "USTD", "vrf_id": "NH17-gen", "cidr": "10.14.1.128/25", "description": "Pre-Prod Standard"},
      ]},
 ]
 
@@ -150,30 +209,60 @@ SEED_NEIGHBOURHOODS = [
 # ============================================================
 
 SEED_SECURITY_ZONES = [
-    {"code": "CCS", "name": "Critical Core Services", "risk_level": "Critical", "pci_scope": True,
-     "cidr": "varies per NH", "description": "Houses critical core banking and financial services"},
-    {"code": "CDE", "name": "Card Holder Data Environment", "risk_level": "Critical", "pci_scope": True,
-     "cidr": "varies per NH", "description": "PCI DSS scope - cardholder data processing and storage"},
-    {"code": "CPA", "name": "Critical Payment Applications", "risk_level": "Critical", "pci_scope": True,
-     "cidr": "varies per NH", "description": "Payment processing applications and APIs"},
+    # ---- Production Fabric ----
+    {"code": "STD", "name": "Standard Zone", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "gen/SZ01",
+     "cidr": "varies per NH", "description": "General application zone – standard workloads, non-sensitive"},
     {"code": "GEN", "name": "General Zone", "risk_level": "Low", "pci_scope": False,
-     "cidr": "varies per NH", "description": "General-purpose compute, non-sensitive workloads"},
-    {"code": "DMZ", "name": "Demilitarized Zone", "risk_level": "High", "pci_scope": False,
-     "cidr": "10.70.0.0/16", "description": "External-facing services, API gateways, WAFs"},
-    {"code": "MGT", "name": "Management Zone", "risk_level": "High", "pci_scope": False,
-     "cidr": "10.80.0.0/16", "description": "Network management, monitoring, jump boxes"},
-    {"code": "DEV", "name": "Development Zone", "risk_level": "Low", "pci_scope": False,
-     "cidr": "10.200.0.0/16", "description": "Development and sandbox environments"},
-    {"code": "UAT", "name": "User Acceptance Testing", "risk_level": "Low", "pci_scope": False,
-     "cidr": "10.201.0.0/16", "description": "UAT environments for integration testing"},
-    {"code": "SIT", "name": "System Integration Testing", "risk_level": "Low", "pci_scope": False,
-     "cidr": "10.202.0.0/16", "description": "SIT environments for system testing"},
-    {"code": "STG", "name": "Staging Zone", "risk_level": "Medium", "pci_scope": False,
-     "cidr": "10.203.0.0/16", "description": "Pre-production staging with sanitized data"},
-    {"code": "DR", "name": "Disaster Recovery", "risk_level": "High", "pci_scope": True,
-     "cidr": "10.90.0.0/16", "description": "DR site with replicated critical systems"},
-    {"code": "EXT", "name": "External Zone", "risk_level": "Critical", "pci_scope": False,
-     "cidr": "0.0.0.0/0", "description": "External/internet-facing endpoints"},
+     "fabric": "Production", "vrf_prefix": "gen/SZ01",
+     "cidr": "varies per NH", "description": "General-purpose compute (alias for STD), routing/transit"},
+    {"code": "PAA", "name": "Publicly Accessible Applications", "risk_level": "High", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "paa/SZ02",
+     "cidr": "varies per NH", "description": "Front-end / internet-accessible applications in DMZ"},
+    {"code": "3PY", "name": "Third Party", "risk_level": "High", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "nh##-sz03",
+     "cidr": "varies per NH", "description": "Third-party owned or managed workloads"},
+    {"code": "CCS", "name": "Critical Core Services", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz04",
+     "cidr": "varies per NH", "description": "Management/control-plane and critical core banking services"},
+    {"code": "CDE", "name": "Card Holder Data Environment", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz05",
+     "cidr": "varies per NH", "description": "PCI DSS scope – cardholder/PAN data processing and storage"},
+    {"code": "CPA", "name": "Critical Payment Applications", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz06",
+     "cidr": "varies per NH", "description": "Enterprise payment applications and settlement"},
+    {"code": "PSE", "name": "Production Simulation", "risk_level": "High", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "nh##-sz07",
+     "cidr": "varies per NH", "description": "Technology enablement simulation – uses CCS firewall"},
+    {"code": "Swift", "name": "Swift Zone", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz08",
+     "cidr": "varies per NH", "description": "Dedicated Swift messaging applications – uses CPA firewall"},
+    {"code": "UC", "name": "Unified Communications", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "nh##-sz09",
+     "cidr": "varies per NH", "description": "Unified communications zone"},
+
+    # ---- Non-Production Fabric ----
+    {"code": "UGen", "name": "Non-Prod General", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "gen",
+     "cidr": "varies per NH", "description": "General zone for non-prod routing"},
+    {"code": "USTD", "name": "Non-Prod Standard", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "gen",
+     "cidr": "varies per NH", "description": "Non-prod/UAT/CTE/SIT/DEV standard workloads"},
+    {"code": "UPAA", "name": "Non-Prod PAA", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "paa/sz-02",
+     "cidr": "varies per NH", "description": "Non-prod front-end / internet-accessible applications"},
+    {"code": "UCPA", "name": "Non-Prod CPA", "risk_level": "High", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz06",
+     "cidr": "varies per NH", "description": "Non-prod critical payment applications"},
+    {"code": "UCDE", "name": "Non-Prod CDE", "risk_level": "High", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz05",
+     "cidr": "varies per NH", "description": "Non-prod cardholder data environment"},
+    {"code": "UCCS", "name": "Non-Prod CCS", "risk_level": "High", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz04",
+     "cidr": "varies per NH", "description": "Non-prod critical core services"},
+    {"code": "U3PY", "name": "Non-Prod Third Party", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz03",
+     "cidr": "varies per NH", "description": "Non-prod third-party workloads"},
 ]
 
 
@@ -592,8 +681,10 @@ SEED_FIREWALL_DEVICES = [
 # based on source/destination NH and SZ placement.
 # ============================================================
 
-SEGMENTED_ZONES = {"CPA", "CDE", "CCS", "PAA"}
-# STD/GEN zones do NOT have per-NH firewalls
+SEGMENTED_ZONES = {"CPA", "CDE", "CCS", "PAA", "3PY", "Swift", "PSE", "UC"}
+NON_PROD_SEGMENTED_ZONES = {"UCPA", "UCDE", "UCCS", "UPAA", "U3PY"}
+# STD/GEN/UGen/USTD zones do NOT have per-NH firewalls
+OPEN_ZONES = {"STD", "GEN", "UGen", "USTD"}
 
 LOGICAL_FLOW_RULES = [
     {
@@ -662,64 +753,287 @@ SEED_HERITAGE_DC_MATRIX = [
      "action": "Blocked", "reason": "Heritage DC to DMZ not permitted directly"},
 ]
 
+# ---- NGDC Production Matrix ----
+# Key rules from architecture:
+#   - Any DC, Any NH, GEN/STD-to-GEN/STD: Permitted (no firewall)
+#   - Same DC, Same NH, Same SZ: Permitted (no firewall)
+#   - Different DC, Same NH, Same SZ: Permitted (no firewall)
+#   - Cross-SZ (except STD/GEN): Firewall Request Required
+#       -> Egress through source NH SZ firewall + Ingress through dest NH SZ firewall
+#   - Same DC, Different NH, Same SZ: Permitted
+#   - Different DC, Different NH, Same SZ: Permitted
+#   - Non-Prod to Prod: Blocked
 SEED_NGDC_PROD_MATRIX = [
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CCS", "dst_sz": "CCS",
-     "action": "Permitted", "reason": "Same DC, same NH, CCS to CCS intra-zone traffic allowed"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CDE", "dst_sz": "CDE",
-     "action": "Permitted", "reason": "Same DC, same NH, CDE intra-zone traffic allowed"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CCS", "dst_sz": "CDE",
-     "action": "Permitted", "reason": "Same DC, same NH, CCS to CDE allowed with controls"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CDE", "dst_sz": "CDE",
-     "action": "Blocked - Exception Required", "reason": "Cross-NH CDE traffic requires exception"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CCS", "dst_sz": "CPA",
-     "action": "Blocked", "reason": "Cross-NH CCS to CPA blocked"},
-    {"src_dc": "Different", "dst_dc": "Different", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "CDE", "dst_sz": "CDE",
-     "action": "Blocked - Exception Required", "reason": "Cross-DC CDE traffic requires exception and encryption"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "GEN", "dst_sz": "GEN",
-     "action": "Permitted", "reason": "General zone traffic permitted"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "GEN", "dst_sz": "CDE",
-     "action": "Blocked", "reason": "GEN to CDE not permitted"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "DMZ", "dst_sz": "CDE",
-     "action": "Blocked", "reason": "DMZ to CDE not permitted directly"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "DMZ", "dst_sz": "GEN",
-     "action": "Permitted", "reason": "DMZ to GEN allowed through proxy"},
+    # GEN/STD open routing – no firewall needed regardless of NH/DC
+    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "GEN",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Any DC, Any NH – GEN-to-GEN traffic permitted, no firewall"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "STD",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Any DC, Any NH – STD-to-STD traffic permitted, no firewall"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "STD",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "GEN/STD interchangeable – permitted, no firewall"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "GEN",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "GEN/STD interchangeable – permitted, no firewall"},
+
+    # Same SZ, same NH (any DC) – intra-zone permitted
+    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "CCS",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "CDE",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "CPA",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "PAA",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "3PY", "dest_zone": "3PY",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "Swift", "dest_zone": "Swift",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "PSE", "dest_zone": "PSE",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "UC", "dest_zone": "UC",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Same SZ intra-zone – permitted within same NH"},
+
+    # Cross-SZ (non-STD/GEN) – Firewall Request Required (egress + ingress)
+    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "CDE",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: requires egress (src NH CCS FW) + ingress (dst NH CDE FW)"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "CPA",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: requires egress (src NH CCS FW) + ingress (dst NH CPA FW)"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "CCS",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: requires egress (src NH CDE FW) + ingress (dst NH CCS FW)"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "CPA",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: requires egress (src NH CDE FW) + ingress (dst NH CPA FW)"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "CCS",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: requires egress (src NH CPA FW) + ingress (dst NH CCS FW)"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "CDE",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: requires egress (src NH CPA FW) + ingress (dst NH CDE FW)"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "CCS",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: PAA to CCS requires PAA FW egress + CCS FW ingress"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "CDE",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: PAA to CDE requires PAA FW egress + CDE FW ingress"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "CPA",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ: PAA to CPA requires PAA FW egress + CPA FW ingress"},
+
+    # GEN/STD to segmented zone – Firewall Request Required (ingress only into dest SZ)
+    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "CCS",
+     "action": "Firewall Request Required", "firewall_traversal": "ingress",
+     "reason": "GEN to segmented zone: ingress through dest NH CCS FW"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "CDE",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "GEN to CDE not permitted – no direct path"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "CPA",
+     "action": "Firewall Request Required", "firewall_traversal": "ingress",
+     "reason": "GEN to segmented zone: ingress through dest NH CPA FW"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "CCS",
+     "action": "Firewall Request Required", "firewall_traversal": "ingress",
+     "reason": "STD to segmented zone: ingress through dest NH CCS FW"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "CDE",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "STD to CDE not permitted – no direct path"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "CPA",
+     "action": "Firewall Request Required", "firewall_traversal": "ingress",
+     "reason": "STD to segmented zone: ingress through dest NH CPA FW"},
+
+    # Segmented zone to GEN/STD – egress only from source SZ
+    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "GEN",
+     "action": "Firewall Request Required", "firewall_traversal": "egress",
+     "reason": "Segmented to GEN: egress through src NH CCS FW"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "GEN",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "CDE to GEN not permitted – CDE is isolated"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "GEN",
+     "action": "Firewall Request Required", "firewall_traversal": "egress",
+     "reason": "Segmented to GEN: egress through src NH CPA FW"},
+
+    # Non-Prod to Prod – Blocked
+    {"matrix_type": "NGDC-Prod", "source_zone": "USTD", "dest_zone": "GEN",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod to Prod traffic blocked"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "USTD", "dest_zone": "CCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod to Prod traffic blocked"},
+    {"matrix_type": "NGDC-Prod", "source_zone": "UCCS", "dest_zone": "CCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod to Prod traffic blocked"},
 ]
 
+# ---- Non-Production Matrix ----
+# Key rules from architecture:
+#   - Non-Prod (UGEN/USTD) to Pre-Prod (UGEN/USTD): Permitted
+#   - Non-Prod (UGEN/USTD) to Pre-Prod (PAA/CCS/CPA): Blocked
+#   - Non-Prod segmented to Pre-Prod segmented: Blocked
+#   - Cross-SZ within Non-Prod: Firewall Request Required (same rule as Prod)
 SEED_NONPROD_MATRIX = [
-    {"source_zone": "DEV", "dest_zone": "DEV", "action": "Permitted", "reason": "Dev to Dev allowed"},
-    {"source_zone": "DEV", "dest_zone": "SIT", "action": "Permitted", "reason": "Dev to SIT allowed"},
-    {"source_zone": "DEV", "dest_zone": "UAT", "action": "Blocked", "reason": "Dev to UAT not allowed"},
-    {"source_zone": "SIT", "dest_zone": "SIT", "action": "Permitted", "reason": "SIT intra-zone allowed"},
-    {"source_zone": "SIT", "dest_zone": "UAT", "action": "Permitted", "reason": "SIT to UAT allowed"},
-    {"source_zone": "UAT", "dest_zone": "UAT", "action": "Permitted", "reason": "UAT intra-zone allowed"},
-    {"source_zone": "Any", "dest_zone": "CDE", "action": "Blocked", "reason": "Non-prod to CDE blocked"},
-    {"source_zone": "Any", "dest_zone": "CPA", "action": "Blocked", "reason": "Non-prod to CPA blocked"},
-    {"source_zone": "GEN", "dest_zone": "GEN", "action": "Permitted", "reason": "GEN intra-zone allowed"},
+    # Intra-zone within non-prod – permitted
+    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "USTD",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod USTD intra-zone – permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "UGen", "dest_zone": "UGen",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod UGen intra-zone – permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UGen",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "USTD/UGen interchangeable – permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "UGen", "dest_zone": "USTD",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "UGen/USTD interchangeable – permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "UCCS",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod UCCS same-SZ – permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "UCDE", "dest_zone": "UCDE",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod UCDE same-SZ – permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "UCPA", "dest_zone": "UCPA",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod UCPA same-SZ – permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "UPAA", "dest_zone": "UPAA",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod UPAA same-SZ – permitted"},
+
+    # Cross-SZ within non-prod – Firewall Request Required
+    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "UCDE",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
+    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "UCPA",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
+    {"matrix_type": "Non-Prod", "source_zone": "UCDE", "dest_zone": "UCCS",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
+    {"matrix_type": "Non-Prod", "source_zone": "UCPA", "dest_zone": "UCCS",
+     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
+     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
+
+    # USTD/UGen to Non-Prod segmented – ingress required
+    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UCCS",
+     "action": "Firewall Request Required", "firewall_traversal": "ingress",
+     "reason": "USTD to segmented: ingress through dest FW"},
+    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UCDE",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "USTD to UCDE not permitted"},
+    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UCPA",
+     "action": "Firewall Request Required", "firewall_traversal": "ingress",
+     "reason": "USTD to segmented: ingress through dest FW"},
+
+    # Non-Prod to Prod – Blocked
+    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "GEN",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod to Prod blocked"},
+    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "CCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod to Prod blocked"},
 ]
 
+# ---- Pre-Production Matrix ----
+# Key rules:
+#   - Non-Prod (UGEN/USTD) to Pre-Prod (UGEN/USTD): Permitted
+#   - Non-Prod (UGEN/USTD) to Pre-Prod (UPAA/UCCS/UCPA): Blocked
+#   - Non-Prod (UCCS/UPAA/UCPA/UCDE) to Pre-Prod (UPAA/UCCS/UCPA): Blocked
+#   - Pre-Prod to Prod: Blocked
 SEED_PREPROD_MATRIX = [
-    {"source_zone": "STG", "dest_zone": "STG", "action": "Permitted", "reason": "Staging intra-zone allowed"},
-    {"source_zone": "STG", "dest_zone": "GEN", "action": "Permitted", "reason": "Staging to GEN allowed"},
-    {"source_zone": "STG", "dest_zone": "CDE", "action": "Blocked - Exception Required",
-     "reason": "Staging to CDE requires exception with data masking"},
-    {"source_zone": "GEN", "dest_zone": "STG", "action": "Permitted", "reason": "GEN to staging allowed"},
-    {"source_zone": "Any", "dest_zone": "CPA", "action": "Blocked", "reason": "Pre-prod to CPA blocked"},
+    # Pre-Prod intra-zone
+    {"matrix_type": "Pre-Prod", "source_zone": "USTD", "dest_zone": "USTD",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Pre-Prod USTD intra-zone – permitted"},
+    {"matrix_type": "Pre-Prod", "source_zone": "UGen", "dest_zone": "UGen",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Pre-Prod UGen intra-zone – permitted"},
+
+    # Non-Prod (UGEN/USTD) to Pre-Prod (UGEN/USTD): Permitted
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "USTD",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod USTD to Pre-Prod USTD – permitted"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UGen",
+     "action": "Permitted", "firewall_traversal": "none",
+     "reason": "Non-Prod UGen to Pre-Prod UGen – permitted"},
+
+    # Non-Prod (UGEN/USTD) to Pre-Prod (UPAA/UCCS/UCPA): Blocked
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "UPAA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod USTD to Pre-Prod PAA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "UCCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod USTD to Pre-Prod CCS – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "UCPA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod USTD to Pre-Prod CPA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UPAA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UGen to Pre-Prod PAA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UCCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UGen to Pre-Prod CCS – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UCPA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UGen to Pre-Prod CPA – blocked"},
+
+    # Non-Prod segmented to Pre-Prod segmented: Blocked
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCCS", "dest_zone": "UPAA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCCS to Pre-Prod PAA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCCS", "dest_zone": "UCCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCCS to Pre-Prod CCS – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCCS", "dest_zone": "UCPA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCCS to Pre-Prod CPA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UPAA", "dest_zone": "UPAA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UPAA to Pre-Prod PAA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UPAA", "dest_zone": "UCCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UPAA to Pre-Prod CCS – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UPAA", "dest_zone": "UCPA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UPAA to Pre-Prod CPA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCPA", "dest_zone": "UPAA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCPA to Pre-Prod PAA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCPA", "dest_zone": "UCCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCPA to Pre-Prod CCS – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCPA", "dest_zone": "UCPA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCPA to Pre-Prod CPA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCDE", "dest_zone": "UPAA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCDE to Pre-Prod PAA – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCDE", "dest_zone": "UCCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCDE to Pre-Prod CCS – blocked"},
+    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCDE", "dest_zone": "UCPA",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Non-Prod UCDE to Pre-Prod CPA – blocked"},
+
+    # Pre-Prod to Prod – Blocked
+    {"matrix_type": "Pre-Prod", "source_zone": "USTD", "dest_zone": "GEN",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Pre-Prod to Prod blocked"},
+    {"matrix_type": "Pre-Prod", "source_zone": "UCCS", "dest_zone": "CCS",
+     "action": "Blocked", "firewall_traversal": "n/a",
+     "reason": "Pre-Prod to Prod blocked"},
 ]
 
-SEED_POLICY_MATRIX = SEED_NGDC_PROD_MATRIX + [
-    {"env": "Non-Production", "entries": SEED_NONPROD_MATRIX},
-    {"env": "Pre-Production", "entries": SEED_PREPROD_MATRIX},
-]
+SEED_POLICY_MATRIX = SEED_NGDC_PROD_MATRIX + SEED_NONPROD_MATRIX + SEED_PREPROD_MATRIX
 
 
 # ============================================================
