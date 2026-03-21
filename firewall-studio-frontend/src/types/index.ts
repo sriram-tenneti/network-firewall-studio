@@ -301,6 +301,20 @@ export interface MappingSummary {
   auto_generated: number;
 }
 
+export interface ComponentGroup {
+  component: string;
+  direction: 'source' | 'destination';
+  ips: string[];
+  ip_count: number;
+  legacy_group: string | null;
+  ngdc_group: string;
+  nh: string;
+  sz: string;
+  dc: string;
+  cidr: string;
+  customizable: boolean;
+}
+
 export interface NGDCRecommendation {
   rule_id: string;
   rule: LegacyRule;
@@ -312,6 +326,7 @@ export interface NGDCRecommendation {
   nh_sz_source?: 'app_dc_mapping' | 'application_config' | 'default';
   source_mappings: IPMapping[];
   destination_mappings: IPMapping[];
+  component_groups?: ComponentGroup[];
   service_entries: string[];
   service_recommendations?: ServiceRecommendation[];
   mapping_summary?: MappingSummary;
