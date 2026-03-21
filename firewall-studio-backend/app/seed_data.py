@@ -782,18 +782,20 @@ SEED_NGDC_PROD_MATRIX = [
      "reason": "Intra-zone, intra-NH traffic is permitted – no firewall boundary"},
 
     # ---- Row 3: Same SZ (Segmented), Cross NH, Same DC ----
+    # Same SZ is always PERMITTED regardless of NH/DC. Traffic still passes
+    # through FW devices (egress + ingress) but no firewall rule is required.
     {"id": "PM-PROD-03", "matrix_type": "NGDC-Prod",
      "source_zone": "Segmented (Same)", "source_nh": "Different", "source_dc": "Same",
      "dest_zone": "Segmented (Same)", "dest_nh": "Different", "dest_dc": "Same",
-     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH) + Ingress (dst NH)",
-     "reason": "Same segmented zone across different NHs requires egress from source NH FW and ingress into destination NH FW"},
+     "action": "Permitted", "firewall_traversal": "Egress (src NH) + Ingress (dst NH) [informational]",
+     "reason": "Same segmented zone across different NHs – permitted per birthright. Traffic passes through egress (src NH FW) and ingress (dst NH FW) but no firewall rule is required."},
 
     # ---- Row 4: Same SZ (Segmented), Cross NH, Cross DC ----
     {"id": "PM-PROD-04", "matrix_type": "NGDC-Prod",
      "source_zone": "Segmented (Same)", "source_nh": "Different", "source_dc": "Different",
      "dest_zone": "Segmented (Same)", "dest_nh": "Different", "dest_dc": "Different",
-     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH) + Ingress (dst NH)",
-     "reason": "Same segmented zone, cross NH and cross DC – egress + ingress FW required"},
+     "action": "Permitted", "firewall_traversal": "Egress (src NH) + Ingress (dst NH) [informational]",
+     "reason": "Same segmented zone, cross NH and cross DC – permitted per birthright. Traffic passes through egress and ingress FW devices but no rule is required."},
 
     # ---- Row 5: Cross SZ (both Segmented), Same NH, Any DC ----
     {"id": "PM-PROD-05", "matrix_type": "NGDC-Prod",

@@ -44,7 +44,7 @@ const LDF_RULE_LABELS: Record<string, string> = {
   'LDF-002': 'Same neighbourhood, same security zone — rule deployed on zone firewall device (permitted per birthright)',
   'LDF-003': 'Segmented to Prod data flow between security zones in different neighbourhoods — egress firewall required',
   'LDF-003-reverse': 'Non-segmented to segmented zone in different neighbourhood — ingress firewall required',
-  'LDF-004': 'Segmented applications data flow between similar security zones in different neighbourhoods — 2 policy boundaries (egress + ingress)',
+  'LDF-004': 'Same security zone across different neighbourhoods — permitted per birthright, traffic passes through egress and ingress FW devices (informational)',
   'LDF-005': 'Cross-zone within same neighbourhood — single segmentation firewall boundary',
   'LDF-006': 'Publicly Accessible Application (PAA) flow — traffic traverses PAA perimeter and internal firewalls',
   'LDF-DEFAULT': 'No firewall boundary required for this traffic flow',

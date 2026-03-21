@@ -3245,7 +3245,10 @@ async def determine_firewall_boundaries(
                          f"traverses {src_nh} {segmented_sz} segmentation firewall."),
             }
 
-    # ---- LDF-004: Same segmented SZ, different NHs — 2 boundaries ----
+    # ---- LDF-004: Same segmented SZ, different NHs — PERMITTED ----
+    # Same SZ is always permitted regardless of NH/DC per birthright.
+    # Traffic still passes through FW devices (egress + ingress) but
+    # no firewall rule is required — devices shown as informational.
     if same_sz and src_segmented and not same_nh:
         eg_dev = _find_device(src_nh, src_sz_upper)
         in_dev = _find_device(dst_nh, dst_sz_upper)
@@ -3259,12 +3262,13 @@ async def determine_firewall_boundaries(
                          "device_id": in_dev["device_id"], "device_name": in_dev["name"],
                          "nh": dst_nh, "sz": dst_sz_upper})
         return {
-            "boundaries": 2, "flow_rule": "LDF-004",
+            "boundaries": len(devs), "flow_rule": "LDF-004",
             "devices": devs,
-            "requires_egress": True, "requires_ingress": True,
+            "requires_egress": False, "requires_ingress": False,
+            "existing_rule": True,
             "note": (f"Same segmented zone ({src_sz_upper}), different NHs "
-                     f"({src_nh} → {dst_nh}) — egress through {src_nh} {src_sz_upper} firewall, "
-                     f"ingress through {dst_nh} {dst_sz_upper} firewall."),
+                     f"({src_nh} → {dst_nh}) — permitted per birthright. "
+                     f"Traffic passes through {src_nh} and {dst_nh} {src_sz_upper} FW devices (no rule required)."),
         }
 
     # ---- LDF-003a: BOTH segmented, different zones, different NHs — 2 boundaries ----
