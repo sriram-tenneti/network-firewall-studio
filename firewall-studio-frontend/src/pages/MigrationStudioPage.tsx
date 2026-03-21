@@ -810,24 +810,25 @@ export function MigrationStudioPage() {
                           </div>
                         </div>
                         <div className="p-3 space-y-3 text-xs">
+                          {/* Direction-specific NH/SZ from rule zones */}
                           <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-gray-500">Neighbourhood</label>
-                              <select value={selectedNh} onChange={e => setSelectedNh(e.target.value)}
-                                className="w-full px-2 py-1 text-xs border border-green-300 rounded bg-green-50 mt-0.5">
-                                {recommendation.available_nhs.map(nh => (
-                                  <option key={nh.nh_id} value={nh.nh_id}>{nh.nh_id} - {nh.name}</option>
-                                ))}
-                              </select>
+                            <div className="border border-green-200 rounded p-2 bg-green-50/50">
+                              <label className="text-[10px] text-gray-500 font-semibold">Source NH / SZ</label>
+                              <div className="mt-0.5 font-mono text-[11px] text-green-800 font-medium">
+                                {recommendation.source_nh || recommendation.recommended_nh} / {recommendation.source_sz || recommendation.recommended_sz}
+                              </div>
+                              {recommendation.source_dc && (
+                                <div className="text-[9px] text-gray-500 mt-0.5">DC: {recommendation.source_dc}</div>
+                              )}
                             </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500">Security Zone</label>
-                              <select value={selectedSz} onChange={e => setSelectedSz(e.target.value)}
-                                className="w-full px-2 py-1 text-xs border border-green-300 rounded bg-green-50 mt-0.5">
-                                {recommendation.available_szs.map(sz => (
-                                  <option key={sz.code} value={sz.code}>{sz.code} - {sz.name}</option>
-                                ))}
-                              </select>
+                            <div className="border border-green-200 rounded p-2 bg-green-50/50">
+                              <label className="text-[10px] text-gray-500 font-semibold">Destination NH / SZ</label>
+                              <div className="mt-0.5 font-mono text-[11px] text-green-800 font-medium">
+                                {recommendation.destination_nh || recommendation.recommended_nh} / {recommendation.destination_sz || recommendation.recommended_sz}
+                              </div>
+                              {recommendation.destination_dc && (
+                                <div className="text-[9px] text-gray-500 mt-0.5">DC: {recommendation.destination_dc}</div>
+                              )}
                             </div>
                           </div>
 
@@ -1249,8 +1250,8 @@ export function MigrationStudioPage() {
                         ['Application', `${migrateRule.app_name} (${migrateRule.app_id})`],
                         ['Dist ID', migrateRule.app_distributed_id || 'N/A'],
                         ['Policy', migrateRule.policy_name || 'N/A'],
-                        ['NH / SZ', `${selectedNh} / ${selectedSz}`],
-                        ['DC', recommendation?.recommended_dc || 'N/A'],
+                        ['Source NH / SZ', `${recommendation?.source_nh || selectedNh} / ${recommendation?.source_sz || selectedSz}`],
+                        ['Dest NH / SZ', `${recommendation?.destination_nh || selectedNh} / ${recommendation?.destination_sz || selectedSz}`],
                         ['Source Zone (Legacy)', migrateRule.rule_source_zone || 'N/A'],
                         ['Dest Zone (Legacy)', migrateRule.rule_destination_zone || 'N/A'],
                         ['Action', migrateRule.rule_action || 'allow'],
@@ -1324,13 +1325,13 @@ export function MigrationStudioPage() {
                                 <span className="text-gray-500">Source Zone:</span>
                                 <span className="text-red-600 line-through ml-1">{migrateRule.rule_source_zone || 'N/A'}</span>
                                 <span className="mx-1">&rarr;</span>
-                                <span className="text-green-600">{selectedSz} ({selectedNh})</span>
+                                <span className="text-green-600">{recommendation.source_sz || selectedSz} ({recommendation.source_nh || selectedNh})</span>
                               </div>
                               <div>
                                 <span className="text-gray-500">Destination Zone:</span>
                                 <span className="text-red-600 line-through ml-1">{migrateRule.rule_destination_zone || 'N/A'}</span>
                                 <span className="mx-1">&rarr;</span>
-                                <span className="text-green-600">NGDC Standard</span>
+                                <span className="text-green-600">{recommendation.destination_sz || selectedSz} ({recommendation.destination_nh || selectedNh})</span>
                               </div>
                             </div>
                           </div>

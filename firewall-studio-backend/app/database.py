@@ -2124,25 +2124,40 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     app_name = rule.get("app_name", "")
     app_info = next((a for a in apps if str(a.get("app_id")) == app_id or a.get("app_distributed_id") == app_dist), None)
 
-    # --- Step 1: Determine NH/SZ from App-DC mapping table first, then app info ---
-    app_dc = next((m for m in app_dc_mappings if
-                   str(m.get("app_id", "")).upper() == app_id.upper() or
-                   str(m.get("app_name", "")).lower() == app_name.lower()), None)
-    if app_dc:
-        recommended_nh = app_dc.get("neighbourhood", "NH01")
-        recommended_sz = app_dc.get("security_zone", "GEN")
-        recommended_dc = app_dc.get("datacenter", "")
-        nh_sz_source = "app_dc_mapping"
-    elif app_info:
-        recommended_nh = app_info.get("nh", "NH01")
-        recommended_sz = app_info.get("sz", "GEN")
-        recommended_dc = ""
-        nh_sz_source = "application_config"
-    else:
-        recommended_nh = "NH01"
-        recommended_sz = "GEN"
-        recommended_dc = ""
-        nh_sz_source = "default"
+    # --- Step 1: Determine NH/SZ using the rule's actual source/dest zones ---
+    # The rule itself tells us source_zone and destination_zone — use these to
+    # find the correct NH for each direction from app-DC mappings.
+    rule_src_zone = (rule.get("rule_source_zone") or "").strip()
+    rule_dst_zone = (rule.get("rule_destination_zone") or "").strip()
+
+    # Get ALL app-DC mappings for this app (component-level)
+    all_app_comps = [m for m in app_dc_mappings
+                     if str(m.get("app_id", "")).upper() == app_id.upper()]
+
+    def _find_nh_for_zone(zone: str) -> tuple[str, str, str]:
+        """Find NH, SZ, DC for a given zone from app-DC mappings."""
+        if not zone:
+            return ("NH01", "GEN", "")
+        zone_upper = zone.upper()
+        for c in all_app_comps:
+            if (c.get("sz", "")).upper() == zone_upper:
+                return (c.get("nh", "NH01"), c.get("sz", zone_upper), c.get("dc", ""))
+        # Fallback: first component mapping or defaults
+        if all_app_comps:
+            first = all_app_comps[0]
+            return (first.get("nh", "NH01"), zone_upper, first.get("dc", ""))
+        if app_info:
+            return (app_info.get("nh", "NH01"), zone_upper, "")
+        return ("NH01", zone_upper, "")
+
+    src_nh, src_sz, src_dc = _find_nh_for_zone(rule_src_zone)
+    dst_nh, dst_sz, dst_dc = _find_nh_for_zone(rule_dst_zone)
+
+    # Use source-side as the "recommended" default (for backward compat)
+    recommended_nh = src_nh
+    recommended_sz = src_sz
+    recommended_dc = src_dc
+    nh_sz_source = "rule_zone_mapping" if all_app_comps else "default"
 
     # --- Step 2: Build IP mappings using NGDC mapping table lookups ---
     src_entries = [s.strip() for s in (rule.get("rule_source", "") or "").split("\n") if s.strip()]
@@ -2161,17 +2176,24 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 return m
         return None
 
-    def _suggest_ngdc_name(legacy_name: str, entry_type: str) -> str:
+    def _suggest_ngdc_name(legacy_name: str, entry_type: str, direction: str = "source") -> str:
         prefix = "grp" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
                  "svr" if legacy_name.startswith("svr") else \
                  "rng" if legacy_name.startswith("rng") else "grp"
         short_app = (app_dist or app_id)[:6].upper()
-        return f"{prefix}-{short_app}-{recommended_nh}-{recommended_sz}-{entry_type}"
+        # Use direction-specific NH/SZ from the rule's actual zones
+        if direction == "destination":
+            nh, sz = dst_nh, dst_sz
+        else:
+            nh, sz = src_nh, src_sz
+        return f"{prefix}-{short_app}-{nh}-{sz}-{entry_type}"
 
-    def _build_mapping(legacy_name: str, entry_type: str, idx: int) -> dict[str, Any]:
+    def _build_mapping(legacy_name: str, entry_type: str, idx: int, direction: str = "source") -> dict[str, Any]:
         obj_type = "group" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
                    "server" if legacy_name.startswith("svr") else \
                    "range" if legacy_name.startswith("rng") else "other"
+        dir_nh = dst_nh if direction == "destination" else src_nh
+        dir_sz = dst_sz if direction == "destination" else src_sz
 
         # Priority 1: Look up NGDC mapping table
         table_match = _lookup_ngdc_mapping(legacy_name)
@@ -2183,8 +2205,8 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 "mapping_source": "ngdc_mapping_table",
                 "mapping_id": table_match.get("id"),
                 "mapping_status": table_match.get("status", ""),
-                "ngdc_nh": table_match.get("ngdc_nh", ""),
-                "ngdc_sz": table_match.get("ngdc_sz", ""),
+                "ngdc_nh": table_match.get("ngdc_nh", "") or dir_nh,
+                "ngdc_sz": table_match.get("ngdc_sz", "") or dir_sz,
                 "existing_group": None,
                 "customizable": True,
             }
@@ -2200,28 +2222,28 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 "mapping_source": "existing_group",
                 "mapping_id": None,
                 "mapping_status": "",
-                "ngdc_nh": "",
-                "ngdc_sz": "",
+                "ngdc_nh": dir_nh,
+                "ngdc_sz": dir_sz,
                 "existing_group": existing_group["name"],
                 "customizable": True,
             }
 
-        # Priority 3: Generate based on naming convention
+        # Priority 3: Generate based on naming convention with direction-specific NH/SZ
         return {
             "legacy": legacy_name,
-            "ngdc_recommended": _suggest_ngdc_name(legacy_name, f"{entry_type}{idx+1:02d}"),
+            "ngdc_recommended": _suggest_ngdc_name(legacy_name, f"{entry_type}{idx+1:02d}", direction),
             "type": obj_type,
             "mapping_source": "auto_generated",
             "mapping_id": None,
             "mapping_status": "",
-            "ngdc_nh": recommended_nh,
-            "ngdc_sz": recommended_sz,
+            "ngdc_nh": dir_nh,
+            "ngdc_sz": dir_sz,
             "existing_group": None,
             "customizable": True,
         }
 
-    source_mappings = [_build_mapping(src, "SRC", i) for i, src in enumerate(src_entries)]
-    destination_mappings = [_build_mapping(dst, "DST", i) for i, dst in enumerate(dst_entries)]
+    source_mappings = [_build_mapping(src, "SRC", i, "source") for i, src in enumerate(src_entries)]
+    destination_mappings = [_build_mapping(dst, "DST", i, "destination") for i, dst in enumerate(dst_entries)]
 
     # --- Step 3: Service/port recommendations ---
     standard_ports: dict[str, str] = {
@@ -2251,9 +2273,11 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "recommendation": f"Ensure {desc or svc} access is restricted to authorized sources" if risk != "low" else "Standard service",
         })
 
-    # Find recommended NH and SZ details
-    nh_info = next((n for n in nhs if n.get("nh_id") == recommended_nh), None)
-    sz_info = next((s for s in szs if s.get("code") == recommended_sz), None)
+    # Find recommended NH and SZ details (source-side as primary)
+    nh_info = next((n for n in nhs if n.get("nh_id") == src_nh), None)
+    sz_info = next((s for s in szs if s.get("code") == src_sz), None)
+    dst_nh_info = next((n for n in nhs if n.get("nh_id") == dst_nh), None)
+    dst_sz_info = next((s for s in szs if s.get("code") == dst_sz), None)
 
     # Count mapping sources
     table_count = sum(1 for m in source_mappings + destination_mappings if m["mapping_source"] == "ngdc_mapping_table")
@@ -2322,10 +2346,15 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     def _build_component_group(comp: str, ips: list[str], direction: str) -> dict[str, Any]:
         """Build a component group mapping entry."""
+        # Use direction-specific defaults from the rule's actual zones
+        dir_nh = dst_nh if direction == "destination" else src_nh
+        dir_sz = dst_sz if direction == "destination" else src_sz
+        dir_dc = dst_dc if direction == "destination" else src_dc
+
         comp_mapping = next((c for c in app_components if c.get("component") == comp), None)
-        comp_nh = comp_mapping.get("nh", recommended_nh) if comp_mapping else recommended_nh
-        comp_sz = comp_mapping.get("sz", recommended_sz) if comp_mapping else recommended_sz
-        comp_dc = comp_mapping.get("dc", recommended_dc) if comp_mapping else recommended_dc
+        comp_nh = comp_mapping.get("nh", dir_nh) if comp_mapping else dir_nh
+        comp_sz = comp_mapping.get("sz", dir_sz) if comp_mapping else dir_sz
+        comp_dc = comp_mapping.get("dc", dir_dc) if comp_mapping else dir_dc
         comp_cidr = comp_mapping.get("cidr", "") if comp_mapping else ""
 
         # Check if legacy already has a group for these IPs
@@ -2343,8 +2372,13 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             if mapped:
                 ngdc_ips.append(mapped)
             else:
-                # Generate a placeholder NGDC IP based on NH CIDR if available
-                ngdc_ips.append(f"ngdc-{ip}")
+                # Fallback: use svr- prefix with the legacy IP (stripped of old prefix)
+                clean_ip = ip.strip()
+                for pfx in ("svr-", "rng-", "grp-"):
+                    if clean_ip.startswith(pfx):
+                        clean_ip = clean_ip[len(pfx):]
+                        break
+                ngdc_ips.append(f"svr-{clean_ip}")
 
         ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}"
         return {
@@ -2389,7 +2423,17 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "auto_generated": auto_count,
             "component_group_count": len(component_groups),
         },
-        "naming_standard": f"grp-{short_app}-{recommended_nh}-{recommended_sz}-{{SUBTYPE}}",
+        "naming_standard": f"grp-{short_app}-{{NH}}-{{SZ}}-{{SUBTYPE}}",
+        "source_nh": src_nh,
+        "source_sz": src_sz,
+        "source_dc": src_dc,
+        "source_nh_name": nh_info.get("name", "") if nh_info else "",
+        "source_sz_name": sz_info.get("name", "") if sz_info else "",
+        "destination_nh": dst_nh,
+        "destination_sz": dst_sz,
+        "destination_dc": dst_dc,
+        "destination_nh_name": dst_nh_info.get("name", "") if dst_nh_info else "",
+        "destination_sz_name": dst_sz_info.get("name", "") if dst_sz_info else "",
         "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
         "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
     }
@@ -3202,8 +3246,31 @@ async def determine_firewall_boundaries(
                      f"ingress through {dst_nh} {dst_sz_upper} firewall."),
         }
 
-    # ---- LDF-003: Segmented zone → different zone, different NHs — 1 boundary ----
-    if src_segmented and not same_sz and not same_nh:
+    # ---- LDF-003a: BOTH segmented, different zones, different NHs — 2 boundaries ----
+    # e.g. CDE(NH06) → CPA(NH14): egress from source NH/SZ + ingress to dest NH/SZ
+    if src_segmented and dst_segmented and not same_sz and not same_nh:
+        eg_dev = _find_device(src_nh, src_sz_upper)
+        in_dev = _find_device(dst_nh, dst_sz_upper)
+        devs = []
+        if eg_dev:
+            devs.append({"role": "egress", "direction": "egress",
+                         "device_id": eg_dev["device_id"], "device_name": eg_dev["name"],
+                         "nh": src_nh, "sz": src_sz_upper})
+        if in_dev:
+            devs.append({"role": "ingress", "direction": "ingress",
+                         "device_id": in_dev["device_id"], "device_name": in_dev["name"],
+                         "nh": dst_nh, "sz": dst_sz_upper})
+        return {
+            "boundaries": len(devs), "flow_rule": "LDF-003",
+            "devices": devs,
+            "requires_egress": True, "requires_ingress": True,
+            "note": (f"Both segmented zones ({src_sz_upper} in {src_nh} → {dst_sz_upper} in {dst_nh}) — "
+                     f"egress through {src_nh} {src_sz_upper} firewall, "
+                     f"ingress through {dst_nh} {dst_sz_upper} firewall."),
+        }
+
+    # ---- LDF-003b: Source segmented, dest NOT segmented, different NHs — 1 boundary (egress) ----
+    if src_segmented and not dst_segmented and not same_sz and not same_nh:
         eg_dev = _find_device(src_nh, src_sz_upper)
         devs = []
         if eg_dev:
@@ -3214,12 +3281,12 @@ async def determine_firewall_boundaries(
             "boundaries": 1, "flow_rule": "LDF-003",
             "devices": devs,
             "requires_egress": True, "requires_ingress": False,
-            "note": (f"Segmented zone ({src_sz_upper}) in {src_nh} to {dst_sz_upper} in {dst_nh} — "
+            "note": (f"Segmented zone ({src_sz_upper}) in {src_nh} to open zone ({dst_sz_upper}) in {dst_nh} — "
                      f"egress through {src_nh} {src_sz_upper} firewall only."),
         }
 
-    # ---- Fallback: destination is segmented, source is not, different NHs ----
-    if dst_segmented and not same_nh:
+    # ---- LDF-003c: Source NOT segmented, dest segmented, different NHs — 1 boundary (ingress) ----
+    if not src_segmented and dst_segmented and not same_nh:
         in_dev = _find_device(dst_nh, dst_sz_upper)
         devs = []
         if in_dev:
@@ -3227,10 +3294,10 @@ async def determine_firewall_boundaries(
                          "device_id": in_dev["device_id"], "device_name": in_dev["name"],
                          "nh": dst_nh, "sz": dst_sz_upper})
         return {
-            "boundaries": 1, "flow_rule": "LDF-003-reverse",
+            "boundaries": 1, "flow_rule": "LDF-003",
             "devices": devs,
             "requires_egress": False, "requires_ingress": True,
-            "note": (f"Non-segmented zone ({src_sz_upper}) in {src_nh} to segmented "
+            "note": (f"Open zone ({src_sz_upper}) in {src_nh} to segmented "
                      f"({dst_sz_upper}) in {dst_nh} — ingress through {dst_nh} {dst_sz_upper} firewall."),
         }
 

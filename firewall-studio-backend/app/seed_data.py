@@ -1408,114 +1408,224 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
 SEED_IP_MAPPINGS: list[dict[str, Any]] = []
 
 def _build_ip_mappings() -> list[dict[str, Any]]:
-    """Build comprehensive app-based IP mappings."""
+    """Build comprehensive app-based IP mappings covering ALL legacy rule IPs.
+
+    Each legacy rule has source and destination IPs that may map to DIFFERENT
+    NGDC zones/NHs.  We provide separate source-side and destination-side
+    mappings so that `_lookup_ngdc_ip` can resolve every IP used in seed rules.
+
+    Legacy rule IP pattern per app (base = dc_ip[legacy_dc]):
+      Rule 1 WEB→APP : src {base}.1.10/.11     dst {base}.2.10/.11/.12
+      Rule 2 APP→DB  : src {base}.2.10/.11/.12  dst {base}.3.10/.11
+      Rule 3 APP→MQ  : src {base}.2.10/.11      dst {base}.4.10/.11
+      Rule 4 APP→Ext : src {base}.2.10           dst 10.70.1.10/.11 (PSE)
+      Rule 5 BAT→DB  : src {base}.5.10           dst {base}.3.10
+      Rule 6 MON→ALL : src 10.80.1.100/.101 (UC) dst rng-{base}.1.10-12, svr-{base}.3.10
+    """
     mappings: list[dict[str, Any]] = []
     idx = 0
 
-    # Mapping config: (app_id, legacy_dc, ngdc_dc, nh, sz, legacy_base, ngdc_entries)
+    # Full mapping config per app.
+    # Each entry: (app_id, legacy_dc, ngdc_dc, entries_list)
+    # entries_list items: (legacy_ip, ngdc_ip, ngdc_group, desc, nh, sz)
     mapping_configs = [
-        # CRM: DC_LEGACY_A -> GAMMA_NGDC
-        ("CRM", "DC_LEGACY_A", "GAMMA_NGDC", "NH02", "CDE", "10.25", [
-            ("10.25.1.10", "svr-10.50.1.10", "grp-CRM-NH02-CDE-WEB", "CRM Web 1"),
-            ("10.25.1.11", "svr-10.50.1.11", "grp-CRM-NH02-CDE-WEB", "CRM Web 2"),
-            ("10.25.2.10", "svr-10.50.1.20", "grp-CRM-NH02-CDE-APP", "CRM App 1"),
-            ("10.25.2.11", "svr-10.50.1.21", "grp-CRM-NH02-CDE-APP", "CRM App 2"),
-            ("10.25.2.12", "svr-10.50.1.22", "grp-CRM-NH02-CDE-APP", "CRM App 3"),
-            ("10.25.3.10", "svr-10.50.1.30", "grp-CRM-NH02-CDE-DB", "CRM DB Primary"),
-            ("10.25.3.11", "svr-10.50.1.31", "grp-CRM-NH02-CDE-DB", "CRM DB Standby"),
-            ("10.25.5.10", "svr-10.50.1.40", "grp-CRM-NH02-CDE-BAT", "CRM Batch 1"),
+        # ================================================================
+        # CRM: DC_LEGACY_A, src_zone=STD, dst_zone=GEN
+        # Source side: NH02/STD (CRM WEB/APP/BAT), Destination side: NH02/GEN
+        # ================================================================
+        ("CRM", "DC_LEGACY_A", "GAMMA_NGDC", [
+            # Source IPs (STD zone)
+            ("10.25.1.10", "svr-10.50.1.10", "grp-CRM-NH02-STD-WEB", "CRM Web 1", "NH02", "STD"),
+            ("10.25.1.11", "svr-10.50.1.11", "grp-CRM-NH02-STD-WEB", "CRM Web 2", "NH02", "STD"),
+            ("10.25.2.10", "svr-10.50.1.20", "grp-CRM-NH02-STD-APP", "CRM App 1", "NH02", "STD"),
+            ("10.25.2.11", "svr-10.50.1.21", "grp-CRM-NH02-STD-APP", "CRM App 2", "NH02", "STD"),
+            ("10.25.2.12", "svr-10.50.1.22", "grp-CRM-NH02-STD-APP", "CRM App 3", "NH02", "STD"),
+            ("10.25.5.10", "svr-10.50.1.40", "grp-CRM-NH02-STD-BAT", "CRM Batch 1", "NH02", "STD"),
+            # Destination IPs (GEN zone)
+            ("10.25.3.10", "svr-10.50.1.30", "grp-CRM-NH02-GEN-DB", "CRM DB Primary", "NH02", "GEN"),
+            ("10.25.3.11", "svr-10.50.1.31", "grp-CRM-NH02-GEN-DB", "CRM DB Standby", "NH02", "GEN"),
+            ("10.25.4.10", "svr-10.50.1.42", "grp-CRM-NH02-GEN-MQ", "CRM MQ 1", "NH02", "GEN"),
+            ("10.25.4.11", "svr-10.50.1.43", "grp-CRM-NH02-GEN-MQ", "CRM MQ 2", "NH02", "GEN"),
         ]),
-        # HRM: DC_LEGACY_B -> ALPHA_NGDC
-        ("HRM", "DC_LEGACY_B", "ALPHA_NGDC", "NH01", "GEN", "10.26", [
-            ("10.26.1.10", "svr-10.0.2.130", "grp-HRM-NH01-GEN-WEB", "HRM Web 1"),
-            ("10.26.1.11", "svr-10.0.2.131", "grp-HRM-NH01-GEN-WEB", "HRM Web 2"),
-            ("10.26.2.10", "svr-10.0.2.140", "grp-HRM-NH01-GEN-APP", "HRM App 1"),
-            ("10.26.2.11", "svr-10.0.2.141", "grp-HRM-NH01-GEN-APP", "HRM App 2"),
-            ("10.26.3.10", "svr-10.0.2.150", "grp-HRM-NH01-GEN-DB", "HRM DB Primary"),
-            ("10.26.3.11", "svr-10.0.2.151", "grp-HRM-NH01-GEN-DB", "HRM DB Replica"),
-            ("10.26.5.10", "svr-10.0.2.160", "grp-HRM-NH01-GEN-BAT", "HRM Batch 1"),
+        # ================================================================
+        # HRM: DC_LEGACY_B, src_zone=GEN, dst_zone=STD
+        # Source side: NH01/GEN, Destination side: NH01/STD
+        # ================================================================
+        ("HRM", "DC_LEGACY_B", "ALPHA_NGDC", [
+            # Source IPs (GEN zone)
+            ("10.26.1.10", "svr-10.0.2.130", "grp-HRM-NH01-GEN-WEB", "HRM Web 1", "NH01", "GEN"),
+            ("10.26.1.11", "svr-10.0.2.131", "grp-HRM-NH01-GEN-WEB", "HRM Web 2", "NH01", "GEN"),
+            ("10.26.2.10", "svr-10.0.2.140", "grp-HRM-NH01-GEN-APP", "HRM App 1", "NH01", "GEN"),
+            ("10.26.2.11", "svr-10.0.2.141", "grp-HRM-NH01-GEN-APP", "HRM App 2", "NH01", "GEN"),
+            ("10.26.2.12", "svr-10.0.2.142", "grp-HRM-NH01-GEN-APP", "HRM App 3", "NH01", "GEN"),
+            ("10.26.5.10", "svr-10.0.2.160", "grp-HRM-NH01-GEN-BAT", "HRM Batch 1", "NH01", "GEN"),
+            # Destination IPs (STD zone)
+            ("10.26.3.10", "svr-10.0.2.150", "grp-HRM-NH01-STD-DB", "HRM DB Primary", "NH01", "STD"),
+            ("10.26.3.11", "svr-10.0.2.151", "grp-HRM-NH01-STD-DB", "HRM DB Replica", "NH01", "STD"),
+            ("10.26.4.10", "svr-10.0.2.162", "grp-HRM-NH01-STD-MQ", "HRM MQ 1", "NH01", "STD"),
+            ("10.26.4.11", "svr-10.0.2.163", "grp-HRM-NH01-STD-MQ", "HRM MQ 2", "NH01", "STD"),
         ]),
-        # TRD: DC_LEGACY_C -> BETA_NGDC
-        ("TRD", "DC_LEGACY_C", "BETA_NGDC", "NH06", "CDE", "10.27", [
-            ("10.27.1.10", "svr-172.16.20.10", "grp-TRD-NH06-CDE-WEB", "TRD Web 1"),
-            ("10.27.1.11", "svr-172.16.20.11", "grp-TRD-NH06-CDE-WEB", "TRD Web 2"),
-            ("10.27.2.10", "svr-172.16.20.20", "grp-TRD-NH06-CDE-APP", "TRD App 1"),
-            ("10.27.2.11", "svr-172.16.20.21", "grp-TRD-NH06-CDE-APP", "TRD App 2"),
-            ("10.27.3.10", "svr-172.16.20.30", "grp-TRD-NH06-CDE-DB", "TRD DB Primary"),
-            ("10.27.3.11", "svr-172.16.20.31", "grp-TRD-NH06-CDE-DB", "TRD DB Standby"),
-            ("10.27.4.10", "svr-172.16.20.40", "grp-TRD-NH06-CDE-MQ", "TRD MQ 1"),
+        # ================================================================
+        # TRD: DC_LEGACY_C, src_zone=CDE, dst_zone=CPA
+        # Source side: NH06/CDE, Destination side: NH07/CPA
+        # ================================================================
+        ("TRD", "DC_LEGACY_C", "BETA_NGDC", [
+            # Source IPs (CDE zone, NH06)
+            ("10.27.1.10", "svr-172.16.20.10", "grp-TRD-NH06-CDE-WEB", "TRD Web 1", "NH06", "CDE"),
+            ("10.27.1.11", "svr-172.16.20.11", "grp-TRD-NH06-CDE-WEB", "TRD Web 2", "NH06", "CDE"),
+            ("10.27.2.10", "svr-172.16.20.20", "grp-TRD-NH06-CDE-APP", "TRD App 1", "NH06", "CDE"),
+            ("10.27.2.11", "svr-172.16.20.21", "grp-TRD-NH06-CDE-APP", "TRD App 2", "NH06", "CDE"),
+            ("10.27.2.12", "svr-172.16.20.22", "grp-TRD-NH06-CDE-APP", "TRD App 3", "NH06", "CDE"),
+            ("10.27.5.10", "svr-172.16.20.50", "grp-TRD-NH06-CDE-BAT", "TRD Batch 1", "NH06", "CDE"),
+            # Destination IPs (CPA zone, NH07)
+            ("10.27.3.10", "svr-10.6.1.30", "grp-TRD-NH07-CPA-DB", "TRD DB Primary", "NH07", "CPA"),
+            ("10.27.3.11", "svr-10.6.1.31", "grp-TRD-NH07-CPA-DB", "TRD DB Standby", "NH07", "CPA"),
+            ("10.27.4.10", "svr-10.6.1.40", "grp-TRD-NH07-CPA-MQ", "TRD MQ Broker 1", "NH07", "CPA"),
+            ("10.27.4.11", "svr-10.6.1.41", "grp-TRD-NH07-CPA-MQ", "TRD MQ Broker 2", "NH07", "CPA"),
         ]),
-        # PAY: DC_LEGACY_A -> GAMMA_NGDC
-        ("PAY", "DC_LEGACY_A", "GAMMA_NGDC", "NH07", "CPA", "10.25", [
-            ("10.25.10.10", "svr-10.50.6.130", "grp-PAY-NH07-CPA-APP", "PAY App 1"),
-            ("10.25.10.11", "svr-10.50.6.131", "grp-PAY-NH07-CPA-APP", "PAY App 2"),
-            ("10.25.11.10", "svr-10.50.6.150", "grp-PAY-NH07-CPA-DB", "PAY DB Primary"),
-            ("10.25.12.10", "svr-10.50.6.160", "grp-PAY-NH07-CPA-MQ", "PAY MQ 1"),
+        # ================================================================
+        # PAY: DC_LEGACY_A, src_zone=CCS, dst_zone=CDE
+        # Source side: NH08/CCS, Destination side: NH07/CDE
+        # ================================================================
+        ("PAY", "DC_LEGACY_A", "GAMMA_NGDC", [
+            # Source IPs (CCS zone, NH08)
+            ("10.25.1.10", "svr-10.50.8.10", "grp-PAY-NH08-CCS-WEB", "PAY Web 1", "NH08", "CCS"),
+            ("10.25.1.11", "svr-10.50.8.11", "grp-PAY-NH08-CCS-WEB", "PAY Web 2", "NH08", "CCS"),
+            ("10.25.2.10", "svr-10.50.8.20", "grp-PAY-NH08-CCS-APP", "PAY App 1", "NH08", "CCS"),
+            ("10.25.2.11", "svr-10.50.8.21", "grp-PAY-NH08-CCS-APP", "PAY App 2", "NH08", "CCS"),
+            ("10.25.2.12", "svr-10.50.8.22", "grp-PAY-NH08-CCS-APP", "PAY App 3", "NH08", "CCS"),
+            # Destination IPs (CDE zone, NH07)
+            ("10.25.3.10", "svr-10.50.7.30", "grp-PAY-NH07-CDE-DB", "PAY DB Primary", "NH07", "CDE"),
+            ("10.25.3.11", "svr-10.50.7.31", "grp-PAY-NH07-CDE-DB", "PAY DB Standby", "NH07", "CDE"),
+            ("10.25.4.10", "svr-10.50.7.40", "grp-PAY-NH07-CDE-MQ", "PAY MQ 1", "NH07", "CDE"),
+            ("10.25.4.11", "svr-10.50.7.41", "grp-PAY-NH07-CDE-MQ", "PAY MQ 2", "NH07", "CDE"),
+            ("10.25.5.10", "svr-10.50.8.50", "grp-PAY-NH08-CCS-BAT", "PAY Batch 1", "NH08", "CCS"),
         ]),
-        # INS: DC_LEGACY_D -> ALPHA_NGDC
-        ("INS", "DC_LEGACY_D", "ALPHA_NGDC", "NH04", "GEN", "10.28", [
-            ("10.28.1.10", "svr-10.3.1.130", "grp-INS-NH04-GEN-WEB", "INS Web 1"),
-            ("10.28.1.11", "svr-10.3.1.131", "grp-INS-NH04-GEN-WEB", "INS Web 2"),
-            ("10.28.2.10", "svr-10.3.1.140", "grp-INS-NH04-GEN-APP", "INS App 1"),
-            ("10.28.3.10", "svr-10.3.1.150", "grp-INS-NH04-GEN-DB", "INS DB Primary"),
-            ("10.28.5.10", "svr-10.3.1.160", "grp-INS-NH04-GEN-BAT", "INS Batch 1"),
+        # ================================================================
+        # INS: DC_LEGACY_D, src_zone=STD, dst_zone=PAA
+        # Source side: NH04/STD, Destination side: NH14/PAA
+        # ================================================================
+        ("INS", "DC_LEGACY_D", "ALPHA_NGDC", [
+            # Source IPs (STD zone, NH04)
+            ("10.28.1.10", "svr-10.3.1.130", "grp-INS-NH04-STD-WEB", "INS Web 1", "NH04", "STD"),
+            ("10.28.1.11", "svr-10.3.1.131", "grp-INS-NH04-STD-WEB", "INS Web 2", "NH04", "STD"),
+            ("10.28.2.10", "svr-10.3.1.140", "grp-INS-NH04-STD-APP", "INS App 1", "NH04", "STD"),
+            ("10.28.2.11", "svr-10.3.1.141", "grp-INS-NH04-STD-APP", "INS App 2", "NH04", "STD"),
+            ("10.28.2.12", "svr-10.3.1.142", "grp-INS-NH04-STD-APP", "INS App 3", "NH04", "STD"),
+            ("10.28.5.10", "svr-10.3.1.160", "grp-INS-NH04-STD-BAT", "INS Batch 1", "NH04", "STD"),
+            # Destination IPs (PAA zone, NH14)
+            ("10.28.3.10", "svr-10.70.4.30", "grp-INS-NH14-PAA-DB", "INS DB Primary", "NH14", "PAA"),
+            ("10.28.3.11", "svr-10.70.4.31", "grp-INS-NH14-PAA-DB", "INS DB Standby", "NH14", "PAA"),
+            ("10.28.4.10", "svr-10.70.4.40", "grp-INS-NH14-PAA-MQ", "INS MQ 1", "NH14", "PAA"),
+            ("10.28.4.11", "svr-10.70.4.41", "grp-INS-NH14-PAA-MQ", "INS MQ 2", "NH14", "PAA"),
         ]),
-        # KYC: DC_LEGACY_F -> ALPHA_NGDC
-        ("KYC", "DC_LEGACY_F", "ALPHA_NGDC", "NH05", "GEN", "10.30", [
-            ("10.30.1.10", "svr-10.4.1.130", "grp-KYC-NH05-GEN-WEB", "KYC Web 1"),
-            ("10.30.2.10", "svr-10.4.1.140", "grp-KYC-NH05-GEN-APP", "KYC App 1"),
-            ("10.30.2.11", "svr-10.4.1.141", "grp-KYC-NH05-GEN-APP", "KYC App 2"),
-            ("10.30.3.10", "svr-10.4.2.10", "grp-KYC-NH05-GEN-DB", "KYC DB Primary"),
+        # ================================================================
+        # KYC: DC_LEGACY_F, src_zone=CCS, dst_zone=CDE
+        # Source side: NH05/CCS, Destination side: NH05/CDE
+        # ================================================================
+        ("KYC", "DC_LEGACY_F", "ALPHA_NGDC", [
+            # Source IPs (CCS zone, NH05)
+            ("10.30.1.10", "svr-10.4.1.130", "grp-KYC-NH05-CCS-WEB", "KYC Web 1", "NH05", "CCS"),
+            ("10.30.1.11", "svr-10.4.1.131", "grp-KYC-NH05-CCS-WEB", "KYC Web 2", "NH05", "CCS"),
+            ("10.30.2.10", "svr-10.4.1.140", "grp-KYC-NH05-CCS-APP", "KYC App 1", "NH05", "CCS"),
+            ("10.30.2.11", "svr-10.4.1.141", "grp-KYC-NH05-CCS-APP", "KYC App 2", "NH05", "CCS"),
+            ("10.30.2.12", "svr-10.4.1.142", "grp-KYC-NH05-CCS-APP", "KYC App 3", "NH05", "CCS"),
+            # Destination IPs (CDE zone, NH05)
+            ("10.30.3.10", "svr-10.4.2.10", "grp-KYC-NH05-CDE-DB", "KYC DB Primary", "NH05", "CDE"),
+            ("10.30.3.11", "svr-10.4.2.11", "grp-KYC-NH05-CDE-DB", "KYC DB Standby", "NH05", "CDE"),
+            ("10.30.4.10", "svr-10.4.2.20", "grp-KYC-NH05-CDE-MQ", "KYC MQ 1", "NH05", "CDE"),
+            ("10.30.4.11", "svr-10.4.2.21", "grp-KYC-NH05-CDE-MQ", "KYC MQ 2", "NH05", "CDE"),
+            ("10.30.5.10", "svr-10.4.1.160", "grp-KYC-NH05-CCS-BAT", "KYC Batch 1", "NH05", "CCS"),
         ]),
-        # FRD: DC_LEGACY_E -> ALPHA_NGDC
-        ("FRD", "DC_LEGACY_E", "ALPHA_NGDC", "NH02", "CDE", "10.29", [
-            ("10.29.2.10", "svr-10.1.1.50", "grp-FRD-NH02-CDE-APP", "FRD Engine 1"),
-            ("10.29.2.11", "svr-10.1.1.51", "grp-FRD-NH02-CDE-APP", "FRD Engine 2"),
-            ("10.29.3.10", "svr-10.1.2.20", "grp-FRD-NH02-CDE-DB", "FRD DB Primary"),
-            ("10.29.4.10", "svr-10.1.1.55", "grp-FRD-NH02-CDE-MQ", "FRD Kafka 1"),
+        # ================================================================
+        # FRD: DC_LEGACY_E, src_zone=CDE, dst_zone=Swift
+        # Source side: NH02/CDE, Destination side: NH02/Swift
+        # ================================================================
+        ("FRD", "DC_LEGACY_E", "ALPHA_NGDC", [
+            # Source IPs (CDE zone, NH02)
+            ("10.29.1.10", "svr-10.1.1.110", "grp-FRD-NH02-CDE-WEB", "FRD Web 1", "NH02", "CDE"),
+            ("10.29.1.11", "svr-10.1.1.111", "grp-FRD-NH02-CDE-WEB", "FRD Web 2", "NH02", "CDE"),
+            ("10.29.2.10", "svr-10.1.1.50", "grp-FRD-NH02-CDE-APP", "FRD Engine 1", "NH02", "CDE"),
+            ("10.29.2.11", "svr-10.1.1.51", "grp-FRD-NH02-CDE-APP", "FRD Engine 2", "NH02", "CDE"),
+            ("10.29.2.12", "svr-10.1.1.52", "grp-FRD-NH02-CDE-APP", "FRD Engine 3", "NH02", "CDE"),
+            ("10.29.5.10", "svr-10.1.1.60", "grp-FRD-NH02-CDE-BAT", "FRD Batch 1", "NH02", "CDE"),
+            # Destination IPs (Swift zone, NH02)
+            ("10.29.3.10", "svr-10.1.2.20", "grp-FRD-NH02-Swift-DB", "FRD DB Primary", "NH02", "Swift"),
+            ("10.29.3.11", "svr-10.1.2.21", "grp-FRD-NH02-Swift-DB", "FRD DB Standby", "NH02", "Swift"),
+            ("10.29.4.10", "svr-10.1.1.55", "grp-FRD-NH02-Swift-MQ", "FRD Kafka 1", "NH02", "Swift"),
+            ("10.29.4.11", "svr-10.1.1.56", "grp-FRD-NH02-Swift-MQ", "FRD Kafka 2", "NH02", "Swift"),
         ]),
-        # LND: DC_LEGACY_D -> ALPHA_NGDC
-        ("LND", "DC_LEGACY_D", "ALPHA_NGDC", "NH09", "CCS", "10.28", [
-            ("10.28.10.10", "svr-10.8.1.10", "grp-LND-NH09-CCS-WEB", "LND Web 1"),
-            ("10.28.11.10", "svr-10.8.1.20", "grp-LND-NH09-CCS-APP", "LND App 1"),
-            ("10.28.12.10", "svr-10.8.1.30", "grp-LND-NH09-CCS-DB", "LND DB Primary"),
-            ("10.28.13.10", "svr-10.8.1.40", "grp-LND-NH09-CCS-BAT", "LND Batch 1"),
+        # ================================================================
+        # LND: DC_LEGACY_D, src_zone=GEN, dst_zone=CPA
+        # Source side: NH09/GEN, Destination side: NH09/CPA
+        # ================================================================
+        ("LND", "DC_LEGACY_D", "ALPHA_NGDC", [
+            # Source IPs (GEN zone, NH09)
+            ("10.28.1.10", "svr-10.8.1.130", "grp-LND-NH09-GEN-WEB", "LND Web 1", "NH09", "GEN"),
+            ("10.28.1.11", "svr-10.8.1.131", "grp-LND-NH09-GEN-WEB", "LND Web 2", "NH09", "GEN"),
+            ("10.28.2.10", "svr-10.8.1.140", "grp-LND-NH09-GEN-APP", "LND App 1", "NH09", "GEN"),
+            ("10.28.2.11", "svr-10.8.1.141", "grp-LND-NH09-GEN-APP", "LND App 2", "NH09", "GEN"),
+            ("10.28.2.12", "svr-10.8.1.142", "grp-LND-NH09-GEN-APP", "LND App 3", "NH09", "GEN"),
+            ("10.28.5.10", "svr-10.8.1.160", "grp-LND-NH09-GEN-BAT", "LND Batch 1", "NH09", "GEN"),
+            # Destination IPs (CPA zone, NH09)
+            ("10.28.3.10", "svr-10.8.2.30", "grp-LND-NH09-CPA-DB", "LND DB Primary", "NH09", "CPA"),
+            ("10.28.3.11", "svr-10.8.2.31", "grp-LND-NH09-CPA-DB", "LND DB Standby", "NH09", "CPA"),
+            ("10.28.4.10", "svr-10.8.2.40", "grp-LND-NH09-CPA-MQ", "LND MQ 1", "NH09", "CPA"),
+            ("10.28.4.11", "svr-10.8.2.41", "grp-LND-NH09-CPA-MQ", "LND MQ 2", "NH09", "CPA"),
         ]),
-        # WLT: DC_LEGACY_B -> ALPHA_NGDC
-        ("WLT", "DC_LEGACY_B", "ALPHA_NGDC", "NH10", "CDE", "10.26", [
-            ("10.26.10.10", "svr-10.9.1.10", "grp-WLT-NH10-CDE-WEB", "WLT Web 1"),
-            ("10.26.11.10", "svr-10.9.1.20", "grp-WLT-NH10-CDE-APP", "WLT App 1"),
-            ("10.26.11.11", "svr-10.9.1.21", "grp-WLT-NH10-CDE-APP", "WLT App 2"),
-            ("10.26.12.10", "svr-10.9.1.30", "grp-WLT-NH10-CDE-DB", "WLT DB Primary"),
+        # ================================================================
+        # WLT: DC_LEGACY_B, src_zone=PAA, dst_zone=3PY
+        # Source side: NH14/PAA, Destination side: NH10/3PY
+        # ================================================================
+        ("WLT", "DC_LEGACY_B", "ALPHA_NGDC", [
+            # Source IPs (PAA zone, NH14)
+            ("10.26.1.10", "svr-10.70.1.100", "grp-WLT-NH14-PAA-WEB", "WLT Web 1", "NH14", "PAA"),
+            ("10.26.1.11", "svr-10.70.1.101", "grp-WLT-NH14-PAA-WEB", "WLT Web 2", "NH14", "PAA"),
+            ("10.26.2.10", "svr-10.9.1.20", "grp-WLT-NH10-PAA-APP", "WLT App 1", "NH10", "PAA"),
+            ("10.26.2.11", "svr-10.9.1.21", "grp-WLT-NH10-PAA-APP", "WLT App 2", "NH10", "PAA"),
+            ("10.26.2.12", "svr-10.9.1.22", "grp-WLT-NH10-PAA-APP", "WLT App 3", "NH10", "PAA"),
+            # Destination IPs (3PY zone, NH10)
+            ("10.26.3.10", "svr-10.9.1.30", "grp-WLT-NH10-3PY-DB", "WLT DB Primary", "NH10", "3PY"),
+            ("10.26.3.11", "svr-10.9.1.31", "grp-WLT-NH10-3PY-DB", "WLT DB Standby", "NH10", "3PY"),
+            ("10.26.4.10", "svr-10.9.1.40", "grp-WLT-NH10-3PY-MQ", "WLT MQ 1", "NH10", "3PY"),
+            ("10.26.4.11", "svr-10.9.1.41", "grp-WLT-NH10-3PY-MQ", "WLT MQ 2", "NH10", "3PY"),
+            ("10.26.5.10", "svr-10.9.1.50", "grp-WLT-NH10-PAA-BAT", "WLT Batch 1", "NH10", "PAA"),
         ]),
-        # CBK: DC_LEGACY_A -> ALPHA_NGDC (note: different target than CRM)
-        ("CBK", "DC_LEGACY_A", "ALPHA_NGDC", "NH08", "CCS", "10.25", [
-            ("10.25.20.10", "svr-10.7.1.10", "grp-CBK-NH08-CCS-APP", "CBK App 1"),
-            ("10.25.20.11", "svr-10.7.1.11", "grp-CBK-NH08-CCS-APP", "CBK App 2"),
-            ("10.25.21.10", "svr-10.7.1.20", "grp-CBK-NH08-CCS-DB", "CBK DB Primary"),
-            ("10.25.21.11", "svr-10.7.1.21", "grp-CBK-NH08-CCS-DB", "CBK DB Standby"),
-            ("10.25.22.10", "svr-10.7.1.30", "grp-CBK-NH08-CCS-MQ", "CBK MQ 1"),
+        # ================================================================
+        # CBK: DC_LEGACY_A, src_zone=CPA, dst_zone=CDE
+        # Source side: NH08/CPA, Destination side: NH08/CDE
+        # ================================================================
+        ("CBK", "DC_LEGACY_A", "ALPHA_NGDC", [
+            # Source IPs (CPA zone, NH08)
+            ("10.25.1.10", "svr-10.7.1.10", "grp-CBK-NH08-CPA-WEB", "CBK Web 1", "NH08", "CPA"),
+            ("10.25.1.11", "svr-10.7.1.11", "grp-CBK-NH08-CPA-WEB", "CBK Web 2", "NH08", "CPA"),
+            ("10.25.2.10", "svr-10.7.1.20", "grp-CBK-NH08-CPA-APP", "CBK App 1", "NH08", "CPA"),
+            ("10.25.2.11", "svr-10.7.1.21", "grp-CBK-NH08-CPA-APP", "CBK App 2", "NH08", "CPA"),
+            ("10.25.2.12", "svr-10.7.1.22", "grp-CBK-NH08-CPA-APP", "CBK App 3", "NH08", "CPA"),
+            ("10.25.5.10", "svr-10.7.1.50", "grp-CBK-NH08-CPA-BAT", "CBK Batch 1", "NH08", "CPA"),
+            # Destination IPs (CDE zone, NH08)
+            ("10.25.3.10", "svr-10.7.2.30", "grp-CBK-NH08-CDE-DB", "CBK DB Primary", "NH08", "CDE"),
+            ("10.25.3.11", "svr-10.7.2.31", "grp-CBK-NH08-CDE-DB", "CBK DB Standby", "NH08", "CDE"),
+            ("10.25.4.10", "svr-10.7.2.40", "grp-CBK-NH08-CDE-MQ", "CBK MQ 1", "NH08", "CDE"),
+            ("10.25.4.11", "svr-10.7.2.41", "grp-CBK-NH08-CDE-MQ", "CBK MQ 2", "NH08", "CDE"),
         ]),
-        # EPT: DC_LEGACY_B -> ALPHA_NGDC (PAA zone)
-        ("EPT", "DC_LEGACY_B", "ALPHA_NGDC", "NH01", "PAA", "10.26", [
-            ("10.26.30.10", "svr-10.0.3.10", "grp-EPT-NH01-PAA-WEB", "EPT Web 1"),
-            ("10.26.30.11", "svr-10.0.3.11", "grp-EPT-NH01-PAA-WEB", "EPT Web 2"),
-            ("10.26.31.10", "svr-10.0.3.20", "grp-EPT-NH01-PAA-APP", "EPT App 1"),
-            ("10.26.31.11", "svr-10.0.3.21", "grp-EPT-NH01-PAA-APP", "EPT App 2"),
-            ("10.26.32.10", "svr-10.0.3.30", "grp-EPT-NH01-PAA-API", "EPT API 1"),
-        ]),
-        # MBK: DC_LEGACY_C -> ALPHA_NGDC
-        ("MBK", "DC_LEGACY_C", "ALPHA_NGDC", "NH07", "CPA", "10.27", [
-            ("10.27.30.10", "svr-10.6.1.170", "grp-MBK-NH07-CPA-WEB", "MBK Web 1"),
-            ("10.27.31.10", "svr-10.6.1.180", "grp-MBK-NH07-CPA-APP", "MBK App 1"),
-            ("10.27.31.11", "svr-10.6.1.181", "grp-MBK-NH07-CPA-APP", "MBK App 2"),
-            ("10.27.32.10", "svr-10.6.1.190", "grp-MBK-NH07-CPA-DB", "MBK DB Primary"),
-            ("10.27.33.10", "svr-10.6.1.200", "grp-MBK-NH07-CPA-API", "MBK API 1"),
+        # ================================================================
+        # Shared / Cross-app IPs (PSE zone, UC zone)
+        # Rule 4: APP→External API destinations (10.70.1.10/.11 in PSE)
+        # Rule 6: Monitoring source IPs (10.80.1.100/.101 in UC)
+        # ================================================================
+        ("SHARED", "SHARED", "ALPHA_NGDC", [
+            # PSE zone destinations (used by all apps Rule 4)
+            ("10.70.1.10", "svr-10.70.1.10", "grp-SHARED-NH14-PSE-API", "DMZ API 1", "NH14", "PSE"),
+            ("10.70.1.11", "svr-10.70.1.11", "grp-SHARED-NH14-PSE-API", "DMZ API 2", "NH14", "PSE"),
+            # UC zone monitoring sources (used by all apps Rule 6)
+            ("10.80.1.100", "svr-10.80.1.100", "grp-SHARED-NH01-UC-MON", "Monitor Agent 1", "NH01", "UC"),
+            ("10.80.1.101", "svr-10.80.1.101", "grp-SHARED-NH01-UC-MON", "Monitor Agent 2", "NH01", "UC"),
         ]),
     ]
 
-    for app_id, legacy_dc, ngdc_dc, nh, sz, _, entries in mapping_configs:
-        for legacy_ip, ngdc_ip, ngdc_group, desc in entries:
+    for app_id, legacy_dc, ngdc_dc, entries in mapping_configs:
+        for legacy_ip, ngdc_ip, ngdc_group, desc, nh, sz in entries:
             idx += 1
             mappings.append({
                 "id": f"ipm-{idx:04d}",

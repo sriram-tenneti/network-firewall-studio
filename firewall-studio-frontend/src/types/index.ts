@@ -324,7 +324,18 @@ export interface NGDCRecommendation {
   recommended_sz: string;
   recommended_sz_name: string;
   recommended_dc?: string;
-  nh_sz_source?: 'app_dc_mapping' | 'application_config' | 'default';
+  nh_sz_source?: 'app_dc_mapping' | 'application_config' | 'rule_zone_mapping' | 'default';
+  // Direction-specific NH/SZ from rule's actual source/dest zones
+  source_nh?: string;
+  source_sz?: string;
+  source_dc?: string;
+  source_nh_name?: string;
+  source_sz_name?: string;
+  destination_nh?: string;
+  destination_sz?: string;
+  destination_dc?: string;
+  destination_nh_name?: string;
+  destination_sz_name?: string;
   source_mappings: IPMapping[];
   destination_mappings: IPMapping[];
   component_groups?: ComponentGroup[];
