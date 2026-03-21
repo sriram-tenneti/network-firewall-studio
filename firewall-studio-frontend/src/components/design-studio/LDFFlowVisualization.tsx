@@ -165,9 +165,22 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
     </div>
   );
 
-  // Build source/dest labels
-  const srcLabel = data.source_objects?.length ? data.source_objects[0] : 'Source';
-  const dstLabel = data.destination_objects?.length ? data.destination_objects[0] : 'Destination';
+  // Build source/dest labels — show group or app name, NOT individual IPs
+  const srcLabel = (() => {
+    // Prefer app name from source_objects if it's NOT an IP/svr- reference
+    if (data.source_objects?.length) {
+      const first = data.source_objects[0];
+      if (!first.match(/^(svr-|\d+\.|any)/i)) return first;
+    }
+    return 'Source';
+  })();
+  const dstLabel = (() => {
+    if (data.destination_objects?.length) {
+      const first = data.destination_objects[0];
+      if (!first.match(/^(svr-|\d+\.|any)/i)) return first;
+    }
+    return 'Destination';
+  })();
 
   return (
     <div className={`border rounded-lg overflow-hidden ${data.boundaries === 0 ? 'border-green-200' : data.boundaries === 1 ? 'border-amber-200' : 'border-red-200'}`}>
@@ -194,11 +207,12 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
       {/* Flow Diagram — Confluence style with server racks, firewall bricks, and bi-directional arrows */}
       <div className="px-4 py-6 bg-white">
         <div className="flex items-center justify-center gap-0 overflow-x-auto">
-          {/* Source Application Node */}
-          <div className="flex-shrink-0 w-36 text-center">
+          {/* Source Application Node — show NH/SZ/DC path, not IPs */}
+          <div className="flex-shrink-0 w-40 text-center">
             <ServerIcon />
             <div className="text-sm font-bold text-gray-900">{srcLabel}</div>
-            <div className="text-xs font-bold text-gray-700">{data.source_nh} {data.source_zone} {data.source_dc ? data.source_dc.replace(/_/g, ' ') : ''}</div>
+            <div className="text-[11px] font-semibold text-blue-700">{data.source_zone}</div>
+            <div className="text-[10px] text-gray-600">{data.source_nh} / {data.source_dc ? data.source_dc.replace(/_/g, ' ') : 'DC'}</div>
           </div>
 
           <BiArrow />
@@ -214,17 +228,17 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
               {(egressDevices.length > 0 || data.requires_egress) && (
                 <div className="flex-shrink-0 text-center">
                   <FirewallIcon />
-                  {egressDevices.length > 0 ? egressDevices.map((dev, i) => {
-                    const enriched = enrichDevice(dev);
-                    return (
-                      <div key={i}>
-                        <div className="text-xs font-bold text-gray-900">{enriched.name || dev.device_name}</div>
-                        <div className="text-[10px] font-semibold text-gray-600">{dev.nh} {dev.sz}</div>
-                      </div>
-                    );
-                  }) : (
-                    <div className="text-[10px] font-semibold text-orange-700">Egress FW</div>
-                  )}
+                      {egressDevices.length > 0 ? egressDevices.map((dev, i) => {
+                        const enriched = enrichDevice(dev);
+                        return (
+                          <div key={i}>
+                            <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                            <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
+                          </div>
+                        );
+                      }) : (
+                        <div className="text-[10px] font-semibold text-orange-700">{data.source_nh} {data.source_zone} FW</div>
+                      )}
                 </div>
               )}
 
@@ -237,15 +251,15 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
               {boundaryDevices.length > 0 && egressDevices.length === 0 && ingressDevices.length === 0 && (
                 <div className="flex-shrink-0 text-center">
                   <FirewallIcon />
-                  {boundaryDevices.map((dev, i) => {
-                    const enriched = enrichDevice(dev);
-                    return (
-                      <div key={i}>
-                        <div className="text-xs font-bold text-gray-900">{enriched.name || dev.device_name}</div>
-                        <div className="text-[10px] font-semibold text-gray-600">{dev.nh} {dev.sz}</div>
-                      </div>
-                    );
-                  })}
+                      {boundaryDevices.map((dev, i) => {
+                        const enriched = enrichDevice(dev);
+                        return (
+                          <div key={i}>
+                            <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                            <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
+                          </div>
+                        );
+                      })}
                 </div>
               )}
 
@@ -253,17 +267,17 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
               {(ingressDevices.length > 0 || data.requires_ingress) && (
                 <div className="flex-shrink-0 text-center">
                   <FirewallIcon />
-                  {ingressDevices.length > 0 ? ingressDevices.map((dev, i) => {
-                    const enriched = enrichDevice(dev);
-                    return (
-                      <div key={i}>
-                        <div className="text-xs font-bold text-gray-900">{enriched.name || dev.device_name}</div>
-                        <div className="text-[10px] font-semibold text-gray-600">{dev.nh} {dev.sz}</div>
-                      </div>
-                    );
-                  }) : (
-                    <div className="text-[10px] font-semibold text-cyan-700">Ingress FW</div>
-                  )}
+                      {ingressDevices.length > 0 ? ingressDevices.map((dev, i) => {
+                        const enriched = enrichDevice(dev);
+                        return (
+                          <div key={i}>
+                            <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                            <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
+                          </div>
+                        );
+                      }) : (
+                        <div className="text-[10px] font-semibold text-cyan-700">{data.destination_nh} {data.destination_zone} FW</div>
+                      )}
                 </div>
               )}
             </>
@@ -271,11 +285,12 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
 
           <BiArrow />
 
-          {/* Destination Application Node */}
-          <div className="flex-shrink-0 w-36 text-center">
+          {/* Destination Application Node — show NH/SZ/DC path, not IPs */}
+          <div className="flex-shrink-0 w-40 text-center">
             <ServerIcon />
             <div className="text-sm font-bold text-gray-900">{dstLabel}</div>
-            <div className="text-xs font-bold text-gray-700">{data.destination_nh} {data.destination_zone} {data.destination_dc ? data.destination_dc.replace(/_/g, ' ') : ''}</div>
+            <div className="text-[11px] font-semibold text-purple-700">{data.destination_zone}</div>
+            <div className="text-[10px] text-gray-600">{data.destination_nh} / {data.destination_dc ? data.destination_dc.replace(/_/g, ' ') : 'DC'}</div>
           </div>
         </div>
       </div>

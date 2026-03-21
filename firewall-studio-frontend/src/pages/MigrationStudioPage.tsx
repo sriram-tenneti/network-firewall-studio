@@ -962,16 +962,33 @@ export function MigrationStudioPage() {
                                 </div>
                               </div>
                               <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-red-50 border border-red-200 rounded p-2">
-                                  <label className="text-[10px] font-semibold text-red-600 uppercase">Legacy Group</label>
-                                  <div className="text-xs font-mono text-red-700 mt-0.5">
-                                    {cg.legacy_group ? (
-                                      <span className="px-1.5 py-0.5 bg-red-100 rounded">{cg.legacy_group}</span>
-                                    ) : (
-                                      <span className="text-gray-400 italic">No group (individual IPs)</span>
-                                    )}
-                                  </div>
+                                {/* Legacy side: show group name if exists, otherwise show raw IPs directly */}
+                                <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                                  <label className="text-[10px] font-semibold text-amber-700 uppercase">Legacy</label>
+                                  {cg.legacy_group ? (
+                                    <div className="text-xs font-mono text-amber-800 mt-0.5">
+                                      <span className="px-1.5 py-0.5 bg-amber-100 rounded">{cg.legacy_group}</span>
+                                      <div className="mt-1.5">
+                                        <label className="text-[9px] text-amber-600">Members:</label>
+                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                          {cg.ips.map((ip, j) => (
+                                            <span key={j} className="px-1 py-0.5 text-[9px] font-mono bg-amber-100 text-amber-700 rounded">{ip}</span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="mt-0.5">
+                                      <div className="flex flex-wrap gap-1">
+                                        {cg.ips.map((ip, j) => (
+                                          <span key={j} className="px-1.5 py-0.5 text-[10px] font-mono bg-amber-100 text-amber-800 rounded">{ip}</span>
+                                        ))}
+                                      </div>
+                                      <div className="text-[9px] text-amber-500 italic mt-1">Individual IPs (no legacy group)</div>
+                                    </div>
+                                  )}
                                 </div>
+                                {/* NGDC side: always show recommended group with associated IPs */}
                                 <div className="bg-green-50 border border-green-200 rounded p-2">
                                   <label className="text-[10px] font-semibold text-green-600 uppercase">NGDC Group</label>
                                   <input type="text" value={cg.ngdc_group}
@@ -982,14 +999,14 @@ export function MigrationStudioPage() {
                                     }}
                                     disabled={!cg.customizable}
                                     className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-green-300 mt-0.5 disabled:bg-gray-100" />
-                                </div>
-                              </div>
-                              <div className="mt-2">
-                                <label className="text-[10px] text-gray-500">IPs in this group:</label>
-                                <div className="flex flex-wrap gap-1 mt-0.5">
-                                  {cg.ips.map((ip, j) => (
-                                    <span key={j} className="px-1.5 py-0.5 text-[10px] font-mono bg-gray-100 text-gray-600 rounded">{ip}</span>
-                                  ))}
+                                  <div className="mt-1.5">
+                                    <label className="text-[9px] text-green-600">IPs to be associated:</label>
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                      {cg.ips.map((ip, j) => (
+                                        <span key={j} className="px-1 py-0.5 text-[9px] font-mono bg-green-100 text-green-700 rounded">{ip}</span>
+                                      ))}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                               {cg.cidr && <div className="mt-1 text-[10px] text-gray-400">CIDR: {cg.cidr}</div>}
@@ -1019,16 +1036,33 @@ export function MigrationStudioPage() {
                                 </div>
                               </div>
                               <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-red-50 border border-red-200 rounded p-2">
-                                  <label className="text-[10px] font-semibold text-red-600 uppercase">Legacy Group</label>
-                                  <div className="text-xs font-mono text-red-700 mt-0.5">
-                                    {cg.legacy_group ? (
-                                      <span className="px-1.5 py-0.5 bg-red-100 rounded">{cg.legacy_group}</span>
-                                    ) : (
-                                      <span className="text-gray-400 italic">No group (individual IPs)</span>
-                                    )}
-                                  </div>
+                                {/* Legacy side: show group name if exists, otherwise show raw IPs directly */}
+                                <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                                  <label className="text-[10px] font-semibold text-amber-700 uppercase">Legacy</label>
+                                  {cg.legacy_group ? (
+                                    <div className="text-xs font-mono text-amber-800 mt-0.5">
+                                      <span className="px-1.5 py-0.5 bg-amber-100 rounded">{cg.legacy_group}</span>
+                                      <div className="mt-1.5">
+                                        <label className="text-[9px] text-amber-600">Members:</label>
+                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                          {cg.ips.map((ip, j) => (
+                                            <span key={j} className="px-1 py-0.5 text-[9px] font-mono bg-amber-100 text-amber-700 rounded">{ip}</span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="mt-0.5">
+                                      <div className="flex flex-wrap gap-1">
+                                        {cg.ips.map((ip, j) => (
+                                          <span key={j} className="px-1.5 py-0.5 text-[10px] font-mono bg-amber-100 text-amber-800 rounded">{ip}</span>
+                                        ))}
+                                      </div>
+                                      <div className="text-[9px] text-amber-500 italic mt-1">Individual IPs (no legacy group)</div>
+                                    </div>
+                                  )}
                                 </div>
+                                {/* NGDC side: always show recommended group with associated IPs */}
                                 <div className="bg-green-50 border border-green-200 rounded p-2">
                                   <label className="text-[10px] font-semibold text-green-600 uppercase">NGDC Group</label>
                                   <input type="text" value={cg.ngdc_group}
@@ -1039,14 +1073,14 @@ export function MigrationStudioPage() {
                                     }}
                                     disabled={!cg.customizable}
                                     className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-green-300 mt-0.5 disabled:bg-gray-100" />
-                                </div>
-                              </div>
-                              <div className="mt-2">
-                                <label className="text-[10px] text-gray-500">IPs in this group:</label>
-                                <div className="flex flex-wrap gap-1 mt-0.5">
-                                  {cg.ips.map((ip, j) => (
-                                    <span key={j} className="px-1.5 py-0.5 text-[10px] font-mono bg-gray-100 text-gray-600 rounded">{ip}</span>
-                                  ))}
+                                  <div className="mt-1.5">
+                                    <label className="text-[9px] text-green-600">IPs to be associated:</label>
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                      {cg.ips.map((ip, j) => (
+                                        <span key={j} className="px-1 py-0.5 text-[9px] font-mono bg-green-100 text-green-700 rounded">{ip}</span>
+                                      ))}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                               {cg.cidr && <div className="mt-1 text-[10px] text-gray-400">CIDR: {cg.cidr}</div>}
