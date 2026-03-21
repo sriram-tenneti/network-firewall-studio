@@ -565,264 +565,114 @@ SEED_NAMING_STANDARDS = [
 
 
 # ============================================================
-# Firewall Devices
+# Firewall Device Naming Patterns (Generic)
 # ============================================================
+# Instead of enumerating every individual firewall device, we define
+# naming patterns and categories.  The backend resolves the actual
+# device name at runtime using:  fw-{VENDOR}-{DC}-{NH}-{SZ}
+#
+# Device categories:
+#   perimeter  – DC-level north-south firewalls (HA pair per DC)
+#   dmz        – DMZ-specific firewall per DC
+#   paa        – PAA perimeter firewall per DC
+#   segmentation – Per-NH, per-SZ east-west firewall (only for SEGMENTED zones)
+#
+# Open zones (STD, GEN, UGen, USTD) do NOT have per-NH firewalls.
+# Segmented zones each get a dedicated per-NH firewall instance.
 
+SEED_FIREWALL_DEVICE_PATTERNS = [
+    # ---- Perimeter (one HA pair per DC) ----
+    {"pattern_id": "FWP-PERIM", "type": "perimeter",
+     "naming": "fw-{VENDOR}-{DC}-{SEQ}",
+     "example": "fw-PA-ALPHA-001 / fw-PA-ALPHA-002 (HA pair)",
+     "scope": "Per DC", "dc": "Any", "nh": "N/A", "sz": "N/A",
+     "description": "DC-level perimeter firewall – north-south traffic, HA pair",
+     "capabilities": ["L7 inspection", "URL filtering", "Threat prevention", "IPS", "VPN"]},
+
+    # ---- DMZ (one per DC) ----
+    {"pattern_id": "FWP-DMZ", "type": "dmz",
+     "naming": "fw-{VENDOR}-{DC}-DMZ",
+     "example": "fw-PA-ALPHA-DMZ, fw-CP-BETA-DMZ, fw-ASA-GAMMA-DMZ",
+     "scope": "Per DC", "dc": "Any", "nh": "N/A", "sz": "N/A",
+     "description": "DMZ firewall – external-facing traffic isolation",
+     "capabilities": ["L7 inspection", "SSL decryption", "WAF integration"]},
+
+    # ---- PAA Perimeter (one per DC) ----
+    {"pattern_id": "FWP-PAA", "type": "paa",
+     "naming": "fw-{VENDOR}-{DC}-PAA-{SEQ}",
+     "example": "fw-PA-PAA-001 (Alpha), fw-CP-BETA-PAA-001 (Beta)",
+     "scope": "Per DC", "dc": "Any", "nh": "N/A", "sz": "PAA",
+     "description": "PAA perimeter firewall – internet-accessible app zone enforcement",
+     "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
+
+    # ---- NH Segmentation (per NH, per segmented SZ, per DC) ----
+    {"pattern_id": "FWP-SEG", "type": "segmentation",
+     "naming": "fw-{VENDOR}-{DC}-{NH}-{SZ}",
+     "example": "fw-PA-NH01-CPA, fw-PA-NH02-CDE, fw-CP-BETA-NH06-CCS",
+     "scope": "Per NH per SZ per DC", "dc": "Any", "nh": "Any (with segmented SZ)", "sz": "Segmented only",
+     "description": "NH-level segmentation firewall – micro-segmentation, east-west enforcement. "
+                    "One instance per NH per segmented zone (CPA, CDE, CCS, PAA, 3PY, Swift, PSE, UC). "
+                    "Open zones (STD, GEN) do NOT get per-NH firewalls.",
+     "capabilities": ["Micro-segmentation", "East-West enforcement", "SZ-specific policy"]},
+
+    # ---- NP Segmentation (per NH, per NP segmented SZ) ----
+    {"pattern_id": "FWP-NP-SEG", "type": "np_segmentation",
+     "naming": "fw-{VENDOR}-{DC}-{NH}-{SZ}",
+     "example": "fw-PA-NH13-UCCS, fw-PA-NH13-UCDE",
+     "scope": "Per NH per NP-SZ per DC", "dc": "Any", "nh": "NP NHs (NH12-NH17)", "sz": "NP-Segmented only",
+     "description": "Non-Prod NH-level segmentation firewall for UCPA, UCDE, UCCS, UPAA, U3PY zones. "
+                    "Open NP zones (UGen, USTD) do NOT get per-NH firewalls.",
+     "capabilities": ["Micro-segmentation", "NP SZ enforcement"]},
+]
+
+# DC-level vendor assignments (used by backend to resolve actual device names)
+SEED_DC_VENDOR_MAP = {
+    "ALPHA_NGDC": {"perimeter": "palo_alto", "dmz": "palo_alto", "paa": "palo_alto", "segmentation": "palo_alto"},
+    "BETA_NGDC":  {"perimeter": "checkpoint", "dmz": "checkpoint", "paa": "checkpoint", "segmentation": "checkpoint"},
+    "GAMMA_NGDC": {"perimeter": "cisco_asa", "dmz": "cisco_asa", "paa": "cisco_asa", "segmentation": "palo_alto"},
+}
+
+# Keep SEED_FIREWALL_DEVICES for backward compatibility (existing CRUD endpoints).
+# This list now contains only representative examples; the backend auto-generates
+# the full device inventory from NH/SZ/DC data + patterns above.
 SEED_FIREWALL_DEVICES = [
-    # ================================================================
-    # ALPHA_NGDC (US-East) — Primary DC
-    # Vendor: Palo Alto (perimeter, segmentation, PAA, DMZ)
-    # ================================================================
-
-    # --- Perimeter / DC-level devices ---
+    # Representative perimeter devices
     {"device_id": "fw-PA-ALPHA-001", "name": "Palo Alto Alpha Primary", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "type": "perimeter", "status": "Active",
      "mgmt_ip": "10.0.254.1", "ha_pair": "fw-PA-ALPHA-002",
      "capabilities": ["L7 inspection", "URL filtering", "Threat prevention"]},
-    {"device_id": "fw-PA-ALPHA-002", "name": "Palo Alto Alpha Secondary", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "10.0.254.2", "ha_pair": "fw-PA-ALPHA-001",
-     "capabilities": ["L7 inspection", "URL filtering", "Threat prevention"]},
+    {"device_id": "fw-CP-BETA-001", "name": "Check Point Beta Primary", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "172.16.254.1", "ha_pair": "fw-CP-BETA-002",
+     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
+    {"device_id": "fw-ASA-GAMMA-001", "name": "Cisco ASA Gamma Primary", "vendor": "cisco_asa",
+     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "10.50.254.1", "ha_pair": "fw-ASA-GAMMA-002",
+     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
+
+    # Representative DMZ devices
     {"device_id": "fw-PA-ALPHA-DMZ", "name": "Palo Alto Alpha DMZ", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "type": "dmz", "status": "Active",
-     "mgmt_ip": "10.70.254.1",
+     "dc": "ALPHA_NGDC", "type": "dmz", "status": "Active", "mgmt_ip": "10.70.254.1",
      "capabilities": ["L7 inspection", "SSL decryption", "WAF integration"]},
 
-    # --- ALPHA NH-specific segmentation firewalls ---
-    # Each NH that hosts a segmented zone (CPA, CDE, CCS) gets its own firewall.
-    # GEN/STD zones do NOT have per-NH firewalls.
+    # Representative PAA devices
+    {"device_id": "fw-PA-PAA-001", "name": "PAA Perimeter FW (Alpha)", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "type": "paa", "status": "Active", "mgmt_ip": "10.0.252.1",
+     "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
 
-    # NH01 — CPA, CDE, CCS (Platform Services)
+    # Representative segmentation devices (auto-generated from NH/SZ/DC at runtime)
     {"device_id": "fw-PA-NH01-CPA", "name": "NH01 CPA Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
      "mgmt_ip": "10.0.253.11",
-     "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH01-CDE", "name": "NH01 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.0.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH01-CCS", "name": "NH01 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.0.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH02 — CPA, CDE, CCS (Team Eta / Data Processing)
-    {"device_id": "fw-PA-NH02-CPA", "name": "NH02 CPA Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.1.253.11",
      "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
     {"device_id": "fw-PA-NH02-CDE", "name": "NH02 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
      "mgmt_ip": "10.1.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH02-CCS", "name": "NH02 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.1.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH03 — CDE, CCS (Team Delta / Web & API)
-    {"device_id": "fw-PA-NH03-CDE", "name": "NH03 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.2.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH03-CCS", "name": "NH03 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.2.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH04 — CCS (Team Kappa / Insurance)
-    {"device_id": "fw-CP-NH04-CCS", "name": "NH04 CCS Segmentation FW", "vendor": "checkpoint",
-     "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.3.253.13",
-     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
-
-    # NH05 — CCS (Team Lambda / Compliance)
-    {"device_id": "fw-CP-NH05-CCS", "name": "NH05 CCS Segmentation FW", "vendor": "checkpoint",
-     "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.4.253.13",
-     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
-
-    # NH06 — CPA, CDE, CCS (Team Xi / Trading)
-    {"device_id": "fw-PA-NH06-CPA", "name": "NH06 CPA Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.5.253.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH06-CDE", "name": "NH06 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.5.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH06-CCS", "name": "NH06 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.5.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH07 — CPA, CDE (Team Epsilon / Payments)
-    {"device_id": "fw-PA-NH07-CPA", "name": "NH07 CPA Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.6.253.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH07-CDE", "name": "NH07 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.6.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH08 — CCS, CDE (Team Theta / Core Banking)
-    {"device_id": "fw-PA-NH08-CCS", "name": "NH08 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.7.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-    {"device_id": "fw-PA-NH08-CDE", "name": "NH08 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.7.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH09 — CCS (Team Iota / Lending)
-    {"device_id": "fw-PA-NH09-CCS", "name": "NH09 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.8.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH10 — CDE (Team Mu / Wealth)
-    {"device_id": "fw-PA-NH10-CDE", "name": "NH10 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.9.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # --- ALPHA PAA devices ---
-    {"device_id": "fw-PA-PAA-001", "name": "PAA Perimeter FW (Alpha)", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "type": "paa", "status": "Active",
-     "mgmt_ip": "10.0.252.1",
-     "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
-
-    # ================================================================
-    # BETA_NGDC (US-West) — Secondary DC
-    # Vendor: Check Point (perimeter), Palo Alto (segmentation)
-    # NHs present in BETA: NH01, NH02, NH03, NH04, NH06
-    # ================================================================
-
-    # --- Perimeter ---
-    {"device_id": "fw-CP-BETA-001", "name": "Check Point Beta Primary", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "172.16.254.1", "ha_pair": "fw-CP-BETA-002",
-     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
-    {"device_id": "fw-CP-BETA-002", "name": "Check Point Beta Secondary", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "172.16.254.2", "ha_pair": "fw-CP-BETA-001",
-     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
-    {"device_id": "fw-CP-BETA-DMZ", "name": "Check Point Beta DMZ", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "dmz", "status": "Active",
-     "mgmt_ip": "172.16.70.1",
-     "capabilities": ["Stateful inspection", "SSL inspection", "IPS"]},
-
-    # --- BETA NH segmentation firewalls ---
-    # NH01 in BETA
-    {"device_id": "fw-CP-BETA-NH01-CPA", "name": "Beta NH01 CPA Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.50.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-CP-BETA-NH01-CDE", "name": "Beta NH01 CDE Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.50.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-CP-BETA-NH01-CCS", "name": "Beta NH01 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.50.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH02 in BETA
-    {"device_id": "fw-CP-BETA-NH02-CDE", "name": "Beta NH02 CDE Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.1.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-CP-BETA-NH02-CCS", "name": "Beta NH02 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.1.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH03 in BETA
-    {"device_id": "fw-CP-BETA-NH03-CCS", "name": "Beta NH03 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH03", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.3.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH04 in BETA
-    {"device_id": "fw-CP-BETA-NH04-CCS", "name": "Beta NH04 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH04", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.4.13",
-     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
-
-    # NH06 in BETA
-    {"device_id": "fw-CP-BETA-NH06-CPA", "name": "Beta NH06 CPA Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.6.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-CP-BETA-NH06-CDE", "name": "Beta NH06 CDE Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.6.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
     {"device_id": "fw-CP-BETA-NH06-CCS", "name": "Beta NH06 CCS Seg FW", "vendor": "checkpoint",
      "dc": "BETA_NGDC", "nh": "NH06", "sz": "CCS", "type": "segmentation", "status": "Active",
      "mgmt_ip": "172.16.6.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # --- BETA PAA ---
-    {"device_id": "fw-CP-BETA-PAA-001", "name": "PAA Perimeter FW (Beta)", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "paa", "status": "Active",
-     "mgmt_ip": "172.16.252.1",
-     "capabilities": ["Stateful inspection", "SSL inspection", "PAA enforcement"]},
-
-    # ================================================================
-    # GAMMA_NGDC (US-Central) — Tertiary DC
-    # Vendor: Cisco ASA (perimeter), Palo Alto (segmentation)
-    # NHs present in GAMMA: NH01, NH02, NH06
-    # ================================================================
-
-    # --- Perimeter ---
-    {"device_id": "fw-ASA-GAMMA-001", "name": "Cisco ASA Gamma Primary", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "10.50.254.1", "ha_pair": "fw-ASA-GAMMA-002",
-     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
-    {"device_id": "fw-ASA-GAMMA-002", "name": "Cisco ASA Gamma Secondary", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "10.50.254.2", "ha_pair": "fw-ASA-GAMMA-001",
-     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
-    {"device_id": "fw-ASA-GAMMA-DMZ", "name": "Cisco ASA Gamma DMZ", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "dmz", "status": "Active",
-     "mgmt_ip": "10.50.70.1",
-     "capabilities": ["Stateful inspection", "NAT", "ACL filtering"]},
-
-    # --- GAMMA NH segmentation firewalls ---
-    # NH01 in GAMMA
-    {"device_id": "fw-PA-GAMMA-NH01-CPA", "name": "Gamma NH01 CPA Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.50.50.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-GAMMA-NH01-CCS", "name": "Gamma NH01 CCS Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.50.50.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH02 in GAMMA
-    {"device_id": "fw-PA-GAMMA-NH02-CDE", "name": "Gamma NH02 CDE Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.50.1.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH06 in GAMMA
-    {"device_id": "fw-PA-GAMMA-NH06-CPA", "name": "Gamma NH06 CPA Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.20.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-GAMMA-NH06-CDE", "name": "Gamma NH06 CDE Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.20.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # --- GAMMA PAA ---
-    {"device_id": "fw-ASA-GAMMA-PAA-001", "name": "PAA Perimeter FW (Gamma)", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "paa", "status": "Active",
-     "mgmt_ip": "10.50.252.1",
-     "capabilities": ["Stateful inspection", "NAT", "PAA enforcement"]},
 ]
 
 
@@ -904,284 +754,185 @@ SEED_HERITAGE_DC_MATRIX = [
      "action": "Blocked", "reason": "Heritage DC to DMZ not permitted directly"},
 ]
 
-# ---- NGDC Production Matrix ----
-# Key rules from architecture:
-#   - Any DC, Any NH, GEN/STD-to-GEN/STD: Permitted (no firewall)
-#   - Same DC, Same NH, Same SZ: Permitted (no firewall)
-#   - Different DC, Same NH, Same SZ: Permitted (no firewall)
-#   - Cross-SZ (except STD/GEN): Firewall Request Required
-#       -> Egress through source NH SZ firewall + Ingress through dest NH SZ firewall
-#   - Same DC, Different NH, Same SZ: Permitted
-#   - Different DC, Different NH, Same SZ: Permitted
-#   - Non-Prod to Prod: Blocked
+# ---- NGDC Production Matrix (Generic Pattern-Based) ----
+# Rules use generic patterns (source_zone/dest_zone as "Any", "Open", "Segmented",
+# "Same", etc.) instead of listing every SZ combination.
+# The backend resolve_policy() function interprets these patterns against actual
+# source/destination NH, SZ, and DC values at runtime.
+#
+# Zone categories used in patterns:
+#   OPEN  = {STD, GEN}  – no per-NH firewall needed
+#   SEGMENTED = {CPA, CDE, CCS, PAA, 3PY, Swift, PSE, UC} – require firewall
+#   NON_PROD_OPEN = {UGen, USTD}
+#   NON_PROD_SEGMENTED = {UCPA, UCDE, UCCS, UPAA, U3PY}
+#
 SEED_NGDC_PROD_MATRIX = [
-    # GEN/STD open routing – no firewall needed regardless of NH/DC
-    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "GEN",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Any DC, Any NH – GEN-to-GEN traffic permitted, no firewall"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "STD",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Any DC, Any NH – STD-to-STD traffic permitted, no firewall"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "STD",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "GEN/STD interchangeable – permitted, no firewall"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "GEN",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "GEN/STD interchangeable – permitted, no firewall"},
+    # ---- Row 1: Open Zone ↔ Open Zone (Any DC, Any NH) ----
+    {"id": "PM-PROD-01", "matrix_type": "NGDC-Prod",
+     "source_zone": "Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Open zone (STD/GEN) traffic is permitted across any NH/DC without firewall"},
 
-    # Same SZ, same NH (any DC) – intra-zone permitted
-    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "CCS",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "CDE",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "CPA",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "PAA",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "3PY", "dest_zone": "3PY",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "Swift", "dest_zone": "Swift",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "PSE", "dest_zone": "PSE",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "UC", "dest_zone": "UC",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Same SZ intra-zone – permitted within same NH"},
+    # ---- Row 2: Same SZ, Same NH, Any DC ----
+    {"id": "PM-PROD-02", "matrix_type": "NGDC-Prod",
+     "source_zone": "Same", "source_nh": "Same", "source_dc": "Any",
+     "dest_zone": "Same", "dest_nh": "Same", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Intra-zone, intra-NH traffic is permitted – no firewall boundary"},
 
-    # Cross-SZ (non-STD/GEN) – Firewall Request Required (egress + ingress)
-    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "CDE",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: requires egress (src NH CCS FW) + ingress (dst NH CDE FW)"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "CPA",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: requires egress (src NH CCS FW) + ingress (dst NH CPA FW)"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "CCS",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: requires egress (src NH CDE FW) + ingress (dst NH CCS FW)"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "CPA",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: requires egress (src NH CDE FW) + ingress (dst NH CPA FW)"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "CCS",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: requires egress (src NH CPA FW) + ingress (dst NH CCS FW)"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "CDE",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: requires egress (src NH CPA FW) + ingress (dst NH CDE FW)"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "CCS",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: PAA to CCS requires PAA FW egress + CCS FW ingress"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "CDE",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: PAA to CDE requires PAA FW egress + CDE FW ingress"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "PAA", "dest_zone": "CPA",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ: PAA to CPA requires PAA FW egress + CPA FW ingress"},
+    # ---- Row 3: Same SZ (Segmented), Cross NH, Same DC ----
+    {"id": "PM-PROD-03", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented (Same)", "source_nh": "Different", "source_dc": "Same",
+     "dest_zone": "Segmented (Same)", "dest_nh": "Different", "dest_dc": "Same",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH) + Ingress (dst NH)",
+     "reason": "Same segmented zone across different NHs requires egress from source NH FW and ingress into destination NH FW"},
 
-    # GEN/STD to segmented zone – Firewall Request Required (ingress only into dest SZ)
-    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "CCS",
-     "action": "Firewall Request Required", "firewall_traversal": "ingress",
-     "reason": "GEN to segmented zone: ingress through dest NH CCS FW"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "CDE",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "GEN to CDE not permitted – no direct path"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "GEN", "dest_zone": "CPA",
-     "action": "Firewall Request Required", "firewall_traversal": "ingress",
-     "reason": "GEN to segmented zone: ingress through dest NH CPA FW"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "CCS",
-     "action": "Firewall Request Required", "firewall_traversal": "ingress",
-     "reason": "STD to segmented zone: ingress through dest NH CCS FW"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "CDE",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "STD to CDE not permitted – no direct path"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "STD", "dest_zone": "CPA",
-     "action": "Firewall Request Required", "firewall_traversal": "ingress",
-     "reason": "STD to segmented zone: ingress through dest NH CPA FW"},
+    # ---- Row 4: Same SZ (Segmented), Cross NH, Cross DC ----
+    {"id": "PM-PROD-04", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented (Same)", "source_nh": "Different", "source_dc": "Different",
+     "dest_zone": "Segmented (Same)", "dest_nh": "Different", "dest_dc": "Different",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH) + Ingress (dst NH)",
+     "reason": "Same segmented zone, cross NH and cross DC – egress + ingress FW required"},
 
-    # Segmented zone to GEN/STD – egress only from source SZ
-    {"matrix_type": "NGDC-Prod", "source_zone": "CCS", "dest_zone": "GEN",
-     "action": "Firewall Request Required", "firewall_traversal": "egress",
-     "reason": "Segmented to GEN: egress through src NH CCS FW"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CDE", "dest_zone": "GEN",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "CDE to GEN not permitted – CDE is isolated"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "CPA", "dest_zone": "GEN",
-     "action": "Firewall Request Required", "firewall_traversal": "egress",
-     "reason": "Segmented to GEN: egress through src NH CPA FW"},
+    # ---- Row 5: Cross SZ (both Segmented), Same NH, Any DC ----
+    {"id": "PM-PROD-05", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented", "source_nh": "Same", "source_dc": "Any",
+     "dest_zone": "Segmented (Different)", "dest_nh": "Same", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "NH SZ Boundary FW",
+     "reason": "Cross-zone within same NH requires traversing the NH segmentation firewall"},
 
-    # Non-Prod to Prod – Blocked
-    {"matrix_type": "NGDC-Prod", "source_zone": "USTD", "dest_zone": "GEN",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod to Prod traffic blocked"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "USTD", "dest_zone": "CCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod to Prod traffic blocked"},
-    {"matrix_type": "NGDC-Prod", "source_zone": "UCCS", "dest_zone": "CCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod to Prod traffic blocked"},
+    # ---- Row 6: Cross SZ (both Segmented), Cross NH, Any DC ----
+    {"id": "PM-PROD-06", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented", "source_nh": "Different", "source_dc": "Any",
+     "dest_zone": "Segmented (Different)", "dest_nh": "Different", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH src SZ FW) + Ingress (dst NH dst SZ FW)",
+     "reason": "Cross-SZ cross-NH requires egress through source SZ FW and ingress through destination SZ FW"},
+
+    # ---- Row 7: Open Zone → Segmented Zone (Any NH/DC) ----
+    {"id": "PM-PROD-07", "matrix_type": "NGDC-Prod",
+     "source_zone": "Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Ingress (dst NH dst SZ FW)",
+     "reason": "Open zone to segmented zone requires ingress through destination NH SZ firewall"},
+
+    # ---- Row 8: Segmented Zone → Open Zone (Any NH/DC) ----
+    {"id": "PM-PROD-08", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH src SZ FW)",
+     "reason": "Segmented zone to open zone requires egress through source NH SZ firewall"},
+
+    # ---- Row 9: Open/STD ↔ CDE (Blocked – CDE is isolated) ----
+    {"id": "PM-PROD-09", "matrix_type": "NGDC-Prod",
+     "source_zone": "Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "CDE", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Direct access from Open zone to CDE is not permitted – CDE is isolated"},
+
+    # ---- Row 10: CDE → Open (Blocked) ----
+    {"id": "PM-PROD-10", "matrix_type": "NGDC-Prod",
+     "source_zone": "CDE", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "CDE to Open zone not permitted – CDE is isolated"},
+
+    # ---- Row 11: Non-Prod → Prod (Blocked) ----
+    {"id": "PM-PROD-11", "matrix_type": "NGDC-Prod",
+     "source_zone": "Non-Prod (Any)", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Prod (Any)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Production to Production traffic is unconditionally blocked"},
+
+    # ---- Row 12: PAA → Internal Segmented (PAA perimeter + internal FW) ----
+    {"id": "PM-PROD-12", "matrix_type": "NGDC-Prod",
+     "source_zone": "PAA", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "PAA Perimeter FW + Ingress (dst NH dst SZ FW)",
+     "reason": "PAA traffic must traverse PAA perimeter firewall and destination NH internal firewall"},
 ]
 
-# ---- Non-Production Matrix ----
-# Key rules from architecture:
-#   - Non-Prod (UGEN/USTD) to Pre-Prod (UGEN/USTD): Permitted
-#   - Non-Prod (UGEN/USTD) to Pre-Prod (PAA/CCS/CPA): Blocked
-#   - Non-Prod segmented to Pre-Prod segmented: Blocked
-#   - Cross-SZ within Non-Prod: Firewall Request Required (same rule as Prod)
+# ---- Non-Production Matrix (Generic Pattern-Based) ----
 SEED_NONPROD_MATRIX = [
-    # Intra-zone within non-prod – permitted
-    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "USTD",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod USTD intra-zone – permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "UGen", "dest_zone": "UGen",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod UGen intra-zone – permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UGen",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "USTD/UGen interchangeable – permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "UGen", "dest_zone": "USTD",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "UGen/USTD interchangeable – permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "UCCS",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod UCCS same-SZ – permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "UCDE", "dest_zone": "UCDE",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod UCDE same-SZ – permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "UCPA", "dest_zone": "UCPA",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod UCPA same-SZ – permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "UPAA", "dest_zone": "UPAA",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod UPAA same-SZ – permitted"},
+    # ---- Row 1: NP Open ↔ NP Open (Any NH/DC) ----
+    {"id": "PM-NPROD-01", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "NP-Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Non-Prod open zone (UGen/USTD) traffic is permitted without firewall"},
 
-    # Cross-SZ within non-prod – Firewall Request Required
-    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "UCDE",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
-    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "UCPA",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
-    {"matrix_type": "Non-Prod", "source_zone": "UCDE", "dest_zone": "UCCS",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
-    {"matrix_type": "Non-Prod", "source_zone": "UCPA", "dest_zone": "UCCS",
-     "action": "Firewall Request Required", "firewall_traversal": "egress+ingress",
-     "reason": "Cross-SZ in Non-Prod: requires egress + ingress FW"},
+    # ---- Row 2: Same NP-SZ, Same NH ----
+    {"id": "PM-NPROD-02", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Segmented (Same)", "source_nh": "Same", "source_dc": "Any",
+     "dest_zone": "NP-Segmented (Same)", "dest_nh": "Same", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Same NP segmented zone within same NH – permitted"},
 
-    # USTD/UGen to Non-Prod segmented – ingress required
-    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UCCS",
-     "action": "Firewall Request Required", "firewall_traversal": "ingress",
-     "reason": "USTD to segmented: ingress through dest FW"},
-    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UCDE",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "USTD to UCDE not permitted"},
-    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "UCPA",
-     "action": "Firewall Request Required", "firewall_traversal": "ingress",
-     "reason": "USTD to segmented: ingress through dest FW"},
+    # ---- Row 3: Cross NP-SZ (both Segmented), Any NH ----
+    {"id": "PM-NPROD-03", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Segmented", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "NP-Segmented (Different)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress + Ingress (NP SZ FWs)",
+     "reason": "Cross-SZ within Non-Prod requires egress + ingress through NP segmentation FWs"},
 
-    # Non-Prod to Prod – Blocked
-    {"matrix_type": "Non-Prod", "source_zone": "USTD", "dest_zone": "GEN",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod to Prod blocked"},
-    {"matrix_type": "Non-Prod", "source_zone": "UCCS", "dest_zone": "CCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod to Prod blocked"},
+    # ---- Row 4: NP-Open → NP-Segmented ----
+    {"id": "PM-NPROD-04", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "NP-Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Ingress (dst NP SZ FW)",
+     "reason": "NP Open zone to NP Segmented requires ingress through destination FW"},
+
+    # ---- Row 5: NP-Open → UCDE (Blocked) ----
+    {"id": "PM-NPROD-05", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "UCDE", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "NP Open to UCDE not permitted – UCDE is isolated in Non-Prod"},
+
+    # ---- Row 6: Non-Prod → Prod (Blocked) ----
+    {"id": "PM-NPROD-06", "matrix_type": "Non-Prod",
+     "source_zone": "Non-Prod (Any)", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Prod (Any)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Prod to Prod traffic is unconditionally blocked"},
 ]
 
-# ---- Pre-Production Matrix ----
-# Key rules:
-#   - Non-Prod (UGEN/USTD) to Pre-Prod (UGEN/USTD): Permitted
-#   - Non-Prod (UGEN/USTD) to Pre-Prod (UPAA/UCCS/UCPA): Blocked
-#   - Non-Prod (UCCS/UPAA/UCPA/UCDE) to Pre-Prod (UPAA/UCCS/UCPA): Blocked
-#   - Pre-Prod to Prod: Blocked
+# ---- Pre-Production Matrix (Generic Pattern-Based) ----
 SEED_PREPROD_MATRIX = [
-    # Pre-Prod intra-zone
-    {"matrix_type": "Pre-Prod", "source_zone": "USTD", "dest_zone": "USTD",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Pre-Prod USTD intra-zone – permitted"},
-    {"matrix_type": "Pre-Prod", "source_zone": "UGen", "dest_zone": "UGen",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Pre-Prod UGen intra-zone – permitted"},
+    # ---- Row 1: PP Open ↔ PP Open ----
+    {"id": "PM-PPROD-01", "matrix_type": "Pre-Prod",
+     "source_zone": "PP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Pre-Prod open zone traffic is permitted"},
 
-    # Non-Prod (UGEN/USTD) to Pre-Prod (UGEN/USTD): Permitted
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "USTD",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod USTD to Pre-Prod USTD – permitted"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UGen",
-     "action": "Permitted", "firewall_traversal": "none",
-     "reason": "Non-Prod UGen to Pre-Prod UGen – permitted"},
+    # ---- Row 2: NP-Open → PP-Open (Cross-Env Permitted) ----
+    {"id": "PM-PPROD-02", "matrix_type": "Pre-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Non-Prod open to Pre-Prod open – permitted"},
 
-    # Non-Prod (UGEN/USTD) to Pre-Prod (UPAA/UCCS/UCPA): Blocked
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "UPAA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod USTD to Pre-Prod PAA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "UCCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod USTD to Pre-Prod CCS – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "USTD", "dest_zone": "UCPA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod USTD to Pre-Prod CPA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UPAA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UGen to Pre-Prod PAA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UCCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UGen to Pre-Prod CCS – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UGen", "dest_zone": "UCPA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UGen to Pre-Prod CPA – blocked"},
+    # ---- Row 3: NP-Open → PP-Segmented (Blocked) ----
+    {"id": "PM-PPROD-03", "matrix_type": "Pre-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Prod open to Pre-Prod segmented – blocked"},
 
-    # Non-Prod segmented to Pre-Prod segmented: Blocked
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCCS", "dest_zone": "UPAA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCCS to Pre-Prod PAA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCCS", "dest_zone": "UCCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCCS to Pre-Prod CCS – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCCS", "dest_zone": "UCPA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCCS to Pre-Prod CPA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UPAA", "dest_zone": "UPAA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UPAA to Pre-Prod PAA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UPAA", "dest_zone": "UCCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UPAA to Pre-Prod CCS – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UPAA", "dest_zone": "UCPA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UPAA to Pre-Prod CPA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCPA", "dest_zone": "UPAA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCPA to Pre-Prod PAA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCPA", "dest_zone": "UCCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCPA to Pre-Prod CCS – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCPA", "dest_zone": "UCPA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCPA to Pre-Prod CPA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCDE", "dest_zone": "UPAA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCDE to Pre-Prod PAA – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCDE", "dest_zone": "UCCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCDE to Pre-Prod CCS – blocked"},
-    {"matrix_type": "Pre-Prod-CrossEnv", "source_zone": "UCDE", "dest_zone": "UCPA",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Non-Prod UCDE to Pre-Prod CPA – blocked"},
+    # ---- Row 4: NP-Segmented → PP-Segmented (Blocked) ----
+    {"id": "PM-PPROD-04", "matrix_type": "Pre-Prod",
+     "source_zone": "NP-Segmented", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Prod segmented to Pre-Prod segmented – blocked"},
 
-    # Pre-Prod to Prod – Blocked
-    {"matrix_type": "Pre-Prod", "source_zone": "USTD", "dest_zone": "GEN",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Pre-Prod to Prod blocked"},
-    {"matrix_type": "Pre-Prod", "source_zone": "UCCS", "dest_zone": "CCS",
-     "action": "Blocked", "firewall_traversal": "n/a",
-     "reason": "Pre-Prod to Prod blocked"},
+    # ---- Row 5: Pre-Prod → Prod (Blocked) ----
+    {"id": "PM-PPROD-05", "matrix_type": "Pre-Prod",
+     "source_zone": "Pre-Prod (Any)", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Prod (Any)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Pre-Prod to Prod traffic is unconditionally blocked"},
 ]
 
 SEED_POLICY_MATRIX = SEED_NGDC_PROD_MATRIX + SEED_NONPROD_MATRIX + SEED_PREPROD_MATRIX
@@ -1492,39 +1243,41 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
     seq = 1000
 
     # App configs: (app_id, name, dist_id, legacy_dc, envs_with_rules)
+    # Zone names use actual NGDC Security Zones: Production Fabric (STD, GEN, PAA, 3PY, CCS, CDE, CPA, Swift, PSE, UC)
+    # and Non-Production Fabric (UGen, USTD, UPAA, UCPA, UCDE, UCCS, U3PY)
     app_configs = [
         ("CRM", "Customer Relationship Manager", "AD-1001", "DC_LEGACY_A",
-         {"Production": ("pol-CRM-legacy", "LegacyFW-A", "Zone-A-Internal", "Zone-A-DB"),
-          "Non-Production": ("pol-CRM-np-legacy", "LegacyFW-A-NP", "Zone-A-Dev", "Zone-A-Dev-DB"),
-          "Pre-Production": ("pol-CRM-pp-legacy", "LegacyFW-A-PP", "Zone-A-STG", "Zone-A-STG-DB")}),
+         {"Production": ("pol-CRM-legacy", "LegacyFW-A", "STD", "GEN"),
+          "Non-Production": ("pol-CRM-np-legacy", "LegacyFW-A-NP", "USTD", "UGen"),
+          "Pre-Production": ("pol-CRM-pp-legacy", "LegacyFW-A-PP", "USTD", "UGen")}),
         ("HRM", "Human Resource Manager", "AD-1002", "DC_LEGACY_B",
-         {"Production": ("pol-HRM-legacy", "LegacyFW-B", "Zone-B-Internal", "Zone-B-DB"),
-          "Non-Production": ("pol-HRM-np-legacy", "LegacyFW-B-NP", "Zone-B-Dev", "Zone-B-Dev-DB")}),
+         {"Production": ("pol-HRM-legacy", "LegacyFW-B", "GEN", "STD"),
+          "Non-Production": ("pol-HRM-np-legacy", "LegacyFW-B-NP", "UGen", "USTD")}),
         ("TRD", "Trading Platform", "AD-1003", "DC_LEGACY_C",
-         {"Production": ("pol-TRD-legacy", "LegacyFW-C", "Zone-C-Trade", "Zone-C-Trade-DB"),
-          "Non-Production": ("pol-TRD-np-legacy", "LegacyFW-C-NP", "Zone-C-Dev", "Zone-C-Dev-DB"),
-          "Pre-Production": ("pol-TRD-pp-legacy", "LegacyFW-C-PP", "Zone-C-STG", "Zone-C-STG-DB")}),
+         {"Production": ("pol-TRD-legacy", "LegacyFW-C", "CDE", "CPA"),
+          "Non-Production": ("pol-TRD-np-legacy", "LegacyFW-C-NP", "UCDE", "UCPA"),
+          "Pre-Production": ("pol-TRD-pp-legacy", "LegacyFW-C-PP", "UCDE", "UCPA")}),
         ("PAY", "Payment Gateway", "AD-1004", "DC_LEGACY_A",
-         {"Production": ("pol-PAY-legacy", "LegacyFW-A", "Zone-A-Pay", "Zone-A-Pay-DB"),
-          "Pre-Production": ("pol-PAY-pp-legacy", "LegacyFW-A-PP", "Zone-A-STG-Pay", "Zone-A-STG-Pay-DB")}),
+         {"Production": ("pol-PAY-legacy", "LegacyFW-A", "CCS", "CDE"),
+          "Pre-Production": ("pol-PAY-pp-legacy", "LegacyFW-A-PP", "UCCS", "UCDE")}),
         ("INS", "Insurance Portal", "AD-1005", "DC_LEGACY_D",
-         {"Production": ("pol-INS-legacy", "LegacyFW-D", "Zone-D-Internal", "Zone-D-DB"),
-          "Non-Production": ("pol-INS-np-legacy", "LegacyFW-D-NP", "Zone-D-Dev", "Zone-D-Dev-DB")}),
+         {"Production": ("pol-INS-legacy", "LegacyFW-D", "STD", "PAA"),
+          "Non-Production": ("pol-INS-np-legacy", "LegacyFW-D-NP", "USTD", "UPAA")}),
         ("KYC", "KYC Compliance", "AD-1006", "DC_LEGACY_F",
-         {"Production": ("pol-KYC-legacy", "LegacyFW-F", "Zone-F-Internal", "Zone-F-DB"),
-          "Non-Production": ("pol-KYC-np-legacy", "LegacyFW-F-NP", "Zone-F-Dev", "Zone-F-Dev-DB")}),
+         {"Production": ("pol-KYC-legacy", "LegacyFW-F", "CCS", "CDE"),
+          "Non-Production": ("pol-KYC-np-legacy", "LegacyFW-F-NP", "UCCS", "UCDE")}),
         ("FRD", "Fraud Detection", "AD-1007", "DC_LEGACY_E",
-         {"Production": ("pol-FRD-legacy", "LegacyFW-E", "Zone-E-Internal", "Zone-E-DB")}),
+         {"Production": ("pol-FRD-legacy", "LegacyFW-E", "CDE", "Swift")}),
         ("LND", "Lending Platform", "AD-1008", "DC_LEGACY_D",
-         {"Production": ("pol-LND-legacy", "LegacyFW-D", "Zone-D-Lending", "Zone-D-Lending-DB"),
-          "Non-Production": ("pol-LND-np-legacy", "LegacyFW-D-NP", "Zone-D-Dev-Lend", "Zone-D-Dev-Lend-DB")}),
+         {"Production": ("pol-LND-legacy", "LegacyFW-D", "GEN", "CPA"),
+          "Non-Production": ("pol-LND-np-legacy", "LegacyFW-D-NP", "UGen", "UCPA")}),
         ("WLT", "Wealth Management", "AD-1009", "DC_LEGACY_B",
-         {"Production": ("pol-WLT-legacy", "LegacyFW-B", "Zone-B-Wealth", "Zone-B-Wealth-DB"),
-          "Pre-Production": ("pol-WLT-pp-legacy", "LegacyFW-B-PP", "Zone-B-STG-W", "Zone-B-STG-W-DB")}),
+         {"Production": ("pol-WLT-legacy", "LegacyFW-B", "PAA", "3PY"),
+          "Pre-Production": ("pol-WLT-pp-legacy", "LegacyFW-B-PP", "UPAA", "U3PY")}),
         ("CBK", "Core Banking", "AD-1010", "DC_LEGACY_A",
-         {"Production": ("pol-CBK-legacy", "LegacyFW-A", "Zone-A-Core", "Zone-A-Core-DB"),
-          "Non-Production": ("pol-CBK-np-legacy", "LegacyFW-A-NP", "Zone-A-Dev-Core", "Zone-A-Dev-Core-DB"),
-          "Pre-Production": ("pol-CBK-pp-legacy", "LegacyFW-A-PP", "Zone-A-STG-Core", "Zone-A-STG-Core-DB")}),
+         {"Production": ("pol-CBK-legacy", "LegacyFW-A", "CPA", "CDE"),
+          "Non-Production": ("pol-CBK-np-legacy", "LegacyFW-A-NP", "UCPA", "UCDE"),
+          "Pre-Production": ("pol-CBK-pp-legacy", "LegacyFW-A-PP", "UCPA", "UCDE")}),
     ]
 
     # IP base per legacy DC
@@ -1601,7 +1354,7 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "rule_source_zone": src_zone,
                 "rule_destination": f"10.70.1.10\n10.70.1.11",
                 "rule_destination_expanded": "svr-10.70.1.10\n  DMZ API 1\nsvr-10.70.1.11\n  DMZ API 2",
-                "rule_destination_zone": "Zone-DMZ",
+                "rule_destination_zone": "PSE",
                 "rule_service": "tcp/443\ntcp/8443",
                 "rule_service_expanded": "tcp/443 (HTTPS)\ntcp/8443 (Alt HTTPS)",
                 "is_standard": False, "rn": 4, "rc": 1,
@@ -1635,7 +1388,7 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "rule_global": True, "rule_action": "Accept",
                 "rule_source": f"10.80.1.100\n10.80.1.101",
                 "rule_source_expanded": "svr-10.80.1.100\n  Monitor Agent 1\nsvr-10.80.1.101\n  Monitor Agent 2",
-                "rule_source_zone": "Zone-MGT",
+                "rule_source_zone": "UC",
                 "rule_destination": f"{base}.1.10\n{base}.2.10\n{base}.3.10",
                 "rule_destination_expanded": f"rng-{base}.1.10-12\n  Web/App range\nsvr-{base}.3.10\n  DB Primary",
                 "rule_destination_zone": dst_zone,

@@ -14,6 +14,8 @@ export interface EgressIngressResult {
   egress_compiled: string; ingress_compiled: string;
   source_zone: string; destination_zone: string;
   source_nh: string; destination_nh: string;
+  source_dc?: string; destination_dc?: string;
+  compliant?: boolean; compliance_note?: string;
 }
 
 interface FWDevice {
@@ -142,9 +144,10 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
       <div className="px-4 py-4 bg-white">
         <div className="flex items-center justify-center gap-0 overflow-x-auto">
           {/* Source Node */}
-          <div className="flex-shrink-0 w-32 text-center">
+          <div className="flex-shrink-0 w-36 text-center">
             <div className="border-2 border-blue-400 bg-blue-50 rounded-lg p-2.5 shadow-sm">
               <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-0.5">Source</div>
+              {data.source_dc && <div className="text-[10px] text-blue-500 font-medium">{data.source_dc}</div>}
               <div className="text-sm font-bold text-blue-800">{data.source_nh}</div>
               <div className="text-xs text-blue-600">{data.source_zone}</div>
             </div>
@@ -249,9 +252,10 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
           )}
 
           {/* Destination Node */}
-          <div className="flex-shrink-0 w-32 text-center">
+          <div className="flex-shrink-0 w-36 text-center">
             <div className="border-2 border-purple-400 bg-purple-50 rounded-lg p-2.5 shadow-sm">
               <div className="text-[10px] font-semibold text-purple-400 uppercase tracking-wider mb-0.5">Destination</div>
+              {data.destination_dc && <div className="text-[10px] text-purple-500 font-medium">{data.destination_dc}</div>}
               <div className="text-sm font-bold text-purple-800">{data.destination_nh}</div>
               <div className="text-xs text-purple-600">{data.destination_zone}</div>
             </div>
@@ -264,6 +268,16 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
         <span className="font-medium">Flow Rule:</span> {data.flow_rule}
         {data.note && <span className="ml-2 opacity-80">| {data.note}</span>}
       </div>
+
+      {/* Compliancy Status */}
+      {data.compliant !== undefined && (
+        <div className={`px-4 py-2 text-xs border-t ${data.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <span className={`font-bold ${data.compliant ? 'text-green-700' : 'text-red-700'}`}>
+            {data.compliant ? 'COMPLIANT' : 'NON-COMPLIANT'}
+          </span>
+          {data.compliance_note && <span className="ml-2 text-gray-600">{data.compliance_note}</span>}
+        </div>
+      )}
 
       {/* Device-Specific Compiled Rules (expandable) */}
       {!compact && data.devices.length > 0 && (

@@ -626,6 +626,10 @@ export const updateAppEnvAssignment = (appId: string, environment: string, data:
 export const deleteAppEnvAssignment = (appId: string, environment: string) =>
   fetchJSON<{ message: string }>(`/api/reference/app-env-assignments/${appId}/${environment}`, { method: 'DELETE' });
 
+// Firewall Device Patterns (generic naming patterns + DC vendor map)
+export const getFirewallDevicePatterns = () =>
+  fetchJSON<{ patterns: Record<string, unknown>[]; dc_vendor_map: Record<string, Record<string, string>> }>('/api/reference/firewall-device-patterns');
+
 // Firewall Devices
 export const getFirewallDevices = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/firewall-devices');

@@ -33,6 +33,8 @@ from app.seed_data import (
     SEED_LEGACY_RULES as _SD_LEGACY_RULES,
     SEED_IP_MAPPINGS as _SD_IP_MAPPINGS,
     SEED_FIREWALL_DEVICES as _SD_FW_DEVICES,
+    SEED_FIREWALL_DEVICE_PATTERNS as _SD_FW_PATTERNS,
+    SEED_DC_VENDOR_MAP as _SD_DC_VENDOR,
     SEED_APP_DC_MAPPINGS as _SD_APP_DC_MAPPINGS,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
@@ -847,100 +849,176 @@ async def create_chg_request(data: dict[str, Any]) -> dict[str, Any]:
 
 async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
                           application: str = "", environment: str = "Production") -> dict[str, Any]:
+    """Resolve the generic pattern-based policy matrix against actual src/dst
+    NH, SZ, and DC values.  The matrix no longer lists every individual zone
+    pair – instead it uses patterns like 'Open', 'Segmented', 'Same',
+    'Different', 'Any', etc.  This function classifies the zones and matches
+    the best-fit pattern row."""
+
     from .seed_data import OPEN_ZONES, SEGMENTED_ZONES, NON_PROD_SEGMENTED_ZONES
 
-    policy_matrix = _load("policy_matrix") or []
     source_zone = source.get("security_zone", "GEN") if isinstance(source, dict) else "GEN"
     dest_zone = destination.get("security_zone", "GEN") if isinstance(destination, dict) else "GEN"
     source_nh = source.get("nh", "") if isinstance(source, dict) else ""
     dest_nh = destination.get("nh", "") if isinstance(destination, dict) else ""
+    source_dc = source.get("dc", "") if isinstance(source, dict) else ""
+    dest_dc = destination.get("dc", "") if isinstance(destination, dict) else ""
     source_type = source.get("source_type", "Group") if isinstance(source, dict) else "Group"
     group_name = source.get("group_name", "") if isinstance(source, dict) else ""
     is_group_to_group = source_type == "Group" and bool(group_name)
     naming_compliant = bool(group_name and group_name.startswith("grp-")) if group_name else True
 
-    # --- Look up explicit matrix entry ---
-    policy = None
-    matched_matrix = ""
-    for p in policy_matrix:
-        if p.get("source_zone") == source_zone and p.get("dest_zone") == dest_zone:
-            policy = p
-            matched_matrix = p.get("matrix_type", "")
-            break
+    # -- Classify zones --
+    NP_OPEN = {"UGen", "USTD"}
+    all_segmented = SEGMENTED_ZONES | NON_PROD_SEGMENTED_ZONES
+    src_is_open = source_zone in OPEN_ZONES
+    dst_is_open = dest_zone in OPEN_ZONES
+    src_is_seg = source_zone in SEGMENTED_ZONES
+    dst_is_seg = dest_zone in SEGMENTED_ZONES
+    src_is_np_open = source_zone in NP_OPEN
+    dst_is_np_open = dest_zone in NP_OPEN
+    src_is_np_seg = source_zone in NON_PROD_SEGMENTED_ZONES
+    dst_is_np_seg = dest_zone in NON_PROD_SEGMENTED_ZONES
+    same_sz = source_zone == dest_zone
+    cross_sz = not same_sz
+    same_nh = (source_nh == dest_nh) and bool(source_nh)
+    cross_nh = (source_nh != dest_nh)
+    same_dc = (source_dc == dest_dc) and bool(source_dc)
+    cross_dc = (source_dc != dest_dc)
+
+    # Determine if src/dst belong to prod or non-prod fabric
+    src_is_prod = src_is_open or src_is_seg
+    dst_is_prod = dst_is_open or dst_is_seg
+    src_is_nonprod = src_is_np_open or src_is_np_seg
+    dst_is_nonprod = dst_is_np_open or dst_is_np_seg
 
     details: list[str] = []
     firewall_request_required = False
-    firewall_traversal = "none"
+    firewall_traversal = "None"
+    result = "Permitted"
+    requires_exception = False
+    matched_rule_id = ""
 
-    if policy:
-        result = policy.get("action", "Permitted")
-        requires_exception = "Exception" in result
-        firewall_request_required = "Firewall Request Required" in result
-        firewall_traversal = policy.get("firewall_traversal", "none")
-        if matched_matrix:
-            details.append(f"Matrix: {matched_matrix}")
-        details.append(f"Policy: {source_zone} -> {dest_zone} = {result}")
-        if firewall_request_required:
-            details.append("Action: Submit a new Firewall Request to open this traffic flow")
-            if firewall_traversal == "egress+ingress":
-                details.append(
-                    f"Firewall Traversal: Egress through source NH ({source_nh or 'src'}) "
-                    f"{source_zone} FW + Ingress through destination NH ({dest_nh or 'dst'}) "
-                    f"{dest_zone} FW"
-                )
-            elif firewall_traversal == "egress":
-                details.append(
-                    f"Firewall Traversal: Egress through source NH ({source_nh or 'src'}) "
-                    f"{source_zone} FW"
-                )
-            elif firewall_traversal == "ingress":
-                details.append(
-                    f"Firewall Traversal: Ingress through destination NH ({dest_nh or 'dst'}) "
-                    f"{dest_zone} FW"
-                )
+    # -- Pattern matching (ordered by specificity) --
+    # Rule: Non-Prod → Prod  OR  Pre-Prod → Prod = Blocked
+    if src_is_nonprod and dst_is_prod:
+        result = "Blocked"
+        firewall_traversal = "N/A"
+        matched_rule_id = "PM-PROD-11"
+        details.append(f"Non-Prod ({source_zone}) to Prod ({dest_zone}): unconditionally blocked")
+
+    # Rule: CDE isolation – Open ↔ CDE blocked
+    elif (src_is_open and dest_zone == "CDE") or (source_zone == "CDE" and dst_is_open):
+        result = "Blocked"
+        firewall_traversal = "N/A"
+        matched_rule_id = "PM-PROD-09" if src_is_open else "PM-PROD-10"
+        details.append(f"CDE is isolated – {source_zone} ↔ CDE direct traffic not permitted")
+
+    # Rule: NP-Open → UCDE blocked
+    elif src_is_np_open and dest_zone == "UCDE":
+        result = "Blocked"
+        firewall_traversal = "N/A"
+        matched_rule_id = "PM-NPROD-05"
+        details.append(f"NP-Open ({source_zone}) to UCDE not permitted – UCDE is isolated")
+
+    # Rule: Open ↔ Open – always permitted, no FW
+    elif src_is_open and dst_is_open:
+        result = "Permitted"
+        firewall_traversal = "None"
+        matched_rule_id = "PM-PROD-01"
+        details.append(f"Open zone routing ({source_zone} → {dest_zone}) – permitted, no firewall")
+
+    # Rule: NP-Open ↔ NP-Open – permitted, no FW
+    elif src_is_np_open and dst_is_np_open:
+        result = "Permitted"
+        firewall_traversal = "None"
+        matched_rule_id = "PM-NPROD-01"
+        details.append(f"NP-Open zone routing ({source_zone} → {dest_zone}) – permitted, no firewall")
+
+    # Rule: Same SZ, same NH – always permitted
+    elif same_sz and same_nh:
+        result = "Permitted"
+        firewall_traversal = "None"
+        matched_rule_id = "PM-PROD-02"
+        details.append(f"Same SZ ({source_zone}), same NH ({source_nh}) – intra-zone, no firewall")
+
+    # Rule: Same segmented SZ, cross NH
+    elif same_sz and cross_nh and (src_is_seg or src_is_np_seg):
+        result = "Firewall Request Required"
+        firewall_request_required = True
+        firewall_traversal = f"Egress (src NH {source_nh} {source_zone} FW) + Ingress (dst NH {dest_nh} {dest_zone} FW)"
+        matched_rule_id = "PM-PROD-03" if same_dc else "PM-PROD-04"
+        details.append(
+            f"Same SZ ({source_zone}), cross-NH ({source_nh}→{dest_nh})"
+            f"{', cross-DC' if cross_dc else ''} – egress + ingress FW required"
+        )
+
+    # Rule: Cross SZ (both segmented), same NH
+    elif cross_sz and same_nh and (src_is_seg or src_is_np_seg) and (dst_is_seg or dst_is_np_seg):
+        result = "Firewall Request Required"
+        firewall_request_required = True
+        firewall_traversal = f"NH {source_nh} SZ Boundary FW"
+        matched_rule_id = "PM-PROD-05"
+        details.append(
+            f"Cross-SZ ({source_zone}→{dest_zone}), same NH ({source_nh}) "
+            f"– NH segmentation firewall required"
+        )
+
+    # Rule: Cross SZ (both segmented), cross NH
+    elif cross_sz and cross_nh and (src_is_seg or src_is_np_seg) and (dst_is_seg or dst_is_np_seg):
+        result = "Firewall Request Required"
+        firewall_request_required = True
+        firewall_traversal = (
+            f"Egress (src NH {source_nh} {source_zone} FW) + "
+            f"Ingress (dst NH {dest_nh} {dest_zone} FW)"
+        )
+        matched_rule_id = "PM-PROD-06"
+        details.append(
+            f"Cross-SZ ({source_zone}→{dest_zone}), cross-NH ({source_nh}→{dest_nh}) "
+            f"– egress + ingress FW required"
+        )
+
+    # Rule: Open → Segmented (ingress only)
+    elif (src_is_open or src_is_np_open) and (dst_is_seg or dst_is_np_seg):
+        result = "Firewall Request Required"
+        firewall_request_required = True
+        firewall_traversal = f"Ingress (dst NH {dest_nh} {dest_zone} FW)"
+        matched_rule_id = "PM-PROD-07" if src_is_open else "PM-NPROD-04"
+        details.append(
+            f"Open ({source_zone}) → Segmented ({dest_zone}) – "
+            f"ingress through destination NH {dest_zone} FW required"
+        )
+
+    # Rule: Segmented → Open (egress only)
+    elif (src_is_seg or src_is_np_seg) and (dst_is_open or dst_is_np_open):
+        result = "Firewall Request Required"
+        firewall_request_required = True
+        firewall_traversal = f"Egress (src NH {source_nh} {source_zone} FW)"
+        matched_rule_id = "PM-PROD-08"
+        details.append(
+            f"Segmented ({source_zone}) → Open ({dest_zone}) – "
+            f"egress through source NH {source_zone} FW required"
+        )
+
+    # Rule: PAA → Segmented (PAA perimeter + internal FW)
+    elif source_zone == "PAA" and dst_is_seg:
+        result = "Firewall Request Required"
+        firewall_request_required = True
+        firewall_traversal = f"PAA Perimeter FW + Ingress (dst NH {dest_nh} {dest_zone} FW)"
+        matched_rule_id = "PM-PROD-12"
+        details.append(
+            f"PAA → {dest_zone}: PAA perimeter FW + destination NH internal FW required"
+        )
+
+    # Fallback – same SZ (no NH info) = permitted
+    elif same_sz:
+        result = "Permitted"
+        firewall_traversal = "None"
+        details.append(f"Same SZ ({source_zone}) – intra-zone traffic permitted")
+
     else:
-        # --- Implicit cross-SZ enforcement ---
-        # If no explicit matrix entry, derive the result from zone types
-        all_segmented = SEGMENTED_ZONES | NON_PROD_SEGMENTED_ZONES
-        cross_sz = source_zone != dest_zone
-        both_open = source_zone in OPEN_ZONES and dest_zone in OPEN_ZONES
-        same_sz = source_zone == dest_zone
-
-        if same_sz:
-            result = "Permitted"
-            requires_exception = False
-            details.append(f"Same SZ ({source_zone}) – intra-zone traffic permitted")
-        elif both_open:
-            result = "Permitted"
-            requires_exception = False
-            details.append(f"STD/GEN open routing ({source_zone} -> {dest_zone}) – permitted, no firewall")
-        elif cross_sz and (source_zone in all_segmented or dest_zone in all_segmented):
-            result = "Firewall Request Required"
-            requires_exception = False
-            firewall_request_required = True
-            if source_zone in OPEN_ZONES:
-                firewall_traversal = "ingress"
-                details.append(
-                    f"Cross-SZ ({source_zone} -> {dest_zone}): "
-                    f"Ingress through dest NH {dest_zone} FW required"
-                )
-            elif dest_zone in OPEN_ZONES:
-                firewall_traversal = "egress"
-                details.append(
-                    f"Cross-SZ ({source_zone} -> {dest_zone}): "
-                    f"Egress through src NH {source_zone} FW required"
-                )
-            else:
-                firewall_traversal = "egress+ingress"
-                details.append(
-                    f"Cross-SZ ({source_zone} -> {dest_zone}): "
-                    f"Egress through src NH {source_zone} FW + "
-                    f"Ingress through dst NH {dest_zone} FW required"
-                )
-        else:
-            result = "Permitted"
-            requires_exception = False
-            details.append(f"No explicit policy for {source_zone} -> {dest_zone}, defaulting to Permitted")
+        result = "Permitted"
+        details.append(f"No matching policy for {source_zone} → {dest_zone}, defaulting to Permitted")
 
     if not is_group_to_group:
         details.append("Warning: Rule is not group-to-group")
@@ -951,7 +1029,7 @@ async def validate_policy(source: dict[str, Any], destination: dict[str, Any],
         "result": result,
         "message": f"Traffic from {source_zone} to {dest_zone}: {result}",
         "details": details,
-        "matrix_type": matched_matrix,
+        "matched_rule_id": matched_rule_id,
         "ngdc_zone_check": True,
         "birthright_compliant": not requires_exception and not firewall_request_required,
         "firewall_request_required": firewall_request_required,
@@ -1147,6 +1225,14 @@ async def delete_environment(code: str) -> bool:
 # ============================================================
 # Firewall Devices CRUD
 # ============================================================
+
+async def get_firewall_device_patterns() -> list[dict[str, Any]]:
+    return deepcopy(_SD_FW_PATTERNS)
+
+
+async def get_dc_vendor_map() -> dict[str, Any]:
+    return deepcopy(_SD_DC_VENDOR)
+
 
 async def get_firewall_devices() -> list[dict[str, Any]]:
     return _load("firewall_devices") or []

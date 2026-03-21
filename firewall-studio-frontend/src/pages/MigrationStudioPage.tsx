@@ -117,9 +117,9 @@ export function MigrationStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
-  const [viewMode, setViewMode] = useState<'table' | 'builder' | 'ip-mappings'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'builder' | 'group-mappings'>('table');
   const [allIPMappings, setAllIPMappings] = useState<Record<string, unknown>[]>([]);
-  const [ipMappingsFilter, setIpMappingsFilter] = useState('');
+  const [groupMappingsFilter, setGroupMappingsFilter] = useState('');
   const [loadingMappings, setLoadingMappings] = useState(false);
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
@@ -177,7 +177,23 @@ export function MigrationStudioPage() {
     setLoadingMappings(false);
   }, []);
 
-  useEffect(() => { if (viewMode === 'ip-mappings') loadIPMappings(ipMappingsFilter); }, [viewMode, ipMappingsFilter, loadIPMappings]);
+  useEffect(() => { if (viewMode === 'group-mappings') loadIPMappings(groupMappingsFilter); }, [viewMode, groupMappingsFilter, loadIPMappings]);
+
+  // Auto-validate birthright when migration popup opens with a rule
+  useEffect(() => {
+    if (!migrateRule || !recommendation) return;
+    const srcZone = migrateRule.rule_source_zone;
+    const dstZone = migrateRule.rule_destination_zone;
+    if (!srcZone && !dstZone) return;
+    setValidatingBirthright(true);
+    validateBirthright({
+      source_zone: srcZone, destination_zone: dstZone,
+      action: migrateRule.rule_action, service: migrateRule.rule_service,
+      app_id: String(migrateRule.app_id),
+    }).then(result => setBirthrightResult(result))
+      .catch(() => setBirthrightResult(null))
+      .finally(() => setValidatingBirthright(false));
+  }, [migrateRule, recommendation]);
 
   const envFilteredRules = legacyRules.filter(r => {
     if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
@@ -307,20 +323,6 @@ export function MigrationStudioPage() {
     setCompiling(false);
   };
 
-  const handleValidateBirthright = async () => {
-    if (!migrateRule) return; setValidatingBirthright(true);
-    try {
-      const result = await validateBirthright({
-        source_zone: migrateRule.rule_source_zone,
-        destination_zone: migrateRule.rule_destination_zone,
-        action: migrateRule.rule_action,
-        service: migrateRule.rule_service,
-        app_id: String(migrateRule.app_id),
-      });
-      setBirthrightResult(result);
-    } catch { showNotification('Failed to validate birthright', 'error'); }
-    setValidatingBirthright(false);
-  };
 
   const handleSubmitMigrationForReview = async () => {
     if (!migrateRule) return; setSubmittingMigration(true);
@@ -435,7 +437,7 @@ export function MigrationStudioPage() {
 
   const migrationSteps = [
     { id: 'review', label: '1. Review' },
-    { id: 'mapping', label: '2. IP Mapping' },
+    { id: 'mapping', label: '2. Group Mapping' },
     { id: 'compile', label: '3. Compile' },
     { id: 'submit', label: '4. Submit' },
   ];
@@ -466,7 +468,7 @@ export function MigrationStudioPage() {
           </select>
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
-            <button onClick={() => setViewMode('ip-mappings')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'ip-mappings' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>IP Mappings</button>
+            <button onClick={() => setViewMode('group-mappings')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'group-mappings' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Group Mappings</button>
           </div>
           {selectedRuleIds.size > 0 && (
             <>
@@ -497,20 +499,20 @@ export function MigrationStudioPage() {
         ))}
       </div>
 
-      {viewMode === 'ip-mappings' ? (
+      {viewMode === 'group-mappings' ? (
         <div className="bg-white border rounded-lg shadow-sm">
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-gray-800">IP Mappings Reference (Legacy DC &rarr; NGDC)</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Browse all 1-1 IP mappings. Filter by app to find relevant mappings for migration.</p>
+              <h2 className="text-sm font-semibold text-gray-800">Group Mappings Reference (Legacy DC &rarr; NGDC)</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Browse all group-level mappings. IPs are auto-recommended into groups. Filter by app to find relevant groups for migration.</p>
             </div>
             <div className="flex items-center gap-2">
-              <select value={ipMappingsFilter} onChange={e => setIpMappingsFilter(e.target.value)}
+              <select value={groupMappingsFilter} onChange={e => setGroupMappingsFilter(e.target.value)}
                 className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white">
                 <option value="">All Applications</option>
                 {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_id} - {a.name}</option>)}
               </select>
-              <button onClick={() => loadIPMappings(ipMappingsFilter)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">Refresh</button>
+              <button onClick={() => loadIPMappings(groupMappingsFilter)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">Refresh</button>
               <label className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 cursor-pointer">
                 Import CSV
                 <input type="file" accept=".csv,.json" className="hidden" onChange={async (e) => {
@@ -529,9 +531,9 @@ export function MigrationStudioPage() {
                         return obj;
                       });
                     }
-                    const result = await importIPMappings(records, ipMappingsFilter || undefined);
+                    const result = await importIPMappings(records, groupMappingsFilter || undefined);
                     showNotification(`Imported ${result.added} IP mappings (total: ${result.total})`, 'success');
-                    loadIPMappings(ipMappingsFilter);
+                    loadIPMappings(groupMappingsFilter);
                   } catch { showNotification('Failed to import IP mappings', 'error'); }
                   e.target.value = '';
                 }} />
@@ -580,7 +582,7 @@ export function MigrationStudioPage() {
               </div>
             ) : (
               <div className="text-center py-12 text-gray-400">
-                <p className="text-sm">No IP mappings found{ipMappingsFilter ? ` for app ${ipMappingsFilter}` : ''}.</p>
+                <p className="text-sm">No group mappings found{groupMappingsFilter ? ` for app ${groupMappingsFilter}` : ''}.</p>
                 <p className="text-xs mt-1">Import mappings using CSV/JSON or check seeded data.</p>
               </div>
             )}
@@ -857,7 +859,7 @@ export function MigrationStudioPage() {
                     {/* Mapping Summary Bar */}
                     {recommendation.mapping_summary && (
                       <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg border text-[10px]">
-                        <span className="font-semibold text-gray-600">IP Mapping Sources:</span>
+                        <span className="font-semibold text-gray-600">Group Mapping Sources:</span>
                         <span className="text-gray-500">{recommendation.mapping_summary.total} total</span>
                         {recommendation.mapping_summary.from_mapping_table > 0 && <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">{recommendation.mapping_summary.from_mapping_table} from 1-1 table</span>}
                         {recommendation.mapping_summary.from_existing_groups > 0 && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">{recommendation.mapping_summary.from_existing_groups} from groups</span>}
@@ -904,18 +906,18 @@ export function MigrationStudioPage() {
                       </div>
                     </div>
 
-                    {/* Birthright Validation */}
-                    <div className="flex gap-2">
-                      <button onClick={handleValidateBirthright} disabled={validatingBirthright}
-                        className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 disabled:opacity-50">
-                        {validatingBirthright ? 'Validating...' : 'Validate Birthright'}
-                      </button>
-                    </div>
+                    {/* Birthright Validation (Auto-validated) */}
+                    {validatingBirthright && (
+                      <div className="flex items-center gap-2 text-sm text-purple-600 animate-pulse">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600" />
+                        Auto-validating birthright...
+                      </div>
+                    )}
                     <BirthrightPanel validation={birthrightResult} />
 
                     <div className="flex justify-end">
                       <button onClick={() => setMigrationStep('mapping')} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-                        Next: IP Mapping Details
+                        Next: Group Mapping
                       </button>
                     </div>
                   </div>
@@ -925,8 +927,8 @@ export function MigrationStudioPage() {
                 {migrationStep === 'mapping' && (
                   <div className="space-y-4">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                      <h3 className="text-sm font-semibold text-green-800 mb-1">Source IP Mapping (Legacy to NGDC)</h3>
-                      <p className="text-xs text-green-600">Map each legacy source entry to its NGDC equivalent. You can customize each mapping.</p>
+                      <h3 className="text-sm font-semibold text-green-800 mb-1">Source Group Mapping (Legacy to NGDC)</h3>
+                      <p className="text-xs text-green-600">IPs are auto-recommended into NGDC groups. You can customize each mapping or create new groups.</p>
                     </div>
                     <div className="space-y-2">
                       {customMappings.map((mapping, i) => (
@@ -969,7 +971,7 @@ export function MigrationStudioPage() {
                     </div>
 
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mt-4">
-                      <h3 className="text-sm font-semibold text-purple-800 mb-1">Destination IP Mapping (Legacy to NGDC)</h3>
+                      <h3 className="text-sm font-semibold text-purple-800 mb-1">Destination Group Mapping (Legacy to NGDC)</h3>
                     </div>
                     <div className="space-y-2">
                       {customDestMappings.map((mapping, i) => (
