@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
-import { compileEgressIngress } from '@/lib/api';
+import { compileEgressIngress, getGroup } from '@/lib/api';
 import { LDFFlowVisualization } from '../design-studio/LDFFlowVisualization';
-import type { ReviewRequest, CompiledRule } from '@/types';
+import type { ReviewRequest, CompiledRule, FirewallGroup } from '@/types';
 
 interface BoundaryDevice {
   device_id: string; device_name: string; nh: string; sz: string;
@@ -37,6 +37,28 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
   const [showFullDetails, setShowFullDetails] = useState(false);
   const [egressIngress, setEgressIngress] = useState<EgressIngressResult | null>(null);
   const [eiLoading, setEiLoading] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, FirewallGroup>>({});
+  const [loadingGroups, setLoadingGroups] = useState(false);
+
+  // Auto-load group members for source/dest groups
+  useEffect(() => {
+    if (!review || !isOpen) { setExpandedGroups({}); return; }
+    const groupNames: string[] = [];
+    const src = review.rule_summary?.source || '';
+    const dst = review.rule_summary?.destination || '';
+    for (const v of [src, dst]) {
+      v.split(',').map(s => s.trim()).filter(s => s.startsWith('grp-') || s.startsWith('g-')).forEach(g => groupNames.push(g));
+    }
+    if (groupNames.length === 0) return;
+    setLoadingGroups(true);
+    Promise.allSettled(groupNames.map(n => getGroup(n)))
+      .then(results => {
+        const map: Record<string, FirewallGroup> = {};
+        results.forEach((r, i) => { if (r.status === 'fulfilled') map[groupNames[i]] = r.value; });
+        setExpandedGroups(map);
+      })
+      .finally(() => setLoadingGroups(false));
+  }, [review, isOpen]);
 
   // Auto-load egress/ingress boundary analysis when modal opens
   useEffect(() => {
@@ -182,6 +204,49 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
           </div>
         )}
       </div>
+
+      {/* Expanded Group Members for Reviewer */}
+      {(Object.keys(expandedGroups).length > 0 || loadingGroups) && (
+        <div className="border border-emerald-200 rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-emerald-50 border-b border-emerald-200">
+            <h4 className="text-sm font-semibold text-emerald-800">Group Members (Expanded)</h4>
+            <p className="text-[10px] text-emerald-600 mt-0.5">Full list of IPs/ranges inside each group referenced in this rule</p>
+          </div>
+          <div className="p-3 space-y-3">
+            {loadingGroups ? (
+              <p className="text-xs text-gray-500 italic">Loading group members...</p>
+            ) : (
+              Object.entries(expandedGroups).map(([name, group]) => (
+                <div key={name} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">GROUP</span>
+                      <span className="text-xs font-mono font-medium text-gray-800">{name}</span>
+                      {group.nh && <span className="text-[10px] text-gray-500">NH: {group.nh}</span>}
+                      {group.sz && <span className="text-[10px] text-gray-500">SZ: {group.sz}</span>}
+                    </div>
+                    <span className="text-[10px] text-gray-500">{group.members.length} member{group.members.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="px-3 py-2 bg-gray-900">
+                    {group.members.length > 0 ? group.members.map((m, i) => (
+                      <div key={i} className="flex items-center gap-2 py-0.5">
+                        <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${
+                          m.type === 'ip' ? 'bg-blue-100 text-blue-700' :
+                          m.type === 'range' ? 'bg-orange-100 text-orange-700' :
+                          'bg-purple-100 text-purple-700'
+                        }`}>{m.type}</span>
+                        <span className="text-xs font-mono text-green-400">{m.value}</span>
+                      </div>
+                    )) : (
+                      <p className="text-xs text-gray-500 italic">No members</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Logical Data Flow Visualization */}
       {review.rule_id && (

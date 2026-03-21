@@ -123,10 +123,23 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <select className={inputClass} value={newGroup.sz} onChange={e => setNewGroup({ ...newGroup, sz: e.target.value })}>
-                  <option value="Standard">Standard</option>
-                  <option value="CCS">CCS</option>
-                  <option value="CDE">CDE</option>
+                  <option value="STD">STD</option>
+                  <option value="GEN">GEN</option>
                   <option value="CPA">CPA</option>
+                  <option value="CDE">CDE</option>
+                  <option value="CCS">CCS</option>
+                  <option value="PAA">PAA</option>
+                  <option value="3PY">3PY</option>
+                  <option value="Swift">Swift</option>
+                  <option value="PSE">PSE</option>
+                  <option value="UC">UC</option>
+                  <option value="USTD">USTD</option>
+                  <option value="UGen">UGen</option>
+                  <option value="UCPA">UCPA</option>
+                  <option value="UCDE">UCDE</option>
+                  <option value="UCCS">UCCS</option>
+                  <option value="UPAA">UPAA</option>
+                  <option value="U3PY">U3PY</option>
                 </select>
                 <select className={inputClass} value={newGroup.subtype} onChange={e => setNewGroup({ ...newGroup, subtype: e.target.value })}>
                   <option value="src">Source</option>
@@ -153,8 +166,17 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
                     selectedGroup?.name === g.name ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'hover:bg-gray-50 border border-transparent'
                   }`}
                 >
-                  <div className="font-medium truncate">{g.name}</div>
-                  <div className="text-gray-500 mt-0.5">{g.members?.length || 0} members</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium truncate">{g.name}</span>
+                    {(g as unknown as Record<string, unknown>).type === 'migration' && (
+                      <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">migrated</span>
+                    )}
+                  </div>
+                  <div className="text-gray-500 mt-0.5 flex items-center gap-2">
+                    <span>{g.members?.length || 0} members</span>
+                    {g.nh && <span className="text-gray-400">NH: {g.nh}</span>}
+                    {g.sz && <span className="text-gray-400">SZ: {g.sz}</span>}
+                  </div>
                 </button>
               ))}
               {groups.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No groups found</p>}

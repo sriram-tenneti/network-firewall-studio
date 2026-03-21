@@ -557,7 +557,8 @@ async def log_migration(rule_id: str, action: str, from_status: str, to_status: 
 
 
 async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
-    """Mark rule as migrated: move to Firewall Studio, remove from legacy views."""
+    """Mark rule as migrated: move to Firewall Studio, remove from legacy views.
+    Also auto-creates recommended NGDC groups with mapped IPs."""
     rules = _load("legacy_rules") or []
     for r in rules:
         if r["id"] == rule_id:
@@ -567,6 +568,71 @@ async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
             _save("legacy_rules", rules)
             await log_migration(rule_id, "migrate_to_ngdc", old_status, "Completed",
                                 f"Rule {rule_id} migrated to NGDC standards")
+
+            # Auto-create recommended NGDC groups post-migration
+            src_groups: list[str] = []
+            dst_groups: list[str] = []
+            rec_nh = ""
+            rec_sz = ""
+            rec_dc = ""
+            try:
+                recs = await get_ngdc_recommendations(rule_id)
+                if recs:
+                    rec_nh = recs.get("recommended_nh", "")
+                    rec_sz = recs.get("recommended_sz", "")
+                    rec_dc = recs.get("recommended_dc", "ALPHA_NGDC")
+                    for cg in recs.get("component_groups") or []:
+                        grp_name = cg.get("ngdc_group", "")
+                        if not grp_name:
+                            continue
+                        # Use mapped NGDC IPs if available, else legacy IPs
+                        ips = cg.get("ngdc_ips") or cg.get("ips") or []
+                        members = [{"type": "ip", "value": ip, "description": f"Migrated from {rule_id}"} for ip in ips]
+                        app_id_val = str(r.get("app_id", ""))
+                        await create_migration_group(
+                            name=grp_name,
+                            app_id=app_id_val,
+                            members=members,
+                            nh=cg.get("nh", ""),
+                            sz=cg.get("sz", ""),
+                        )
+                        direction = cg.get("direction", "source")
+                        if direction == "source":
+                            src_groups.append(grp_name)
+                        else:
+                            dst_groups.append(grp_name)
+            except Exception:
+                pass  # Group creation is best-effort; don't block migration
+
+            # Auto-create rule in Firewall Studio so it appears post-migration
+            try:
+                src_val = ",".join(src_groups) if src_groups else r.get("rule_source", "")
+                dst_val = ",".join(dst_groups) if dst_groups else r.get("rule_destination", "")
+                src_zone = r.get("rule_source_zone", rec_sz or "STD")
+                dst_zone = r.get("rule_destination_zone", rec_sz or "STD")
+                svc = r.get("rule_service", "")
+                app_id_str = str(r.get("app_id", ""))
+                env = r.get("policy_name", "Production")
+                await create_rule({
+                    "source": {"source_type": "Group", "ip_address": None, "cidr": None,
+                               "group_name": src_val, "ports": svc, "neighbourhood": rec_nh,
+                               "security_zone": src_zone},
+                    "destination": {"name": dst_val, "security_zone": dst_zone,
+                                    "dest_ip": None, "ports": svc, "is_predefined": False},
+                    "port": svc,
+                    "protocol": "TCP",
+                    "action": r.get("rule_action", "Allow"),
+                    "description": f"Migrated from legacy rule {rule_id}",
+                    "application": app_id_str,
+                    "environment": env,
+                    "datacenter": rec_dc or "ALPHA_NGDC",
+                    "is_group_to_group": True,
+                    "source_zone": src_zone,
+                    "destination_zone": dst_zone,
+                })
+            except Exception:
+                pass  # Rule creation is best-effort; don't block migration
+
             return r
     return None
 

@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+// RuleFormModal kept only for editing existing draft rules
 import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
 import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
@@ -26,7 +27,6 @@ export function DesignStudioPage() {
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
 
-  const createModal = useModal();
   const editModal = useModal<FirewallRule>();
   const detailModal = useModal<FirewallRule>();
   const modifyModal = useModal<FirewallRule>();
@@ -86,16 +86,6 @@ export function DesignStudioPage() {
     Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
     Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
     Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-  };
-
-  const handleCreate = async (data: Record<string, string | boolean>) => {
-    try {
-      await api.createRule(data);
-      showNotification('Rule created successfully', 'success');
-      loadData();
-    } catch {
-      showNotification('Failed to create rule', 'error');
-    }
   };
 
   const handleEdit = async (data: Record<string, string | boolean>) => {
@@ -282,7 +272,7 @@ export function DesignStudioPage() {
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
             <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Visual Builder</button>
           </div>
-          <button onClick={() => createModal.open()} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
+          <button onClick={() => setViewMode('builder')} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
             + New Rule
           </button>
         </div>
@@ -336,7 +326,6 @@ export function DesignStudioPage() {
       )}
 
       {/* Modals */}
-      <RuleFormModal isOpen={createModal.isOpen} onClose={createModal.close} onSave={handleCreate} applications={applications} mode="create" existingRules={rules} />
       <RuleFormModal isOpen={editModal.isOpen} onClose={editModal.close} onSave={handleEdit} rule={editModal.data} applications={applications} mode="edit" existingRules={rules} />
 
       <RuleDetailModal

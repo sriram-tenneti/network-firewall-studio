@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
-import type { FirewallRule } from '@/types';
+import { getGroup } from '@/lib/api';
+import type { FirewallRule, FirewallGroup } from '@/types';
 
 interface RuleDetailModalProps {
   isOpen: boolean;
@@ -71,6 +73,28 @@ function ExpandedHierarchy({ text, color }: { text: string; color: string }) {
 }
 
 export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSubmitReview }: RuleDetailModalProps) {
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, FirewallGroup>>({});
+  const [loadingGroups, setLoadingGroups] = useState(false);
+
+  useEffect(() => {
+    if (!rule || !isOpen) { setExpandedGroups({}); return; }
+    const groupNames: string[] = [];
+    const srcVal = getVal(rule.source, 'group_name') || getVal(rule.source, 'ip_address') || (typeof rule.source === 'string' ? rule.source : '');
+    const dstVal = getVal(rule.destination, 'name') || (typeof rule.destination === 'string' ? rule.destination : '');
+    for (const v of [srcVal, dstVal]) {
+      v.split(',').map(s => s.trim()).filter(s => s.startsWith('grp-') || s.startsWith('g-')).forEach(g => groupNames.push(g));
+    }
+    if (groupNames.length === 0) return;
+    setLoadingGroups(true);
+    Promise.allSettled(groupNames.map(n => getGroup(n)))
+      .then(results => {
+        const map: Record<string, FirewallGroup> = {};
+        results.forEach((r, i) => { if (r.status === 'fulfilled') map[groupNames[i]] = r.value; });
+        setExpandedGroups(map);
+      })
+      .finally(() => setLoadingGroups(false));
+  }, [rule, isOpen]);
+
   if (!rule) return null;
 
   const srcGroup = getVal(rule.source, 'group_name') || getVal(rule.source, 'ip_address') || (typeof rule.source === 'string' ? rule.source : '');
@@ -148,6 +172,46 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
           </div>
           <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
             <ExpandedHierarchy text={dstExpanded} color="text-purple-400" />
+          </div>
+        </div>
+      )}
+
+      {/* Expanded Group Members */}
+      {(Object.keys(expandedGroups).length > 0 || loadingGroups) && (
+        <div className="mt-4 border rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-emerald-50 border-b">
+            <h4 className="text-sm font-semibold text-emerald-800">Group Members (Expanded)</h4>
+          </div>
+          <div className="p-3 space-y-3">
+            {loadingGroups ? (
+              <p className="text-xs text-gray-500 italic">Loading group members...</p>
+            ) : (
+              Object.entries(expandedGroups).map(([name, group]) => (
+                <div key={name} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">GROUP</span>
+                      <span className="text-xs font-mono font-medium text-gray-800">{name}</span>
+                    </div>
+                    <span className="text-[10px] text-gray-500">{group.members.length} member{group.members.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="px-3 py-2 bg-gray-900">
+                    {group.members.length > 0 ? group.members.map((m, i) => (
+                      <div key={i} className="flex items-center gap-2 py-0.5">
+                        <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${
+                          m.type === 'ip' ? 'bg-blue-100 text-blue-700' :
+                          m.type === 'range' ? 'bg-orange-100 text-orange-700' :
+                          'bg-purple-100 text-purple-700'
+                        }`}>{m.type}</span>
+                        <span className="text-xs font-mono text-green-400">{m.value}</span>
+                      </div>
+                    )) : (
+                      <p className="text-xs text-gray-500 italic">No members</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

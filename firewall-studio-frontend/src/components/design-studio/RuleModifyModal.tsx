@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import type { FirewallRule, RuleDelta, BirthrightValidation } from '@/types';
-import { validateBirthright } from '@/lib/api';
+import type { FirewallRule, RuleDelta, BirthrightValidation, FirewallGroup } from '@/types';
+import { validateBirthright, getGroup } from '@/lib/api';
 
 interface EntryItem {
   id: string;
@@ -185,6 +185,8 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
   const [activeSection, setActiveSection] = useState<'source' | 'destination' | 'service'>('source');
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [fwDeviceInfo, setFwDeviceInfo] = useState<BirthrightValidation | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, FirewallGroup>>({});
+  const [loadingGroups, setLoadingGroups] = useState(false);
 
   useEffect(() => {
     if (rule && isOpen) {
@@ -195,6 +197,24 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
       setAction('Allow');
       setActiveSection('source');
       setFwDeviceInfo(null);
+      setExpandedGroups({});
+      // Auto-fetch group members for source/dest groups
+      const groupNames: string[] = [];
+      const srcParsed = parseEntries(rule.source);
+      const dstParsed = parseEntries(rule.destination);
+      [...srcParsed, ...dstParsed].forEach(e => {
+        if (e.value.startsWith('grp-') || e.value.startsWith('g-')) groupNames.push(e.value);
+      });
+      if (groupNames.length > 0) {
+        setLoadingGroups(true);
+        Promise.allSettled(groupNames.map(n => getGroup(n)))
+          .then(results => {
+            const map: Record<string, FirewallGroup> = {};
+            results.forEach((r, i) => { if (r.status === 'fulfilled') map[groupNames[i]] = r.value; });
+            setExpandedGroups(map);
+          })
+          .finally(() => setLoadingGroups(false));
+      }
       // Auto-fetch FW device info based on rule's zones
       const srcZone = getVal(rule.source, 'security_zone');
       const dstZone = getVal(rule.destination, 'security_zone');
@@ -296,11 +316,57 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
             </div>
 
             {activeSection === 'source' && (
-              <EntryEditor label="Source Entries" entries={sourceEntries} onChange={setSourceEntries} />
+              <>
+                <EntryEditor label="Source Entries" entries={sourceEntries} onChange={setSourceEntries} />
+                {/* Expanded group members for source */}
+                {sourceEntries.filter(e => expandedGroups[e.value]).map(e => (
+                  <div key={e.value} className="mt-2 border border-emerald-200 rounded-lg overflow-hidden">
+                    <div className="px-3 py-1.5 bg-emerald-50 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">GROUP</span>
+                        <span className="text-xs font-mono font-medium text-gray-800">{e.value}</span>
+                      </div>
+                      <span className="text-[10px] text-gray-500">{expandedGroups[e.value].members.length} member{expandedGroups[e.value].members.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="px-3 py-1.5 bg-gray-900 max-h-32 overflow-y-auto">
+                      {expandedGroups[e.value].members.map((m, i) => (
+                        <div key={i} className="flex items-center gap-2 py-0.5">
+                          <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>{m.type}</span>
+                          <span className="text-xs font-mono text-green-400">{m.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {loadingGroups && <p className="text-xs text-gray-400 italic mt-1">Loading group members...</p>}
+              </>
             )}
 
             {activeSection === 'destination' && (
-              <EntryEditor label="Destination Entries" entries={destEntries} onChange={setDestEntries} />
+              <>
+                <EntryEditor label="Destination Entries" entries={destEntries} onChange={setDestEntries} />
+                {/* Expanded group members for destination */}
+                {destEntries.filter(e => expandedGroups[e.value]).map(e => (
+                  <div key={e.value} className="mt-2 border border-emerald-200 rounded-lg overflow-hidden">
+                    <div className="px-3 py-1.5 bg-emerald-50 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">GROUP</span>
+                        <span className="text-xs font-mono font-medium text-gray-800">{e.value}</span>
+                      </div>
+                      <span className="text-[10px] text-gray-500">{expandedGroups[e.value].members.length} member{expandedGroups[e.value].members.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="px-3 py-1.5 bg-gray-900 max-h-32 overflow-y-auto">
+                      {expandedGroups[e.value].members.map((m, i) => (
+                        <div key={i} className="flex items-center gap-2 py-0.5">
+                          <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>{m.type}</span>
+                          <span className="text-xs font-mono text-green-400">{m.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {loadingGroups && <p className="text-xs text-gray-400 italic mt-1">Loading group members...</p>}
+              </>
             )}
 
             {activeSection === 'service' && (
