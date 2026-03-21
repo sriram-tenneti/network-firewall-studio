@@ -578,20 +578,7 @@ export default function FirewallManagementPage() {
   };
 
   const openModifyModal = async (rule: LegacyRule) => {
-    const state: ModifyState = {
-      rule_source: rule.rule_source || '',
-      rule_destination: rule.rule_destination || '',
-      rule_service: rule.rule_service || '',
-      rule_source_expanded: rule.rule_source_expanded || '',
-      rule_destination_expanded: rule.rule_destination_expanded || '',
-      rule_service_expanded: rule.rule_service_expanded || '',
-      rule_source_zone: rule.rule_source_zone || '',
-      rule_destination_zone: rule.rule_destination_zone || '',
-      rule_action: rule.rule_action || '',
-    };
     setModifyRule(rule);
-    setModifyState({ ...state });
-    setOriginalState({ ...state });
     setModifyComments('');
     setCompiledRule(null);
     let groups: FirewallGroup[] = [];
@@ -602,9 +589,26 @@ export default function FirewallManagementPage() {
       setAppGroups([]);
     }
     // Parse entries into resource model — use expanded text for hierarchical group→member structure
-    setSourceEntries(parseToResourceEntries(rule.rule_source || '', groups, rule.rule_source_expanded || ''));
-    setDestEntries(parseToResourceEntries(rule.rule_destination || '', groups, rule.rule_destination_expanded || ''));
-    setServiceEntries(parseToResourceEntries(rule.rule_service || '', []));
+    const srcEntries = parseToResourceEntries(rule.rule_source || '', groups, rule.rule_source_expanded || '');
+    const dstEntries = parseToResourceEntries(rule.rule_destination || '', groups, rule.rule_destination_expanded || '');
+    const svcEntries = parseToResourceEntries(rule.rule_service || '', []);
+    setSourceEntries(srcEntries);
+    setDestEntries(dstEntries);
+    setServiceEntries(svcEntries);
+    // Build the baseline state from the parsed entries so roundtrip matches exactly (no false delta)
+    const baselineState: ModifyState = {
+      rule_source: entriesToRaw(srcEntries),
+      rule_destination: entriesToRaw(dstEntries),
+      rule_service: entriesToRaw(svcEntries),
+      rule_source_expanded: buildExpandedText(srcEntries),
+      rule_destination_expanded: buildExpandedText(dstEntries),
+      rule_service_expanded: buildExpandedText(svcEntries),
+      rule_source_zone: rule.rule_source_zone || '',
+      rule_destination_zone: rule.rule_destination_zone || '',
+      rule_action: rule.rule_action || '',
+    };
+    setModifyState({ ...baselineState });
+    setOriginalState({ ...baselineState });
   };
 
   const closeModifyModal = () => {
@@ -1043,13 +1047,15 @@ export default function FirewallManagementPage() {
                   )}
                 </div>
 
-                {/* Delta inline while editing */}
-                <div className={`border rounded-lg p-4 ${hasAnyChange ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
-                  <h3 className={`text-sm font-semibold mb-2 ${hasAnyChange ? 'text-blue-800' : 'text-gray-600'}`}>
-                    Change Delta {hasAnyChange ? '' : '(No changes yet)'}
-                  </h3>
-                  <DeltaView delta={currentDelta} />
-                </div>
+                {/* Delta inline while editing — only show when there are actual changes */}
+                {hasAnyChange && (
+                  <div className="border rounded-lg p-4 border-blue-200 bg-blue-50">
+                    <h3 className="text-sm font-semibold mb-2 text-blue-800">
+                      Change Delta
+                    </h3>
+                    <DeltaView delta={currentDelta} />
+                  </div>
+                )}
               </>
             ) : (
               /* Preview Mode: Delta-only view for reviewers */
