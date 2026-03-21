@@ -1847,16 +1847,36 @@ async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
                                   "action": action, "reason": reason})
 
     # If no explicit match, apply implicit cross-SZ enforcement
+    # Track informational FW path (for same-SZ cross-NH segmented traffic)
+    firewall_path_info: list[str] = []
+
     if not matched:
         all_segmented = SEGMENTED_ZONES | NON_PROD_SEGMENTED_ZONES
         cross_sz = src_sz != dst_sz
+        cross_nh = src_nh != dst_nh and src_nh and dst_nh
         both_open = src_sz in OPEN_ZONES and dst_sz in OPEN_ZONES
 
-        if src_sz == dst_sz:
+        if src_sz == dst_sz and not cross_nh:
+            # Same SZ, same NH — permitted, no FW path
             permitted.append({"matrix": f"NGDC {env_label} (implicit)",
                               "rule": f"SZ:{src_sz} -> SZ:{dst_sz}",
                               "action": "Permitted",
-                              "reason": "Same SZ intra-zone – permitted"})
+                              "reason": "Same SZ intra-zone, same NH – permitted"})
+        elif src_sz == dst_sz and cross_nh:
+            # Same SZ, cross NH — permitted per birthright (no rule required),
+            # but show FW device path as informational for segmented zones
+            if src_sz in all_segmented:
+                firewall_path_info.append(f"{src_nh} {src_sz} FW")
+                firewall_path_info.append(f"{dst_nh} {dst_sz} FW")
+                permitted.append({"matrix": f"NGDC {env_label} (implicit)",
+                                  "rule": f"SZ:{src_sz} -> SZ:{dst_sz} ({src_nh} -> {dst_nh})",
+                                  "action": "Permitted",
+                                  "reason": f"Same SZ ({src_sz}) cross-NH – permitted per birthright, no firewall rule required. Traffic path through {src_nh} and {dst_nh} FW devices."})
+            else:
+                permitted.append({"matrix": f"NGDC {env_label} (implicit)",
+                                  "rule": f"SZ:{src_sz} -> SZ:{dst_sz} ({src_nh} -> {dst_nh})",
+                                  "action": "Permitted",
+                                  "reason": "Same SZ (open zone) cross-NH – permitted"})
         elif both_open:
             permitted.append({"matrix": f"NGDC {env_label} (implicit)",
                               "rule": f"SZ:{src_sz} -> SZ:{dst_sz}",
@@ -1888,12 +1908,14 @@ async def validate_birthright(rule_data: dict[str, Any]) -> dict[str, Any]:
         "warnings": warnings,
         "permitted": permitted,
         "firewall_devices_needed": firewall_devices_needed,
+        "firewall_path_info": firewall_path_info,
         "firewall_request_required": fw_required,
         "summary": (
             f"{'Compliant' if is_compliant else 'Non-Compliant'} ({env_label}) - "
             f"{len(violations)} violations, {len(warnings)} warnings, "
             f"{len(permitted)} permitted"
             + (f", FW devices: {', '.join(firewall_devices_needed)}" if fw_required else "")
+            + (f", FW path (info): {', '.join(firewall_path_info)}" if firewall_path_info else "")
         ),
     }
 

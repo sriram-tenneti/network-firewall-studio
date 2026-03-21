@@ -371,19 +371,40 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                   )}
                 </div>
 
-                {/* Firewall Device Hops */}
+                {/* Firewall Device Hops — rule required */}
                 {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
-                  <div className="p-3 rounded-lg border border-blue-200 bg-blue-50 text-sm">
-                    <div className="font-bold text-xs text-blue-800 mb-1">Firewall Traversal ({birthrightResult.firewall_devices_needed.length} hop{birthrightResult.firewall_devices_needed.length > 1 ? 's' : ''})</div>
+                  <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-sm">
+                    <div className="font-bold text-xs text-amber-800 mb-1">Firewall Rule Required — {birthrightResult.firewall_devices_needed.length} device{birthrightResult.firewall_devices_needed.length > 1 ? 's' : ''}</div>
                     <div className="flex flex-wrap gap-2">
                       {birthrightResult.firewall_devices_needed.map((dev, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-blue-300 text-xs font-mono text-blue-800">
-                          {dev.startsWith('Egress') ? '\u2B06\uFE0F' : '\u2B07\uFE0F'} {dev}
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-amber-300 text-xs font-mono text-amber-800">
+                          {dev}
                         </span>
                       ))}
                     </div>
-                    <div className="text-[10px] text-blue-600 mt-1">
+                    <div className="text-[10px] text-amber-600 mt-1">
                       DC: {DATACENTERS.find(d => d.code === form.datacenter)?.name || form.datacenter}
+                    </div>
+                  </div>
+                )}
+
+                {/* Informational FW path — same SZ cross NH (permitted, no rule required) */}
+                {birthrightResult.firewall_path_info && birthrightResult.firewall_path_info.length > 0 && !birthrightResult.firewall_request_required && (
+                  <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50 text-sm">
+                    <div className="font-bold text-xs text-blue-700 mb-1">Traffic Path (informational — no firewall rule required)</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2 py-1 rounded bg-blue-100 border border-blue-200 text-xs font-mono text-blue-800">{form.src_nh} {form.src_sz}</span>
+                      {birthrightResult.firewall_path_info.map((fw, i) => (
+                        <span key={i} className="inline-flex items-center gap-1">
+                          <span className="text-gray-400">&rarr;</span>
+                          <span className="px-2 py-1 rounded bg-white border border-blue-200 text-xs font-mono text-blue-700">{fw}</span>
+                        </span>
+                      ))}
+                      <span className="text-gray-400">&rarr;</span>
+                      <span className="px-2 py-1 rounded bg-purple-100 border border-purple-200 text-xs font-mono text-purple-800">{form.dst_nh} {form.dst_sz}</span>
+                    </div>
+                    <div className="text-[10px] text-blue-500 mt-1">
+                      DC: {DATACENTERS.find(d => d.code === form.datacenter)?.name || form.datacenter} — Permitted per birthright
                     </div>
                   </div>
                 )}
