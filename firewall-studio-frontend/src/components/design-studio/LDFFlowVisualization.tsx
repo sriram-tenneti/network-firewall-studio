@@ -122,6 +122,53 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
   const _boundaryColor = data.boundaries === 0 ? 'green' : data.boundaries === 1 ? 'amber' : 'red';
   void _boundaryColor;
 
+  // SVG icons matching Confluence diagrams
+  const ServerIcon = () => (
+    <svg viewBox="0 0 40 48" className="w-10 h-12 mx-auto mb-1">
+      {/* Server rack icon */}
+      <rect x="4" y="0" width="32" height="10" rx="2" fill="#475569" stroke="#334155" strokeWidth="1" />
+      <rect x="4" y="12" width="32" height="10" rx="2" fill="#475569" stroke="#334155" strokeWidth="1" />
+      <rect x="4" y="24" width="32" height="10" rx="2" fill="#475569" stroke="#334155" strokeWidth="1" />
+      <rect x="4" y="36" width="32" height="10" rx="2" fill="#475569" stroke="#334155" strokeWidth="1" />
+      {/* Drive bays */}
+      <rect x="7" y="2" width="8" height="2" rx="0.5" fill="#94a3b8" /><rect x="7" y="5" width="8" height="2" rx="0.5" fill="#94a3b8" />
+      <rect x="7" y="14" width="8" height="2" rx="0.5" fill="#94a3b8" /><rect x="7" y="17" width="8" height="2" rx="0.5" fill="#94a3b8" />
+      <rect x="7" y="26" width="8" height="2" rx="0.5" fill="#94a3b8" /><rect x="7" y="29" width="8" height="2" rx="0.5" fill="#94a3b8" />
+      <rect x="7" y="38" width="8" height="2" rx="0.5" fill="#94a3b8" /><rect x="7" y="41" width="8" height="2" rx="0.5" fill="#94a3b8" />
+      {/* LEDs */}
+      <circle cx="30" cy="5" r="1.5" fill="#22c55e" /><circle cx="30" cy="17" r="1.5" fill="#22c55e" />
+      <circle cx="30" cy="29" r="1.5" fill="#22c55e" /><circle cx="30" cy="41" r="1.5" fill="#22c55e" />
+    </svg>
+  );
+
+  const FirewallIcon = () => (
+    <svg viewBox="0 0 36 44" className="w-9 h-11 mx-auto mb-1">
+      {/* Firewall brick wall icon */}
+      <rect x="0" y="0" width="36" height="44" rx="2" fill="#991b1b" stroke="#7f1d1d" strokeWidth="1" />
+      {/* Brick rows */}
+      <rect x="2" y="2" width="14" height="6" rx="1" fill="#dc2626" /><rect x="18" y="2" width="16" height="6" rx="1" fill="#dc2626" />
+      <rect x="2" y="10" width="20" height="6" rx="1" fill="#dc2626" /><rect x="24" y="10" width="10" height="6" rx="1" fill="#dc2626" />
+      <rect x="2" y="18" width="10" height="6" rx="1" fill="#dc2626" /><rect x="14" y="18" width="20" height="6" rx="1" fill="#dc2626" />
+      <rect x="2" y="26" width="18" height="6" rx="1" fill="#dc2626" /><rect x="22" y="26" width="12" height="6" rx="1" fill="#dc2626" />
+      <rect x="2" y="34" width="12" height="6" rx="1" fill="#dc2626" /><rect x="16" y="34" width="18" height="6" rx="1" fill="#dc2626" />
+    </svg>
+  );
+
+  // Bi-directional arrow matching Confluence style
+  const BiArrow = () => (
+    <div className="flex-shrink-0 w-16 flex items-center justify-center">
+      <svg width="56" height="20" viewBox="0 0 56 20">
+        <path d="M8 10 H48" fill="none" stroke="#1e293b" strokeWidth="2.5" />
+        <path d="M8 4 L0 10 L8 16" fill="none" stroke="#1e293b" strokeWidth="2.5" />
+        <path d="M48 4 L56 10 L48 16" fill="none" stroke="#1e293b" strokeWidth="2.5" />
+      </svg>
+    </div>
+  );
+
+  // Build source/dest labels
+  const srcLabel = data.source_objects?.length ? data.source_objects[0] : 'Source';
+  const dstLabel = data.destination_objects?.length ? data.destination_objects[0] : 'Destination';
+
   return (
     <div className={`border rounded-lg overflow-hidden ${data.boundaries === 0 ? 'border-green-200' : data.boundaries === 1 ? 'border-amber-200' : 'border-red-200'}`}>
       {/* Header */}
@@ -144,125 +191,91 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
         <p className="text-xs mt-1 opacity-80">{ldfDescription}</p>
       </div>
 
-      {/* Flow Diagram */}
-      <div className="px-4 py-4 bg-white">
+      {/* Flow Diagram — Confluence style with server racks, firewall bricks, and bi-directional arrows */}
+      <div className="px-4 py-6 bg-white">
         <div className="flex items-center justify-center gap-0 overflow-x-auto">
-          {/* Source Node */}
+          {/* Source Application Node */}
           <div className="flex-shrink-0 w-36 text-center">
-            <div className="border-2 border-blue-400 bg-blue-50 rounded-lg p-2.5 shadow-sm">
-              <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-0.5">Source</div>
-              {data.source_dc && <div className="text-[10px] text-blue-500 font-medium">{data.source_dc}</div>}
-              <div className="text-sm font-bold text-blue-800">{data.source_nh}</div>
-              <div className="text-xs text-blue-600">{data.source_zone}</div>
-            </div>
+            <ServerIcon />
+            <div className="text-sm font-bold text-gray-900">{srcLabel}</div>
+            <div className="text-xs font-bold text-gray-700">{data.source_nh} {data.source_zone} {data.source_dc ? data.source_dc.replace(/_/g, ' ') : ''}</div>
           </div>
 
-          {/* Flow Arrow */}
-          <div className="flex-shrink-0 w-8 flex items-center justify-center">
-            <svg width="32" height="20" viewBox="0 0 32 20"><path d="M0 10 H24 M24 4 L32 10 L24 16" fill="none" stroke="#94a3b8" strokeWidth="2" /></svg>
-          </div>
+          <BiArrow />
 
           {data.boundaries === 0 ? (
-            /* Direct connection - no firewall */
-            <>
-              <div className="flex-shrink-0 px-3 py-1.5 bg-green-100 border border-green-300 rounded-full">
-                <span className="text-xs font-semibold text-green-700">Direct (No FW)</span>
-              </div>
-              <div className="flex-shrink-0 w-8 flex items-center justify-center">
-                <svg width="32" height="20" viewBox="0 0 32 20"><path d="M0 10 H24 M24 4 L32 10 L24 16" fill="none" stroke="#94a3b8" strokeWidth="2" /></svg>
-              </div>
-            </>
+            /* Direct connection — no firewall traversal */
+            <div className="flex-shrink-0 px-4 py-2 bg-green-100 border-2 border-green-400 rounded-lg">
+              <span className="text-xs font-bold text-green-800">No Firewall Boundary</span>
+            </div>
           ) : (
             <>
-              {/* Egress Firewall */}
+              {/* Egress Firewall Device(s) */}
               {(egressDevices.length > 0 || data.requires_egress) && (
-                <>
-                  <div className="flex-shrink-0 w-40 text-center">
-                    <div className="border-2 border-orange-400 bg-orange-50 rounded-lg p-2.5 shadow-sm relative">
-                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-orange-500 text-white text-[9px] font-bold rounded-full uppercase">Egress</div>
-                      {egressDevices.length > 0 ? egressDevices.map((dev, i) => {
-                        const enriched = enrichDevice(dev);
-                        return (
-                          <div key={i} className="mt-1.5">
-                            <div className="text-xs font-bold text-orange-800">{enriched.name || dev.device_name}</div>
-                            <div className="text-[10px] text-orange-600">{dev.device_id}</div>
-                            {enriched.vendor && <div className="text-[10px] text-gray-500">{VENDOR_LABELS[enriched.vendor] || enriched.vendor}</div>}
-                            <div className="text-[10px] text-gray-400">{dev.nh}/{dev.sz}</div>
-                          </div>
-                        );
-                      }) : (
-                        <div className="mt-1.5 text-xs text-orange-600 italic">Egress FW Required</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 w-8 flex items-center justify-center">
-                    <svg width="32" height="20" viewBox="0 0 32 20"><path d="M0 10 H24 M24 4 L32 10 L24 16" fill="none" stroke="#94a3b8" strokeWidth="2" /></svg>
-                  </div>
-                </>
+                <div className="flex-shrink-0 text-center">
+                  <FirewallIcon />
+                  {egressDevices.length > 0 ? egressDevices.map((dev, i) => {
+                    const enriched = enrichDevice(dev);
+                    return (
+                      <div key={i}>
+                        <div className="text-xs font-bold text-gray-900">{enriched.name || dev.device_name}</div>
+                        <div className="text-[10px] font-semibold text-gray-600">{dev.nh} {dev.sz}</div>
+                      </div>
+                    );
+                  }) : (
+                    <div className="text-[10px] font-semibold text-orange-700">Egress FW</div>
+                  )}
+                </div>
+              )}
+
+              {/* Arrow between egress and ingress (or boundary) */}
+              {(egressDevices.length > 0 || data.requires_egress) && (ingressDevices.length > 0 || data.requires_ingress) && (
+                <BiArrow />
               )}
 
               {/* Boundary Device (for single boundary scenarios without separate egress/ingress) */}
               {boundaryDevices.length > 0 && egressDevices.length === 0 && ingressDevices.length === 0 && (
-                <>
-                  <div className="flex-shrink-0 w-40 text-center">
-                    <div className="border-2 border-purple-400 bg-purple-50 rounded-lg p-2.5 shadow-sm relative">
-                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-purple-500 text-white text-[9px] font-bold rounded-full uppercase">Boundary</div>
-                      {boundaryDevices.map((dev, i) => {
-                        const enriched = enrichDevice(dev);
-                        return (
-                          <div key={i} className="mt-1.5">
-                            <div className="text-xs font-bold text-purple-800">{enriched.name || dev.device_name}</div>
-                            <div className="text-[10px] text-purple-600">{dev.device_id}</div>
-                            {enriched.vendor && <div className="text-[10px] text-gray-500">{VENDOR_LABELS[enriched.vendor] || enriched.vendor}</div>}
-                            <div className="text-[10px] text-gray-400">{dev.nh}/{dev.sz}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 w-8 flex items-center justify-center">
-                    <svg width="32" height="20" viewBox="0 0 32 20"><path d="M0 10 H24 M24 4 L32 10 L24 16" fill="none" stroke="#94a3b8" strokeWidth="2" /></svg>
-                  </div>
-                </>
+                <div className="flex-shrink-0 text-center">
+                  <FirewallIcon />
+                  {boundaryDevices.map((dev, i) => {
+                    const enriched = enrichDevice(dev);
+                    return (
+                      <div key={i}>
+                        <div className="text-xs font-bold text-gray-900">{enriched.name || dev.device_name}</div>
+                        <div className="text-[10px] font-semibold text-gray-600">{dev.nh} {dev.sz}</div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
-              {/* Ingress Firewall */}
+              {/* Ingress Firewall Device(s) */}
               {(ingressDevices.length > 0 || data.requires_ingress) && (
-                <>
-                  <div className="flex-shrink-0 w-40 text-center">
-                    <div className="border-2 border-cyan-400 bg-cyan-50 rounded-lg p-2.5 shadow-sm relative">
-                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-cyan-500 text-white text-[9px] font-bold rounded-full uppercase">Ingress</div>
-                      {ingressDevices.length > 0 ? ingressDevices.map((dev, i) => {
-                        const enriched = enrichDevice(dev);
-                        return (
-                          <div key={i} className="mt-1.5">
-                            <div className="text-xs font-bold text-cyan-800">{enriched.name || dev.device_name}</div>
-                            <div className="text-[10px] text-cyan-600">{dev.device_id}</div>
-                            {enriched.vendor && <div className="text-[10px] text-gray-500">{VENDOR_LABELS[enriched.vendor] || enriched.vendor}</div>}
-                            <div className="text-[10px] text-gray-400">{dev.nh}/{dev.sz}</div>
-                          </div>
-                        );
-                      }) : (
-                        <div className="mt-1.5 text-xs text-cyan-600 italic">Ingress FW Required</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 w-8 flex items-center justify-center">
-                    <svg width="32" height="20" viewBox="0 0 32 20"><path d="M0 10 H24 M24 4 L32 10 L24 16" fill="none" stroke="#94a3b8" strokeWidth="2" /></svg>
-                  </div>
-                </>
+                <div className="flex-shrink-0 text-center">
+                  <FirewallIcon />
+                  {ingressDevices.length > 0 ? ingressDevices.map((dev, i) => {
+                    const enriched = enrichDevice(dev);
+                    return (
+                      <div key={i}>
+                        <div className="text-xs font-bold text-gray-900">{enriched.name || dev.device_name}</div>
+                        <div className="text-[10px] font-semibold text-gray-600">{dev.nh} {dev.sz}</div>
+                      </div>
+                    );
+                  }) : (
+                    <div className="text-[10px] font-semibold text-cyan-700">Ingress FW</div>
+                  )}
+                </div>
               )}
             </>
           )}
 
-          {/* Destination Node */}
+          <BiArrow />
+
+          {/* Destination Application Node */}
           <div className="flex-shrink-0 w-36 text-center">
-            <div className="border-2 border-purple-400 bg-purple-50 rounded-lg p-2.5 shadow-sm">
-              <div className="text-[10px] font-semibold text-purple-400 uppercase tracking-wider mb-0.5">Destination</div>
-              {data.destination_dc && <div className="text-[10px] text-purple-500 font-medium">{data.destination_dc}</div>}
-              <div className="text-sm font-bold text-purple-800">{data.destination_nh}</div>
-              <div className="text-xs text-purple-600">{data.destination_zone}</div>
-            </div>
+            <ServerIcon />
+            <div className="text-sm font-bold text-gray-900">{dstLabel}</div>
+            <div className="text-xs font-bold text-gray-700">{data.destination_nh} {data.destination_zone} {data.destination_dc ? data.destination_dc.replace(/_/g, ' ') : ''}</div>
           </div>
         </div>
       </div>
@@ -283,7 +296,7 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
         </div>
       )}
 
-      {/* Device-Specific Compiled Rules (expandable) */}
+      {/* Device-Specific Compiled Rules — auto-expanded */}
       {!compact && data.devices.length > 0 && (
         <DeviceCompiledRules devices={data.devices} allDevices={allDevices} />
       )}
@@ -292,47 +305,42 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
 }
 
 function DeviceCompiledRules({ devices, allDevices }: { devices: BoundaryDevice[]; allDevices: FWDevice[] }) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
     <div className="border-t border-gray-200">
-      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 transition-colors">
-        <span className="text-xs font-semibold text-gray-600">Device-Specific Compiled Rules ({devices.length})</span>
-        <span className="text-xs text-gray-400">{expanded ? '\u25B2 Collapse' : '\u25BC Expand'}</span>
-      </button>
-      {expanded && (
-        <div className="p-3 space-y-2 bg-gray-50">
-          {devices.map((dev, i) => {
-            const full = allDevices.find(fd => fd.device_id === dev.device_id);
-            return (
-              <div key={i} className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                      dev.direction === 'egress' ? 'bg-orange-500 text-white' :
-                      dev.direction === 'ingress' ? 'bg-cyan-500 text-white' :
-                      'bg-purple-500 text-white'
-                    }`}>{dev.direction.toUpperCase()}</span>
-                    <span className="text-xs text-gray-200 font-medium">{full?.name || dev.device_name}</span>
-                    <span className="text-[10px] text-gray-500">({dev.device_id})</span>
-                    {full?.vendor && <span className="text-[10px] text-gray-400 px-1.5 py-0.5 bg-gray-800 rounded">{VENDOR_LABELS[full.vendor] || full.vendor}</span>}
-                  </div>
-                  <button onClick={() => navigator.clipboard.writeText(dev.compiled)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+      <div className="px-4 py-2 bg-gray-50">
+        <span className="text-xs font-semibold text-gray-700">Per-Device Compiled Rules ({devices.length} device{devices.length !== 1 ? 's' : ''})</span>
+      </div>
+      <div className="p-3 space-y-2 bg-gray-50">
+        {devices.map((dev, i) => {
+          const full = allDevices.find(fd => fd.device_id === dev.device_id);
+          return (
+            <div key={i} className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                    dev.direction === 'egress' ? 'bg-orange-500 text-white' :
+                    dev.direction === 'ingress' ? 'bg-cyan-500 text-white' :
+                    'bg-purple-500 text-white'
+                  }`}>{dev.direction.toUpperCase()}</span>
+                  <span className="text-xs text-gray-200 font-medium">{full?.name || dev.device_name}</span>
+                  <span className="text-[10px] text-gray-500">({dev.device_id})</span>
+                  {full?.vendor && <span className="text-[10px] text-gray-400 px-1.5 py-0.5 bg-gray-800 rounded">{VENDOR_LABELS[full.vendor] || full.vendor}</span>}
                 </div>
-                <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-1.5">
-                  <span>NH: {dev.nh}</span>
-                  <span>SZ: {dev.sz}</span>
-                  <span>Role: {dev.role}</span>
-                  {full?.dc && <span>DC: {full.dc}</span>}
-                  {full?.mgmt_ip && <span>Mgmt: {full.mgmt_ip}</span>}
-                  {full?.status && <span className={`px-1 py-0.5 rounded ${full.status === 'Active' ? 'bg-green-900 text-green-400' : 'bg-yellow-900 text-yellow-400'}`}>{full.status}</span>}
-                </div>
-                <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{dev.compiled}</pre>
+                <button onClick={() => navigator.clipboard.writeText(dev.compiled)} className="text-xs text-blue-400 hover:text-blue-300">Copy</button>
               </div>
-            );
-          })}
-        </div>
-      )}
+              <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-1.5">
+                <span>NH: {dev.nh}</span>
+                <span>SZ: {dev.sz}</span>
+                <span>Role: {dev.role}</span>
+                {full?.dc && <span>DC: {full.dc}</span>}
+                {full?.mgmt_ip && <span>Mgmt: {full.mgmt_ip}</span>}
+                {full?.status && <span className={`px-1 py-0.5 rounded ${full.status === 'Active' ? 'bg-green-900 text-green-400' : 'bg-yellow-900 text-yellow-400'}`}>{full.status}</span>}
+              </div>
+              <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{dev.compiled}</pre>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
