@@ -301,6 +301,22 @@ export interface MappingSummary {
   auto_generated: number;
 }
 
+export interface ComponentGroup {
+  component: string;
+  direction: 'source' | 'destination';
+  ips: string[];
+  ngdc_ips?: string[];
+  ip_count: number;
+  legacy_group: string | null;
+  ngdc_group: string;
+  nh: string;
+  sz: string;
+  dc: string;
+  cidr: string;
+  environment?: string;
+  customizable: boolean;
+}
+
 export interface NGDCRecommendation {
   rule_id: string;
   rule: LegacyRule;
@@ -309,9 +325,21 @@ export interface NGDCRecommendation {
   recommended_sz: string;
   recommended_sz_name: string;
   recommended_dc?: string;
-  nh_sz_source?: 'app_dc_mapping' | 'application_config' | 'default';
+  nh_sz_source?: 'app_dc_mapping' | 'application_config' | 'rule_zone_mapping' | 'default';
+  // Direction-specific NH/SZ from rule's actual source/dest zones
+  source_nh?: string;
+  source_sz?: string;
+  source_dc?: string;
+  source_nh_name?: string;
+  source_sz_name?: string;
+  destination_nh?: string;
+  destination_sz?: string;
+  destination_dc?: string;
+  destination_nh_name?: string;
+  destination_sz_name?: string;
   source_mappings: IPMapping[];
   destination_mappings: IPMapping[];
+  component_groups?: ComponentGroup[];
   service_entries: string[];
   service_recommendations?: ServiceRecommendation[];
   mapping_summary?: MappingSummary;
@@ -341,6 +369,9 @@ export interface BirthrightValidation {
   summary: string;
   matrix_used?: string;
   environment?: string;
+  firewall_devices_needed?: string[];
+  firewall_path_info?: string[];
+  firewall_request_required?: boolean;
 }
 
 export interface BirthrightEntry {
@@ -450,6 +481,19 @@ export interface AsIsRule {
   last_reviewed: string | null;
   request_type: 'existing' | 'new' | 'modification';
   output_generated: boolean;
+}
+
+// App-to-DC/NH/SZ Component Mapping
+export interface AppDCMapping {
+  id?: string;
+  app_id: string;
+  component: 'WEB' | 'APP' | 'DB' | 'MQ' | 'BAT' | 'API';
+  dc: string;
+  nh: string;
+  sz: string;
+  cidr: string;
+  status: 'Active' | 'Inactive';
+  notes?: string;
 }
 
 // Exception request for individual IPs/subnets

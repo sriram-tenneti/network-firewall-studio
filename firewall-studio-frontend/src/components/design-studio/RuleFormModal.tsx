@@ -365,35 +365,53 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
           </div>
         )}
         {birthrightResult && !validatingBR && (
-          <div className={`p-3 rounded-lg border text-sm ${birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`font-bold text-xs ${birthrightResult.compliant ? 'text-green-700' : 'text-red-700'}`}>
-                BR {birthrightResult.matrix_used || ''}
-              </span>
-              <span className={`text-xs ${birthrightResult.compliant ? 'text-green-600' : 'text-red-600'}`}>
-                {birthrightResult.summary}
-              </span>
+          <div className="space-y-2">
+            <div className={`p-3 rounded-lg border text-sm ${
+              birthrightResult.firewall_request_required ? 'bg-amber-50 border-amber-200' :
+              birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`font-bold text-xs ${
+                  birthrightResult.firewall_request_required ? 'text-amber-700' :
+                  birthrightResult.compliant ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  Policy: {birthrightResult.matrix_used || ''}
+                </span>
+                <span className={`text-xs ${
+                  birthrightResult.firewall_request_required ? 'text-amber-600' :
+                  birthrightResult.compliant ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {birthrightResult.firewall_request_required
+                    ? 'Firewall rule required for this cross-zone traffic'
+                    : birthrightResult.compliant ? 'Permitted' : 'Blocked by policy'}
+                </span>
+              </div>
+              {birthrightResult.permitted.length > 0 && (
+                <ul className="text-xs text-green-700 list-disc list-inside mt-1">
+                  {birthrightResult.permitted.map((p, i) => (
+                    <li key={i}>{p.rule} — {p.reason}</li>
+                  ))}
+                </ul>
+              )}
+              {birthrightResult.warnings.length > 0 && (
+                <ul className="text-xs text-amber-700 list-disc list-inside mt-1">
+                  {birthrightResult.warnings.map((w, i) => (
+                    <li key={i}>{w.rule} — {w.reason}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-            {birthrightResult.violations.length > 0 && (
-              <ul className="text-xs text-red-700 list-disc list-inside mt-1">
-                {birthrightResult.violations.map((v, i) => (
-                  <li key={i}>{v.matrix}: {v.rule} — {v.reason}</li>
-                ))}
-              </ul>
-            )}
-            {birthrightResult.permitted.length > 0 && birthrightResult.compliant && (
-              <ul className="text-xs text-green-700 list-disc list-inside mt-1">
-                {birthrightResult.permitted.map((p, i) => (
-                  <li key={i}>{p.matrix}: {p.rule} — {p.reason}</li>
-                ))}
-              </ul>
-            )}
-            {birthrightResult.warnings.length > 0 && (
-              <ul className="text-xs text-amber-700 list-disc list-inside mt-1">
-                {birthrightResult.warnings.map((w, i) => (
-                  <li key={i}>{w.matrix}: {w.rule} — {w.reason}</li>
-                ))}
-              </ul>
+            {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
+              <div className="p-3 rounded-lg border border-blue-200 bg-blue-50 text-sm">
+                <div className="font-bold text-xs text-blue-800 mb-1">Firewall Traversal ({birthrightResult.firewall_devices_needed.length} hop{birthrightResult.firewall_devices_needed.length > 1 ? 's' : ''})</div>
+                <div className="flex flex-wrap gap-2">
+                  {birthrightResult.firewall_devices_needed.map((dev, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-blue-300 text-xs font-mono text-blue-800">
+                      {dev}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}

@@ -8,30 +8,38 @@ interface GroupManagerModalProps {
   onClose: () => void;
   appId?: string;
   applications?: { app_id: string; name: string }[];
+  environment?: string;
 }
 
-export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }: GroupManagerModalProps) {
+export function GroupManagerModal({ isOpen, onClose, appId, applications = [], environment }: GroupManagerModalProps) {
   const [groups, setGroups] = useState<FirewallGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<FirewallGroup | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filterAppId, setFilterAppId] = useState(appId || '');
+  const [filterEnv, setFilterEnv] = useState(environment || '');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', nh: '', sz: 'Standard', subtype: 'src', description: '' });
+  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', nh: '', sz: 'Standard', subtype: 'src', description: '', environment: environment || 'Production' });
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
 
   useEffect(() => {
     if (isOpen) {
       setFilterAppId(appId || '');
-      loadGroups(appId || '');
+      setFilterEnv(environment || '');
+      loadGroups(appId || '', environment || '');
     }
-  }, [isOpen, appId]);
+  }, [isOpen, appId, environment]);
 
-  const loadGroups = async (forAppId?: string) => {
+  const loadGroups = async (forAppId?: string, forEnv?: string) => {
     setLoading(true);
     try {
       const data = await getGroups(forAppId || undefined);
-      setGroups(data);
+      // Client-side environment filter since backend groups may have environment field
+      const filtered = forEnv ? data.filter(g => {
+        const gEnv = (g as unknown as Record<string, string>).environment;
+        return !gEnv || gEnv === forEnv;
+      }) : data;
+      setGroups(filtered);
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -39,8 +47,15 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
   const handleAppFilterChange = (newAppId: string) => {
     setFilterAppId(newAppId);
     setSelectedGroup(null);
-    loadGroups(newAppId);
+    loadGroups(newAppId, filterEnv);
     setNewGroup(prev => ({ ...prev, app_id: newAppId }));
+  };
+
+  const handleEnvFilterChange = (newEnv: string) => {
+    setFilterEnv(newEnv);
+    setSelectedGroup(null);
+    loadGroups(filterAppId, newEnv);
+    setNewGroup(prev => ({ ...prev, environment: newEnv || 'Production' }));
   };
 
   const filteredGroups = groups.filter(g => {
@@ -53,7 +68,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
     try {
       await createGroup(newGroup);
       setShowCreate(false);
-      setNewGroup({ name: '', app_id: '', nh: '', sz: 'Standard', subtype: 'src', description: '' });
+      setNewGroup({ name: '', app_id: '', nh: '', sz: 'Standard', subtype: 'src', description: '', environment: filterEnv || 'Production' });
       loadGroups();
     } catch { /* ignore */ }
   };
@@ -80,10 +95,23 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Group Management" subtitle={filterAppId ? `Filtered by ${filterAppId}` : 'All Applications'} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Group Management" subtitle={[filterEnv, filterAppId].filter(Boolean).join(' | ') || 'All Environments & Applications'} size="xl">
       <div className="flex gap-4 min-h-[400px]">
         {/* Left panel - Group list */}
         <div className="w-1/3 border-r pr-4">
+          {/* Environment filter */}
+          <div className="mb-2">
+            <select
+              value={filterEnv}
+              onChange={e => handleEnvFilterChange(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Environments</option>
+              <option value="Production">Production</option>
+              <option value="Non-Production">Non-Production</option>
+              <option value="Pre-Production">Pre-Production</option>
+            </select>
+          </div>
           {/* App ID filter */}
           <div className="mb-3">
             <select
@@ -123,10 +151,23 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <select className={inputClass} value={newGroup.sz} onChange={e => setNewGroup({ ...newGroup, sz: e.target.value })}>
-                  <option value="Standard">Standard</option>
-                  <option value="CCS">CCS</option>
-                  <option value="CDE">CDE</option>
+                  <option value="STD">STD</option>
+                  <option value="GEN">GEN</option>
                   <option value="CPA">CPA</option>
+                  <option value="CDE">CDE</option>
+                  <option value="CCS">CCS</option>
+                  <option value="PAA">PAA</option>
+                  <option value="3PY">3PY</option>
+                  <option value="Swift">Swift</option>
+                  <option value="PSE">PSE</option>
+                  <option value="UC">UC</option>
+                  <option value="USTD">USTD</option>
+                  <option value="UGen">UGen</option>
+                  <option value="UCPA">UCPA</option>
+                  <option value="UCDE">UCDE</option>
+                  <option value="UCCS">UCCS</option>
+                  <option value="UPAA">UPAA</option>
+                  <option value="U3PY">U3PY</option>
                 </select>
                 <select className={inputClass} value={newGroup.subtype} onChange={e => setNewGroup({ ...newGroup, subtype: e.target.value })}>
                   <option value="src">Source</option>
@@ -134,6 +175,11 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
                   <option value="both">Both</option>
                 </select>
               </div>
+              <select className={inputClass} value={newGroup.environment} onChange={e => setNewGroup({ ...newGroup, environment: e.target.value })}>
+                <option value="Production">Production</option>
+                <option value="Non-Production">Non-Production</option>
+                <option value="Pre-Production">Pre-Production</option>
+              </select>
               <input className={inputClass} placeholder="Description" value={newGroup.description} onChange={e => setNewGroup({ ...newGroup, description: e.target.value })} />
               <button onClick={handleCreateGroup} className="w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Create Group</button>
             </div>
@@ -153,8 +199,17 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [] }:
                     selectedGroup?.name === g.name ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'hover:bg-gray-50 border border-transparent'
                   }`}
                 >
-                  <div className="font-medium truncate">{g.name}</div>
-                  <div className="text-gray-500 mt-0.5">{g.members?.length || 0} members</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium truncate">{g.name}</span>
+                    {(g as unknown as Record<string, unknown>).type === 'migration' && (
+                      <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">migrated</span>
+                    )}
+                  </div>
+                  <div className="text-gray-500 mt-0.5 flex items-center gap-2">
+                    <span>{g.members?.length || 0} members</span>
+                    {g.nh && <span className="text-gray-400">NH: {g.nh}</span>}
+                    {g.sz && <span className="text-gray-400">SZ: {g.sz}</span>}
+                  </div>
                 </button>
               ))}
               {groups.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No groups found</p>}
