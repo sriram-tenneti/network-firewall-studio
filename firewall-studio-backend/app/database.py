@@ -36,6 +36,7 @@ from app.seed_data import (
     SEED_FIREWALL_DEVICE_PATTERNS as _SD_FW_PATTERNS,
     SEED_DC_VENDOR_MAP as _SD_DC_VENDOR,
     SEED_APP_DC_MAPPINGS as _SD_APP_DC_MAPPINGS,
+    SEED_REVIEWS as _SD_REVIEWS,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
 )
@@ -96,6 +97,7 @@ SEED_IP_MAPPINGS = _SD_IP_MAPPINGS
 SEED_MIGRATIONS = _sd_build_migrations()
 SEED_MIGRATION_MAPPINGS: list[dict[str, Any]] = []
 SEED_CHG_REQUESTS = _sd_build_chg_requests()
+SEED_REVIEWS = _SD_REVIEWS
 
 
 def _build_seed_rules() -> list[dict[str, Any]]:
@@ -410,6 +412,8 @@ async def seed_database() -> None:
     _save("ip_mappings", deepcopy(SEED_IP_MAPPINGS))
     _save("firewall_devices", deepcopy(_SD_FW_DEVICES))
     _save("app_dc_mappings", deepcopy(_SD_APP_DC_MAPPINGS))
+    _save("reviews", deepcopy(SEED_REVIEWS))
+    _save("rule_modifications", [])
 
 
 # ============================================================
