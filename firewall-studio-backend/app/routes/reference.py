@@ -39,6 +39,12 @@ def _parse_excel_bytes(contents: bytes) -> list[tuple]:
     """Parse Excel file bytes into a list of row tuples.
     Tries openpyxl (.xlsx) first, then xlrd (.xls), then HTML-table fallback.
     Returns list of tuples where first tuple is headers."""
+    import logging
+    logger = logging.getLogger("excel_import")
+    logger.info(f"Received file: {len(contents)} bytes, first 8 bytes: {contents[:8].hex() if contents else 'empty'}")
+
+    errors: list[str] = []
+
     # Strategy 1: openpyxl for .xlsx (Office Open XML)
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
@@ -49,29 +55,33 @@ def _parse_excel_bytes(contents: bytes) -> list[tuple]:
         rows = list(ws.iter_rows(values_only=True))
         wb.close()
         if rows:
+            logger.info(f"openpyxl success: {len(rows)} rows")
             return rows
-    except (zipfile.BadZipFile, Exception):
-        pass  # Not a valid .xlsx — try other formats
+    except Exception as exc:
+        errors.append(f"xlsx: {exc}")
+        logger.warning(f"openpyxl failed: {exc}")
 
     # Strategy 2: xlrd for old .xls (Excel 97-2003 binary BIFF format)
     try:
         import xlrd
         wb = xlrd.open_workbook(file_contents=contents)
         ws = wb.sheet_by_index(0)
-        rows: list[tuple] = []
+        rows_list: list[tuple] = []
         for row_idx in range(ws.nrows):
-            rows.append(tuple(ws.cell_value(row_idx, col_idx) for col_idx in range(ws.ncols)))
-        if rows:
-            return rows
-    except Exception:
-        pass  # Not a valid .xls either
+            rows_list.append(tuple(ws.cell_value(row_idx, col_idx) for col_idx in range(ws.ncols)))
+        if rows_list:
+            logger.info(f"xlrd success: {len(rows_list)} rows")
+            return rows_list
+    except Exception as exc:
+        errors.append(f"xls: {exc}")
+        logger.warning(f"xlrd failed: {exc}")
 
     # Strategy 3: HTML table disguised as .xlsx (some tools export this way)
     try:
         text = contents.decode("utf-8", errors="ignore")
         if "<table" in text.lower() or "<html" in text.lower():
             from html.parser import HTMLParser
-            rows: list[tuple] = []
+            html_rows: list[tuple] = []
             current_row: list[str] = []
             in_cell = False
             cell_text = ""
@@ -83,12 +93,12 @@ def _parse_excel_bytes(contents: bytes) -> list[tuple]:
                         in_cell = True
                         cell_text = ""
                 def handle_endtag(self, tag: str) -> None:
-                    nonlocal in_cell, cell_text, current_row, rows
+                    nonlocal in_cell, cell_text, current_row, html_rows
                     if tag in ("td", "th"):
                         in_cell = False
                         current_row.append(cell_text.strip())
                     elif tag == "tr" and current_row:
-                        rows.append(tuple(current_row))
+                        html_rows.append(tuple(current_row))
                         current_row = []
                 def handle_data(self, data: str) -> None:
                     nonlocal cell_text
@@ -98,16 +108,19 @@ def _parse_excel_bytes(contents: bytes) -> list[tuple]:
             parser = TableParser()
             parser.feed(text)
             if current_row:
-                rows.append(tuple(current_row))
-            if rows:
-                return rows
-    except Exception:
-        pass
+                html_rows.append(tuple(current_row))
+            if html_rows:
+                logger.info(f"HTML success: {len(html_rows)} rows")
+                return html_rows
+    except Exception as exc:
+        errors.append(f"html: {exc}")
 
+    error_detail = "; ".join(errors) if errors else "unknown format"
     raise ValueError(
-        "Cannot read the file. Supported formats: .xlsx (Office Open XML), "
-        ".xls (Excel 97-2003). If the file was exported from a web tool, "
-        "try opening it in Excel first and re-saving as .xlsx."
+        f"Cannot read the file ({len(contents)} bytes received). "
+        f"Details: {error_detail}. "
+        f"Supported formats: .xlsx (Office Open XML), .xls (Excel 97-2003). "
+        f"If the file was exported from a web tool, try opening it in Excel first and re-saving as .xlsx."
     )
 
 
