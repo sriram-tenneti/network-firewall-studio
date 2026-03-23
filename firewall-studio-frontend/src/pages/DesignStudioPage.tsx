@@ -204,7 +204,7 @@ export function DesignStudioPage() {
           {(row.status === 'Approved' || row.status === 'Deployed') && (
             <button onClick={() => handleCertify(row.rule_id)} className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded hover:bg-purple-100">Certify</button>
           )}
-          {(row.status === 'Approved' || row.status === 'Deployed' || row.status === 'Certified') && (
+          {(row.status === 'Pending Review' || row.status === 'Approved' || row.status === 'Deployed' || row.status === 'Certified') && (
             <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
           )}
           {row.status === 'Draft' && (

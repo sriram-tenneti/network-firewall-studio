@@ -104,7 +104,8 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     ['Requestor', review.requestor],
   ];
 
-  // Full details (collapsible)
+  // Full details (collapsible) — comprehensive info for reviewer
+  const rs = review.rule_summary as Record<string, unknown> | undefined;
   const fullRows: [string, string | React.ReactNode][] = [
     ['Review ID', review.id],
     ['Submitted', review.submitted_at ? new Date(review.submitted_at).toLocaleString() : 'N/A'],
@@ -113,6 +114,13 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     ['Destination', review.rule_summary?.destination || 'N/A'],
     ['Ports', review.rule_summary?.ports || 'N/A'],
     ['Environment', review.rule_summary?.environment || 'N/A'],
+    ['Source Zone', String(rs?.source_zone || 'N/A')],
+    ['Destination Zone', String(rs?.destination_zone || 'N/A')],
+    ['Datacenter', String(rs?.datacenter || 'N/A')],
+    ['Action', String(rs?.action || 'N/A')],
+    ['Protocol', String(rs?.protocol || 'N/A')],
+    ['Description', String(rs?.description || 'N/A')],
+    ['Comments', review.comments || 'N/A'],
   ];
 
   const hasDelta = review.delta && (

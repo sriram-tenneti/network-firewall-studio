@@ -24,6 +24,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [nfrLoading, setNfrLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; apps: number } | null>(null);
 
+  const [nfrEnvFilter, setNfrEnvFilter] = useState<string>('');
   const isNGDCMappings = context === 'ngdc-mappings';
   const isNFRImport = context === 'ngdc-import-rules';
   const pageTitle = isNGDCMappings ? 'NGDC Organization Mappings' :
@@ -39,17 +40,18 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     try {
       const rules = await getRules();
       setNfrRules(rules);
-      const apps = Array.from(new Set(rules.map((r: FirewallRule) => `${r.application}|${r.application_name || r.application}`))).map(key => {
+      const filteredByEnv = nfrEnvFilter ? rules.filter((r: FirewallRule) => r.environment === nfrEnvFilter) : rules;
+      const apps = Array.from(new Set(filteredByEnv.map((r: FirewallRule) => `${r.application}|${r.application_name || r.application}`))).map(key => {
         const [appId, appName] = (key as string).split('|');
         return { value: appId, label: `${appId} - ${appName}` };
       });
       setNfrApps(apps);
     } catch { setNfrApps([]); }
     setNfrLoading(false);
-  }, []);
+  }, [nfrEnvFilter]);
 
   useEffect(() => {
-    if (isNFRImport) loadNFRApps();
+    if (isNFRImport) { setSelectedImportApps(new Set()); loadNFRApps(); }
   }, [isNFRImport, loadNFRApps]);
 
   const toggleImportApp = (appId: string) => {
@@ -135,7 +137,15 @@ export default function DataImportPage({ context }: DataImportPageProps) {
               : 'Upload Excel (.xlsx) files to import rules into the system'}
           </p>
         </div>
-        {!isNFRImport && (
+        {isNFRImport ? (
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={nfrEnvFilter} onChange={e => setNfrEnvFilter(e.target.value)}>
+            <option value="">All Environments</option>
+            <option value="Production">Production</option>
+            <option value="Non-Production">Non-Production</option>
+            <option value="Pre-Production">Pre-Production</option>
+          </select>
+        ) : (
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
             <option value="Production">Production</option>
@@ -181,7 +191,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
                   <label key={app.value} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-indigo-50 transition-colors ${selectedImportApps.has(app.value) ? 'bg-indigo-50' : ''}`}>
                     <input type="checkbox" checked={selectedImportApps.has(app.value)} onChange={() => toggleImportApp(app.value)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                     <span className="text-sm text-gray-800 font-medium">{app.label}</span>
-                    <span className="text-xs text-gray-400 ml-auto">{nfrRules.filter(r => r.application === app.value).length} rules</span>
+                    <span className="text-xs text-gray-400 ml-auto">{nfrRules.filter(r => r.application === app.value && (!nfrEnvFilter || r.environment === nfrEnvFilter)).length} rules</span>
                   </label>
                 ))}
               </div>
@@ -189,7 +199,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
               {selectedImportApps.size > 0 && (
                 <div className="mt-4 bg-gray-50 rounded-lg p-4 flex items-center justify-between">
                   <span className="text-sm text-gray-600">
-                    <strong>{selectedImportApps.size}</strong> app(s) selected &middot; <strong>{nfrRules.filter(r => selectedImportApps.has(r.application)).length}</strong> rules will be imported for migration
+                    <strong>{selectedImportApps.size}</strong> app(s) selected &middot; <strong>{nfrRules.filter(r => selectedImportApps.has(r.application) && (!nfrEnvFilter || r.environment === nfrEnvFilter)).length}</strong> rules will be imported for migration
                   </span>
                   <button onClick={handleImportFromNFR} disabled={importingFromNFR}
                     className="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition-colors">

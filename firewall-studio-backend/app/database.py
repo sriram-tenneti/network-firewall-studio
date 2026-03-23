@@ -1575,6 +1575,29 @@ async def create_review(rule_id: str, comments: str = "") -> dict[str, Any]:
     rule = await get_rule(rule_id)
     now = _now()
     review_id = f"REV-{_id()}"
+    # Build comprehensive rule summary for reviewers
+    rule_summary: dict[str, Any] = {}
+    if rule:
+        src = rule.get("source", "")
+        dst = rule.get("destination", "")
+        if isinstance(src, dict):
+            src = src.get("group_name", "") or src.get("ip_address", "") or src.get("cidr", "")
+        if isinstance(dst, dict):
+            dst = dst.get("name", "") or dst.get("dest_ip", "")
+        rule_summary = {
+            "application": rule.get("application", ""),
+            "source": str(src),
+            "destination": str(dst),
+            "ports": rule.get("port", ""),
+            "environment": rule.get("environment", ""),
+            "source_zone": rule.get("source_zone", ""),
+            "destination_zone": rule.get("destination_zone", ""),
+            "datacenter": rule.get("datacenter", ""),
+            "action": rule.get("action", ""),
+            "protocol": rule.get("protocol", ""),
+            "description": rule.get("description", ""),
+            "is_group_to_group": rule.get("is_group_to_group", False),
+        }
     review = {
         "id": review_id,
         "rule_id": rule_id,
@@ -1587,13 +1610,7 @@ async def create_review(rule_id: str, comments: str = "") -> dict[str, Any]:
         "reviewed_at": None,
         "comments": comments,
         "review_notes": None,
-        "rule_summary": {
-            "application": rule.get("application", "") if rule else "",
-            "source": rule.get("source", "") if rule else "",
-            "destination": rule.get("destination", "") if rule else "",
-            "ports": rule.get("port", "") if rule else "",
-            "environment": rule.get("environment", "") if rule else "",
-        },
+        "rule_summary": rule_summary,
     }
     reviews.append(review)
     _save("reviews", reviews)
@@ -2177,11 +2194,33 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 return m
         return None
 
+    # Load IP mappings table early so _build_mapping can use 1-to-1 mapped IPs
+    _ip_mappings_early = _load("ip_mappings") or []
+
+    def _lookup_ip_mapping(legacy_ip_raw: str) -> str | None:
+        """Look up NGDC equivalent IP from the 1-to-1 ip_mappings table."""
+        clean = legacy_ip_raw.strip()
+        for pfx in ("svr-", "rng-", "grp-"):
+            if clean.startswith(pfx):
+                clean = clean[len(pfx):]
+                break
+        for m in _ip_mappings_early:
+            legacy_val = str(m.get("legacy_ip", ""))
+            if legacy_val == clean or legacy_val == legacy_ip_raw:
+                ngdc_ip = str(m.get("ngdc_ip", ""))
+                return f"svr-{ngdc_ip}" if ngdc_ip else None
+        return None
+
     def _suggest_ngdc_name(legacy_name: str, entry_type: str, direction: str = "source") -> str:
         prefix = "grp" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
                  "svr" if legacy_name.startswith("svr") else \
                  "rng" if legacy_name.startswith("rng") else "grp"
         short_app = app_id.upper()
+        # For individual IPs (svr-*), try 1-to-1 IP mapping first
+        if prefix == "svr":
+            mapped = _lookup_ip_mapping(legacy_name)
+            if mapped:
+                return mapped
         # Use direction-specific NH/SZ from the rule's actual zones
         if direction == "destination":
             nh, sz = dst_nh, dst_sz
@@ -2982,29 +3021,44 @@ async def expand_groups_in_rule(rule: dict[str, Any]) -> dict[str, Any]:
     for g in groups:
         group_lookup[g.get("name", "")] = g.get("members", [])
 
+    def _is_group_entry(name: str) -> bool:
+        """Check if entry is a group (grp-, g-, gapigr- prefix) vs individual IP/subnet/range."""
+        lower = name.lower()
+        return lower.startswith("grp-") or lower.startswith("g-") or lower.startswith("gapigr-")
+
     def expand_field(field_value: str) -> str:
         if not field_value:
             return ""
         lines = [l.strip() for l in field_value.split("\n") if l.strip()]
         expanded_lines: list[str] = []
         for line in lines:
-            if line in group_lookup:
-                expanded_lines.append(f"[Group] {line}")
-                for member in group_lookup[line]:
-                    mtype = member.get("type", "ip")
-                    mval = member.get("value", "")
-                    expanded_lines.append(f"  {mtype}: {mval}")
-            else:
-                # Check if it's a group by prefix
-                matching = [g for g in groups if g.get("name") == line]
-                if matching:
+            if _is_group_entry(line):
+                # This is a group — expand to show members
+                if line in group_lookup:
                     expanded_lines.append(f"[Group] {line}")
-                    for member in matching[0].get("members", []):
+                    for member in group_lookup[line]:
                         mtype = member.get("type", "ip")
                         mval = member.get("value", "")
-                        expanded_lines.append(f"  {mtype}: {mval}")
+                        # Check for nested groups
+                        if mtype == "group" and mval in group_lookup:
+                            expanded_lines.append(f"  [Group] {mval}")
+                            for nested in group_lookup[mval]:
+                                expanded_lines.append(f"    {nested.get('type', 'ip')}: {nested.get('value', '')}")
+                        else:
+                            expanded_lines.append(f"  {mtype}: {mval}")
                 else:
-                    expanded_lines.append(line)
+                    matching = [g for g in groups if g.get("name") == line]
+                    if matching:
+                        expanded_lines.append(f"[Group] {line}")
+                        for member in matching[0].get("members", []):
+                            mtype = member.get("type", "ip")
+                            mval = member.get("value", "")
+                            expanded_lines.append(f"  {mtype}: {mval}")
+                    else:
+                        expanded_lines.append(f"[Group] {line}")
+            else:
+                # Individual IP, subnet, or range — show as-is, no expansion
+                expanded_lines.append(line)
         return "\n".join(expanded_lines)
 
     rule["rule_source_expanded"] = expand_field(rule.get("rule_source", ""))
