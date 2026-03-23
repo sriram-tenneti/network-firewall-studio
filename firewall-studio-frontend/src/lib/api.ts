@@ -377,17 +377,27 @@ export const updateLegacyRule = (ruleId: string, data: Partial<LegacyRule>) =>
 export const deleteLegacyRule = (ruleId: string) =>
   fetchJSON<{ message: string }>(`/api/reference/legacy-rules/${ruleId}`, { method: 'DELETE' });
 
-// Excel import for legacy rules
+// Excel import for legacy rules (supports large files up to 50K+ rows)
 export const importLegacyRulesExcel = async (file: File, environment?: string): Promise<{ added: number; duplicates: number; total: number }> => {
   const formData = new FormData();
   formData.append('file', file);
   if (environment) formData.append('environment', environment);
-  const res = await fetch(`${API_BASE}/api/reference/legacy-rules/import`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!res.ok) throw new Error(`Import failed: ${res.status}`);
-  return res.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300000); // 5 min timeout for large files
+  try {
+    const res = await fetch(`${API_BASE}/api/reference/legacy-rules/import`, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      throw new Error(errBody?.detail || `Import failed: ${res.status}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 // Migration operations
