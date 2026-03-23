@@ -52,6 +52,32 @@ def _now() -> str:
     return datetime.utcnow().isoformat()
 
 
+def _auto_prefix(value: str, entry_type: str = "ip") -> str:
+    """Auto-prefix a value based on entry type for NGDC naming standards.
+    - ip -> svr-
+    - group -> grp- (normalizes legacy g- to grp-)
+    - cidr/range/subnet -> rng-
+    If already prefixed, returns as-is (except g- which is normalized to grp-).
+    """
+    v = value.strip()
+    if not v:
+        return v
+    vl = v.lower()
+    # Normalize legacy g- prefix to NGDC grp-
+    if vl.startswith("g-") and not vl.startswith("grp-"):
+        v = "grp-" + v[2:]
+        return v
+    # Already has a recognized prefix
+    if vl.startswith(("svr-", "grp-", "rng-", "sub-")):
+        return v
+    # Add prefix based on type
+    if entry_type in ("group",):
+        return f"grp-{v}"
+    if entry_type in ("cidr", "subnet", "range"):
+        return f"rng-{v}"
+    return f"svr-{v}"
+
+
 def _ensure_dir() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1415,6 +1441,13 @@ async def get_group(name: str) -> dict[str, Any] | None:
 
 async def create_group(data: dict[str, Any]) -> dict[str, Any]:
     groups = _load("groups") or []
+    # Auto-prefix group name if missing
+    if "name" in data:
+        data["name"] = _auto_prefix(data["name"], "group")
+    # Auto-prefix member values
+    for m in data.get("members", []):
+        if "value" in m:
+            m["value"] = _auto_prefix(m["value"], m.get("type", "ip"))
     data["created_at"] = _now()
     data["updated_at"] = _now()
     groups.append(dict(data))
@@ -1444,6 +1477,9 @@ async def delete_group(name: str) -> bool:
 
 async def add_group_member(group_name: str, member: dict[str, Any]) -> dict[str, Any] | None:
     groups = _load("groups") or []
+    # Auto-prefix member value based on type
+    if "value" in member:
+        member["value"] = _auto_prefix(member["value"], member.get("type", "ip"))
     for g in groups:
         if g.get("name") == group_name:
             members = g.get("members", [])

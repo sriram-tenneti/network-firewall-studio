@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { getGroups, createGroup, addGroupMember, removeGroupMember } from '@/lib/api';
 import type { FirewallGroup, GroupMember } from '@/types';
+import { autoPrefix } from '@/lib/utils';
 
 interface GroupManagerModalProps {
   isOpen: boolean;
@@ -66,7 +67,8 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
 
   const handleCreateGroup = async () => {
     try {
-      await createGroup(newGroup);
+      const prefixedGroup = { ...newGroup, name: autoPrefix(newGroup.name, 'group') };
+      await createGroup(prefixedGroup);
       setShowCreate(false);
       setNewGroup({ name: '', app_id: '', nh: '', sz: 'Standard', subtype: 'src', description: '', environment: filterEnv || 'Production' });
       loadGroups();
@@ -76,7 +78,8 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const handleAddMember = async () => {
     if (!selectedGroup || !newMember.value) return;
     try {
-      const updated = await addGroupMember(selectedGroup.name, newMember);
+      const prefixedMember = { ...newMember, value: autoPrefix(newMember.value, newMember.type) };
+      const updated = await addGroupMember(selectedGroup.name, prefixedMember);
       setSelectedGroup(updated);
       setNewMember({ type: 'ip', value: '', description: '' });
       loadGroups();

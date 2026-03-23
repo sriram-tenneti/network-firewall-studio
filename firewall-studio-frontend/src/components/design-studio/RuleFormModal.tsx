@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../shared/Modal';
 import type { FirewallRule, Application, BirthrightValidation } from '@/types';
 import { validateBirthright } from '@/lib/api';
+import { autoPrefix } from '@/lib/utils';
 
 interface RuleConflict {
   type: 'exact_duplicate' | 'birthright_ngdc' | 'legacy_passthrough' | 'port_overlap';
@@ -199,8 +200,27 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
       setShowConflicts(true);
       return;
     }
-    onSave(form);
+    // Auto-prefix source and destination before saving
+    const prefixedForm = {
+      ...form,
+      source: form.source ? autoPrefixFormValue(form.source) : form.source,
+      destination: form.destination ? autoPrefixFormValue(form.destination) : form.destination,
+    };
+    onSave(prefixedForm);
     onClose();
+  };
+
+  /** Detect type and auto-prefix a form source/destination value */
+  const autoPrefixFormValue = (val: string): string => {
+    const v = val.trim();
+    if (!v) return v;
+    const vl = v.toLowerCase();
+    // Already prefixed
+    if (vl.startsWith('svr-') || vl.startsWith('grp-') || vl.startsWith('rng-') || vl.startsWith('sub-') || vl.startsWith('g-')) return v;
+    // Detect type: CIDR -> rng-, plain IP -> svr-, otherwise grp-
+    if (/\/\d{1,2}$/.test(v)) return autoPrefix(v, 'subnet');
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v)) return autoPrefix(v, 'ip');
+    return autoPrefix(v, 'group');
   };
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white';

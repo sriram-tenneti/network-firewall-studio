@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Application, BirthrightValidation } from '@/types';
 import * as api from '@/lib/api';
+import { autoPrefix } from '@/lib/utils';
 
 interface DragDropRuleBuilderProps {
   applications: Application[];
@@ -140,10 +141,12 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
     if (!canSubmit) return;
     setSubmitting(true);
     try {
+      const finalSrc = form.src_custom ? autoPrefix(form.src_custom.trim(), 'group') : srcName;
+      const finalDst = form.dst_custom ? autoPrefix(form.dst_custom.trim(), 'group') : dstName;
       await api.createRule({
         application: form.application, environment: form.environment, datacenter: form.datacenter,
-        source: form.src_custom || srcName, source_zone: form.src_sz,
-        destination: form.dst_custom || dstName, destination_zone: form.dst_sz,
+        source: finalSrc, source_zone: form.src_sz,
+        destination: finalDst, destination_zone: form.dst_sz,
         port: effectivePort, protocol: form.protocol, action: form.action,
         description: form.description, is_group_to_group: true,
       });
