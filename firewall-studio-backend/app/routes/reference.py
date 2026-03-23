@@ -504,10 +504,16 @@ async def delete_legacy_rule_endpoint(rule_id: str):
 @router.post("/legacy-rules/import")
 async def import_legacy_rules_excel(file: UploadFile = File(...)):
     """Import legacy rules from an Excel (.xlsx) file with deduplication."""
-    if not file.filename or not file.filename.endswith(".xlsx"):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
     contents = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
+        )
     ws = wb.active
     if ws is None:
         raise HTTPException(status_code=400, detail="Empty workbook")
@@ -705,10 +711,16 @@ async def delete_ngdc_mapping_endpoint(mapping_id: str):
 async def import_ngdc_mappings_excel(file: UploadFile = File(...)):
     """Import legacy-to-NGDC mappings from Excel."""
     from app.database import import_ngdc_mappings
-    if not file.filename or not file.filename.endswith(".xlsx"):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
     contents = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
+        )
     ws = wb.active
     if ws is None:
         raise HTTPException(status_code=400, detail="Empty workbook")
@@ -809,10 +821,16 @@ async def delete_app_dc_mapping_endpoint(mapping_id: str):
 async def import_app_dc_mappings_excel(file: UploadFile = File(...)):
     """Import App-to-DC/NH/SZ mappings from Excel."""
     from app.database import import_app_dc_mappings
-    if not file.filename or not file.filename.endswith(".xlsx"):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
     contents = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
+        )
     ws = wb.active
     if ws is None:
         raise HTTPException(status_code=400, detail="Empty workbook")
