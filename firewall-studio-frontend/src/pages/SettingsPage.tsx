@@ -81,6 +81,11 @@ export default function SettingsPage() {
   const [dcVendorMap, setDcVendorMap] = useState<Record<string, Record<string, string>>>({});
   const [fwViewMode, setFwViewMode] = useState<'patterns' | 'devices'>('patterns');
 
+  // Data Mode state (seed vs live)
+  const [dataMode, setDataModeState] = useState<string>('seed');
+  const [switchingMode, setSwitchingMode] = useState(false);
+  const [resettingSeed, setResettingSeed] = useState(false);
+
   // Edit states for App Management
   const [editingAppId, setEditingAppId] = useState<string | null>(null);
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
@@ -103,6 +108,41 @@ export default function SettingsPage() {
   // Edit states for Users
   const userModal = useModal<ADUser>();
   const [editUser, setEditUser] = useState<Partial<ADUser>>({});
+
+  const loadDataMode = useCallback(async () => {
+    try {
+      const res = await api.getDataMode();
+      setDataModeState(res.mode);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleSwitchDataMode = async (mode: string) => {
+    setSwitchingMode(true);
+    try {
+      const res = await api.setDataMode(mode);
+      setDataModeState(res.mode);
+      showNotification(`Switched to ${mode === 'live' ? 'Live Data' : 'Seed/Test Data'} mode`, 'success');
+      loadRefData();
+    } catch {
+      showNotification('Failed to switch data mode', 'error');
+    } finally {
+      setSwitchingMode(false);
+    }
+  };
+
+  const handleResetSeed = async () => {
+    if (!confirm('Reset seed/test data to defaults? This will NOT affect your live data.')) return;
+    setResettingSeed(true);
+    try {
+      await api.resetSeedData();
+      showNotification('Seed data reset successfully', 'success');
+      if (dataMode === 'seed') loadRefData();
+    } catch {
+      showNotification('Failed to reset seed data', 'error');
+    } finally {
+      setResettingSeed(false);
+    }
+  };
 
   const loadRefData = useCallback(async () => {
     setLoadingRef(true);
@@ -351,7 +391,10 @@ export default function SettingsPage() {
     return true;
   });
 
+  useEffect(() => { loadDataMode(); }, [loadDataMode]);
+
   const tabs = [
+    { id: 'data_mode', label: 'Data Mode' },
     { id: 'app_management', label: 'App Management' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
@@ -379,6 +422,82 @@ export default function SettingsPage() {
       )}
 
       <div className="mt-6">
+        {/* ── Data Mode Tab ── */}
+        {activeTab === 'data_mode' && (
+          <div className="space-y-6">
+            <div className="p-6 bg-white border border-gray-200 rounded-lg">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Data Mode</h2>
+              <p className="text-sm text-gray-500 mb-6">Switch between seed/test data and live/real data. Seed data is for testing and development. Live data stores your actual imported rules and configurations separately.</p>
+
+              <div className="grid grid-cols-2 gap-6">
+                {/* Seed Mode Card */}
+                <div className={`p-5 rounded-lg border-2 cursor-pointer transition-all ${
+                  dataMode === 'seed'
+                    ? 'border-amber-500 bg-amber-50'
+                    : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/50'
+                }`} onClick={() => !switchingMode && handleSwitchDataMode('seed')}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${dataMode === 'seed' ? 'border-amber-500 bg-amber-500' : 'border-gray-300'}`}>
+                      {dataMode === 'seed' && <div className="w-full h-full rounded-full bg-white scale-[0.4]" />}
+                    </div>
+                    <h3 className="text-sm font-bold text-gray-900">Seed / Test Data</h3>
+                    {dataMode === 'seed' && <span className="px-2 py-0.5 text-xs rounded-full bg-amber-200 text-amber-800 font-medium">Active</span>}
+                  </div>
+                  <p className="text-xs text-gray-600">Pre-loaded sample data for testing and development. All seed data can be reset to defaults at any time without affecting live data.</p>
+                </div>
+
+                {/* Live Mode Card */}
+                <div className={`p-5 rounded-lg border-2 cursor-pointer transition-all ${
+                  dataMode === 'live'
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50'
+                }`} onClick={() => !switchingMode && handleSwitchDataMode('live')}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${dataMode === 'live' ? 'border-green-500 bg-green-500' : 'border-gray-300'}`}>
+                      {dataMode === 'live' && <div className="w-full h-full rounded-full bg-white scale-[0.4]" />}
+                    </div>
+                    <h3 className="text-sm font-bold text-gray-900">Live / Real Data</h3>
+                    {dataMode === 'live' && <span className="px-2 py-0.5 text-xs rounded-full bg-green-200 text-green-800 font-medium">Active</span>}
+                  </div>
+                  <p className="text-xs text-gray-600">Your real imported data. Rules imported via Firewall Management, NGDC mappings, and all configurations are stored separately from seed data.</p>
+                </div>
+              </div>
+
+              {switchingMode && (
+                <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600" />
+                  Switching data mode...
+                </div>
+              )}
+            </div>
+
+            {/* Seed Data Management */}
+            <div className="p-6 bg-white border border-gray-200 rounded-lg">
+              <h3 className="text-sm font-semibold text-gray-800 mb-3">Seed Data Management</h3>
+              <p className="text-xs text-gray-500 mb-4">Reset seed/test data back to factory defaults. This will NOT affect your live data.</p>
+              <button onClick={handleResetSeed} disabled={resettingSeed}
+                className="px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50">
+                {resettingSeed ? 'Resetting...' : 'Reset Seed Data to Defaults'}
+              </button>
+            </div>
+
+            {/* Current Mode Info */}
+            <div className={`p-4 rounded-lg border ${
+              dataMode === 'live'
+                ? 'bg-green-50 border-green-200'
+                : 'bg-amber-50 border-amber-200'
+            }`}>
+              <p className="text-sm">
+                <strong>Current Mode:</strong>{' '}
+                <span className={dataMode === 'live' ? 'text-green-700' : 'text-amber-700'}>
+                  {dataMode === 'live' ? 'Live / Real Data' : 'Seed / Test Data'}
+                </span>
+                {' '}&mdash; All data reads and writes across the portal are using the <strong>{dataMode}</strong> data store.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── App Management Tab ── */}
         {activeTab === 'app_management' && (
           <div className="space-y-6">

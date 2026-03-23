@@ -512,6 +512,13 @@ export const compileRuleExpanded = (ruleId: string, vendor = 'generic', expandGr
     method: 'POST', body: JSON.stringify({ vendor, expand_groups: expandGroups })
   });
 
+// Data Mode (Seed vs Live)
+export const getDataMode = () => fetchJSON<{ mode: string }>('/api/reference/data-mode');
+export const setDataMode = (mode: string) =>
+  fetchJSON<{ mode: string }>('/api/reference/data-mode', { method: 'POST', body: JSON.stringify({ mode }) });
+export const resetSeedData = () =>
+  fetchJSON<{ message: string; current_mode: string }>('/api/reference/data-mode/reset-seed', { method: 'POST' });
+
 // Imported Apps from Legacy Rules (with mapping status)
 export const getImportedApps = () =>
   fetchJSON<{ app_id: string; app_name: string; app_distributed_id: string; rule_count: number; has_mapping: boolean; components: Record<string, unknown>[] }[]>(

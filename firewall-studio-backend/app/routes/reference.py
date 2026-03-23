@@ -34,6 +34,37 @@ from app.services.naming_standards import (
 router = APIRouter(prefix="/api/reference", tags=["Reference Data"])
 
 
+# ---- Data Mode Toggle (Seed vs Live) ----
+
+@router.get("/data-mode")
+async def get_data_mode_endpoint():
+    """Return the current data mode: 'seed' or 'live'."""
+    from app.database import get_data_mode
+    return {"mode": get_data_mode()}
+
+
+@router.post("/data-mode")
+async def set_data_mode_endpoint(data: dict):
+    """Switch data mode. 'seed' = test/seed data, 'live' = real imported data."""
+    from app.database import set_data_mode
+    mode = data.get("mode", "")
+    if mode not in ("seed", "live"):
+        raise HTTPException(status_code=400, detail="mode must be 'seed' or 'live'")
+    result = set_data_mode(mode)
+    return {"mode": result}
+
+
+@router.post("/data-mode/reset-seed")
+async def reset_seed_data():
+    """Re-seed the seed data directory (does NOT touch live data)."""
+    from app.database import seed_database, set_data_mode, get_data_mode
+    prev = get_data_mode()
+    set_data_mode("seed")
+    await seed_database()
+    set_data_mode(prev)
+    return {"message": "Seed data reset successfully", "current_mode": prev}
+
+
 # ---- Read endpoints ----
 
 @router.get("/ngdc-datacenters")

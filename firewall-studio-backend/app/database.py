@@ -41,7 +41,37 @@ from app.seed_data import (
     build_seed_chg_requests as _sd_build_chg_requests,
 )
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+SEED_DATA_DIR = Path(__file__).parent.parent / "data"
+LIVE_DATA_DIR = Path(__file__).parent.parent / "live-data"
+
+# Current data mode: "seed" uses data/ (seed/test data), "live" uses live-data/ (real data)
+_data_mode: str = "seed"
+
+
+def _get_data_dir() -> Path:
+    """Return the active data directory based on current mode."""
+    return LIVE_DATA_DIR if _data_mode == "live" else SEED_DATA_DIR
+
+
+# Keep DATA_DIR as a property-like accessor for backward compatibility
+DATA_DIR = SEED_DATA_DIR
+
+
+def get_data_mode() -> str:
+    """Return the current data mode: 'seed' or 'live'."""
+    return _data_mode
+
+
+def set_data_mode(mode: str) -> str:
+    """Switch data mode. 'seed' = test data, 'live' = real data."""
+    global _data_mode
+    if mode not in ("seed", "live"):
+        raise ValueError("mode must be 'seed' or 'live'")
+    _data_mode = mode
+    # Ensure live-data dir exists when switching to live
+    if mode == "live":
+        LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return _data_mode
 
 
 def _id() -> str:
@@ -79,11 +109,11 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
 
 
 def _ensure_dir() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _get_data_dir().mkdir(parents=True, exist_ok=True)
 
 
 def _load(name: str) -> Any:
-    path = DATA_DIR / f"{name}.json"
+    path = _get_data_dir() / f"{name}.json"
     if not path.exists():
         return None
     with open(path, "r") as f:
@@ -92,7 +122,7 @@ def _load(name: str) -> Any:
 
 def _save(name: str, data: Any) -> None:
     _ensure_dir()
-    path = DATA_DIR / f"{name}.json"
+    path = _get_data_dir() / f"{name}.json"
     with open(path, "w") as f:
         json.dump(data, f, indent=2, default=str)
 
