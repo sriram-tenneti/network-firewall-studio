@@ -24,7 +24,9 @@ from app.database import (
     get_ngdc_recommendations,
 )
 import io
+import json as json_lib
 import openpyxl
+from fastapi.responses import StreamingResponse
 from app.services.naming_standards import (
     validate_name, generate_group_name, generate_server_name,
     generate_subnet_name, suggest_standard_name, determine_security_zone,
@@ -587,6 +589,99 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
         parsed_rules.append(rule)
     result = await import_legacy_rules(parsed_rules)
     return result
+
+
+@router.post("/legacy-rules/import-json")
+async def import_legacy_rules_json(file: UploadFile = File(...)):
+    """Import legacy rules from a JSON file with deduplication.
+    Expects a JSON array of objects with same field names as Excel columns
+    (either Excel header names or internal field names are accepted)."""
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Only .json files are supported")
+    contents = await file.read()
+    try:
+        data = json_lib.loads(contents)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}")
+    if not isinstance(data, list):
+        raise HTTPException(status_code=400, detail="JSON must be an array of rule objects")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty JSON array")
+
+    # Accept both Excel header names and internal field names
+    col_map = {
+        "App ID": "app_id", "app_id": "app_id",
+        "App Current Distributed ID": "app_distributed_id", "app_distributed_id": "app_distributed_id",
+        "App Name": "app_name", "app_name": "app_name",
+        "Inventory Item": "inventory_item", "inventory_item": "inventory_item",
+        "Policy Name": "policy_name", "policy_name": "policy_name",
+        "Rule Global": "rule_global", "rule_global": "rule_global",
+        "Rule Action": "rule_action", "rule_action": "rule_action",
+        "Rule Source": "rule_source", "rule_source": "rule_source",
+        "Rule Source Expanded": "rule_source_expanded", "rule_source_expanded": "rule_source_expanded",
+        "Rule Source Zone": "rule_source_zone", "rule_source_zone": "rule_source_zone",
+        "Rule Destination": "rule_destination", "rule_destination": "rule_destination",
+        "Rule Destination Expanded": "rule_destination_expanded", "rule_destination_expanded": "rule_destination_expanded",
+        "Rule Destination Zone": "rule_destination_zone", "rule_destination_zone": "rule_destination_zone",
+        "Rule Service": "rule_service", "rule_service": "rule_service",
+        "Rule Service Expanded": "rule_service_expanded", "rule_service_expanded": "rule_service_expanded",
+        "RN": "rn", "rn": "rn",
+        "RC": "rc", "rc": "rc",
+    }
+    parsed_rules = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        rule: dict = {}
+        for key, val in item.items():
+            mapped = col_map.get(key)
+            if mapped:
+                rule[mapped] = str(val) if val is not None else ""
+        rule["is_standard"] = False
+        rule["migration_status"] = "Not Started"
+        parsed_rules.append(rule)
+    result = await import_legacy_rules(parsed_rules)
+    return result
+
+
+@router.get("/legacy-rules/export-excel")
+async def export_legacy_rules_excel(app_id: str = ""):
+    """Export imported legacy rules as an Excel (.xlsx) file."""
+    rules = await get_legacy_rules()
+    if app_id:
+        rules = [r for r in rules if r.get("app_id") == app_id]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Legacy Rules"
+    headers = [
+        "App ID", "App Current Distributed ID", "App Name", "Inventory Item",
+        "Policy Name", "Rule Global", "Rule Action",
+        "Rule Source", "Rule Source Expanded", "Rule Source Zone",
+        "Rule Destination", "Rule Destination Expanded", "Rule Destination Zone",
+        "Rule Service", "Rule Service Expanded", "RN", "RC", "Migration Status",
+    ]
+    field_map = [
+        "app_id", "app_distributed_id", "app_name", "inventory_item",
+        "policy_name", "rule_global", "rule_action",
+        "rule_source", "rule_source_expanded", "rule_source_zone",
+        "rule_destination", "rule_destination_expanded", "rule_destination_zone",
+        "rule_service", "rule_service_expanded", "rn", "rc", "migration_status",
+    ]
+    ws.append(headers)
+    for rule in rules:
+        ws.append([rule.get(f, "") for f in field_map])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    wb.close()
+    buf.seek(0)
+    filename = f"legacy_rules_{app_id}.xlsx" if app_id else "legacy_rules.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/legacy-rules/imported-apps")

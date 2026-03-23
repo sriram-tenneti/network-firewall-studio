@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules } from '@/lib/api';
+import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules } from '@/lib/api';
 import type { FirewallRule, LegacyRule } from '@/types';
 
 interface ImportedApp {
@@ -141,8 +141,11 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     setError('');
     setResult(null);
     try {
+      const isJSON = file.name.endsWith('.json');
       const res = isNGDCMappings
         ? await importNGDCMappingsExcel(file)
+        : isJSON
+        ? await importLegacyRulesJSON(file)
         : await importLegacyRulesExcel(file);
       setResult(res);
       if (isNGDCMappings) loadMappings();
@@ -373,21 +376,21 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       {/* Excel Import Section (for non-NFR contexts) */}
       {!isNFRImport && <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">
-          {isNGDCMappings ? 'Import Mappings from Excel' : 'Import from Excel'}
+          {isNGDCMappings ? 'Import Mappings from Excel' : 'Import from Excel / JSON'}
         </h2>
         <div className="flex items-center gap-4">
           <label className="flex-1">
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all">
               <input
                 type="file"
-                accept=".xlsx"
+                accept={isNGDCMappings ? '.xlsx' : '.xlsx,.xls,.json'}
                 className="hidden"
                 onChange={e => setFile(e.target.files?.[0] || null)}
               />
               <svg className="w-10 h-10 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
-              <p className="text-sm text-gray-600">{file ? file.name : 'Click to select .xlsx file'}</p>
+              <p className="text-sm text-gray-600">{file ? file.name : isNGDCMappings ? 'Click to select .xlsx file' : 'Click to select .xlsx or .json file'}</p>
             </div>
           </label>
           <button
@@ -448,6 +451,9 @@ export default function DataImportPage({ context }: DataImportPageProps) {
               />
               <button onClick={exportImportedRulesToCSV} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">
                 Export CSV
+              </button>
+              <button onClick={() => exportLegacyRulesToExcel(rulesAppFilter || undefined)} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+                Export Excel
               </button>
               <button onClick={() => setShowImportedRules(false)} className="px-3 py-2 text-xs text-gray-500 border rounded-md hover:bg-gray-50">
                 Hide
