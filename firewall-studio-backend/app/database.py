@@ -610,15 +610,26 @@ async def clear_all_legacy_rules() -> int:
     return deleted_count
 
 
+def _rule_fingerprint(rule: dict[str, Any]) -> str:
+    """Build a fingerprint from ALL data columns of a rule (excludes internal fields like id, is_standard, migration_status).
+    Two records are duplicates only when every imported column matches."""
+    skip = {"id", "is_standard", "migration_status", "imported_at", "environment"}
+    parts: list[str] = []
+    for k in sorted(rule.keys()):
+        if k in skip:
+            continue
+        parts.append(f"{k}={rule[k]}")
+    return "|".join(parts)
+
+
 async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:
-    """Import legacy rules from Excel, dedup against existing rules.
-    Optimised for large imports (50K+ rows).
+    """Import legacy rules from Excel, dedup against existing rules using ALL columns.
+    Optimised for large imports (50K+ rows). Delta-based — only new/changed rows are added.
     NGDC auto-promotion is deferred — use the dedicated auto-import endpoint instead."""
     existing = _load("legacy_rules") or []
     existing_keys: set[str] = set()
     for r in existing:
-        key = f"{r.get('app_id')}|{r.get('app_distributed_id')}|{r.get('rule_source')}|{r.get('rule_destination')}|{r.get('rule_service')}"
-        existing_keys.add(key)
+        existing_keys.add(_rule_fingerprint(r))
 
     max_num = 0
     for r in existing:
@@ -632,8 +643,8 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
     added = 0
     duplicates = 0
     for rule in new_rules:
-        key = f"{rule.get('app_id')}|{rule.get('app_distributed_id')}|{rule.get('rule_source')}|{rule.get('rule_destination')}|{rule.get('rule_service')}"
-        if key in existing_keys:
+        fp = _rule_fingerprint(rule)
+        if fp in existing_keys:
             duplicates += 1
             continue
         max_num += 1
@@ -641,7 +652,7 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         rule.setdefault("is_standard", False)
         rule.setdefault("migration_status", "Not Started")
         existing.append(rule)
-        existing_keys.add(key)
+        existing_keys.add(fp)
         added += 1
 
     _save("legacy_rules", existing)
@@ -3988,3 +3999,144 @@ async def clear_all_legacy_rules_force() -> int:
     count = len(rules)
     _save("legacy_rules", [])
     return count
+
+
+async def clear_data_by_app(app_id: str) -> dict[str, int]:
+    """Clear all data for a specific app_id across all stores."""
+    counts: dict[str, int] = {}
+
+    # Legacy rules
+    legacy = _load("legacy_rules") or []
+    filtered = [r for r in legacy if str(r.get("app_id", "")) != app_id]
+    counts["legacy_rules"] = len(legacy) - len(filtered)
+    _save("legacy_rules", filtered)
+
+    # Firewall rules
+    fw = _load("firewall_rules") or []
+    filtered_fw = [r for r in fw if str(r.get("application", "")) != app_id]
+    counts["firewall_rules"] = len(fw) - len(filtered_fw)
+    _save("firewall_rules", filtered_fw)
+
+    # Reviews
+    reviews = _load("reviews") or []
+    # reviews reference rule_id; check rule_summary.application
+    filtered_rev = [r for r in reviews if str(r.get("rule_summary", {}).get("application", "")) != app_id]
+    counts["reviews"] = len(reviews) - len(filtered_rev)
+    _save("reviews", filtered_rev)
+
+    # Modifications
+    mods = _load("rule_modifications") or []
+    filtered_mods = [m for m in mods if str(m.get("application", "")) != app_id]
+    counts["modifications"] = len(mods) - len(filtered_mods)
+    _save("rule_modifications", filtered_mods)
+
+    # Studio rules (separate JSON)
+    studio = await get_studio_rules()
+    filtered_studio = [r for r in studio if str(r.get("application", "")) != app_id]
+    counts["studio_rules"] = len(studio) - len(filtered_studio)
+    _save_separate("studio_rules", filtered_studio)
+
+    # Migration data (separate JSON)
+    migration = await get_migration_data()
+    for key in ["migration_history", "migration_mappings", "migration_reviews", "migrated_rules"]:
+        items = migration.get(key, [])
+        app_field = "app_id" if key != "migrated_rules" else "application"
+        filtered_items = [i for i in items if str(i.get(app_field, "")) != app_id]
+        counts[key] = len(items) - len(filtered_items)
+        migration[key] = filtered_items
+    _save_separate("migration_data", migration)
+
+    return counts
+
+
+async def clear_data_by_environment(environment: str) -> dict[str, int]:
+    """Clear all data for a specific environment across all stores."""
+    counts: dict[str, int] = {}
+
+    # Legacy rules
+    legacy = _load("legacy_rules") or []
+    filtered = [r for r in legacy if str(r.get("environment", "")) != environment]
+    counts["legacy_rules"] = len(legacy) - len(filtered)
+    _save("legacy_rules", filtered)
+
+    # Firewall rules
+    fw = _load("firewall_rules") or []
+    filtered_fw = [r for r in fw if str(r.get("environment", "")) != environment]
+    counts["firewall_rules"] = len(fw) - len(filtered_fw)
+    _save("firewall_rules", filtered_fw)
+
+    # Reviews
+    reviews = _load("reviews") or []
+    filtered_rev = [r for r in reviews if str(r.get("rule_summary", {}).get("environment", "")) != environment]
+    counts["reviews"] = len(reviews) - len(filtered_rev)
+    _save("reviews", filtered_rev)
+
+    # Modifications
+    mods = _load("rule_modifications") or []
+    filtered_mods = [m for m in mods if str(m.get("environment", "")) != environment]
+    counts["modifications"] = len(mods) - len(filtered_mods)
+    _save("rule_modifications", filtered_mods)
+
+    # Studio rules (separate JSON)
+    studio = await get_studio_rules()
+    filtered_studio = [r for r in studio if str(r.get("environment", "")) != environment]
+    counts["studio_rules"] = len(studio) - len(filtered_studio)
+    _save_separate("studio_rules", filtered_studio)
+
+    return counts
+
+
+async def get_data_summary_by_app() -> list[dict[str, Any]]:
+    """Return per-app record counts for the Data Management overview."""
+    legacy = _load("legacy_rules") or []
+    fw = _load("firewall_rules") or []
+    reviews = _load("reviews") or []
+    studio = await get_studio_rules()
+
+    app_counts: dict[str, dict[str, int]] = {}
+    for r in legacy:
+        aid = str(r.get("app_id", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["legacy"] += 1
+    for r in fw:
+        aid = str(r.get("application", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["firewall"] += 1
+    for r in reviews:
+        aid = str(r.get("rule_summary", {}).get("application", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["reviews"] += 1
+    for r in studio:
+        aid = str(r.get("application", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["studio"] += 1
+
+    return [{"app_id": k, **v, "total": sum(v.values())} for k, v in sorted(app_counts.items())]
+
+
+async def get_data_summary_by_env() -> list[dict[str, Any]]:
+    """Return per-environment record counts for the Data Management overview."""
+    legacy = _load("legacy_rules") or []
+    fw = _load("firewall_rules") or []
+    reviews = _load("reviews") or []
+    studio = await get_studio_rules()
+
+    env_counts: dict[str, dict[str, int]] = {}
+    for r in legacy:
+        env = str(r.get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["legacy"] += 1
+    for r in fw:
+        env = str(r.get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["firewall"] += 1
+    for r in reviews:
+        env = str(r.get("rule_summary", {}).get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["reviews"] += 1
+    for r in studio:
+        env = str(r.get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["studio"] += 1
+
+    return [{"environment": k, **v, "total": sum(v.values())} for k, v in sorted(env_counts.items())]

@@ -100,6 +100,14 @@ export default function SettingsPage() {
   const [clearingMods, setClearingMods] = useState(false);
   const [clearingAll, setClearingAll] = useState(false);
 
+  // Per-app / per-environment data summary
+  const [appDataSummary, setAppDataSummary] = useState<{app_id:string;legacy:number;firewall:number;reviews:number;studio:number;total:number}[]>([]);
+  const [envDataSummary, setEnvDataSummary] = useState<{environment:string;legacy:number;firewall:number;reviews:number;studio:number;total:number}[]>([]);
+  const [dmView, setDmView] = useState<'overview' | 'by-app' | 'by-env'>('overview');
+  const [clearingAppId, setClearingAppId] = useState<string | null>(null);
+  const [clearingEnvId, setClearingEnvId] = useState<string | null>(null);
+  const [dmEnvironment, setDmEnvironment] = useState<string>('');
+
   // Edit states for App Management
   const [editingAppId, setEditingAppId] = useState<string | null>(null);
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
@@ -515,6 +523,40 @@ export default function SettingsPage() {
     setClearingMods(false);
   };
 
+  const loadAppDataSummary = async () => {
+    try { const data = await api.getDataSummaryByApp(); setAppDataSummary(data); } catch { showNotification('Failed to load app summary', 'error'); }
+  };
+
+  const loadEnvDataSummary = async () => {
+    try { const data = await api.getDataSummaryByEnv(); setEnvDataSummary(data); } catch { showNotification('Failed to load env summary', 'error'); }
+  };
+
+  const handleClearByApp = async (appId: string) => {
+    if (!confirm(`Clear ALL data for application "${appId}"? This removes legacy rules, firewall rules, reviews, studio rules, and migration data for this app.`)) return;
+    setClearingAppId(appId);
+    try {
+      const res = await api.clearDataByApp(appId);
+      const total = Object.values(res.counts).reduce((a: number, b: number) => a + b, 0);
+      showNotification(`Cleared ${total} records for ${appId}`, 'success');
+      loadAppDataSummary();
+      loadUserDataSummary();
+    } catch { showNotification(`Failed to clear data for ${appId}`, 'error'); }
+    setClearingAppId(null);
+  };
+
+  const handleClearByEnv = async (env: string) => {
+    if (!confirm(`Clear ALL data for environment "${env}"? This removes legacy rules, firewall rules, reviews, and studio rules for this environment.`)) return;
+    setClearingEnvId(env);
+    try {
+      const res = await api.clearDataByEnv(env);
+      const total = Object.values(res.counts).reduce((a: number, b: number) => a + b, 0);
+      showNotification(`Cleared ${total} records for ${env}`, 'success');
+      loadEnvDataSummary();
+      loadUserDataSummary();
+    } catch { showNotification(`Failed to clear data for ${env}`, 'error'); }
+    setClearingEnvId(null);
+  };
+
   const handleClearAll = async () => {
     if (!confirm('⚠️ CLEAN ALL DATA — This will clear ALL imported data across the entire portal:\n\n• Legacy Rules\n• Migration Data\n• Studio Rules\n• Reviews\n• Firewall Rules\n• Modifications\n\nSeed reference data (NHs, SZs, Policy Matrix, etc.) is NOT affected.\n\nContinue?')) return;
     setClearingAll(true);
@@ -782,6 +824,122 @@ export default function SettingsPage() {
                 <div className="text-center py-6">
                   <p className="text-sm text-gray-500">Click &quot;Load Summary&quot; to view record counts and manage data stores.</p>
                 </div>
+              )}
+            </div>
+
+            {/* Per-App / Per-Environment Cleanup */}
+            <div className="p-6 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Targeted Cleanup (by App / Environment)</h2>
+                  <p className="text-xs text-gray-500 mt-1">Selectively clear data for a specific application or environment without affecting other data.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setDmView('by-app'); loadAppDataSummary(); }}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${dmView === 'by-app' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                    By Application
+                  </button>
+                  <button onClick={() => { setDmView('by-env'); loadEnvDataSummary(); }}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${dmView === 'by-env' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                    By Environment
+                  </button>
+                </div>
+              </div>
+
+              {/* Environment filter for app view */}
+              {dmView === 'by-app' && (
+                <div className="mb-3 flex items-center gap-2">
+                  <label className="text-xs font-medium text-gray-600">Filter Environment:</label>
+                  <select value={dmEnvironment} onChange={e => setDmEnvironment(e.target.value)}
+                    className="px-2 py-1 text-xs border border-gray-300 rounded-md bg-white">
+                    <option value="">All Environments</option>
+                    {environments.map(env => <option key={String(env)} value={String(env)}>{String(env)}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {dmView === 'by-app' && appDataSummary.length > 0 && (
+                <div className="overflow-auto max-h-96">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Application</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Legacy</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">FW Rules</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Reviews</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Studio</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Total</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {appDataSummary.map(row => (
+                        <tr key={row.app_id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-gray-800">{row.app_id}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.legacy}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.firewall}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.reviews}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.studio}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-gray-800">{row.total}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button onClick={() => handleClearByApp(row.app_id)} disabled={clearingAppId === row.app_id}
+                              className="px-3 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50">
+                              {clearingAppId === row.app_id ? '...' : 'Clear'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {dmView === 'by-app' && appDataSummary.length === 0 && (
+                <div className="text-center py-6 text-sm text-gray-500">Click &quot;By Application&quot; to load per-app data breakdown.</div>
+              )}
+
+              {dmView === 'by-env' && envDataSummary.length > 0 && (
+                <div className="overflow-auto max-h-96">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Environment</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Legacy</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">FW Rules</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Reviews</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Studio</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Total</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {envDataSummary.map(row => (
+                        <tr key={row.environment} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-gray-800">{row.environment}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.legacy}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.firewall}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.reviews}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{row.studio}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-gray-800">{row.total}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button onClick={() => handleClearByEnv(row.environment)} disabled={clearingEnvId === row.environment}
+                              className="px-3 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50">
+                              {clearingEnvId === row.environment ? '...' : 'Clear'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {dmView === 'by-env' && envDataSummary.length === 0 && (
+                <div className="text-center py-6 text-sm text-gray-500">Click &quot;By Environment&quot; to load per-environment data breakdown.</div>
+              )}
+
+              {dmView === 'overview' && (
+                <div className="text-center py-6 text-sm text-gray-500">Select &quot;By Application&quot; or &quot;By Environment&quot; to view targeted cleanup options.</div>
               )}
             </div>
           </div>

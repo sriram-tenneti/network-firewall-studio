@@ -770,6 +770,18 @@ export const clearModifications = () =>
 export const clearLegacyRulesForce = () =>
   fetchJSON<{ status: string; count: number }>('/api/reference/user-data/legacy-rules', { method: 'DELETE' });
 
+export const clearDataByApp = (appId: string) =>
+  fetchJSON<{ status: string; app_id: string; counts: Record<string, number> }>(`/api/reference/user-data/by-app/${encodeURIComponent(appId)}`, { method: 'DELETE' });
+
+export const clearDataByEnv = (environment: string) =>
+  fetchJSON<{ status: string; environment: string; counts: Record<string, number> }>(`/api/reference/user-data/by-env/${encodeURIComponent(environment)}`, { method: 'DELETE' });
+
+export const getDataSummaryByApp = () =>
+  fetchJSON<{ app_id: string; legacy: number; firewall: number; reviews: number; studio: number; total: number }[]>('/api/reference/user-data/summary/by-app');
+
+export const getDataSummaryByEnv = () =>
+  fetchJSON<{ environment: string; legacy: number; firewall: number; reviews: number; studio: number; total: number }[]>('/api/reference/user-data/summary/by-env');
+
 // ---- Hide Seed Data Toggle ----
 
 export const getHideSeed = () =>

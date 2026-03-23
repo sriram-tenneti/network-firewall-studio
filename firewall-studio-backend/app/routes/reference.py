@@ -1434,6 +1434,36 @@ async def clear_legacy_rules_force_endpoint():
     return {"status": "cleared", "count": count}
 
 
+@router.delete("/user-data/by-app/{app_id}")
+async def clear_data_by_app_endpoint(app_id: str):
+    """Clear all data for a specific application across all stores."""
+    from app.database import clear_data_by_app
+    counts = await clear_data_by_app(app_id)
+    return {"status": "cleared", "app_id": app_id, "counts": counts}
+
+
+@router.delete("/user-data/by-env/{environment}")
+async def clear_data_by_env_endpoint(environment: str):
+    """Clear all data for a specific environment across all stores."""
+    from app.database import clear_data_by_environment
+    counts = await clear_data_by_environment(environment)
+    return {"status": "cleared", "environment": environment, "counts": counts}
+
+
+@router.get("/user-data/summary/by-app")
+async def get_data_summary_by_app_endpoint():
+    """Return per-app record counts for Data Management overview."""
+    from app.database import get_data_summary_by_app
+    return await get_data_summary_by_app()
+
+
+@router.get("/user-data/summary/by-env")
+async def get_data_summary_by_env_endpoint():
+    """Return per-environment record counts for Data Management overview."""
+    from app.database import get_data_summary_by_env
+    return await get_data_summary_by_env()
+
+
 # ---- Standalone JSON Seed Export ----
 
 @router.get("/export/seed-json")
