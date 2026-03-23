@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import type { FirewallRule, RuleDelta, BirthrightValidation, FirewallGroup } from '@/types';
 import { validateBirthright, getGroup } from '@/lib/api';
+import { autoPrefix } from '@/lib/utils';
 
 interface EntryItem {
   id: string;
@@ -76,10 +77,11 @@ function EntryEditor({ label, entries, onChange }: {
 
   const handleAdd = () => {
     if (!addValue.trim()) return;
+    const prefixed = autoPrefix(addValue.trim(), addType);
     const newEntry: EntryItem = {
       id: `new-${nextId++}`,
       type: addType,
-      value: addValue.trim(),
+      value: prefixed,
       isNew: true,
     };
     onChange([...entries, newEntry]);
@@ -97,8 +99,10 @@ function EntryEditor({ label, entries, onChange }: {
 
   const handleSaveEdit = (id: string) => {
     if (!editValue.trim()) return;
+    const detectedType = detectType(editValue.trim());
+    const prefixed = autoPrefix(editValue.trim(), detectedType === 'group' ? 'group' : detectedType === 'subnet' ? 'subnet' : 'ip');
     onChange(entries.map(e =>
-      e.id === id ? { ...e, value: editValue.trim(), type: detectType(editValue.trim()), isModified: true } : e
+      e.id === id ? { ...e, value: prefixed, type: detectedType, isModified: true } : e
     ));
     setEditingId(null);
     setEditValue('');

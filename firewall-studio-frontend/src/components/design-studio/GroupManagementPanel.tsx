@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit, Users, X, Save } from 'lucide-react';
 import type { FirewallGroup, GroupMember } from '@/types';
 import * as api from '@/lib/api';
+import { autoPrefix } from '@/lib/utils';
 
 interface GroupManagementPanelProps {
   appFilter: string;
@@ -51,9 +52,10 @@ export function GroupManagementPanel({ appFilter, onNotification }: GroupManagem
   const handleAddMember = async () => {
     if (!selectedGroup || !newMemberValue) return;
     try {
-      const member: GroupMember = { type: newMemberType, value: newMemberValue, description: newMemberDesc };
+      const prefixedValue = autoPrefix(newMemberValue, newMemberType);
+      const member: GroupMember = { type: newMemberType, value: prefixedValue, description: newMemberDesc };
       await api.addGroupMember(selectedGroup.name, member);
-      onNotification(`Added ${newMemberValue} to ${selectedGroup.name}`, 'success');
+      onNotification(`Added ${prefixedValue} to ${selectedGroup.name}`, 'success');
       setNewMemberValue('');
       setNewMemberDesc('');
       loadGroups();

@@ -7,6 +7,7 @@ import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications } from '@/lib/api';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
+import { autoPrefix } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
 
 interface ModifyState {
@@ -262,9 +263,10 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const handleAdd = () => {
     if (!addValue.trim()) return;
+    const prefixed = autoPrefix(addValue.trim(), addType);
     if (addType === 'group') {
-      // For groups, check if it matches an existing group
-      const matched = appGroups.find(g => g.name === addValue.trim());
+      // For groups, check if it matches an existing group (try both raw and prefixed)
+      const matched = appGroups.find(g => g.name === prefixed || g.name === addValue.trim());
       if (matched) {
         if (entries.some(e => e.value === matched.name)) return;
         onChange([...entries, {
@@ -277,7 +279,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
         setAddValue('');
       } else {
         // Open the new group wizard so user can add members
-        setNewGroupName(addValue.trim());
+        setNewGroupName(prefixed);
         setNewGroupMembers([]);
         setShowNewGroupWizard(true);
         setAddValue('');
@@ -287,7 +289,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
     onChange([...entries, {
       id: `new-${_nextId++}`,
       type: addType,
-      value: addValue.trim(),
+      value: prefixed,
       isNew: true,
     }]);
     setAddValue('');
@@ -311,7 +313,9 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const handleSaveEdit = (id: string) => {
     if (!editValue.trim()) return;
-    onChange(entries.map(e => e.id === id ? { ...e, value: editValue.trim(), type: detectEntryType(editValue.trim(), allGroupNames), isModified: true } : e));
+    const detectedType = detectEntryType(editValue.trim(), allGroupNames);
+    const prefixed = autoPrefix(editValue.trim(), detectedType);
+    onChange(entries.map(e => e.id === id ? { ...e, value: prefixed, type: detectedType, isModified: true } : e));
     setEditingId(null);
   };
 
@@ -321,9 +325,10 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const handleAddGroupMember = (entryId: string) => {
     if (!newMemberValue.trim()) return;
+    const memberPrefixed = autoPrefix(newMemberValue.trim(), newMemberType as 'ip' | 'subnet' | 'cidr' | 'group' | 'range');
     onChange(entries.map(e => {
       if (e.id !== entryId) return e;
-      const members = [...(e.groupMembers || []), { type: newMemberType, value: newMemberValue.trim() }];
+      const members = [...(e.groupMembers || []), { type: newMemberType, value: memberPrefixed }];
       return { ...e, groupMembers: members, isModified: true };
     }));
     setNewMemberValue('');
@@ -339,10 +344,11 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const handleCreateNewGroup = () => {
     if (!newGroupName.trim() || newGroupMembers.length === 0) return;
+    const grpName = autoPrefix(newGroupName.trim(), 'group');
     onChange([...entries, {
       id: `new-${_nextId++}`,
       type: 'group',
-      value: newGroupName.trim(),
+      value: grpName,
       groupMembers: [...newGroupMembers],
       isNew: true,
     }]);
@@ -353,7 +359,8 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const handleWizAddMember = () => {
     if (!wizMemberValue.trim()) return;
-    setNewGroupMembers(prev => [...prev, { type: wizMemberType, value: wizMemberValue.trim() }]);
+    const memberPrefixed = autoPrefix(wizMemberValue.trim(), wizMemberType as 'ip' | 'subnet' | 'cidr' | 'group' | 'range');
+    setNewGroupMembers(prev => [...prev, { type: wizMemberType, value: memberPrefixed }]);
     setWizMemberValue('');
   };
 

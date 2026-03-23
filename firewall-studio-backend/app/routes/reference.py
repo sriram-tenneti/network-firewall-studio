@@ -504,14 +504,25 @@ async def delete_legacy_rule_endpoint(rule_id: str):
 @router.post("/legacy-rules/import")
 async def import_legacy_rules_excel(file: UploadFile = File(...)):
     """Import legacy rules from an Excel (.xlsx) file with deduplication."""
-    if not file.filename or not file.filename.endswith(".xlsx"):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
     contents = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
+        )
     ws = wb.active
     if ws is None:
+        wb.close()
         raise HTTPException(status_code=400, detail="Empty workbook")
-    headers = [cell.value for cell in ws[1]]
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if not rows:
+        raise HTTPException(status_code=400, detail="Empty workbook")
+    headers = list(rows[0])
     col_map = {
         "App ID": "app_id", "App Current Distributed ID": "app_distributed_id",
         "App Name": "app_name", "Inventory Item": "inventory_item",
@@ -525,15 +536,14 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
         "RN": "rn", "RC": "rc",
     }
     parsed_rules = []
-    for row_idx in range(2, ws.max_row + 1):
-        row_vals = [cell.value for cell in ws[row_idx]]
+    for row_vals in rows[1:]:
         if not any(row_vals):
             continue
         rule: dict = {}
         for i, h in enumerate(headers):
             if h in col_map and i < len(row_vals):
                 val = row_vals[i]
-                rule[col_map[h]] = val if val is not None else ""
+                rule[col_map[h]] = str(val) if val is not None else ""
         rule["is_standard"] = False
         rule["migration_status"] = "Not Started"
         parsed_rules.append(rule)
@@ -705,23 +715,33 @@ async def delete_ngdc_mapping_endpoint(mapping_id: str):
 async def import_ngdc_mappings_excel(file: UploadFile = File(...)):
     """Import legacy-to-NGDC mappings from Excel."""
     from app.database import import_ngdc_mappings
-    if not file.filename or not file.filename.endswith(".xlsx"):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
     contents = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
+        )
     ws = wb.active
     if ws is None:
+        wb.close()
         raise HTTPException(status_code=400, detail="Empty workbook")
-    headers = [cell.value for cell in ws[1]]
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if not rows:
+        raise HTTPException(status_code=400, detail="Empty workbook")
+    headers = list(rows[0])
     mappings = []
-    for row_idx in range(2, ws.max_row + 1):
-        row_vals = [cell.value for cell in ws[row_idx]]
+    for row_vals in rows[1:]:
         if not any(row_vals):
             continue
         m: dict = {}
         for i, h in enumerate(headers):
             if i < len(row_vals) and h:
-                m[str(h).lower().replace(" ", "_")] = row_vals[i] if row_vals[i] is not None else ""
+                m[str(h).lower().replace(" ", "_")] = str(row_vals[i]) if row_vals[i] is not None else ""
         mappings.append(m)
     result = await import_ngdc_mappings(mappings)
     return result
@@ -809,24 +829,34 @@ async def delete_app_dc_mapping_endpoint(mapping_id: str):
 async def import_app_dc_mappings_excel(file: UploadFile = File(...)):
     """Import App-to-DC/NH/SZ mappings from Excel."""
     from app.database import import_app_dc_mappings
-    if not file.filename or not file.filename.endswith(".xlsx"):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
     contents = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
+        )
     ws = wb.active
     if ws is None:
+        wb.close()
         raise HTTPException(status_code=400, detail="Empty workbook")
-    headers = [cell.value for cell in ws[1]]
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if not rows:
+        raise HTTPException(status_code=400, detail="Empty workbook")
+    headers = list(rows[0])
     mappings = []
-    for row_idx in range(2, ws.max_row + 1):
-        row_vals = [cell.value for cell in ws[row_idx]]
+    for row_vals in rows[1:]:
         if not any(row_vals):
             continue
         m: dict = {}
         for i, h in enumerate(headers):
             if i < len(row_vals) and h:
                 key = str(h).lower().replace(" ", "_")
-                m[key] = row_vals[i] if row_vals[i] is not None else ""
+                m[key] = str(row_vals[i]) if row_vals[i] is not None else ""
         mappings.append(m)
     result = await import_app_dc_mappings(mappings)
     return result
