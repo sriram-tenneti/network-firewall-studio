@@ -551,6 +551,41 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
     return result
 
 
+@router.get("/legacy-rules/imported-apps")
+async def get_imported_apps():
+    """Return unique apps from imported legacy rules with their mapping status.
+    For each app, indicates whether it already has app-dc-mappings (NH/SZ/DC)
+    and lists its existing component mappings if any."""
+    from app.database import get_app_dc_mappings
+    rules = await get_legacy_rules()
+    app_dc_mappings = await get_app_dc_mappings()
+
+    # Build lookup of existing mappings by app_id
+    mapped: dict[str, list[dict]] = {}
+    for m in app_dc_mappings:
+        aid = str(m.get("app_id", ""))
+        mapped.setdefault(aid, []).append(m)
+
+    # Extract unique apps from legacy rules
+    seen: set[str] = set()
+    apps: list[dict] = []
+    for r in rules:
+        app_id = str(r.get("app_id", "")).strip()
+        if not app_id or app_id in seen:
+            continue
+        seen.add(app_id)
+        existing_mappings = mapped.get(app_id, [])
+        apps.append({
+            "app_id": app_id,
+            "app_name": r.get("app_name", ""),
+            "app_distributed_id": r.get("app_distributed_id", ""),
+            "rule_count": sum(1 for lr in rules if str(lr.get("app_id", "")).strip() == app_id),
+            "has_mapping": len(existing_mappings) > 0,
+            "components": existing_mappings,
+        })
+    return apps
+
+
 @router.post("/legacy-rules/migrate")
 async def migrate_rules_to_ngdc(data: dict):
     """Migrate selected rules to NGDC standards."""

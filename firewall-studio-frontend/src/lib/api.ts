@@ -512,6 +512,12 @@ export const compileRuleExpanded = (ruleId: string, vendor = 'generic', expandGr
     method: 'POST', body: JSON.stringify({ vendor, expand_groups: expandGroups })
   });
 
+// Imported Apps from Legacy Rules (with mapping status)
+export const getImportedApps = () =>
+  fetchJSON<{ app_id: string; app_name: string; app_distributed_id: string; rule_count: number; has_mapping: boolean; components: Record<string, unknown>[] }[]>(
+    '/api/reference/legacy-rules/imported-apps'
+  );
+
 // App-to-DC/NH/SZ Organization Mappings
 export const getAppDCMappings = () => fetchJSON<Record<string, unknown>[]>('/api/reference/app-dc-mappings');
 export const getAppDCMapping = (appId: string) => fetchJSON<Record<string, unknown>>(`/api/reference/app-dc-mappings/${appId}`);
