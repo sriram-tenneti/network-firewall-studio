@@ -86,6 +86,20 @@ export default function SettingsPage() {
   const [switchingMode, setSwitchingMode] = useState(false);
   const [resettingSeed, setResettingSeed] = useState(false);
 
+  // Hide Seed Data toggle (persisted in localStorage)
+  const [hideSeedData, setHideSeedData] = useState(() => localStorage.getItem('nfs_hide_seed') === 'true');
+
+  // Data Management state
+  const [userDataSummary, setUserDataSummary] = useState<{migration_data:Record<string,number>;studio_rules_count:number;legacy_rules_count:number;firewall_rules_count:number;reviews_count:number;groups_count:number;modifications_count:number;data_directory:string}|null>(null);
+  const [clearingMigration, setClearingMigration] = useState(false);
+  const [clearingStudio, setClearingStudio] = useState(false);
+  const [clearingLegacy, setClearingLegacy] = useState(false);
+  const [clearingReviews, setClearingReviews] = useState(false);
+  const [clearingFwRules, setClearingFwRules] = useState(false);
+  const [clearingGroups, setClearingGroups] = useState(false);
+  const [clearingMods, setClearingMods] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
+
   // Edit states for App Management
   const [editingAppId, setEditingAppId] = useState<string | null>(null);
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
@@ -393,9 +407,131 @@ export default function SettingsPage() {
 
   useEffect(() => { loadDataMode(); }, [loadDataMode]);
 
+  // App NGDC Mappings state (moved from DataImportPage)
+  const [ngdcImportedApps, setNgdcImportedApps] = useState<{app_id:string;app_name:string;app_distributed_id:string;rule_count:number;has_mapping:boolean;components:Record<string,unknown>[]}[]>([]);
+  const [ngdcAppFilter, setNgdcAppFilter] = useState<'all'|'unmapped'|'mapped'>('all');
+  const [ngdcExpandedAppId, setNgdcExpandedAppId] = useState<string|null>(null);
+  const [ngdcAddingForApp, setNgdcAddingForApp] = useState<string|null>(null);
+  const [ngdcComponentForm, setNgdcComponentForm] = useState({component:'APP',dc:'ALPHA_NGDC',nh:'',sz:'',cidr:'',notes:''});
+  const [ngdcSaving, setNgdcSaving] = useState(false);
+  const [ngdcLoaded, setNgdcLoaded] = useState(false);
+
+  const loadNgdcApps = useCallback(async () => {
+    try {
+      const apps = await api.getImportedApps();
+      setNgdcImportedApps(apps);
+      setNgdcLoaded(true);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleNgdcAddComponent = async (appId: string) => {
+    setNgdcSaving(true);
+    try {
+      await api.createAppDCMapping({ app_id: appId, ...ngdcComponentForm, status: 'Active' });
+      setNgdcComponentForm({component:'APP',dc:'ALPHA_NGDC',nh:'',sz:'',cidr:'',notes:''});
+      setNgdcAddingForApp(null);
+      loadNgdcApps();
+      showNotification('Component added', 'success');
+    } catch { showNotification('Failed to add component', 'error'); }
+    setNgdcSaving(false);
+  };
+
+  const handleNgdcDeleteComponent = async (mappingId: string) => {
+    try {
+      await api.deleteAppDCMapping(mappingId);
+      loadNgdcApps();
+      showNotification('Component deleted', 'success');
+    } catch { showNotification('Failed to delete', 'error'); }
+  };
+
+  const loadUserDataSummary = useCallback(async () => {
+    try {
+      const summary = await api.getUserDataSummary();
+      setUserDataSummary(summary);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleClearMigrationData = async () => {
+    if (!confirm('Clear all migration data? This removes migration history, mappings, reviews, and migrated rules from the separate JSON. Seed data is NOT affected.')) return;
+    setClearingMigration(true);
+    try {
+      await api.clearMigrationData();
+      showNotification('Migration data cleared', 'success');
+      loadUserDataSummary();
+    } catch { showNotification('Failed to clear migration data', 'error'); }
+    setClearingMigration(false);
+  };
+
+  const handleClearStudioRules = async () => {
+    if (!confirm('Clear all studio rules from separate JSON? This removes rules created/approved in Firewall Studio. Seed data is NOT affected.')) return;
+    setClearingStudio(true);
+    try {
+      await api.clearStudioRules();
+      showNotification('Studio rules cleared', 'success');
+      loadUserDataSummary();
+    } catch { showNotification('Failed to clear studio rules', 'error'); }
+    setClearingStudio(false);
+  };
+
+  const handleToggleHideSeed = async (hide: boolean) => {
+    setHideSeedData(hide);
+    localStorage.setItem('nfs_hide_seed', hide ? 'true' : 'false');
+    try { await api.setHideSeed(hide); } catch { /* localStorage is primary */ }
+    showNotification(hide ? 'Seed data hidden — showing only real/imported data' : 'Seed data visible — showing all data', 'success');
+  };
+
+  const handleClearLegacy = async () => {
+    if (!confirm('Clear ALL imported legacy rules? This cannot be undone.')) return;
+    setClearingLegacy(true);
+    try { await api.clearLegacyRulesForce(); showNotification('Legacy rules cleared', 'success'); loadUserDataSummary(); } catch { showNotification('Failed to clear legacy rules', 'error'); }
+    setClearingLegacy(false);
+  };
+
+  const handleClearReviews = async () => {
+    if (!confirm('Clear ALL reviews? This cannot be undone.')) return;
+    setClearingReviews(true);
+    try { await api.clearReviews(); showNotification('Reviews cleared', 'success'); loadUserDataSummary(); } catch { showNotification('Failed to clear reviews', 'error'); }
+    setClearingReviews(false);
+  };
+
+  const handleClearFwRules = async () => {
+    if (!confirm('Clear ALL firewall rules (from firewall_rules.json)? This cannot be undone.')) return;
+    setClearingFwRules(true);
+    try { await api.clearFirewallRules(); showNotification('Firewall rules cleared', 'success'); loadUserDataSummary(); } catch { showNotification('Failed to clear firewall rules', 'error'); }
+    setClearingFwRules(false);
+  };
+
+  const handleClearGroups = async () => {
+    if (!confirm('Clear ALL groups? This cannot be undone.')) return;
+    setClearingGroups(true);
+    try { await api.clearGroups(); showNotification('Groups cleared', 'success'); loadUserDataSummary(); } catch { showNotification('Failed to clear groups', 'error'); }
+    setClearingGroups(false);
+  };
+
+  const handleClearMods = async () => {
+    if (!confirm('Clear ALL rule modifications? This cannot be undone.')) return;
+    setClearingMods(true);
+    try { await api.clearModifications(); showNotification('Modifications cleared', 'success'); loadUserDataSummary(); } catch { showNotification('Failed to clear modifications', 'error'); }
+    setClearingMods(false);
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('⚠️ CLEAN ALL DATA — This will clear ALL imported data across the entire portal:\n\n• Legacy Rules\n• Migration Data\n• Studio Rules\n• Reviews\n• Firewall Rules\n• Modifications\n\nSeed reference data (NHs, SZs, Policy Matrix, etc.) is NOT affected.\n\nContinue?')) return;
+    setClearingAll(true);
+    try {
+      const res = await api.clearAllUserData();
+      const total = Object.values(res.counts).reduce((a: number, b: number) => a + b, 0);
+      showNotification(`All data cleared (${total} records removed)`, 'success');
+      loadUserDataSummary();
+    } catch { showNotification('Failed to clear all data', 'error'); }
+    setClearingAll(false);
+  };
+
   const tabs = [
     { id: 'data_mode', label: 'Data Mode' },
+    { id: 'data_management', label: 'Data Management' },
     { id: 'app_management', label: 'App Management' },
+    { id: 'app_ngdc_mappings', label: 'App NGDC Mappings' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
@@ -494,6 +630,159 @@ export default function SettingsPage() {
                 </span>
                 {' '}&mdash; All data reads and writes across the portal are using the <strong>{dataMode}</strong> data store.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Data Management Tab ── */}
+        {activeTab === 'data_management' && (
+          <div className="space-y-6">
+            {/* Hide Seed Data Toggle */}
+            <div className="p-6 bg-white border border-gray-200 rounded-lg">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Hide Seed Data</h2>
+              <p className="text-xs text-gray-500 mb-4">When enabled, seed/test data is hidden across the entire portal. Only real/imported data will be shown in Firewall Management, Migration Studio, Firewall Studio, and all other pages.</p>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => handleToggleHideSeed(!hideSeedData)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${hideSeedData ? 'bg-indigo-600' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hideSeedData ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+                <span className={`text-sm font-medium ${hideSeedData ? 'text-indigo-700' : 'text-gray-500'}`}>
+                  {hideSeedData ? 'Seed data hidden — showing only real data' : 'Seed data visible — showing all data'}
+                </span>
+              </div>
+            </div>
+
+            {/* One-Click Clean All */}
+            <div className="p-6 bg-red-50 border-2 border-red-300 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-red-800">Clean All Imported Data</h2>
+                  <p className="text-xs text-red-600 mt-1">One-click reset: clears ALL imported/user data (legacy rules, migration data, studio rules, reviews, firewall rules, modifications). Seed reference data (NHs, SZs, Policy Matrix, etc.) is NOT affected.</p>
+                </div>
+                <button onClick={handleClearAll} disabled={clearingAll}
+                  className="px-6 py-3 text-sm font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 whitespace-nowrap">
+                  {clearingAll ? 'Cleaning...' : 'Clean All & Reset'}
+                </button>
+              </div>
+            </div>
+
+            {/* Data Summary & Individual Cleanup */}
+            <div className="p-6 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Data Summary &amp; Individual Cleanup</h2>
+                  <p className="text-xs text-gray-500 mt-1">View record counts and clear individual data stores. Use this during testing to selectively reset specific areas.</p>
+                </div>
+                <button onClick={loadUserDataSummary} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                  {userDataSummary ? 'Refresh Counts' : 'Load Summary'}
+                </button>
+              </div>
+
+              {userDataSummary && (
+                <div className="space-y-3">
+                  {/* Legacy Rules */}
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-amber-800">Legacy Imported Rules</h3>
+                      <p className="text-xs text-amber-600 mt-0.5">Records: <strong>{userDataSummary.legacy_rules_count}</strong> &mdash; Rules imported from Excel/CSV/JSON in Firewall Management</p>
+                    </div>
+                    <button onClick={handleClearLegacy} disabled={clearingLegacy}
+                      className="px-4 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                      {clearingLegacy ? 'Clearing...' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {/* Migration Data */}
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-blue-800">Migration Data <span className="font-mono text-xs text-blue-500">(migration_data.json)</span></h3>
+                      <div className="mt-0.5 flex gap-4 text-xs text-blue-600">
+                        <span>History: <strong>{userDataSummary.migration_data.migration_history || 0}</strong></span>
+                        <span>Mappings: <strong>{userDataSummary.migration_data.migration_mappings || 0}</strong></span>
+                        <span>Reviews: <strong>{userDataSummary.migration_data.migration_reviews || 0}</strong></span>
+                        <span>Migrated: <strong>{userDataSummary.migration_data.migrated_rules || 0}</strong></span>
+                      </div>
+                    </div>
+                    <button onClick={handleClearMigrationData} disabled={clearingMigration}
+                      className="px-4 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                      {clearingMigration ? 'Clearing...' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {/* Studio Rules */}
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-emerald-800">Studio Rules <span className="font-mono text-xs text-emerald-500">(studio_rules.json)</span></h3>
+                      <p className="text-xs text-emerald-600 mt-0.5">Records: <strong>{userDataSummary.studio_rules_count}</strong> &mdash; New rules, approved rules, migrated rules</p>
+                    </div>
+                    <button onClick={handleClearStudioRules} disabled={clearingStudio}
+                      className="px-4 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                      {clearingStudio ? 'Clearing...' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {/* Firewall Rules */}
+                  <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-purple-800">Firewall Rules <span className="font-mono text-xs text-purple-500">(firewall_rules.json)</span></h3>
+                      <p className="text-xs text-purple-600 mt-0.5">Records: <strong>{userDataSummary.firewall_rules_count}</strong> &mdash; All rules in Firewall Studio (seed + created)</p>
+                    </div>
+                    <button onClick={handleClearFwRules} disabled={clearingFwRules}
+                      className="px-4 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                      {clearingFwRules ? 'Clearing...' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {/* Reviews */}
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-orange-800">Reviews &amp; Approvals</h3>
+                      <p className="text-xs text-orange-600 mt-0.5">Records: <strong>{userDataSummary.reviews_count}</strong> &mdash; All review requests (pending, approved, rejected)</p>
+                    </div>
+                    <button onClick={handleClearReviews} disabled={clearingReviews}
+                      className="px-4 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                      {clearingReviews ? 'Clearing...' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {/* Groups */}
+                  <div className="p-4 bg-cyan-50 border border-cyan-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-cyan-800">Groups</h3>
+                      <p className="text-xs text-cyan-600 mt-0.5">Records: <strong>{userDataSummary.groups_count}</strong> &mdash; All firewall groups (seed + user-created)</p>
+                    </div>
+                    <button onClick={handleClearGroups} disabled={clearingGroups}
+                      className="px-4 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                      {clearingGroups ? 'Clearing...' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {/* Modifications */}
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-800">Rule Modifications</h3>
+                      <p className="text-xs text-gray-600 mt-0.5">Records: <strong>{userDataSummary.modifications_count}</strong> &mdash; All rule modification requests with deltas</p>
+                    </div>
+                    <button onClick={handleClearMods} disabled={clearingMods}
+                      className="px-4 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                      {clearingMods ? 'Clearing...' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {/* Data Directory */}
+                  <div className="text-xs text-gray-400 mt-2">
+                    Data directory: <code className="bg-gray-100 px-1 rounded">{userDataSummary.data_directory}</code>
+                  </div>
+                </div>
+              )}
+
+              {!userDataSummary && (
+                <div className="text-center py-6">
+                  <p className="text-sm text-gray-500">Click &quot;Load Summary&quot; to view record counts and manage data stores.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -724,6 +1013,171 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── App NGDC Mappings Tab ── */}
+        {activeTab === 'app_ngdc_mappings' && (
+          <div className="space-y-6">
+            <div className="p-6 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold">App NGDC Mappings (DC / NH / SZ)</h2>
+                  <p className="text-xs text-gray-500 mt-1">Map imported apps to NGDC Data Centers, Neighbourhoods, and Security Zones. Add components (WEB, APP, DB, etc.) per app.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select className="px-2 py-1.5 text-xs border rounded-md" value={ngdcAppFilter} onChange={e => setNgdcAppFilter(e.target.value as 'all'|'unmapped'|'mapped')}>
+                    <option value="all">All Apps</option>
+                    <option value="unmapped">Unmapped Only</option>
+                    <option value="mapped">Mapped Only</option>
+                  </select>
+                  <button onClick={loadNgdcApps} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                    {ngdcLoaded ? 'Refresh' : 'Load Apps'}
+                  </button>
+                </div>
+              </div>
+
+              {ngdcLoaded && ngdcImportedApps.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-xs text-gray-500 mb-2">
+                    <span>Total: <strong className="text-gray-700">{ngdcImportedApps.length}</strong></span>
+                    <span>Mapped: <strong className="text-green-700">{ngdcImportedApps.filter(a => a.has_mapping).length}</strong></span>
+                    <span>Unmapped: <strong className="text-amber-700">{ngdcImportedApps.filter(a => !a.has_mapping).length}</strong></span>
+                  </div>
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dist ID</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Rules</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Components</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {ngdcImportedApps
+                          .filter(a => ngdcAppFilter === 'all' || (ngdcAppFilter === 'unmapped' ? !a.has_mapping : a.has_mapping))
+                          .map(app => (
+                          <React.Fragment key={app.app_id}>
+                            <tr className={`hover:bg-gray-50 ${ngdcExpandedAppId === app.app_id ? 'bg-blue-50' : ''}`}>
+                              <td className="px-3 py-2 font-mono text-xs font-medium">{app.app_id}</td>
+                              <td className="px-3 py-2 text-xs">{app.app_name}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-500">{app.app_distributed_id}</td>
+                              <td className="px-3 py-2 text-xs">{app.rule_count}</td>
+                              <td className="px-3 py-2">
+                                {app.has_mapping ? (
+                                  <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">Mapped ({app.components.length})</span>
+                                ) : (
+                                  <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">Unmapped</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-500">
+                                {app.components.length > 0
+                                  ? app.components.map(c => String(c.component || '')).join(', ')
+                                  : <span className="text-gray-400 italic">None</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <button onClick={() => setNgdcExpandedAppId(ngdcExpandedAppId === app.app_id ? null : app.app_id)}
+                                    className="px-2 py-0.5 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">
+                                    {ngdcExpandedAppId === app.app_id ? 'Collapse' : 'Edit'}
+                                  </button>
+                                  <button onClick={() => { setNgdcAddingForApp(app.app_id); setNgdcExpandedAppId(app.app_id); }}
+                                    className="px-2 py-0.5 text-xs text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">
+                                    + Component
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {ngdcExpandedAppId === app.app_id && (
+                              <tr>
+                                <td colSpan={7} className="px-4 py-3 bg-blue-50/50">
+                                  {app.components.length > 0 && (
+                                    <div className="mb-3">
+                                      <h4 className="text-xs font-semibold text-gray-600 mb-2">Existing Component Mappings</h4>
+                                      <table className="w-full text-xs">
+                                        <thead><tr className="text-gray-500">
+                                          <th className="px-2 py-1 text-left">Component</th>
+                                          <th className="px-2 py-1 text-left">DC</th>
+                                          <th className="px-2 py-1 text-left">NH</th>
+                                          <th className="px-2 py-1 text-left">SZ</th>
+                                          <th className="px-2 py-1 text-left">CIDR</th>
+                                          <th className="px-2 py-1 text-left">Status</th>
+                                          <th className="px-2 py-1 text-left">Actions</th>
+                                        </tr></thead>
+                                        <tbody>
+                                          {app.components.map((c, idx) => (
+                                            <tr key={idx} className="border-t border-gray-200">
+                                              <td className="px-2 py-1"><span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">{String(c.component || '')}</span></td>
+                                              <td className="px-2 py-1 font-mono">{String(c.dc || '')}</td>
+                                              <td className="px-2 py-1 font-mono">{String(c.nh || '')}</td>
+                                              <td className="px-2 py-1 font-mono">{String(c.sz || '')}</td>
+                                              <td className="px-2 py-1 font-mono">{String(c.cidr || '')}</td>
+                                              <td className="px-2 py-1"><span className={`px-1.5 py-0.5 rounded-full ${c.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{String(c.status || 'Active')}</span></td>
+                                              <td className="px-2 py-1">
+                                                <button onClick={() => handleNgdcDeleteComponent(String(c.id || ''))} className="text-red-500 hover:text-red-700">Delete</button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                  {ngdcAddingForApp === app.app_id && (
+                                    <div className="p-3 bg-white border border-blue-200 rounded-lg">
+                                      <h4 className="text-xs font-semibold text-blue-700 mb-2">Add Component for {app.app_id} - {app.app_name}</h4>
+                                      <div className="grid grid-cols-7 gap-2">
+                                        <select className="px-2 py-1.5 text-xs border rounded" value={ngdcComponentForm.component} onChange={e => setNgdcComponentForm(p => ({ ...p, component: e.target.value }))}>
+                                          {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        <select className="px-2 py-1.5 text-xs border rounded" value={ngdcComponentForm.dc} onChange={e => setNgdcComponentForm(p => ({ ...p, dc: e.target.value }))}>
+                                          <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                                          <option value="BETA_NGDC">BETA_NGDC</option>
+                                          <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                                        </select>
+                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="NH (e.g. NH02,NH14)" value={ngdcComponentForm.nh} onChange={e => setNgdcComponentForm(p => ({ ...p, nh: e.target.value }))} />
+                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="SZ (e.g. CCS,PAA)" value={ngdcComponentForm.sz} onChange={e => setNgdcComponentForm(p => ({ ...p, sz: e.target.value }))} />
+                                        <input className="px-2 py-1.5 text-xs border rounded font-mono" placeholder="CIDR" value={ngdcComponentForm.cidr} onChange={e => setNgdcComponentForm(p => ({ ...p, cidr: e.target.value }))} />
+                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="Notes" value={ngdcComponentForm.notes} onChange={e => setNgdcComponentForm(p => ({ ...p, notes: e.target.value }))} />
+                                        <div className="flex gap-1">
+                                          <button onClick={() => setNgdcAddingForApp(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
+                                          <button onClick={() => handleNgdcAddComponent(app.app_id)} disabled={ngdcSaving || !ngdcComponentForm.nh || !ngdcComponentForm.sz}
+                                            className="px-2 py-1 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50">
+                                            {ngdcSaving ? '...' : 'Add'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!ngdcAddingForApp && app.components.length === 0 && (
+                                    <p className="text-xs text-gray-400 italic">No component mappings yet. Click &quot;+ Component&quot; to add DC/NH/SZ mapping for this app.</p>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {ngdcLoaded && ngdcImportedApps.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-sm text-gray-500">No imported apps found. Import legacy rules first via Firewall Management &rarr; Import.</p>
+                </div>
+              )}
+
+              {!ngdcLoaded && (
+                <div className="text-center py-8">
+                  <p className="text-sm text-gray-500">Click &quot;Load Apps&quot; to view imported apps and manage their NGDC component mappings.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

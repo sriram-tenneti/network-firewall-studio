@@ -107,7 +107,7 @@ function parseDestConfig(dst: string, dstZone: string, port: string): Destinatio
   };
 }
 
-function transformRule(raw: RawBackendRule): FirewallRule {
+export function transformRule(raw: RawBackendRule): FirewallRule {
   const src = raw.source;
   const isNamingValid = src.startsWith('grp-') || src.startsWith('svr-') || src.startsWith('rng-');
   const dstNamingValid = raw.destination.startsWith('grp-') || raw.destination.startsWith('svr-') || raw.destination.startsWith('rng-');
@@ -729,3 +729,64 @@ export const getNgdcProdMatrix = () =>
 // NonProd Matrix
 export const getNonprodMatrix = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/nonprod');
+
+// ---- Separate JSON Storage (user-data/) — Migration Data & Studio Rules ----
+
+export const getUserDataSummary = () =>
+  fetchJSON<{ migration_data: Record<string, number>; studio_rules_count: number; data_directory: string }>('/api/reference/user-data/summary');
+
+export const getMigrationData = () =>
+  fetchJSON<{ migration_history: Record<string, unknown>[]; migration_mappings: Record<string, unknown>[]; migration_reviews: Record<string, unknown>[]; migrated_rules: Record<string, unknown>[] }>('/api/reference/user-data/migration');
+
+export const clearMigrationData = () =>
+  fetchJSON<{ status: string; cleared_counts: Record<string, number> }>('/api/reference/user-data/migration', { method: 'DELETE' });
+
+export const getStudioRules = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/user-data/studio-rules');
+
+export const clearStudioRules = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/studio-rules', { method: 'DELETE' });
+
+export const deleteStudioRule = (ruleId: string) =>
+  fetchJSON<{ status: string; rule_id: string }>(`/api/reference/user-data/studio-rules/${ruleId}`, { method: 'DELETE' });
+
+// ---- Cleanup Endpoints (individual + one-click reset) ----
+
+export const clearAllUserData = () =>
+  fetchJSON<{ status: string; counts: Record<string, number> }>('/api/reference/user-data/all', { method: 'DELETE' });
+
+export const clearReviews = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/reviews', { method: 'DELETE' });
+
+export const clearGroups = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/groups', { method: 'DELETE' });
+
+export const clearFirewallRules = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/firewall-rules', { method: 'DELETE' });
+
+export const clearModifications = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/modifications', { method: 'DELETE' });
+
+export const clearLegacyRulesForce = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/legacy-rules', { method: 'DELETE' });
+
+// ---- Hide Seed Data Toggle ----
+
+export const getHideSeed = () =>
+  fetchJSON<{ hide_seed: boolean }>('/api/reference/hide-seed');
+
+export const setHideSeed = (hide: boolean) =>
+  fetchJSON<{ hide_seed: boolean }>('/api/reference/hide-seed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hide }) });
+
+export const getRealRules = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/rules/real');
+
+export const getRealGroups = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/groups/real');
+
+export const getRealReviews = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/reviews/real');
+
+/** Helper: check localStorage for hide-seed preference */
+export const isHideSeedEnabled = (): boolean =>
+  typeof window !== 'undefined' && localStorage.getItem('nfs_hide_seed') === 'true';

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules } from '@/lib/api';
+import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules, isHideSeedEnabled } from '@/lib/api';
 import type { FirewallRule, LegacyRule } from '@/types';
 
 interface ImportedApp {
@@ -70,14 +70,27 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     context === 'firewall-studio' ? 'Import Rules for Firewall Studio' :
     'Data Import';
 
-  // Load NFR apps when this is the NFR import page
+  // Load legacy imported apps when this is the NFR import page (reads from Firewall Management legacy_rules)
   const loadNFRApps = useCallback(async () => {
     setNfrLoading(true);
     try {
-      const rules = await getRules();
-      setNfrRules(rules);
-      const filteredByEnv = nfrEnvFilter ? rules.filter((r: FirewallRule) => r.environment === nfrEnvFilter) : rules;
-      const apps = Array.from(new Set(filteredByEnv.map((r: FirewallRule) => `${r.application}|${r.application_name || r.application}`))).map(key => {
+      const legacyRules = await getLegacyRules();
+      // Map legacy rules to FirewallRule shape for display compatibility
+      const mapped = legacyRules.map((r: LegacyRule) => ({
+        ...r,
+        rule_id: r.id || '',
+        application: String(r.app_id || ''),
+        application_name: r.app_name || String(r.app_id || ''),
+        source: r.rule_source || '',
+        destination: r.rule_destination || '',
+        port: (r.rule_service || '').split('/')[0] || '',
+        protocol: (r.rule_service || '').split('/')[1] || 'tcp',
+        action: r.rule_action || 'Accept',
+        status: r.migration_status || 'Not Started',
+        environment: 'Production',
+      })) as unknown as FirewallRule[];
+      setNfrRules(mapped);
+      const apps = Array.from(new Set(legacyRules.map((r: LegacyRule) => `${r.app_id}|${r.app_name || r.app_id}`))).map(key => {
         const [appId, appName] = (key as string).split('|');
         return { value: appId, label: `${appId} - ${appName}` };
       });
@@ -275,6 +288,12 @@ export default function DataImportPage({ context }: DataImportPageProps) {
 
   return (
     <div className="max-w-[1800px] mx-auto p-6">
+      {isHideSeedEnabled() && (
+        <div className="mb-4 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-2">
+          <span className="text-xs font-semibold text-indigo-700">REAL DATA MODE</span>
+          <span className="text-xs text-indigo-500">Seed/test data is hidden. Showing only real imported data. Change in Settings &gt; Data Management.</span>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
@@ -559,168 +578,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         </div>
       )}
 
-      {/* Imported Apps - NGDC Mapping Section (shown after import or on demand) */}
-      {!isNGDCMappings && !isNFRImport && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold">App NGDC Mappings (DC / NH / SZ)</h2>
-              <p className="text-xs text-gray-500 mt-1">Map imported apps to NGDC Data Centers, Neighbourhoods, and Security Zones. Add components (WEB, APP, DB, etc.) per app.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <select className="px-2 py-1.5 text-xs border rounded-md" value={appFilter} onChange={e => setAppFilter(e.target.value as 'all' | 'unmapped' | 'mapped')}>
-                <option value="all">All Apps</option>
-                <option value="unmapped">Unmapped Only</option>
-                <option value="mapped">Mapped Only</option>
-              </select>
-              <button onClick={loadImportedApps} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-                {showAppMappings ? 'Refresh' : 'Load Apps'}
-              </button>
-            </div>
-          </div>
-
-          {showAppMappings && importedApps.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex gap-4 text-xs text-gray-500 mb-2">
-                <span>Total: <strong className="text-gray-700">{importedApps.length}</strong></span>
-                <span>Mapped: <strong className="text-green-700">{importedApps.filter(a => a.has_mapping).length}</strong></span>
-                <span>Unmapped: <strong className="text-amber-700">{importedApps.filter(a => !a.has_mapping).length}</strong></span>
-              </div>
-              <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dist ID</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Rules</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Components</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {importedApps
-                      .filter(a => appFilter === 'all' || (appFilter === 'unmapped' ? !a.has_mapping : a.has_mapping))
-                      .map(app => (
-                      <>
-                        <tr key={app.app_id} className={`hover:bg-gray-50 ${expandedAppId === app.app_id ? 'bg-blue-50' : ''}`}>
-                          <td className="px-3 py-2 font-mono text-xs font-medium">{app.app_id}</td>
-                          <td className="px-3 py-2 text-xs">{app.app_name}</td>
-                          <td className="px-3 py-2 font-mono text-xs text-gray-500">{app.app_distributed_id}</td>
-                          <td className="px-3 py-2 text-xs">{app.rule_count}</td>
-                          <td className="px-3 py-2">
-                            {app.has_mapping ? (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">Mapped ({app.components.length})</span>
-                            ) : (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">Unmapped</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-500">
-                            {app.components.length > 0
-                              ? app.components.map(c => String(c.component || '')).join(', ')
-                              : <span className="text-gray-400 italic">None</span>}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => setExpandedAppId(expandedAppId === app.app_id ? null : app.app_id)}
-                                className="px-2 py-0.5 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
-                              >
-                                {expandedAppId === app.app_id ? 'Collapse' : 'Edit'}
-                              </button>
-                              <button
-                                onClick={() => { setAddingComponentForApp(app.app_id); setExpandedAppId(app.app_id); }}
-                                className="px-2 py-0.5 text-xs text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100"
-                              >
-                                + Component
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                        {/* Expanded: show existing components + add form */}
-                        {expandedAppId === app.app_id && (
-                          <tr key={`${app.app_id}-detail`}>
-                            <td colSpan={7} className="px-4 py-3 bg-blue-50/50">
-                              {app.components.length > 0 && (
-                                <div className="mb-3">
-                                  <h4 className="text-xs font-semibold text-gray-600 mb-2">Existing Component Mappings</h4>
-                                  <table className="w-full text-xs">
-                                    <thead><tr className="text-gray-500">
-                                      <th className="px-2 py-1 text-left">Component</th>
-                                      <th className="px-2 py-1 text-left">DC</th>
-                                      <th className="px-2 py-1 text-left">NH</th>
-                                      <th className="px-2 py-1 text-left">SZ</th>
-                                      <th className="px-2 py-1 text-left">CIDR</th>
-                                      <th className="px-2 py-1 text-left">Status</th>
-                                      <th className="px-2 py-1 text-left">Actions</th>
-                                    </tr></thead>
-                                    <tbody>
-                                      {app.components.map((c, idx) => (
-                                        <tr key={idx} className="border-t border-gray-200">
-                                          <td className="px-2 py-1"><span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">{String(c.component || '')}</span></td>
-                                          <td className="px-2 py-1 font-mono">{String(c.dc || '')}</td>
-                                          <td className="px-2 py-1 font-mono">{String(c.nh || '')}</td>
-                                          <td className="px-2 py-1 font-mono">{String(c.sz || '')}</td>
-                                          <td className="px-2 py-1 font-mono">{String(c.cidr || '')}</td>
-                                          <td className="px-2 py-1"><span className={`px-1.5 py-0.5 rounded-full ${c.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{String(c.status || 'Active')}</span></td>
-                                          <td className="px-2 py-1">
-                                            <button onClick={() => handleDeleteComponent(String(c.id || ''))} className="text-red-500 hover:text-red-700">Delete</button>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                              {/* Add Component Form */}
-                              {addingComponentForApp === app.app_id && (
-                                <div className="p-3 bg-white border border-blue-200 rounded-lg">
-                                  <h4 className="text-xs font-semibold text-blue-700 mb-2">Add Component for {app.app_id} - {app.app_name}</h4>
-                                  <div className="grid grid-cols-7 gap-2">
-                                    <select className="px-2 py-1.5 text-xs border rounded" value={newComponentForm.component} onChange={e => setNewComponentForm(p => ({ ...p, component: e.target.value }))}>
-                                      {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                    <select className="px-2 py-1.5 text-xs border rounded" value={newComponentForm.dc} onChange={e => setNewComponentForm(p => ({ ...p, dc: e.target.value }))}>
-                                      <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                                      <option value="BETA_NGDC">BETA_NGDC</option>
-                                      <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                                    </select>
-                                    <input className="px-2 py-1.5 text-xs border rounded" placeholder="NH (e.g. NH02,NH14)" value={newComponentForm.nh} onChange={e => setNewComponentForm(p => ({ ...p, nh: e.target.value }))} />
-                                    <input className="px-2 py-1.5 text-xs border rounded" placeholder="SZ (e.g. CCS,PAA)" value={newComponentForm.sz} onChange={e => setNewComponentForm(p => ({ ...p, sz: e.target.value }))} />
-                                    <input className="px-2 py-1.5 text-xs border rounded font-mono" placeholder="CIDR" value={newComponentForm.cidr} onChange={e => setNewComponentForm(p => ({ ...p, cidr: e.target.value }))} />
-                                    <input className="px-2 py-1.5 text-xs border rounded" placeholder="Notes" value={newComponentForm.notes} onChange={e => setNewComponentForm(p => ({ ...p, notes: e.target.value }))} />
-                                    <div className="flex gap-1">
-                                      <button onClick={() => setAddingComponentForApp(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
-                                      <button onClick={() => handleAddComponent(app.app_id)} disabled={savingComponent || !newComponentForm.nh || !newComponentForm.sz}
-                                        className="px-2 py-1 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50">
-                                        {savingComponent ? '...' : 'Add'}
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                              {!addingComponentForApp && app.components.length === 0 && (
-                                <p className="text-xs text-gray-400 italic">No component mappings yet. Click "+ Component" to add DC/NH/SZ mapping for this app.</p>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {showAppMappings && importedApps.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-sm text-gray-500">No imported apps found. Import legacy rules first to see apps here.</p>
-            </div>
-          )}
-        </div>
-      )}
+      {/* App NGDC Mappings moved to Settings page */}
 
       {/* NGDC Mappings Table */}
       {isNGDCMappings && (

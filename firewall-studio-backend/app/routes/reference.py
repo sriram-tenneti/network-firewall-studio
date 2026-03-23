@@ -1278,6 +1278,162 @@ async def list_fw_device_patterns():
     }
 
 
+# ---- Separate JSON Storage (user-data/) — Migration Data & Studio Rules ----
+
+@router.get("/user-data/summary")
+async def get_user_data_summary():
+    """Return summary of all separate user-data JSON files."""
+    from app.database import get_all_user_data_files
+    return await get_all_user_data_files()
+
+
+@router.get("/user-data/migration")
+async def get_migration_data_endpoint():
+    """Get all migration data from separate JSON."""
+    from app.database import get_migration_data
+    return await get_migration_data()
+
+
+@router.delete("/user-data/migration")
+async def clear_migration_data_endpoint():
+    """Clear all migration data from separate JSON for safe cleanup."""
+    from app.database import clear_migration_data
+    counts = await clear_migration_data()
+    return {"status": "cleared", "cleared_counts": counts}
+
+
+@router.get("/user-data/studio-rules")
+async def get_studio_rules_endpoint():
+    """Get all studio rules from separate JSON."""
+    from app.database import get_studio_rules
+    return await get_studio_rules()
+
+
+@router.delete("/user-data/studio-rules")
+async def clear_studio_rules_endpoint():
+    """Clear all studio rules from separate JSON for safe cleanup."""
+    from app.database import clear_studio_rules
+    count = await clear_studio_rules()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/studio-rules/{rule_id}")
+async def delete_studio_rule_endpoint(rule_id: str):
+    """Delete a specific studio rule from separate JSON."""
+    from app.database import delete_studio_rule
+    deleted = await delete_studio_rule(rule_id)
+    if not deleted:
+        raise HTTPException(404, "Studio rule not found")
+    return {"status": "deleted", "rule_id": rule_id}
+
+
+# ---- Hide Seed Data Toggle ----
+
+@router.get("/hide-seed")
+async def get_hide_seed_endpoint():
+    """Return the current hide-seed-data setting."""
+    from app.database import get_hide_seed
+    return {"hide_seed": get_hide_seed()}
+
+
+@router.post("/hide-seed")
+async def set_hide_seed_endpoint(data: dict):
+    """Toggle hide-seed-data. When True, only real/imported data is returned."""
+    from app.database import set_hide_seed
+    hide = bool(data.get("hide", False))
+    result = set_hide_seed(hide)
+    return {"hide_seed": result}
+
+
+@router.get("/rules/real")
+async def get_real_rules_only():
+    """Return only real/user-created rules (from studio_rules.json + legacy imported).
+    Use this endpoint when hide-seed-data is enabled."""
+    from app.database import get_studio_rules, get_legacy_rules
+    studio = await get_studio_rules()
+    legacy = await get_legacy_rules()
+    # Combine: studio rules are the primary real rules, legacy are imported
+    studio_ids = {r.get("rule_id") for r in studio}
+    combined = list(studio)
+    for lr in legacy:
+        if lr.get("rule_id") and lr["rule_id"] not in studio_ids:
+            combined.append(lr)
+    return combined
+
+
+@router.get("/groups/real")
+async def get_real_groups_only():
+    """Return only groups that were created by the user (not seed data).
+    Groups with _user_created=True or created after seed are considered real."""
+    from app.database import get_groups
+    groups = await get_groups()
+    # Filter: only groups with _user_created flag or groups created via Studio
+    real_groups = [g for g in groups if g.get("_user_created", False) or g.get("source") == "studio"]
+    return real_groups
+
+
+@router.get("/reviews/real")
+async def get_real_reviews_only():
+    """Return only reviews for real/user-created rules."""
+    from app.database import get_reviews, get_studio_rules
+    reviews = await get_reviews()
+    studio = await get_studio_rules()
+    studio_ids = {r.get("rule_id") for r in studio}
+    real_reviews = [r for r in reviews if r.get("rule_id") in studio_ids]
+    return real_reviews
+
+
+# ---- Cleanup Endpoints (individual + one-click reset) ----
+
+@router.delete("/user-data/all")
+async def clear_all_user_data_endpoint():
+    """One-click reset: clear ALL user/imported data across all stores.
+    Seed reference data (NHs, SZs, policy matrix, etc.) is NOT affected."""
+    from app.database import clear_all_user_data
+    counts = await clear_all_user_data()
+    return {"status": "cleared", "counts": counts}
+
+
+@router.delete("/user-data/reviews")
+async def clear_reviews_endpoint():
+    """Clear all reviews."""
+    from app.database import clear_reviews
+    count = await clear_reviews()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/groups")
+async def clear_groups_endpoint():
+    """Clear all groups."""
+    from app.database import clear_user_groups
+    count = await clear_user_groups()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/firewall-rules")
+async def clear_firewall_rules_endpoint():
+    """Clear all firewall rules (from firewall_rules.json)."""
+    from app.database import clear_firewall_rules
+    count = await clear_firewall_rules()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/modifications")
+async def clear_modifications_endpoint():
+    """Clear all rule modifications."""
+    from app.database import clear_modifications
+    count = await clear_modifications()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/legacy-rules")
+async def clear_legacy_rules_force_endpoint():
+    """Force-clear ALL legacy rules (including migrated). For full reset."""
+    from app.database import clear_all_legacy_rules_force
+    count = await clear_all_legacy_rules_force()
+    return {"status": "cleared", "count": count}
+
+
 # ---- Standalone JSON Seed Export ----
 
 @router.get("/export/seed-json")
