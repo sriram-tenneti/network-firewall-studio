@@ -239,7 +239,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   };
 
   const handleClearAllRules = async () => {
-    if (!confirm('Are you sure you want to delete ALL imported legacy rules? This cannot be undone. You can re-import from Excel afterwards.')) return;
+    if (!confirm('This will delete all non-migrated legacy rules. Rules already migrated or in-progress will be preserved. App DC mappings will NOT be affected. Continue?')) return;
     setClearing(true);
     try {
       const res = await clearAllLegacyRules();

@@ -560,11 +560,14 @@ async def delete_legacy_rule(rule_id: str) -> bool:
 
 
 async def clear_all_legacy_rules() -> int:
-    """Delete all imported legacy rules. Returns count of deleted rules."""
+    """Delete non-migrated legacy rules. Preserves rules that are already migrated or in-progress.
+    App DC mappings and component mappings are NOT affected."""
     rules = _load("legacy_rules") or []
-    count = len(rules)
-    _save("legacy_rules", [])
-    return count
+    migrated_statuses = {"Completed", "In Progress", "Mapped", "Needs Review"}
+    preserved = [r for r in rules if r.get("migration_status") in migrated_statuses]
+    deleted_count = len(rules) - len(preserved)
+    _save("legacy_rules", preserved)
+    return deleted_count
 
 
 async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:

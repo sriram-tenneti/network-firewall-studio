@@ -524,19 +524,19 @@ async def update_legacy_rule_endpoint(rule_id: str, data: dict):
     return result
 
 
+@router.delete("/legacy-rules/clear-all")
+async def clear_all_legacy_rules_endpoint():
+    """Delete non-migrated legacy rules for a fresh re-import. Preserves migrated/in-progress rules and all mappings."""
+    count = await clear_all_legacy_rules()
+    return {"message": f"Deleted {count} non-migrated rules", "deleted": count}
+
+
 @router.delete("/legacy-rules/{rule_id}")
 async def delete_legacy_rule_endpoint(rule_id: str):
     ok = await delete_legacy_rule(rule_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Legacy rule not found")
     return {"message": "Deleted"}
-
-
-@router.delete("/legacy-rules/clear-all")
-async def clear_all_legacy_rules_endpoint():
-    """Delete all imported legacy rules for a fresh re-import."""
-    count = await clear_all_legacy_rules()
-    return {"message": f"Deleted {count} rules", "deleted": count}
 
 
 @router.post("/legacy-rules/import")
