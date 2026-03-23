@@ -4,7 +4,7 @@ from app.database import (
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
     get_policy_matrix, get_heritage_dc_matrix, get_ngdc_prod_matrix, get_nonprod_matrix,
-    get_rules, get_legacy_rules, update_legacy_rule, delete_legacy_rule,
+    get_rules, get_legacy_rules, update_legacy_rule, delete_legacy_rule, clear_all_legacy_rules,
     import_legacy_rules, get_migration_history, migrate_rule_to_ngdc,
     create_migration_review,
     create_neighbourhood, update_neighbourhood, delete_neighbourhood,
@@ -24,9 +24,11 @@ from app.database import (
     get_ngdc_recommendations,
 )
 import io
+import json as json_lib
 import csv
 import openpyxl
 import zipfile
+from fastapi.responses import StreamingResponse
 from app.services.naming_standards import (
     validate_name, generate_group_name, generate_server_name,
     generate_subnet_name, suggest_standard_name, determine_security_zone,
@@ -34,6 +36,37 @@ from app.services.naming_standards import (
 )
 
 router = APIRouter(prefix="/api/reference", tags=["Reference Data"])
+
+
+# ---- Data Mode Toggle (Seed vs Live) ----
+
+@router.get("/data-mode")
+async def get_data_mode_endpoint():
+    """Return the current data mode: 'seed' or 'live'."""
+    from app.database import get_data_mode
+    return {"mode": get_data_mode()}
+
+
+@router.post("/data-mode")
+async def set_data_mode_endpoint(data: dict):
+    """Switch data mode. 'seed' = test/seed data, 'live' = real imported data."""
+    from app.database import set_data_mode
+    mode = data.get("mode", "")
+    if mode not in ("seed", "live"):
+        raise HTTPException(status_code=400, detail="mode must be 'seed' or 'live'")
+    result = set_data_mode(mode)
+    return {"mode": result}
+
+
+@router.post("/data-mode/reset-seed")
+async def reset_seed_data():
+    """Re-seed the seed data directory (does NOT touch live data)."""
+    from app.database import seed_database, set_data_mode, get_data_mode
+    prev = get_data_mode()
+    set_data_mode("seed")
+    await seed_database()
+    set_data_mode(prev)
+    return {"message": "Seed data reset successfully", "current_mode": prev}
 
 
 def _parse_excel_bytes(contents: bytes, filename: str = "") -> list[tuple]:
@@ -137,6 +170,7 @@ def _parse_excel_bytes(contents: bytes, filename: str = "") -> list[tuple]:
         f"If the file has IRM/DRM protection (Access workbook programmatically = No), "
         f"open it in Excel, Save As CSV (.csv), then upload the CSV file."
     )
+
 
 
 # ---- Read endpoints ----
@@ -598,6 +632,13 @@ async def update_legacy_rule_endpoint(rule_id: str, data: dict):
     return result
 
 
+@router.delete("/legacy-rules/clear-all")
+async def clear_all_legacy_rules_endpoint():
+    """Delete non-migrated legacy rules for a fresh re-import. Preserves migrated/in-progress rules and all mappings."""
+    count = await clear_all_legacy_rules()
+    return {"message": f"Deleted {count} non-migrated rules", "deleted": count}
+
+
 @router.delete("/legacy-rules/{rule_id}")
 async def delete_legacy_rule_endpoint(rule_id: str):
     ok = await delete_legacy_rule(rule_id)
@@ -646,6 +687,134 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
         parsed_rules.append(rule)
     result = await import_legacy_rules(parsed_rules)
     return result
+
+
+@router.post("/legacy-rules/import-json")
+async def import_legacy_rules_json(file: UploadFile = File(...)):
+    """Import legacy rules from a JSON file with deduplication.
+    Expects a JSON array of objects with same field names as Excel columns
+    (either Excel header names or internal field names are accepted)."""
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Only .json files are supported")
+    contents = await file.read()
+    try:
+        data = json_lib.loads(contents)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}")
+    if not isinstance(data, list):
+        raise HTTPException(status_code=400, detail="JSON must be an array of rule objects")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty JSON array")
+
+    # Accept both Excel header names and internal field names
+    col_map = {
+        "App ID": "app_id", "app_id": "app_id",
+        "App Current Distributed ID": "app_distributed_id", "app_distributed_id": "app_distributed_id",
+        "App Name": "app_name", "app_name": "app_name",
+        "Inventory Item": "inventory_item", "inventory_item": "inventory_item",
+        "Policy Name": "policy_name", "policy_name": "policy_name",
+        "Rule Global": "rule_global", "rule_global": "rule_global",
+        "Rule Action": "rule_action", "rule_action": "rule_action",
+        "Rule Source": "rule_source", "rule_source": "rule_source",
+        "Rule Source Expanded": "rule_source_expanded", "rule_source_expanded": "rule_source_expanded",
+        "Rule Source Zone": "rule_source_zone", "rule_source_zone": "rule_source_zone",
+        "Rule Destination": "rule_destination", "rule_destination": "rule_destination",
+        "Rule Destination Expanded": "rule_destination_expanded", "rule_destination_expanded": "rule_destination_expanded",
+        "Rule Destination Zone": "rule_destination_zone", "rule_destination_zone": "rule_destination_zone",
+        "Rule Service": "rule_service", "rule_service": "rule_service",
+        "Rule Service Expanded": "rule_service_expanded", "rule_service_expanded": "rule_service_expanded",
+        "RN": "rn", "rn": "rn",
+        "RC": "rc", "rc": "rc",
+    }
+    parsed_rules = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        rule: dict = {}
+        for key, val in item.items():
+            mapped = col_map.get(key)
+            if mapped:
+                rule[mapped] = str(val) if val is not None else ""
+        rule["is_standard"] = False
+        rule["migration_status"] = "Not Started"
+        parsed_rules.append(rule)
+    result = await import_legacy_rules(parsed_rules)
+    return result
+
+
+@router.get("/legacy-rules/export-excel")
+async def export_legacy_rules_excel(app_id: str = ""):
+    """Export imported legacy rules as an Excel (.xlsx) file."""
+    rules = await get_legacy_rules()
+    if app_id:
+        rules = [r for r in rules if r.get("app_id") == app_id]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Legacy Rules"
+    headers = [
+        "App ID", "App Current Distributed ID", "App Name", "Inventory Item",
+        "Policy Name", "Rule Global", "Rule Action",
+        "Rule Source", "Rule Source Expanded", "Rule Source Zone",
+        "Rule Destination", "Rule Destination Expanded", "Rule Destination Zone",
+        "Rule Service", "Rule Service Expanded", "RN", "RC", "Migration Status",
+    ]
+    field_map = [
+        "app_id", "app_distributed_id", "app_name", "inventory_item",
+        "policy_name", "rule_global", "rule_action",
+        "rule_source", "rule_source_expanded", "rule_source_zone",
+        "rule_destination", "rule_destination_expanded", "rule_destination_zone",
+        "rule_service", "rule_service_expanded", "rn", "rc", "migration_status",
+    ]
+    ws.append(headers)
+    for rule in rules:
+        ws.append([rule.get(f, "") for f in field_map])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    wb.close()
+    buf.seek(0)
+    filename = f"legacy_rules_{app_id}.xlsx" if app_id else "legacy_rules.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/legacy-rules/imported-apps")
+async def get_imported_apps():
+    """Return unique apps from imported legacy rules with their mapping status.
+    For each app, indicates whether it already has app-dc-mappings (NH/SZ/DC)
+    and lists its existing component mappings if any."""
+    from app.database import get_app_dc_mappings
+    rules = await get_legacy_rules()
+    app_dc_mappings = await get_app_dc_mappings()
+
+    # Build lookup of existing mappings by app_id
+    mapped: dict[str, list[dict]] = {}
+    for m in app_dc_mappings:
+        aid = str(m.get("app_id", ""))
+        mapped.setdefault(aid, []).append(m)
+
+    # Extract unique apps from legacy rules
+    seen: set[str] = set()
+    apps: list[dict] = []
+    for r in rules:
+        app_id = str(r.get("app_id", "")).strip()
+        if not app_id or app_id in seen:
+            continue
+        seen.add(app_id)
+        existing_mappings = mapped.get(app_id, [])
+        apps.append({
+            "app_id": app_id,
+            "app_name": r.get("app_name", ""),
+            "app_distributed_id": r.get("app_distributed_id", ""),
+            "rule_count": sum(1 for lr in rules if str(lr.get("app_id", "")).strip() == app_id),
+            "has_mapping": len(existing_mappings) > 0,
+            "components": existing_mappings,
+        })
+    return apps
 
 
 @router.post("/legacy-rules/migrate")
@@ -1189,6 +1358,192 @@ async def list_fw_device_patterns():
         "patterns": await get_firewall_device_patterns(),
         "dc_vendor_map": await get_dc_vendor_map(),
     }
+
+
+# ---- Separate JSON Storage (user-data/) — Migration Data & Studio Rules ----
+
+@router.get("/user-data/summary")
+async def get_user_data_summary():
+    """Return summary of all separate user-data JSON files."""
+    from app.database import get_all_user_data_files
+    return await get_all_user_data_files()
+
+
+@router.get("/user-data/migration")
+async def get_migration_data_endpoint():
+    """Get all migration data from separate JSON."""
+    from app.database import get_migration_data
+    return await get_migration_data()
+
+
+@router.delete("/user-data/migration")
+async def clear_migration_data_endpoint():
+    """Clear all migration data from separate JSON for safe cleanup."""
+    from app.database import clear_migration_data
+    counts = await clear_migration_data()
+    return {"status": "cleared", "cleared_counts": counts}
+
+
+@router.get("/user-data/studio-rules")
+async def get_studio_rules_endpoint():
+    """Get all studio rules from separate JSON."""
+    from app.database import get_studio_rules
+    return await get_studio_rules()
+
+
+@router.delete("/user-data/studio-rules")
+async def clear_studio_rules_endpoint():
+    """Clear all studio rules from separate JSON for safe cleanup."""
+    from app.database import clear_studio_rules
+    count = await clear_studio_rules()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/studio-rules/{rule_id}")
+async def delete_studio_rule_endpoint(rule_id: str):
+    """Delete a specific studio rule from separate JSON."""
+    from app.database import delete_studio_rule
+    deleted = await delete_studio_rule(rule_id)
+    if not deleted:
+        raise HTTPException(404, "Studio rule not found")
+    return {"status": "deleted", "rule_id": rule_id}
+
+
+# ---- Hide Seed Data Toggle ----
+
+@router.get("/hide-seed")
+async def get_hide_seed_endpoint():
+    """Return the current hide-seed-data setting."""
+    from app.database import get_hide_seed
+    return {"hide_seed": get_hide_seed()}
+
+
+@router.post("/hide-seed")
+async def set_hide_seed_endpoint(data: dict):
+    """Toggle hide-seed-data. When True, only real/imported data is returned."""
+    from app.database import set_hide_seed
+    hide = bool(data.get("hide", False))
+    result = set_hide_seed(hide)
+    return {"hide_seed": result}
+
+
+@router.get("/rules/real")
+async def get_real_rules_only():
+    """Return only real/user-created rules (from studio_rules.json + legacy imported).
+    Use this endpoint when hide-seed-data is enabled."""
+    from app.database import get_studio_rules, get_legacy_rules
+    studio = await get_studio_rules()
+    legacy = await get_legacy_rules()
+    # Combine: studio rules are the primary real rules, legacy are imported
+    studio_ids = {r.get("rule_id") for r in studio}
+    combined = list(studio)
+    for lr in legacy:
+        if lr.get("rule_id") and lr["rule_id"] not in studio_ids:
+            combined.append(lr)
+    return combined
+
+
+@router.get("/groups/real")
+async def get_real_groups_only():
+    """Return only groups that were created by the user (not seed data).
+    Groups with _user_created=True or created after seed are considered real."""
+    from app.database import get_groups
+    groups = await get_groups()
+    # Filter: only groups with _user_created flag or groups created via Studio
+    real_groups = [g for g in groups if g.get("_user_created", False) or g.get("source") == "studio"]
+    return real_groups
+
+
+@router.get("/reviews/real")
+async def get_real_reviews_only():
+    """Return only reviews for real/user-created rules."""
+    from app.database import get_reviews, get_studio_rules
+    reviews = await get_reviews()
+    studio = await get_studio_rules()
+    studio_ids = {r.get("rule_id") for r in studio}
+    real_reviews = [r for r in reviews if r.get("rule_id") in studio_ids]
+    return real_reviews
+
+
+# ---- Cleanup Endpoints (individual + one-click reset) ----
+
+@router.delete("/user-data/all")
+async def clear_all_user_data_endpoint():
+    """One-click reset: clear ALL user/imported data across all stores.
+    Seed reference data (NHs, SZs, policy matrix, etc.) is NOT affected."""
+    from app.database import clear_all_user_data
+    counts = await clear_all_user_data()
+    return {"status": "cleared", "counts": counts}
+
+
+@router.delete("/user-data/reviews")
+async def clear_reviews_endpoint():
+    """Clear all reviews."""
+    from app.database import clear_reviews
+    count = await clear_reviews()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/groups")
+async def clear_groups_endpoint():
+    """Clear all groups."""
+    from app.database import clear_user_groups
+    count = await clear_user_groups()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/firewall-rules")
+async def clear_firewall_rules_endpoint():
+    """Clear all firewall rules (from firewall_rules.json)."""
+    from app.database import clear_firewall_rules
+    count = await clear_firewall_rules()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/modifications")
+async def clear_modifications_endpoint():
+    """Clear all rule modifications."""
+    from app.database import clear_modifications
+    count = await clear_modifications()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/legacy-rules")
+async def clear_legacy_rules_force_endpoint():
+    """Force-clear ALL legacy rules (including migrated). For full reset."""
+    from app.database import clear_all_legacy_rules_force
+    count = await clear_all_legacy_rules_force()
+    return {"status": "cleared", "count": count}
+
+
+@router.delete("/user-data/by-app/{app_id}")
+async def clear_data_by_app_endpoint(app_id: str):
+    """Clear all data for a specific application across all stores."""
+    from app.database import clear_data_by_app
+    counts = await clear_data_by_app(app_id)
+    return {"status": "cleared", "app_id": app_id, "counts": counts}
+
+
+@router.delete("/user-data/by-env/{environment}")
+async def clear_data_by_env_endpoint(environment: str):
+    """Clear all data for a specific environment across all stores."""
+    from app.database import clear_data_by_environment
+    counts = await clear_data_by_environment(environment)
+    return {"status": "cleared", "environment": environment, "counts": counts}
+
+
+@router.get("/user-data/summary/by-app")
+async def get_data_summary_by_app_endpoint():
+    """Return per-app record counts for Data Management overview."""
+    from app.database import get_data_summary_by_app
+    return await get_data_summary_by_app()
+
+
+@router.get("/user-data/summary/by-env")
+async def get_data_summary_by_env_endpoint():
+    """Return per-environment record counts for Data Management overview."""
+    from app.database import get_data_summary_by_env
+    return await get_data_summary_by_env()
 
 
 # ---- Standalone JSON Seed Export ----

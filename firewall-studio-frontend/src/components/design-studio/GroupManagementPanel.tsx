@@ -7,9 +7,10 @@ import { autoPrefix } from '@/lib/utils';
 interface GroupManagementPanelProps {
   appFilter: string;
   onNotification: (message: string, type: 'success' | 'error' | 'info') => void;
+  appDCMappings?: Record<string, unknown>[];
 }
 
-export function GroupManagementPanel({ appFilter, onNotification }: GroupManagementPanelProps) {
+export function GroupManagementPanel({ appFilter, onNotification, appDCMappings = [] }: GroupManagementPanelProps) {
   const [groups, setGroups] = useState<FirewallGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<FirewallGroup | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -17,10 +18,17 @@ export function GroupManagementPanel({ appFilter, onNotification }: GroupManagem
   const [newMemberType, setNewMemberType] = useState<'ip' | 'cidr' | 'group' | 'range'>('ip');
   const [newMemberDesc, setNewMemberDesc] = useState('');
   const [newGroupAppId, setNewGroupAppId] = useState(appFilter || '');
-  const [newGroupNh, setNewGroupNh] = useState('NH01');
-  const [newGroupSz, setNewGroupSz] = useState('GEN');
+  const [newGroupDc, setNewGroupDc] = useState('');
+  const [newGroupNh, setNewGroupNh] = useState('');
+  const [newGroupSz, setNewGroupSz] = useState('');
   const [newGroupSubtype, setNewGroupSubtype] = useState('APP');
   const [newGroupDesc, setNewGroupDesc] = useState('');
+
+  // Derive DC/NH/SZ options from app DC mappings for the selected app
+  const appMappingsForApp = appDCMappings.filter(m => String(m.app_id || '') === newGroupAppId);
+  const dcOptions = [...new Set(appMappingsForApp.map(m => String(m.dc || '')).filter(Boolean))];
+  const nhOptions = [...new Set(appMappingsForApp.map(m => String(m.nh || '')).filter(Boolean))];
+  const szOptions = [...new Set(appMappingsForApp.map(m => String(m.sz || '')).filter(Boolean))];
 
   const loadGroups = async () => {
     try {
@@ -118,32 +126,67 @@ export function GroupManagementPanel({ appFilter, onNotification }: GroupManagem
           <div className="grid grid-cols-2 gap-1.5">
             <div>
               <label className="text-xs text-slate-500">App ID</label>
-              <input value={newGroupAppId} onChange={(e) => setNewGroupAppId(e.target.value)}
+              <input value={newGroupAppId} onChange={(e) => { setNewGroupAppId(e.target.value); setNewGroupDc(''); setNewGroupNh(''); setNewGroupSz(''); }}
                 className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="CRM" />
             </div>
             <div>
-              <label className="text-xs text-slate-500">NH</label>
-              <input value={newGroupNh} onChange={(e) => setNewGroupNh(e.target.value)}
-                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="NH01" />
+              <label className="text-xs text-slate-500">DC {dcOptions.length > 0 && `(${dcOptions.length})`}</label>
+              {dcOptions.length > 0 ? (
+                <select value={newGroupDc} onChange={(e) => setNewGroupDc(e.target.value)}
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                  <option value="">-- Select DC --</option>
+                  {dcOptions.map(dc => <option key={dc} value={dc}>{dc}</option>)}
+                </select>
+              ) : (
+                <select value={newGroupDc} onChange={(e) => setNewGroupDc(e.target.value)}
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                  <option value="">-- Select DC --</option>
+                  <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                  <option value="BETA_NGDC">BETA_NGDC</option>
+                  <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                </select>
+              )}
             </div>
             <div>
-              <label className="text-xs text-slate-500">SZ</label>
-              <input value={newGroupSz} onChange={(e) => setNewGroupSz(e.target.value)}
-                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="GEN" />
+              <label className="text-xs text-slate-500">NH {nhOptions.length > 0 && `(${nhOptions.length})`}</label>
+              {nhOptions.length > 0 ? (
+                <select value={newGroupNh} onChange={(e) => setNewGroupNh(e.target.value)}
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                  <option value="">-- Select NH --</option>
+                  {nhOptions.map(nh => <option key={nh} value={nh}>{nh}</option>)}
+                </select>
+              ) : (
+                <input value={newGroupNh} onChange={(e) => setNewGroupNh(e.target.value)}
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="NH01" />
+              )}
             </div>
             <div>
-              <label className="text-xs text-slate-500">Subtype</label>
-              <select value={newGroupSubtype} onChange={(e) => setNewGroupSubtype(e.target.value)}
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
-                <option value="APP">APP (Application)</option>
-                <option value="WEB">WEB (Web Servers)</option>
-                <option value="DB">DB (Database)</option>
-                <option value="BAT">BAT (Batch)</option>
-                <option value="MQ">MQ (Messaging)</option>
-                <option value="API">API (API Gateway)</option>
-              </select>
+              <label className="text-xs text-slate-500">SZ {szOptions.length > 0 && `(${szOptions.length})`}</label>
+              {szOptions.length > 0 ? (
+                <select value={newGroupSz} onChange={(e) => setNewGroupSz(e.target.value)}
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                  <option value="">-- Select SZ --</option>
+                  {szOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+                </select>
+              ) : (
+                <input value={newGroupSz} onChange={(e) => setNewGroupSz(e.target.value)}
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="GEN" />
+              )}
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <label className="text-xs text-slate-500">Component</label>
+              <select value={newGroupSubtype} onChange={(e) => setNewGroupSubtype(e.target.value)}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                <option value="WEB">WEB</option>
+                <option value="APP">APP</option>
+                <option value="DB">DB</option>
+                <option value="MQ">MQ</option>
+                <option value="BAT">BAT</option>
+                <option value="API">API</option>
+              </select>
+            </div>
           <div>
             <label className="text-xs text-slate-500">Description</label>
             <input value={newGroupDesc} onChange={(e) => setNewGroupDesc(e.target.value)}

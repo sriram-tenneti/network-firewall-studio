@@ -107,7 +107,7 @@ function parseDestConfig(dst: string, dstZone: string, port: string): Destinatio
   };
 }
 
-function transformRule(raw: RawBackendRule): FirewallRule {
+export function transformRule(raw: RawBackendRule): FirewallRule {
   const src = raw.source;
   const isNamingValid = src.startsWith('grp-') || src.startsWith('svr-') || src.startsWith('rng-');
   const dstNamingValid = raw.destination.startsWith('grp-') || raw.destination.startsWith('svr-') || raw.destination.startsWith('rng-');
@@ -377,6 +377,39 @@ export const updateLegacyRule = (ruleId: string, data: Partial<LegacyRule>) =>
 export const deleteLegacyRule = (ruleId: string) =>
   fetchJSON<{ message: string }>(`/api/reference/legacy-rules/${ruleId}`, { method: 'DELETE' });
 
+export const clearAllLegacyRules = () =>
+  fetchJSON<{ message: string; deleted: number }>('/api/reference/legacy-rules/clear-all', { method: 'DELETE' });
+
+// JSON import for legacy rules
+export const importLegacyRulesJSON = async (file: File): Promise<{ added: number; duplicates: number; total: number }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300000);
+  try {
+    const res = await fetch(`${API_BASE}/api/reference/legacy-rules/import-json`, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      throw new Error(errBody?.detail || `Import failed: ${res.status}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+// Export legacy rules as Excel (.xlsx)
+export const exportLegacyRulesToExcel = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  window.open(`${API_BASE}/api/reference/legacy-rules/export-excel${qs ? `?${qs}` : ''}`, '_blank');
+};
+
 // Excel import for legacy rules (supports large files up to 50K+ rows)
 export const importLegacyRulesExcel = async (file: File, environment?: string): Promise<{ added: number; duplicates: number; total: number }> => {
   const formData = new FormData();
@@ -511,6 +544,19 @@ export const compileRuleExpanded = (ruleId: string, vendor = 'generic', expandGr
   fetchJSON<Record<string, unknown>>(`/api/reference/rules/${ruleId}/compile-expanded`, {
     method: 'POST', body: JSON.stringify({ vendor, expand_groups: expandGroups })
   });
+
+// Data Mode (Seed vs Live)
+export const getDataMode = () => fetchJSON<{ mode: string }>('/api/reference/data-mode');
+export const setDataMode = (mode: string) =>
+  fetchJSON<{ mode: string }>('/api/reference/data-mode', { method: 'POST', body: JSON.stringify({ mode }) });
+export const resetSeedData = () =>
+  fetchJSON<{ message: string; current_mode: string }>('/api/reference/data-mode/reset-seed', { method: 'POST' });
+
+// Imported Apps from Legacy Rules (with mapping status)
+export const getImportedApps = () =>
+  fetchJSON<{ app_id: string; app_name: string; app_distributed_id: string; rule_count: number; has_mapping: boolean; components: Record<string, unknown>[] }[]>(
+    '/api/reference/legacy-rules/imported-apps'
+  );
 
 // App-to-DC/NH/SZ Organization Mappings
 export const getAppDCMappings = () => fetchJSON<Record<string, unknown>[]>('/api/reference/app-dc-mappings');
@@ -683,3 +729,76 @@ export const getNgdcProdMatrix = () =>
 // NonProd Matrix
 export const getNonprodMatrix = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix/nonprod');
+
+// ---- Separate JSON Storage (user-data/) — Migration Data & Studio Rules ----
+
+export const getUserDataSummary = () =>
+  fetchJSON<{ migration_data: Record<string, number>; studio_rules_count: number; data_directory: string }>('/api/reference/user-data/summary');
+
+export const getMigrationData = () =>
+  fetchJSON<{ migration_history: Record<string, unknown>[]; migration_mappings: Record<string, unknown>[]; migration_reviews: Record<string, unknown>[]; migrated_rules: Record<string, unknown>[] }>('/api/reference/user-data/migration');
+
+export const clearMigrationData = () =>
+  fetchJSON<{ status: string; cleared_counts: Record<string, number> }>('/api/reference/user-data/migration', { method: 'DELETE' });
+
+export const getStudioRules = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/user-data/studio-rules');
+
+export const clearStudioRules = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/studio-rules', { method: 'DELETE' });
+
+export const deleteStudioRule = (ruleId: string) =>
+  fetchJSON<{ status: string; rule_id: string }>(`/api/reference/user-data/studio-rules/${ruleId}`, { method: 'DELETE' });
+
+// ---- Cleanup Endpoints (individual + one-click reset) ----
+
+export const clearAllUserData = () =>
+  fetchJSON<{ status: string; counts: Record<string, number> }>('/api/reference/user-data/all', { method: 'DELETE' });
+
+export const clearReviews = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/reviews', { method: 'DELETE' });
+
+export const clearGroups = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/groups', { method: 'DELETE' });
+
+export const clearFirewallRules = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/firewall-rules', { method: 'DELETE' });
+
+export const clearModifications = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/modifications', { method: 'DELETE' });
+
+export const clearLegacyRulesForce = () =>
+  fetchJSON<{ status: string; count: number }>('/api/reference/user-data/legacy-rules', { method: 'DELETE' });
+
+export const clearDataByApp = (appId: string) =>
+  fetchJSON<{ status: string; app_id: string; counts: Record<string, number> }>(`/api/reference/user-data/by-app/${encodeURIComponent(appId)}`, { method: 'DELETE' });
+
+export const clearDataByEnv = (environment: string) =>
+  fetchJSON<{ status: string; environment: string; counts: Record<string, number> }>(`/api/reference/user-data/by-env/${encodeURIComponent(environment)}`, { method: 'DELETE' });
+
+export const getDataSummaryByApp = () =>
+  fetchJSON<{ app_id: string; legacy: number; firewall: number; reviews: number; studio: number; total: number }[]>('/api/reference/user-data/summary/by-app');
+
+export const getDataSummaryByEnv = () =>
+  fetchJSON<{ environment: string; legacy: number; firewall: number; reviews: number; studio: number; total: number }[]>('/api/reference/user-data/summary/by-env');
+
+// ---- Hide Seed Data Toggle ----
+
+export const getHideSeed = () =>
+  fetchJSON<{ hide_seed: boolean }>('/api/reference/hide-seed');
+
+export const setHideSeed = (hide: boolean) =>
+  fetchJSON<{ hide_seed: boolean }>('/api/reference/hide-seed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hide }) });
+
+export const getRealRules = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/rules/real');
+
+export const getRealGroups = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/groups/real');
+
+export const getRealReviews = () =>
+  fetchJSON<Record<string, unknown>[]>('/api/reference/reviews/real');
+
+/** Helper: check localStorage for hide-seed preference */
+export const isHideSeedEnabled = (): boolean =>
+  typeof window !== 'undefined' && localStorage.getItem('nfs_hide_seed') === 'true';

@@ -1,6 +1,24 @@
 import { useState, useCallback, useEffect } from 'react';
-import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC } from '@/lib/api';
-import type { FirewallRule } from '@/types';
+import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules, isHideSeedEnabled } from '@/lib/api';
+import type { FirewallRule, LegacyRule } from '@/types';
+
+interface ImportedApp {
+  app_id: string;
+  app_name: string;
+  app_distributed_id: string;
+  rule_count: number;
+  has_mapping: boolean;
+  components: Record<string, unknown>[];
+}
+
+interface NewComponentForm {
+  component: string;
+  dc: string;
+  nh: string;
+  sz: string;
+  cidr: string;
+  notes: string;
+}
 
 interface DataImportPageProps {
   context?: string;
@@ -15,6 +33,24 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [mappings, setMappings] = useState<Record<string, unknown>[]>([]);
   const [showMappings, setShowMappings] = useState(false);
   const [newMapping, setNewMapping] = useState({ legacy_name: '', legacy_dc: '', ngdc_name: '', ngdc_dc: '', ngdc_nh: '', ngdc_sz: '', type: 'group' });
+
+  // Imported apps mapping state
+  const [importedApps, setImportedApps] = useState<ImportedApp[]>([]);
+  const [showAppMappings, setShowAppMappings] = useState(false);
+  const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
+  const [addingComponentForApp, setAddingComponentForApp] = useState<string | null>(null);
+  const [newComponentForm, setNewComponentForm] = useState<NewComponentForm>({
+    component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', notes: ''
+  });
+  const [savingComponent, setSavingComponent] = useState(false);
+  const [appFilter, setAppFilter] = useState<'all' | 'unmapped' | 'mapped'>('all');
+
+  // Imported legacy rules display state
+  const [importedRules, setImportedRules] = useState<LegacyRule[]>([]);
+  const [showImportedRules, setShowImportedRules] = useState(false);
+  const [rulesAppFilter, setRulesAppFilter] = useState<string>('');
+  const [rulesSearchQuery, setRulesSearchQuery] = useState<string>('');
+  const [clearing, setClearing] = useState(false);
 
   // NFR import state (for ngdc-import-rules context)
   const [nfrRules, setNfrRules] = useState<FirewallRule[]>([]);
@@ -34,14 +70,27 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     context === 'firewall-studio' ? 'Import Rules for Firewall Studio' :
     'Data Import';
 
-  // Load NFR apps when this is the NFR import page
+  // Load legacy imported apps when this is the NFR import page (reads from Firewall Management legacy_rules)
   const loadNFRApps = useCallback(async () => {
     setNfrLoading(true);
     try {
-      const rules = await getRules();
-      setNfrRules(rules);
-      const filteredByEnv = nfrEnvFilter ? rules.filter((r: FirewallRule) => r.environment === nfrEnvFilter) : rules;
-      const apps = Array.from(new Set(filteredByEnv.map((r: FirewallRule) => `${r.application}|${r.application_name || r.application}`))).map(key => {
+      const legacyRules = await getLegacyRules();
+      // Map legacy rules to FirewallRule shape for display compatibility
+      const mapped = legacyRules.map((r: LegacyRule) => ({
+        ...r,
+        rule_id: r.id || '',
+        application: String(r.app_id || ''),
+        application_name: r.app_name || String(r.app_id || ''),
+        source: r.rule_source || '',
+        destination: r.rule_destination || '',
+        port: (r.rule_service || '').split('/')[0] || '',
+        protocol: (r.rule_service || '').split('/')[1] || 'tcp',
+        action: r.rule_action || 'Accept',
+        status: r.migration_status || 'Not Started',
+        environment: 'Production',
+      })) as unknown as FirewallRule[];
+      setNfrRules(mapped);
+      const apps = Array.from(new Set(legacyRules.map((r: LegacyRule) => `${r.app_id}|${r.app_name || r.app_id}`))).map(key => {
         const [appId, appName] = (key as string).split('|');
         return { value: appId, label: `${appId} - ${appName}` };
       });
@@ -91,21 +140,134 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     } catch { setError('Failed to load mappings'); }
   }, []);
 
+  const loadImportedApps = useCallback(async () => {
+    try {
+      const apps = await getImportedApps();
+      setImportedApps(apps);
+      setShowAppMappings(true);
+    } catch { /* ignore */ }
+  }, []);
+
   const handleImport = async () => {
     if (!file) return;
     setImporting(true);
     setError('');
     setResult(null);
     try {
+      const isJSON = file.name.endsWith('.json');
       const res = isNGDCMappings
         ? await importNGDCMappingsExcel(file)
+        : isJSON
+        ? await importLegacyRulesJSON(file)
         : await importLegacyRulesExcel(file);
       setResult(res);
       if (isNGDCMappings) loadMappings();
+      // After legacy import, load imported apps for mapping and load rules
+      if (!isNGDCMappings) {
+        loadImportedApps();
+        loadImportedRules();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleAddComponent = async (appId: string) => {
+    setSavingComponent(true);
+    try {
+      await createAppDCMapping({
+        app_id: appId,
+        component: newComponentForm.component,
+        dc: newComponentForm.dc,
+        nh: newComponentForm.nh,
+        sz: newComponentForm.sz,
+        cidr: newComponentForm.cidr,
+        notes: newComponentForm.notes,
+        status: 'Active',
+      });
+      setAddingComponentForApp(null);
+      setNewComponentForm({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', notes: '' });
+      await loadImportedApps();
+    } catch {
+      setError('Failed to add component mapping');
+    } finally {
+      setSavingComponent(false);
+    }
+  };
+
+  const handleDeleteComponent = async (mappingId: string) => {
+    try {
+      await deleteAppDCMapping(mappingId);
+      await loadImportedApps();
+    } catch {
+      setError('Failed to delete component mapping');
+    }
+  };
+
+  const loadImportedRules = useCallback(async () => {
+    try {
+      const rules = await getLegacyRules();
+      setImportedRules(rules);
+      setShowImportedRules(true);
+    } catch { /* ignore */ }
+  }, []);
+
+  const exportImportedRulesToCSV = () => {
+    const filtered = getFilteredImportedRules();
+    if (filtered.length === 0) return;
+    const headers = ['App ID', 'App Distributed ID', 'App Name', 'Inventory Item', 'Policy Name', 'Rule Global', 'Rule Action', 'Rule Source', 'Rule Source Expanded', 'Rule Source Zone', 'Rule Destination', 'Rule Destination Expanded', 'Rule Destination Zone', 'Rule Service', 'Rule Service Expanded', 'RN', 'RC', 'Migration Status'];
+    const rows = filtered.map(r => [
+      r.app_id, r.app_distributed_id, r.app_name, r.inventory_item, r.policy_name,
+      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action, r.rule_source, r.rule_source_expanded,
+      r.rule_source_zone, r.rule_destination, r.rule_destination_expanded,
+      r.rule_destination_zone, r.rule_service, r.rule_service_expanded, r.rn, r.rc, r.migration_status
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `imported-legacy-rules-${rulesAppFilter || 'all'}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getFilteredImportedRules = () => {
+    let filtered = importedRules;
+    if (rulesAppFilter) filtered = filtered.filter(r => String(r.app_id) === rulesAppFilter);
+    if (rulesSearchQuery.trim()) {
+      const q = rulesSearchQuery.toLowerCase();
+      filtered = filtered.filter(r =>
+        String(r.app_id).toLowerCase().includes(q) ||
+        (r.app_name || '').toLowerCase().includes(q) ||
+        (r.rule_source || '').toLowerCase().includes(q) ||
+        (r.rule_source_expanded || '').toLowerCase().includes(q) ||
+        (r.rule_destination || '').toLowerCase().includes(q) ||
+        (r.rule_destination_expanded || '').toLowerCase().includes(q) ||
+        (r.rule_service || '').toLowerCase().includes(q) ||
+        (r.rule_source_zone || '').toLowerCase().includes(q) ||
+        (r.rule_destination_zone || '').toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  };
+
+  const handleClearAllRules = async () => {
+    if (!confirm('This will delete all non-migrated legacy rules. Rules already migrated or in-progress will be preserved. App DC mappings will NOT be affected. Continue?')) return;
+    setClearing(true);
+    try {
+      const res = await clearAllLegacyRules();
+      setImportedRules([]);
+      setShowImportedRules(false);
+      setResult(null);
+      setError('');
+      alert(`Cleared ${res.deleted} rules. You can now import fresh data.`);
+    } catch {
+      setError('Failed to clear rules');
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -126,6 +288,12 @@ export default function DataImportPage({ context }: DataImportPageProps) {
 
   return (
     <div className="max-w-[1800px] mx-auto p-6">
+      {isHideSeedEnabled() && (
+        <div className="mb-4 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-2">
+          <span className="text-xs font-semibold text-indigo-700">REAL DATA MODE</span>
+          <span className="text-xs text-indigo-500">Seed/test data is hidden. Showing only real imported data. Change in Settings &gt; Data Management.</span>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
@@ -227,21 +395,21 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       {/* Excel Import Section (for non-NFR contexts) */}
       {!isNFRImport && <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">
-          {isNGDCMappings ? 'Import Mappings from Excel' : 'Import from Excel'}
+          {isNGDCMappings ? 'Import Mappings from Excel' : 'Import from Excel / JSON'}
         </h2>
         <div className="flex items-center gap-4">
           <label className="flex-1">
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all">
               <input
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept={isNGDCMappings ? '.xlsx' : '.xlsx,.xls,.csv,.json'}
                 className="hidden"
                 onChange={e => setFile(e.target.files?.[0] || null)}
               />
               <svg className="w-10 h-10 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
-              <p className="text-sm text-gray-600">{file ? file.name : 'Click to select .xlsx, .xls, or .csv file'}</p>
+              <p className="text-sm text-gray-600">{file ? file.name : isNGDCMappings ? 'Click to select .xlsx file' : 'Click to select .xlsx, .xls, .csv, or .json file'}</p>
               <p className="text-xs text-gray-400 mt-1">If your .xlsx file has IRM/DRM protection, save it as CSV first</p>
             </div>
           </label>
@@ -251,6 +419,14 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {importing ? 'Importing...' : 'Import'}
+          </button>
+          <button
+            onClick={handleClearAllRules}
+            disabled={clearing}
+            className="px-4 py-3 bg-red-50 text-red-600 rounded-lg font-medium hover:bg-red-100 border border-red-200 disabled:opacity-50 transition-colors text-sm"
+            title="Delete all imported rules and start fresh"
+          >
+            {clearing ? 'Clearing...' : 'Clear All & Re-import'}
           </button>
         </div>
 
@@ -270,6 +446,140 @@ export default function DataImportPage({ context }: DataImportPageProps) {
           </div>
         )}
       </div>}
+
+      {/* Imported Legacy Rules with Source/Destination Details */}
+      {!isNGDCMappings && !isNFRImport && showImportedRules && importedRules.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold">Imported Legacy Rules</h2>
+              <p className="text-xs text-gray-500 mt-1">View source and destination details of imported rules. Use filters to narrow down, then export as CSV.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <select className="px-2 py-1.5 text-xs border rounded-md" value={rulesAppFilter} onChange={e => setRulesAppFilter(e.target.value)}>
+                <option value="">All Apps</option>
+                {Array.from(new Set(importedRules.map(r => String(r.app_id)))).sort().map(appId => (
+                  <option key={appId} value={appId}>{appId}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="Search source, destination, service..."
+                value={rulesSearchQuery}
+                onChange={e => setRulesSearchQuery(e.target.value)}
+                className="px-2 py-1.5 text-xs border rounded-md w-64"
+              />
+              <button onClick={exportImportedRulesToCSV} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">
+                Export CSV
+              </button>
+              <button onClick={() => exportLegacyRulesToExcel(rulesAppFilter || undefined)} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+                Export Excel
+              </button>
+              <button onClick={() => setShowImportedRules(false)} className="px-3 py-2 text-xs text-gray-500 border rounded-md hover:bg-gray-50">
+                Hide
+              </button>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-500 mb-2">
+            Showing <strong className="text-gray-700">{getFilteredImportedRules().length}</strong> of <strong className="text-gray-700">{importedRules.length}</strong> rules
+          </div>
+
+          <div className="overflow-x-auto max-h-[500px] overflow-y-auto border rounded-lg">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule ID</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">App ID</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">App Name</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Policy</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Action</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule Source</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap min-w-[180px]">Source Details</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Src Zone</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule Destination</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap min-w-[180px]">Destination Details</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Dst Zone</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Service</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {getFilteredImportedRules().slice(0, 200).map(rule => (
+                  <tr key={rule.id} className="hover:bg-gray-50">
+                    <td className="px-2 py-1.5 font-mono text-gray-600">{rule.id}</td>
+                    <td className="px-2 py-1.5 font-mono font-medium">{String(rule.app_id)}</td>
+                    <td className="px-2 py-1.5 text-gray-700 max-w-[120px] truncate" title={rule.app_name}>{rule.app_name}</td>
+                    <td className="px-2 py-1.5 text-gray-500 max-w-[100px] truncate" title={rule.policy_name}>{rule.policy_name}</td>
+                    <td className="px-2 py-1.5">
+                      <span className={`px-1.5 py-0.5 rounded font-medium ${rule.rule_action === 'Accept' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {rule.rule_action}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 max-w-[150px]">
+                      <div className="font-mono text-blue-800" title={rule.rule_source}>
+                        {(rule.rule_source || '').split('\n').filter(Boolean).slice(0, 2).join(', ')}
+                        {(rule.rule_source || '').split('\n').filter(Boolean).length > 2 && <span className="text-gray-400"> +{(rule.rule_source || '').split('\n').filter(Boolean).length - 2}</span>}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 max-w-[250px]">
+                      {rule.rule_source_expanded ? (
+                        <div className="text-gray-700 truncate" title={rule.rule_source_expanded}>
+                          {rule.rule_source_expanded.substring(0, 100)}{rule.rule_source_expanded.length > 100 ? '...' : ''}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-500">{rule.rule_source_zone}</td>
+                    <td className="px-2 py-1.5 max-w-[150px]">
+                      <div className="font-mono text-purple-800" title={rule.rule_destination}>
+                        {(rule.rule_destination || '').split('\n').filter(Boolean).slice(0, 2).join(', ')}
+                        {(rule.rule_destination || '').split('\n').filter(Boolean).length > 2 && <span className="text-gray-400"> +{(rule.rule_destination || '').split('\n').filter(Boolean).length - 2}</span>}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 max-w-[250px]">
+                      {rule.rule_destination_expanded ? (
+                        <div className="text-gray-700 truncate" title={rule.rule_destination_expanded}>
+                          {rule.rule_destination_expanded.substring(0, 100)}{rule.rule_destination_expanded.length > 100 ? '...' : ''}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-500">{rule.rule_destination_zone}</td>
+                    <td className="px-2 py-1.5 font-mono text-gray-600 max-w-[100px] truncate" title={rule.rule_service}>{rule.rule_service}</td>
+                    <td className="px-2 py-1.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        rule.migration_status === 'Completed' ? 'bg-green-100 text-green-700' :
+                        rule.migration_status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>{rule.migration_status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {getFilteredImportedRules().length > 200 && (
+              <div className="px-3 py-2 bg-amber-50 text-xs text-amber-700 text-center border-t">
+                Showing first 200 of {getFilteredImportedRules().length} rules. Use filters to narrow down or export all as CSV.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Load Rules Button (if not auto-loaded) */}
+      {!isNGDCMappings && !isNFRImport && !showImportedRules && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6 text-center">
+          <button onClick={loadImportedRules} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            Load Imported Rules
+          </button>
+          <p className="text-xs text-gray-500 mt-2">View imported legacy rules with source and destination details</p>
+        </div>
+      )}
+
+      {/* App NGDC Mappings moved to Settings page */}
 
       {/* NGDC Mappings Table */}
       {isNGDCMappings && (

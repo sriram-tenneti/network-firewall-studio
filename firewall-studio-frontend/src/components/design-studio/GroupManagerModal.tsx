@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import { getGroups, createGroup, addGroupMember, removeGroupMember } from '@/lib/api';
+import { getGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings } from '@/lib/api';
 import type { FirewallGroup, GroupMember } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 
@@ -20,16 +20,51 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [filterAppId, setFilterAppId] = useState(appId || '');
   const [filterEnv, setFilterEnv] = useState(environment || '');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', nh: '', sz: 'Standard', subtype: 'src', description: '', environment: environment || 'Production' });
+  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: environment || 'Production' });
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
+
+  // App DC mappings for auto-populating NH/SZ dropdowns
+  const [allAppDCMappings, setAllAppDCMappings] = useState<Record<string, unknown>[]>([]);
+  const [appNHOptions, setAppNHOptions] = useState<string[]>([]);
+  const [appSZOptions, setAppSZOptions] = useState<string[]>([]);
+  const [appDCOptions, setAppDCOptions] = useState<string[]>([]);
 
   useEffect(() => {
     if (isOpen) {
       setFilterAppId(appId || '');
       setFilterEnv(environment || '');
       loadGroups(appId || '', environment || '');
+      loadAppDCMappings();
     }
   }, [isOpen, appId, environment]);
+
+  const loadAppDCMappings = async () => {
+    try {
+      const mappings = await getAppDCMappings();
+      setAllAppDCMappings(mappings);
+      // If we have an initial app, populate its options
+      if (appId) updateAppOptions(appId, mappings);
+    } catch { /* ignore */ }
+  };
+
+  const updateAppOptions = (selectedAppId: string, mappings?: Record<string, unknown>[]) => {
+    const source = mappings || allAppDCMappings;
+    const appMappings = source.filter(m => String(m.app_id || '') === selectedAppId);
+    const nhs = [...new Set(appMappings.map(m => String(m.nh || '')).filter(Boolean))];
+    const szs = [...new Set(appMappings.map(m => String(m.sz || '')).filter(Boolean))];
+    const dcs = [...new Set(appMappings.map(m => String(m.dc || '')).filter(Boolean))];
+    setAppNHOptions(nhs);
+    setAppSZOptions(szs);
+    setAppDCOptions(dcs);
+    // Auto-select first option if available
+    setNewGroup(prev => ({
+      ...prev,
+      app_id: selectedAppId,
+      dc: dcs.length === 1 ? dcs[0] : '',
+      nh: nhs.length === 1 ? nhs[0] : '',
+      sz: szs.length === 1 ? szs[0] : '',
+    }));
+  };
 
   const loadGroups = async (forAppId?: string, forEnv?: string) => {
     setLoading(true);
@@ -70,7 +105,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       const prefixedGroup = { ...newGroup, name: autoPrefix(newGroup.name, 'group') };
       await createGroup(prefixedGroup);
       setShowCreate(false);
-      setNewGroup({ name: '', app_id: '', nh: '', sz: 'Standard', subtype: 'src', description: '', environment: filterEnv || 'Production' });
+      setNewGroup({ name: '', app_id: '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: filterEnv || 'Production' });
       loadGroups();
     } catch { /* ignore */ }
   };
@@ -147,36 +182,76 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
 
           {showCreate && (
             <div className="mb-3 p-3 bg-blue-50 rounded-lg space-y-2">
-              <input className={inputClass} placeholder="Group name (e.g. grp-APP-NH01-STD-src)" value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} />
+              <input className={inputClass} placeholder="Group name (auto-generated if blank)" value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} />
               <div className="grid grid-cols-2 gap-2">
-                <input className={inputClass} placeholder="App ID" value={newGroup.app_id} onChange={e => setNewGroup({ ...newGroup, app_id: e.target.value })} />
-                <input className={inputClass} placeholder="NH (e.g. NH01)" value={newGroup.nh} onChange={e => setNewGroup({ ...newGroup, nh: e.target.value })} />
+                <div>
+                  <label className="text-xs text-gray-500">App ID</label>
+                  <select className={inputClass} value={newGroup.app_id} onChange={e => { setNewGroup({ ...newGroup, app_id: e.target.value }); updateAppOptions(e.target.value); }}>
+                    <option value="">-- Select App --</option>
+                    {applications.map(app => (
+                      <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">DC {appDCOptions.length > 0 && `(${appDCOptions.length} mapped)`}</label>
+                  {appDCOptions.length > 0 ? (
+                    <select className={inputClass} value={newGroup.dc || ''} onChange={e => setNewGroup({ ...newGroup, dc: e.target.value })}>
+                      <option value="">-- Select DC --</option>
+                      {appDCOptions.map(dc => <option key={dc} value={dc}>{dc}</option>)}
+                    </select>
+                  ) : (
+                    <select className={inputClass} value={newGroup.dc || ''} onChange={e => setNewGroup({ ...newGroup, dc: e.target.value })}>
+                      <option value="">-- Select DC --</option>
+                      <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                      <option value="BETA_NGDC">BETA_NGDC</option>
+                      <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                    </select>
+                  )}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <select className={inputClass} value={newGroup.sz} onChange={e => setNewGroup({ ...newGroup, sz: e.target.value })}>
-                  <option value="STD">STD</option>
-                  <option value="GEN">GEN</option>
-                  <option value="CPA">CPA</option>
-                  <option value="CDE">CDE</option>
-                  <option value="CCS">CCS</option>
-                  <option value="PAA">PAA</option>
-                  <option value="3PY">3PY</option>
-                  <option value="Swift">Swift</option>
-                  <option value="PSE">PSE</option>
-                  <option value="UC">UC</option>
-                  <option value="USTD">USTD</option>
-                  <option value="UGen">UGen</option>
-                  <option value="UCPA">UCPA</option>
-                  <option value="UCDE">UCDE</option>
-                  <option value="UCCS">UCCS</option>
-                  <option value="UPAA">UPAA</option>
-                  <option value="U3PY">U3PY</option>
-                </select>
-                <select className={inputClass} value={newGroup.subtype} onChange={e => setNewGroup({ ...newGroup, subtype: e.target.value })}>
-                  <option value="src">Source</option>
-                  <option value="dst">Destination</option>
-                  <option value="both">Both</option>
-                </select>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500">NH {appNHOptions.length > 0 && `(${appNHOptions.length} mapped)`}</label>
+                  {appNHOptions.length > 0 ? (
+                    <select className={inputClass} value={newGroup.nh} onChange={e => setNewGroup({ ...newGroup, nh: e.target.value })}>
+                      <option value="">-- Select NH --</option>
+                      {appNHOptions.map(nh => <option key={nh} value={nh}>{nh}</option>)}
+                    </select>
+                  ) : (
+                    <input className={inputClass} placeholder="NH (e.g. NH01)" value={newGroup.nh} onChange={e => setNewGroup({ ...newGroup, nh: e.target.value })} />
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">SZ {appSZOptions.length > 0 && `(${appSZOptions.length} mapped)`}</label>
+                  {appSZOptions.length > 0 ? (
+                    <select className={inputClass} value={newGroup.sz} onChange={e => setNewGroup({ ...newGroup, sz: e.target.value })}>
+                      <option value="">-- Select SZ --</option>
+                      {appSZOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+                    </select>
+                  ) : (
+                    <select className={inputClass} value={newGroup.sz} onChange={e => setNewGroup({ ...newGroup, sz: e.target.value })}>
+                      <option value="">-- Select SZ --</option>
+                      <option value="STD">STD</option>
+                      <option value="GEN">GEN</option>
+                      <option value="CPA">CPA</option>
+                      <option value="CDE">CDE</option>
+                      <option value="CCS">CCS</option>
+                      <option value="PAA">PAA</option>
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">Component</label>
+                  <select className={inputClass} value={newGroup.subtype} onChange={e => setNewGroup({ ...newGroup, subtype: e.target.value })}>
+                    <option value="WEB">WEB</option>
+                    <option value="APP">APP</option>
+                    <option value="DB">DB</option>
+                    <option value="MQ">MQ</option>
+                    <option value="BAT">BAT</option>
+                    <option value="API">API</option>
+                  </select>
+                </div>
               </div>
               <select className={inputClass} value={newGroup.environment} onChange={e => setNewGroup({ ...newGroup, environment: e.target.value })}>
                 <option value="Production">Production</option>
@@ -229,9 +304,10 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 <p className="text-xs text-gray-500 mt-1">{selectedGroup.description}</p>
                 <div className="flex gap-3 mt-2 text-xs text-gray-500">
                   <span>App: {selectedGroup.app_id}</span>
+                  {(selectedGroup as unknown as Record<string, string>).dc && <span>DC: {(selectedGroup as unknown as Record<string, string>).dc}</span>}
                   <span>NH: {selectedGroup.nh}</span>
                   <span>SZ: {selectedGroup.sz}</span>
-                  <span>Type: {selectedGroup.subtype}</span>
+                  <span>Component: {selectedGroup.subtype}</span>
                 </div>
               </div>
 

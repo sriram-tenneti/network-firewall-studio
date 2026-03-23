@@ -5,7 +5,7 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications } from '@/lib/api';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled } from '@/lib/api';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
@@ -786,6 +786,13 @@ export default function FirewallManagementPage() {
   return (
     <div className="p-6 max-w-[1800px] mx-auto">
       {notification && <Notification message={notification.message} type={notification.type} onClose={clearNotification} />}
+
+      {isHideSeedEnabled() && (
+        <div className="mb-4 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-2">
+          <span className="text-xs font-semibold text-indigo-700">REAL DATA MODE</span>
+          <span className="text-xs text-indigo-500">Seed/test data is hidden. Showing only real imported data. Change in Settings &gt; Data Management.</span>
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-6">
         <div>

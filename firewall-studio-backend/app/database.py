@@ -41,7 +41,54 @@ from app.seed_data import (
     build_seed_chg_requests as _sd_build_chg_requests,
 )
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+SEED_DATA_DIR = Path(__file__).parent.parent / "data"
+LIVE_DATA_DIR = Path(__file__).parent.parent / "live-data"
+# Separate JSON directory for migration & studio data (safe to clean without affecting seed/live)
+SEPARATE_DATA_DIR = Path(__file__).parent.parent / "user-data"
+
+# Current data mode: "seed" uses data/ (seed/test data), "live" uses live-data/ (real data)
+_data_mode: str = "seed"
+
+# Hide-seed-data flag: when True, data endpoints filter out seed data and return only real/user data
+_hide_seed: bool = False
+
+
+def get_hide_seed() -> bool:
+    """Return the current hide-seed-data setting."""
+    return _hide_seed
+
+
+def set_hide_seed(hide: bool) -> bool:
+    """Toggle hide-seed-data. When True, only real/imported data is returned."""
+    global _hide_seed
+    _hide_seed = hide
+    return _hide_seed
+
+
+def _get_data_dir() -> Path:
+    """Return the active data directory based on current mode."""
+    return LIVE_DATA_DIR if _data_mode == "live" else SEED_DATA_DIR
+
+
+# Keep DATA_DIR as a property-like accessor for backward compatibility
+DATA_DIR = SEED_DATA_DIR
+
+
+def get_data_mode() -> str:
+    """Return the current data mode: 'seed' or 'live'."""
+    return _data_mode
+
+
+def set_data_mode(mode: str) -> str:
+    """Switch data mode. 'seed' = test data, 'live' = real data."""
+    global _data_mode
+    if mode not in ("seed", "live"):
+        raise ValueError("mode must be 'seed' or 'live'")
+    _data_mode = mode
+    # Ensure live-data dir exists when switching to live
+    if mode == "live":
+        LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return _data_mode
 
 
 def _id() -> str:
@@ -79,11 +126,11 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
 
 
 def _ensure_dir() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _get_data_dir().mkdir(parents=True, exist_ok=True)
 
 
 def _load(name: str) -> Any:
-    path = DATA_DIR / f"{name}.json"
+    path = _get_data_dir() / f"{name}.json"
     if not path.exists():
         return None
     with open(path, "r") as f:
@@ -92,7 +139,30 @@ def _load(name: str) -> Any:
 
 def _save(name: str, data: Any) -> None:
     _ensure_dir()
-    path = DATA_DIR / f"{name}.json"
+    path = _get_data_dir() / f"{name}.json"
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+
+# --- Separate user-data JSON helpers (migration_data, studio_rules) ---
+
+def _ensure_separate_dir() -> None:
+    SEPARATE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _load_separate(name: str) -> Any:
+    """Load from user-data/ directory (separate from seed/live)."""
+    path = SEPARATE_DATA_DIR / f"{name}.json"
+    if not path.exists():
+        return None
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _save_separate(name: str, data: Any) -> None:
+    """Save to user-data/ directory (separate from seed/live)."""
+    _ensure_separate_dir()
+    path = SEPARATE_DATA_DIR / f"{name}.json"
     with open(path, "w") as f:
         json.dump(data, f, indent=2, default=str)
 
@@ -529,15 +599,37 @@ async def delete_legacy_rule(rule_id: str) -> bool:
     return False
 
 
+async def clear_all_legacy_rules() -> int:
+    """Delete non-migrated legacy rules. Preserves rules that are already migrated or in-progress.
+    App DC mappings and component mappings are NOT affected."""
+    rules = _load("legacy_rules") or []
+    migrated_statuses = {"Completed", "In Progress", "Mapped", "Needs Review"}
+    preserved = [r for r in rules if r.get("migration_status") in migrated_statuses]
+    deleted_count = len(rules) - len(preserved)
+    _save("legacy_rules", preserved)
+    return deleted_count
+
+
+def _rule_fingerprint(rule: dict[str, Any]) -> str:
+    """Build a fingerprint from ALL data columns of a rule (excludes internal fields like id, is_standard, migration_status).
+    Two records are duplicates only when every imported column matches."""
+    skip = {"id", "is_standard", "migration_status", "imported_at", "environment"}
+    parts: list[str] = []
+    for k in sorted(rule.keys()):
+        if k in skip:
+            continue
+        parts.append(f"{k}={rule[k]}")
+    return "|".join(parts)
+
+
 async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:
-    """Import legacy rules from Excel, dedup against existing rules.
-    Optimised for large imports (50K+ rows).
+    """Import legacy rules from Excel, dedup against existing rules using ALL columns.
+    Optimised for large imports (50K+ rows). Delta-based — only new/changed rows are added.
     NGDC auto-promotion is deferred — use the dedicated auto-import endpoint instead."""
     existing = _load("legacy_rules") or []
     existing_keys: set[str] = set()
     for r in existing:
-        key = f"{r.get('app_id')}|{r.get('app_distributed_id')}|{r.get('rule_source')}|{r.get('rule_destination')}|{r.get('rule_service')}"
-        existing_keys.add(key)
+        existing_keys.add(_rule_fingerprint(r))
 
     max_num = 0
     for r in existing:
@@ -551,8 +643,8 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
     added = 0
     duplicates = 0
     for rule in new_rules:
-        key = f"{rule.get('app_id')}|{rule.get('app_distributed_id')}|{rule.get('rule_source')}|{rule.get('rule_destination')}|{rule.get('rule_service')}"
-        if key in existing_keys:
+        fp = _rule_fingerprint(rule)
+        if fp in existing_keys:
             duplicates += 1
             continue
         max_num += 1
@@ -560,7 +652,7 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         rule.setdefault("is_standard", False)
         rule.setdefault("migration_status", "Not Started")
         existing.append(rule)
-        existing_keys.add(key)
+        existing_keys.add(fp)
         added += 1
 
     _save("legacy_rules", existing)
@@ -600,6 +692,17 @@ async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
             _save("legacy_rules", rules)
             await log_migration(rule_id, "migrate_to_ngdc", old_status, "Completed",
                                 f"Rule {rule_id} migrated to NGDC standards")
+            # Also save to separate migration_data.json for safe cleanup
+            await save_migration_data_entry("migrated_rules", {
+                "rule_id": rule_id,
+                "app_id": str(r.get("app_id", "")),
+                "app_name": r.get("app_name", ""),
+                "rule_source": r.get("rule_source", ""),
+                "rule_destination": r.get("rule_destination", ""),
+                "rule_service": r.get("rule_service", ""),
+                "migrated_at": r["migrated_at"],
+                "migration_status": "Completed",
+            })
 
             # Auto-create recommended NGDC groups post-migration
             src_groups: list[str] = []
@@ -771,6 +874,8 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "details": f"Rule created: {rule['description']}", "user": "system",
     })
     _save("rule_history", history)
+    # Also save to separate studio_rules.json for safe cleanup
+    await add_studio_rule(rule)
     return rule
 
 
@@ -1619,6 +1724,10 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             rule_id = r.get("rule_id")
             if rule_id:
                 await update_rule_status(rule_id, "Approved")
+                # Also update in separate studio_rules.json
+                rule = await get_rule(rule_id)
+                if rule:
+                    await add_studio_rule(rule)
             return r
     return None
 
@@ -3718,3 +3827,316 @@ async def create_migration_group(name: str, app_id: str, members: list[dict[str,
     groups.append(new_group)
     _save("groups", groups)
     return new_group
+
+
+# ============================================================
+# Separate JSON Storage (user-data/) — Migration Data & Studio Rules
+# These are stored independently from seed/live data for safe cleanup.
+# ============================================================
+
+async def get_migration_data() -> dict[str, Any]:
+    """Get all migration data from separate JSON (user-data/migration_data.json)."""
+    data = _load_separate("migration_data")
+    if data is None:
+        return {"migration_history": [], "migration_mappings": [], "migration_reviews": [], "migrated_rules": []}
+    return data
+
+
+async def save_migration_data_entry(entry_type: str, entry: dict[str, Any]) -> dict[str, Any]:
+    """Append a migration data entry to the separate migration_data.json.
+    entry_type: 'migration_history' | 'migration_mappings' | 'migration_reviews' | 'migrated_rules'"""
+    data = await get_migration_data()
+    if entry_type not in data:
+        data[entry_type] = []
+    data[entry_type].append(entry)
+    _save_separate("migration_data", data)
+    return entry
+
+
+async def clear_migration_data() -> dict[str, int]:
+    """Clear all migration data from the separate JSON. Returns count of cleared entries."""
+    data = await get_migration_data()
+    counts = {k: len(v) for k, v in data.items() if isinstance(v, list)}
+    _save_separate("migration_data", {"migration_history": [], "migration_mappings": [], "migration_reviews": [], "migrated_rules": []})
+    return counts
+
+
+async def get_studio_rules() -> list[dict[str, Any]]:
+    """Get all studio rules from separate JSON (user-data/studio_rules.json).
+    These are rules created in Firewall Studio (new + approved + migrated)."""
+    data = _load_separate("studio_rules")
+    if data is None:
+        return []
+    return data
+
+
+async def add_studio_rule(rule: dict[str, Any]) -> dict[str, Any]:
+    """Add a rule to the separate studio_rules.json."""
+    rules = await get_studio_rules()
+    # Dedup by rule_id
+    existing_ids = {r.get("rule_id") for r in rules}
+    if rule.get("rule_id") in existing_ids:
+        # Update existing
+        for i, r in enumerate(rules):
+            if r.get("rule_id") == rule.get("rule_id"):
+                rules[i] = rule
+                break
+    else:
+        rules.append(rule)
+    _save_separate("studio_rules", rules)
+    return rule
+
+
+async def update_studio_rule(rule_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    """Update a studio rule in the separate JSON."""
+    rules = await get_studio_rules()
+    for r in rules:
+        if r.get("rule_id") == rule_id:
+            r.update(updates)
+            r["updated_at"] = _now()
+            _save_separate("studio_rules", rules)
+            return r
+    return None
+
+
+async def delete_studio_rule(rule_id: str) -> bool:
+    """Delete a studio rule from the separate JSON."""
+    rules = await get_studio_rules()
+    new_rules = [r for r in rules if r.get("rule_id") != rule_id]
+    if len(new_rules) < len(rules):
+        _save_separate("studio_rules", new_rules)
+        return True
+    return False
+
+
+async def clear_studio_rules() -> int:
+    """Clear all studio rules from the separate JSON. Returns count of cleared entries."""
+    rules = await get_studio_rules()
+    count = len(rules)
+    _save_separate("studio_rules", [])
+    return count
+
+
+async def get_all_user_data_files() -> dict[str, Any]:
+    """Return a summary of all user-data JSON files for inspection."""
+    migration = await get_migration_data()
+    studio = await get_studio_rules()
+    legacy = _load("legacy_rules") or []
+    reviews = _load("reviews") or []
+    rules = _load("firewall_rules") or []
+    groups = _load("groups") or []
+    modifications = _load("rule_modifications") or []
+    return {
+        "migration_data": {k: len(v) if isinstance(v, list) else v for k, v in migration.items()},
+        "studio_rules_count": len(studio),
+        "legacy_rules_count": len(legacy),
+        "firewall_rules_count": len(rules),
+        "reviews_count": len(reviews),
+        "groups_count": len(groups),
+        "modifications_count": len(modifications),
+        "data_directory": str(SEPARATE_DATA_DIR),
+    }
+
+
+async def clear_reviews() -> int:
+    """Clear all reviews. Returns count of cleared entries."""
+    reviews = _load("reviews") or []
+    count = len(reviews)
+    _save("reviews", [])
+    return count
+
+
+async def clear_user_groups() -> int:
+    """Clear all user-created groups (preserves seed groups). Returns count of cleared entries."""
+    groups = _load("groups") or []
+    count = len(groups)
+    _save("groups", [])
+    return count
+
+
+async def clear_firewall_rules() -> int:
+    """Clear all firewall rules (studio/seed rules in firewall_rules.json). Returns count."""
+    rules = _load("firewall_rules") or []
+    count = len(rules)
+    _save("firewall_rules", [])
+    return count
+
+
+async def clear_modifications() -> int:
+    """Clear all rule modifications. Returns count of cleared entries."""
+    mods = _load("rule_modifications") or []
+    count = len(mods)
+    _save("rule_modifications", [])
+    return count
+
+
+async def clear_all_user_data() -> dict[str, int]:
+    """One-click reset: clear ALL user/imported data across all stores.
+    Clears: legacy rules, migration data, studio rules, reviews, modifications, firewall rules.
+    Seed reference data (NHs, SZs, policy matrix, etc.) is NOT affected."""
+    legacy_count = await clear_all_legacy_rules_force()
+    migration_counts = await clear_migration_data()
+    studio_count = await clear_studio_rules()
+    reviews_count = await clear_reviews()
+    fw_rules_count = await clear_firewall_rules()
+    mods_count = await clear_modifications()
+    return {
+        "legacy_rules": legacy_count,
+        "migration_history": migration_counts.get("migration_history", 0),
+        "migration_mappings": migration_counts.get("migration_mappings", 0),
+        "migration_reviews": migration_counts.get("migration_reviews", 0),
+        "migrated_rules": migration_counts.get("migrated_rules", 0),
+        "studio_rules": studio_count,
+        "reviews": reviews_count,
+        "firewall_rules": fw_rules_count,
+        "modifications": mods_count,
+    }
+
+
+async def clear_all_legacy_rules_force() -> int:
+    """Force-clear ALL legacy rules (including migrated). Used for full reset."""
+    rules = _load("legacy_rules") or []
+    count = len(rules)
+    _save("legacy_rules", [])
+    return count
+
+
+async def clear_data_by_app(app_id: str) -> dict[str, int]:
+    """Clear all data for a specific app_id across all stores."""
+    counts: dict[str, int] = {}
+
+    # Legacy rules
+    legacy = _load("legacy_rules") or []
+    filtered = [r for r in legacy if str(r.get("app_id", "")) != app_id]
+    counts["legacy_rules"] = len(legacy) - len(filtered)
+    _save("legacy_rules", filtered)
+
+    # Firewall rules
+    fw = _load("firewall_rules") or []
+    filtered_fw = [r for r in fw if str(r.get("application", "")) != app_id]
+    counts["firewall_rules"] = len(fw) - len(filtered_fw)
+    _save("firewall_rules", filtered_fw)
+
+    # Reviews
+    reviews = _load("reviews") or []
+    # reviews reference rule_id; check rule_summary.application
+    filtered_rev = [r for r in reviews if str(r.get("rule_summary", {}).get("application", "")) != app_id]
+    counts["reviews"] = len(reviews) - len(filtered_rev)
+    _save("reviews", filtered_rev)
+
+    # Modifications
+    mods = _load("rule_modifications") or []
+    filtered_mods = [m for m in mods if str(m.get("application", "")) != app_id]
+    counts["modifications"] = len(mods) - len(filtered_mods)
+    _save("rule_modifications", filtered_mods)
+
+    # Studio rules (separate JSON)
+    studio = await get_studio_rules()
+    filtered_studio = [r for r in studio if str(r.get("application", "")) != app_id]
+    counts["studio_rules"] = len(studio) - len(filtered_studio)
+    _save_separate("studio_rules", filtered_studio)
+
+    # Migration data (separate JSON)
+    migration = await get_migration_data()
+    for key in ["migration_history", "migration_mappings", "migration_reviews", "migrated_rules"]:
+        items = migration.get(key, [])
+        app_field = "app_id" if key != "migrated_rules" else "application"
+        filtered_items = [i for i in items if str(i.get(app_field, "")) != app_id]
+        counts[key] = len(items) - len(filtered_items)
+        migration[key] = filtered_items
+    _save_separate("migration_data", migration)
+
+    return counts
+
+
+async def clear_data_by_environment(environment: str) -> dict[str, int]:
+    """Clear all data for a specific environment across all stores."""
+    counts: dict[str, int] = {}
+
+    # Legacy rules
+    legacy = _load("legacy_rules") or []
+    filtered = [r for r in legacy if str(r.get("environment", "")) != environment]
+    counts["legacy_rules"] = len(legacy) - len(filtered)
+    _save("legacy_rules", filtered)
+
+    # Firewall rules
+    fw = _load("firewall_rules") or []
+    filtered_fw = [r for r in fw if str(r.get("environment", "")) != environment]
+    counts["firewall_rules"] = len(fw) - len(filtered_fw)
+    _save("firewall_rules", filtered_fw)
+
+    # Reviews
+    reviews = _load("reviews") or []
+    filtered_rev = [r for r in reviews if str(r.get("rule_summary", {}).get("environment", "")) != environment]
+    counts["reviews"] = len(reviews) - len(filtered_rev)
+    _save("reviews", filtered_rev)
+
+    # Modifications
+    mods = _load("rule_modifications") or []
+    filtered_mods = [m for m in mods if str(m.get("environment", "")) != environment]
+    counts["modifications"] = len(mods) - len(filtered_mods)
+    _save("rule_modifications", filtered_mods)
+
+    # Studio rules (separate JSON)
+    studio = await get_studio_rules()
+    filtered_studio = [r for r in studio if str(r.get("environment", "")) != environment]
+    counts["studio_rules"] = len(studio) - len(filtered_studio)
+    _save_separate("studio_rules", filtered_studio)
+
+    return counts
+
+
+async def get_data_summary_by_app() -> list[dict[str, Any]]:
+    """Return per-app record counts for the Data Management overview."""
+    legacy = _load("legacy_rules") or []
+    fw = _load("firewall_rules") or []
+    reviews = _load("reviews") or []
+    studio = await get_studio_rules()
+
+    app_counts: dict[str, dict[str, int]] = {}
+    for r in legacy:
+        aid = str(r.get("app_id", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["legacy"] += 1
+    for r in fw:
+        aid = str(r.get("application", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["firewall"] += 1
+    for r in reviews:
+        aid = str(r.get("rule_summary", {}).get("application", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["reviews"] += 1
+    for r in studio:
+        aid = str(r.get("application", "Unknown"))
+        app_counts.setdefault(aid, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        app_counts[aid]["studio"] += 1
+
+    return [{"app_id": k, **v, "total": sum(v.values())} for k, v in sorted(app_counts.items())]
+
+
+async def get_data_summary_by_env() -> list[dict[str, Any]]:
+    """Return per-environment record counts for the Data Management overview."""
+    legacy = _load("legacy_rules") or []
+    fw = _load("firewall_rules") or []
+    reviews = _load("reviews") or []
+    studio = await get_studio_rules()
+
+    env_counts: dict[str, dict[str, int]] = {}
+    for r in legacy:
+        env = str(r.get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["legacy"] += 1
+    for r in fw:
+        env = str(r.get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["firewall"] += 1
+    for r in reviews:
+        env = str(r.get("rule_summary", {}).get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["reviews"] += 1
+    for r in studio:
+        env = str(r.get("environment", "Unknown"))
+        env_counts.setdefault(env, {"legacy": 0, "firewall": 0, "reviews": 0, "studio": 0})
+        env_counts[env]["studio"] += 1
+
+    return [{"environment": k, **v, "total": sum(v.values())} for k, v in sorted(env_counts.items())]
