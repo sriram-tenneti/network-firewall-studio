@@ -24,6 +24,7 @@ from app.database import (
     get_ngdc_recommendations,
 )
 import io
+import csv
 import openpyxl
 import zipfile
 from app.services.naming_standards import (
@@ -35,15 +36,28 @@ from app.services.naming_standards import (
 router = APIRouter(prefix="/api/reference", tags=["Reference Data"])
 
 
-def _parse_excel_bytes(contents: bytes) -> list[tuple]:
-    """Parse Excel file bytes into a list of row tuples.
-    Tries openpyxl (.xlsx) first, then xlrd (.xls), then HTML-table fallback.
+def _parse_excel_bytes(contents: bytes, filename: str = "") -> list[tuple]:
+    """Parse Excel/CSV file bytes into a list of row tuples.
+    Tries: CSV (if .csv), openpyxl (.xlsx), xlrd (.xls), HTML-table fallback.
     Returns list of tuples where first tuple is headers."""
     import logging
     logger = logging.getLogger("excel_import")
-    logger.info(f"Received file: {len(contents)} bytes, first 8 bytes: {contents[:8].hex() if contents else 'empty'}")
+    logger.info(f"Received file: {len(contents)} bytes, name={filename}, first 8 bytes: {contents[:8].hex() if contents else 'empty'}")
 
     errors: list[str] = []
+
+    # Strategy 0: CSV file
+    if filename.lower().endswith(".csv") or (not filename and contents[:3] in (b'\xef\xbb\xbf', b'App')):
+        try:
+            text = contents.decode("utf-8-sig")  # handles BOM
+            reader = csv.reader(io.StringIO(text))
+            rows = [tuple(row) for row in reader if any(cell.strip() for cell in row)]
+            if rows:
+                logger.info(f"CSV success: {len(rows)} rows")
+                return rows
+        except Exception as exc:
+            errors.append(f"csv: {exc}")
+            logger.warning(f"CSV parse failed: {exc}")
 
     # Strategy 1: openpyxl for .xlsx (Office Open XML)
     try:
@@ -119,8 +133,9 @@ def _parse_excel_bytes(contents: bytes) -> list[tuple]:
     raise ValueError(
         f"Cannot read the file ({len(contents)} bytes received). "
         f"Details: {error_detail}. "
-        f"Supported formats: .xlsx (Office Open XML), .xls (Excel 97-2003). "
-        f"If the file was exported from a web tool, try opening it in Excel first and re-saving as .xlsx."
+        f"Supported formats: .xlsx, .xls, .csv. "
+        f"If the file has IRM/DRM protection (Access workbook programmatically = No), "
+        f"open it in Excel, Save As CSV (.csv), then upload the CSV file."
     )
 
 
@@ -593,12 +608,13 @@ async def delete_legacy_rule_endpoint(rule_id: str):
 
 @router.post("/legacy-rules/import")
 async def import_legacy_rules_excel(file: UploadFile = File(...)):
-    """Import legacy rules from an Excel (.xlsx/.xls) file with deduplication."""
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx / .xls files are supported")
+    """Import legacy rules from Excel (.xlsx/.xls) or CSV file with deduplication."""
+    fname = file.filename or ""
+    if not fname.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
     contents = await file.read()
     try:
-        rows = _parse_excel_bytes(contents)
+        rows = _parse_excel_bytes(contents, filename=fname)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if not rows:
@@ -794,13 +810,14 @@ async def delete_ngdc_mapping_endpoint(mapping_id: str):
 
 @router.post("/ngdc-mappings/import")
 async def import_ngdc_mappings_excel(file: UploadFile = File(...)):
-    """Import legacy-to-NGDC mappings from Excel."""
+    """Import legacy-to-NGDC mappings from Excel or CSV."""
     from app.database import import_ngdc_mappings
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx / .xls files are supported")
+    fname = file.filename or ""
+    if not fname.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
     contents = await file.read()
     try:
-        rows = _parse_excel_bytes(contents)
+        rows = _parse_excel_bytes(contents, filename=fname)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if not rows:
@@ -899,13 +916,14 @@ async def delete_app_dc_mapping_endpoint(mapping_id: str):
 
 @router.post("/app-dc-mappings/import")
 async def import_app_dc_mappings_excel(file: UploadFile = File(...)):
-    """Import App-to-DC/NH/SZ mappings from Excel."""
+    """Import App-to-DC/NH/SZ mappings from Excel or CSV."""
     from app.database import import_app_dc_mappings
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx / .xls files are supported")
+    fname = file.filename or ""
+    if not fname.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
     contents = await file.read()
     try:
-        rows = _parse_excel_bytes(contents)
+        rows = _parse_excel_bytes(contents, filename=fname)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if not rows:
