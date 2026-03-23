@@ -639,6 +639,15 @@ def _add_superseded_fingerprint(fp: str) -> None:
     _save_separate("superseded_fingerprints", list(existing))
 
 
+def clear_superseded_fingerprints() -> int:
+    """Clear all superseded fingerprints. Returns count of cleared entries.
+    Called during full data reset so re-imports work cleanly."""
+    existing = _load_superseded_fingerprints()
+    count = len(existing)
+    _save_separate("superseded_fingerprints", [])
+    return count
+
+
 async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:
     """Import legacy rules from Excel, dedup against existing rules using ALL columns.
     Optimised for large imports (50K+ rows). Delta-based — only new/changed rows are added.
@@ -4053,6 +4062,8 @@ async def clear_all_user_data() -> dict[str, int]:
     reviews_count = await clear_reviews()
     fw_rules_count = await clear_firewall_rules()
     mods_count = await clear_modifications()
+    # Also clear superseded fingerprints so re-imports work cleanly after full reset
+    superseded_count = clear_superseded_fingerprints()
     return {
         "legacy_rules": legacy_count,
         "migration_history": migration_counts.get("migration_history", 0),
@@ -4063,6 +4074,7 @@ async def clear_all_user_data() -> dict[str, int]:
         "reviews": reviews_count,
         "firewall_rules": fw_rules_count,
         "modifications": mods_count,
+        "superseded_fingerprints": superseded_count,
     }
 
 
