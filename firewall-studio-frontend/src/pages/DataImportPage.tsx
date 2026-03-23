@@ -442,8 +442,10 @@ export default function DataImportPage({ context }: DataImportPageProps) {
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">App Name</th>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Policy</th>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Action</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule Source</th>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap min-w-[180px]">Source Details</th>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Src Zone</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule Destination</th>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap min-w-[180px]">Destination Details</th>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Dst Zone</th>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Service</th>
@@ -462,27 +464,35 @@ export default function DataImportPage({ context }: DataImportPageProps) {
                         {rule.rule_action}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 max-w-[250px]">
+                    <td className="px-2 py-1.5 max-w-[150px]">
                       <div className="font-mono text-blue-800" title={rule.rule_source}>
                         {(rule.rule_source || '').split('\n').filter(Boolean).slice(0, 2).join(', ')}
                         {(rule.rule_source || '').split('\n').filter(Boolean).length > 2 && <span className="text-gray-400"> +{(rule.rule_source || '').split('\n').filter(Boolean).length - 2}</span>}
                       </div>
-                      {rule.rule_source_expanded && rule.rule_source_expanded !== rule.rule_source && (
-                        <div className="text-gray-400 mt-0.5 truncate" title={rule.rule_source_expanded}>
-                          {rule.rule_source_expanded.substring(0, 80)}{rule.rule_source_expanded.length > 80 ? '...' : ''}
+                    </td>
+                    <td className="px-2 py-1.5 max-w-[250px]">
+                      {rule.rule_source_expanded ? (
+                        <div className="text-gray-700 truncate" title={rule.rule_source_expanded}>
+                          {rule.rule_source_expanded.substring(0, 100)}{rule.rule_source_expanded.length > 100 ? '...' : ''}
                         </div>
+                      ) : (
+                        <span className="text-gray-300 italic">—</span>
                       )}
                     </td>
                     <td className="px-2 py-1.5 text-gray-500">{rule.rule_source_zone}</td>
-                    <td className="px-2 py-1.5 max-w-[250px]">
+                    <td className="px-2 py-1.5 max-w-[150px]">
                       <div className="font-mono text-purple-800" title={rule.rule_destination}>
                         {(rule.rule_destination || '').split('\n').filter(Boolean).slice(0, 2).join(', ')}
                         {(rule.rule_destination || '').split('\n').filter(Boolean).length > 2 && <span className="text-gray-400"> +{(rule.rule_destination || '').split('\n').filter(Boolean).length - 2}</span>}
                       </div>
-                      {rule.rule_destination_expanded && rule.rule_destination_expanded !== rule.rule_destination && (
-                        <div className="text-gray-400 mt-0.5 truncate" title={rule.rule_destination_expanded}>
-                          {rule.rule_destination_expanded.substring(0, 80)}{rule.rule_destination_expanded.length > 80 ? '...' : ''}
+                    </td>
+                    <td className="px-2 py-1.5 max-w-[250px]">
+                      {rule.rule_destination_expanded ? (
+                        <div className="text-gray-700 truncate" title={rule.rule_destination_expanded}>
+                          {rule.rule_destination_expanded.substring(0, 100)}{rule.rule_destination_expanded.length > 100 ? '...' : ''}
                         </div>
+                      ) : (
+                        <span className="text-gray-300 italic">—</span>
                       )}
                     </td>
                     <td className="px-2 py-1.5 text-gray-500">{rule.rule_destination_zone}</td>
