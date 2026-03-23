@@ -402,14 +402,15 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all">
               <input
                 type="file"
-                accept={isNGDCMappings ? '.xlsx' : '.xlsx,.xls,.json'}
+                accept={isNGDCMappings ? '.xlsx' : '.xlsx,.xls,.csv,.json'}
                 className="hidden"
                 onChange={e => setFile(e.target.files?.[0] || null)}
               />
               <svg className="w-10 h-10 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
-              <p className="text-sm text-gray-600">{file ? file.name : isNGDCMappings ? 'Click to select .xlsx file' : 'Click to select .xlsx or .json file'}</p>
+              <p className="text-sm text-gray-600">{file ? file.name : isNGDCMappings ? 'Click to select .xlsx file' : 'Click to select .xlsx, .xls, .csv, or .json file'}</p>
+              <p className="text-xs text-gray-400 mt-1">If your .xlsx file has IRM/DRM protection, save it as CSV first</p>
             </div>
           </label>
           <button

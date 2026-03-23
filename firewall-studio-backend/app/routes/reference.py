@@ -25,7 +25,9 @@ from app.database import (
 )
 import io
 import json as json_lib
+import csv
 import openpyxl
+import zipfile
 from fastapi.responses import StreamingResponse
 from app.services.naming_standards import (
     validate_name, generate_group_name, generate_server_name,
@@ -65,6 +67,110 @@ async def reset_seed_data():
     await seed_database()
     set_data_mode(prev)
     return {"message": "Seed data reset successfully", "current_mode": prev}
+
+
+def _parse_excel_bytes(contents: bytes, filename: str = "") -> list[tuple]:
+    """Parse Excel/CSV file bytes into a list of row tuples.
+    Tries: CSV (if .csv), openpyxl (.xlsx), xlrd (.xls), HTML-table fallback.
+    Returns list of tuples where first tuple is headers."""
+    import logging
+    logger = logging.getLogger("excel_import")
+    logger.info(f"Received file: {len(contents)} bytes, name={filename}, first 8 bytes: {contents[:8].hex() if contents else 'empty'}")
+
+    errors: list[str] = []
+
+    # Strategy 0: CSV file
+    if filename.lower().endswith(".csv") or (not filename and contents[:3] in (b'\xef\xbb\xbf', b'App')):
+        try:
+            text = contents.decode("utf-8-sig")  # handles BOM
+            reader = csv.reader(io.StringIO(text))
+            rows = [tuple(row) for row in reader if any(cell.strip() for cell in row)]
+            if rows:
+                logger.info(f"CSV success: {len(rows)} rows")
+                return rows
+        except Exception as exc:
+            errors.append(f"csv: {exc}")
+            logger.warning(f"CSV parse failed: {exc}")
+
+    # Strategy 1: openpyxl for .xlsx (Office Open XML)
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        ws = wb.active
+        if ws is None:
+            wb.close()
+            raise ValueError("Empty workbook")
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+        if rows:
+            logger.info(f"openpyxl success: {len(rows)} rows")
+            return rows
+    except Exception as exc:
+        errors.append(f"xlsx: {exc}")
+        logger.warning(f"openpyxl failed: {exc}")
+
+    # Strategy 2: xlrd for old .xls (Excel 97-2003 binary BIFF format)
+    try:
+        import xlrd
+        wb = xlrd.open_workbook(file_contents=contents)
+        ws = wb.sheet_by_index(0)
+        rows_list: list[tuple] = []
+        for row_idx in range(ws.nrows):
+            rows_list.append(tuple(ws.cell_value(row_idx, col_idx) for col_idx in range(ws.ncols)))
+        if rows_list:
+            logger.info(f"xlrd success: {len(rows_list)} rows")
+            return rows_list
+    except Exception as exc:
+        errors.append(f"xls: {exc}")
+        logger.warning(f"xlrd failed: {exc}")
+
+    # Strategy 3: HTML table disguised as .xlsx (some tools export this way)
+    try:
+        text = contents.decode("utf-8", errors="ignore")
+        if "<table" in text.lower() or "<html" in text.lower():
+            from html.parser import HTMLParser
+            html_rows: list[tuple] = []
+            current_row: list[str] = []
+            in_cell = False
+            cell_text = ""
+
+            class TableParser(HTMLParser):
+                def handle_starttag(self, tag: str, attrs: list) -> None:
+                    nonlocal in_cell, cell_text, current_row
+                    if tag in ("td", "th"):
+                        in_cell = True
+                        cell_text = ""
+                def handle_endtag(self, tag: str) -> None:
+                    nonlocal in_cell, cell_text, current_row, html_rows
+                    if tag in ("td", "th"):
+                        in_cell = False
+                        current_row.append(cell_text.strip())
+                    elif tag == "tr" and current_row:
+                        html_rows.append(tuple(current_row))
+                        current_row = []
+                def handle_data(self, data: str) -> None:
+                    nonlocal cell_text
+                    if in_cell:
+                        cell_text += data
+
+            parser = TableParser()
+            parser.feed(text)
+            if current_row:
+                html_rows.append(tuple(current_row))
+            if html_rows:
+                logger.info(f"HTML success: {len(html_rows)} rows")
+                return html_rows
+    except Exception as exc:
+        errors.append(f"html: {exc}")
+
+    error_detail = "; ".join(errors) if errors else "unknown format"
+    raise ValueError(
+        f"Cannot read the file ({len(contents)} bytes received). "
+        f"Details: {error_detail}. "
+        f"Supported formats: .xlsx, .xls, .csv. "
+        f"If the file has IRM/DRM protection (Access workbook programmatically = No), "
+        f"open it in Excel, Save As CSV (.csv), then upload the CSV file."
+    )
+
 
 
 # ---- Read endpoints ----
@@ -543,23 +649,15 @@ async def delete_legacy_rule_endpoint(rule_id: str):
 
 @router.post("/legacy-rules/import")
 async def import_legacy_rules_excel(file: UploadFile = File(...)):
-    """Import legacy rules from an Excel (.xlsx) file with deduplication."""
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
+    """Import legacy rules from Excel (.xlsx/.xls) or CSV file with deduplication."""
+    fname = file.filename or ""
+    if not fname.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
     contents = await file.read()
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
-        )
-    ws = wb.active
-    if ws is None:
-        wb.close()
-        raise HTTPException(status_code=400, detail="Empty workbook")
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
+        rows = _parse_excel_bytes(contents, filename=fname)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not rows:
         raise HTTPException(status_code=400, detail="Empty workbook")
     headers = list(rows[0])
@@ -881,24 +979,16 @@ async def delete_ngdc_mapping_endpoint(mapping_id: str):
 
 @router.post("/ngdc-mappings/import")
 async def import_ngdc_mappings_excel(file: UploadFile = File(...)):
-    """Import legacy-to-NGDC mappings from Excel."""
+    """Import legacy-to-NGDC mappings from Excel or CSV."""
     from app.database import import_ngdc_mappings
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
+    fname = file.filename or ""
+    if not fname.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
     contents = await file.read()
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
-        )
-    ws = wb.active
-    if ws is None:
-        wb.close()
-        raise HTTPException(status_code=400, detail="Empty workbook")
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
+        rows = _parse_excel_bytes(contents, filename=fname)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not rows:
         raise HTTPException(status_code=400, detail="Empty workbook")
     headers = list(rows[0])
@@ -995,24 +1085,16 @@ async def delete_app_dc_mapping_endpoint(mapping_id: str):
 
 @router.post("/app-dc-mappings/import")
 async def import_app_dc_mappings_excel(file: UploadFile = File(...)):
-    """Import App-to-DC/NH/SZ mappings from Excel."""
+    """Import App-to-DC/NH/SZ mappings from Excel or CSV."""
     from app.database import import_app_dc_mappings
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
+    fname = file.filename or ""
+    if not fname.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
     contents = await file.read()
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot read Excel file. Make sure it is a valid .xlsx (not .xls) file. Error: {exc}",
-        )
-    ws = wb.active
-    if ws is None:
-        wb.close()
-        raise HTTPException(status_code=400, detail="Empty workbook")
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
+        rows = _parse_excel_bytes(contents, filename=fname)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not rows:
         raise HTTPException(status_code=400, detail="Empty workbook")
     headers = list(rows[0])
