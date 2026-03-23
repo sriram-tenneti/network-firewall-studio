@@ -559,6 +559,14 @@ async def delete_legacy_rule(rule_id: str) -> bool:
     return False
 
 
+async def clear_all_legacy_rules() -> int:
+    """Delete all imported legacy rules. Returns count of deleted rules."""
+    rules = _load("legacy_rules") or []
+    count = len(rules)
+    _save("legacy_rules", [])
+    return count
+
+
 async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:
     """Import legacy rules from Excel, dedup against existing rules.
     Optimised for large imports (50K+ rows).

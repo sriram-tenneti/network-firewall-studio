@@ -4,7 +4,7 @@ from app.database import (
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
     get_policy_matrix, get_heritage_dc_matrix, get_ngdc_prod_matrix, get_nonprod_matrix,
-    get_rules, get_legacy_rules, update_legacy_rule, delete_legacy_rule,
+    get_rules, get_legacy_rules, update_legacy_rule, delete_legacy_rule, clear_all_legacy_rules,
     import_legacy_rules, get_migration_history, migrate_rule_to_ngdc,
     create_migration_review,
     create_neighbourhood, update_neighbourhood, delete_neighbourhood,
@@ -530,6 +530,13 @@ async def delete_legacy_rule_endpoint(rule_id: str):
     if not ok:
         raise HTTPException(status_code=404, detail="Legacy rule not found")
     return {"message": "Deleted"}
+
+
+@router.delete("/legacy-rules/clear-all")
+async def clear_all_legacy_rules_endpoint():
+    """Delete all imported legacy rules for a fresh re-import."""
+    count = await clear_all_legacy_rules()
+    return {"message": f"Deleted {count} rules", "deleted": count}
 
 
 @router.post("/legacy-rules/import")

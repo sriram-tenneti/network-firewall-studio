@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules } from '@/lib/api';
+import { importLegacyRulesExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules } from '@/lib/api';
 import type { FirewallRule, LegacyRule } from '@/types';
 
 interface ImportedApp {
@@ -50,6 +50,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [showImportedRules, setShowImportedRules] = useState(false);
   const [rulesAppFilter, setRulesAppFilter] = useState<string>('');
   const [rulesSearchQuery, setRulesSearchQuery] = useState<string>('');
+  const [clearing, setClearing] = useState(false);
 
   // NFR import state (for ngdc-import-rules context)
   const [nfrRules, setNfrRules] = useState<FirewallRule[]>([]);
@@ -237,6 +238,23 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     return filtered;
   };
 
+  const handleClearAllRules = async () => {
+    if (!confirm('Are you sure you want to delete ALL imported legacy rules? This cannot be undone. You can re-import from Excel afterwards.')) return;
+    setClearing(true);
+    try {
+      const res = await clearAllLegacyRules();
+      setImportedRules([]);
+      setShowImportedRules(false);
+      setResult(null);
+      setError('');
+      alert(`Cleared ${res.deleted} rules. You can now import fresh data.`);
+    } catch {
+      setError('Failed to clear rules');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const handleDeleteMapping = async (id: string) => {
     try {
       await deleteNGDCMapping(id);
@@ -378,6 +396,14 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {importing ? 'Importing...' : 'Import'}
+          </button>
+          <button
+            onClick={handleClearAllRules}
+            disabled={clearing}
+            className="px-4 py-3 bg-red-50 text-red-600 rounded-lg font-medium hover:bg-red-100 border border-red-200 disabled:opacity-50 transition-colors text-sm"
+            title="Delete all imported rules and start fresh"
+          >
+            {clearing ? 'Clearing...' : 'Clear All & Re-import'}
           </button>
         </div>
 

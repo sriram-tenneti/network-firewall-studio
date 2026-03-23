@@ -377,6 +377,9 @@ export const updateLegacyRule = (ruleId: string, data: Partial<LegacyRule>) =>
 export const deleteLegacyRule = (ruleId: string) =>
   fetchJSON<{ message: string }>(`/api/reference/legacy-rules/${ruleId}`, { method: 'DELETE' });
 
+export const clearAllLegacyRules = () =>
+  fetchJSON<{ message: string; deleted: number }>('/api/reference/legacy-rules/clear-all', { method: 'DELETE' });
+
 // Excel import for legacy rules (supports large files up to 50K+ rows)
 export const importLegacyRulesExcel = async (file: File, environment?: string): Promise<{ added: number; duplicates: number; total: number }> => {
   const formData = new FormData();
