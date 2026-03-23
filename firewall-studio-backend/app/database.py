@@ -2157,7 +2157,8 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                      if str(m.get("app_id", "")).upper() == app_id.upper()]
 
     def _find_nh_for_zone(zone: str) -> tuple[str, str, str]:
-        """Find NH, SZ, DC for a given zone from app-DC mappings."""
+        """Find NH, SZ, DC for a given zone from app-DC mappings.
+        Handles comma-separated NH/SZ values in app_info by picking the first match."""
         if not zone:
             return ("NH01", "GEN", "")
         zone_upper = zone.upper()
@@ -2169,7 +2170,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             first = all_app_comps[0]
             return (first.get("nh", "NH01"), zone_upper, first.get("dc", ""))
         if app_info:
-            return (app_info.get("nh", "NH01"), zone_upper, "")
+            # Handle comma-separated NH/SZ — pick the first value as default
+            raw_nh = app_info.get("nh", "NH01")
+            first_nh = raw_nh.split(",")[0].strip() if raw_nh else "NH01"
+            return (first_nh, zone_upper, "")
         return ("NH01", zone_upper, "")
 
     src_nh, src_sz, src_dc = _find_nh_for_zone(rule_src_zone)
@@ -2337,9 +2341,19 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     ip_mappings_table = _load("ip_mappings") or []
 
     def _detect_component(ip_str: str) -> str:
-        """Detect component type from IP by matching against app_dc_mappings CIDRs."""
+        """Detect component type from IP by matching against app_dc_mappings CIDRs,
+        ip_mappings table (NGDC IP -> component), legacy group names, and port heuristics."""
         import ipaddress
         ip_clean = ip_str.strip().split("\n")[0].strip()
+
+        # Strip svr-/rng-/grp- prefix for raw IP matching
+        ip_raw = ip_clean
+        for pfx in ("svr-", "rng-", "grp-"):
+            if ip_raw.startswith(pfx):
+                ip_raw = ip_raw[len(pfx):]
+                break
+
+        # Strategy 1: Match legacy IP against app_dc_mappings CIDRs directly
         for comp in app_components:
             cidr = comp.get("cidr", "")
             if not cidr:
@@ -2347,20 +2361,61 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             try:
                 net = ipaddress.ip_network(cidr, strict=False)
                 try:
-                    addr = ipaddress.ip_address(ip_clean)
+                    addr = ipaddress.ip_address(ip_raw)
                     if addr in net:
-                        return comp.get("component", "UNKNOWN")
+                        return comp.get("component", "APP")
                 except ValueError:
-                    # Could be a subnet itself
                     try:
-                        test_net = ipaddress.ip_network(ip_clean, strict=False)
+                        test_net = ipaddress.ip_network(ip_raw, strict=False)
                         if test_net.subnet_of(net) or net.subnet_of(test_net):
-                            return comp.get("component", "UNKNOWN")
+                            return comp.get("component", "APP")
                     except (ValueError, TypeError):
                         pass
             except (ValueError, TypeError):
                 pass
-        return "UNKNOWN"
+
+        # Strategy 2: Look up ip_mappings table to find NGDC IP, then match NGDC IP against CIDRs
+        for m in ip_mappings_table:
+            legacy_val = str(m.get("legacy_ip", ""))
+            if legacy_val == ip_raw or legacy_val == ip_clean:
+                ngdc_ip = str(m.get("ngdc_ip", ""))
+                if ngdc_ip:
+                    for comp in app_components:
+                        cidr = comp.get("cidr", "")
+                        if not cidr:
+                            continue
+                        try:
+                            net = ipaddress.ip_network(cidr, strict=False)
+                            addr = ipaddress.ip_address(ngdc_ip)
+                            if addr in net:
+                                return comp.get("component", "APP")
+                        except (ValueError, TypeError):
+                            pass
+                    # NGDC IP found but no CIDR match — try component from mapping metadata
+                    comp_hint = m.get("component", "")
+                    if comp_hint:
+                        return comp_hint
+
+        # Strategy 3: Infer component from legacy group name patterns
+        name_lower = ip_clean.lower()
+        comp_keywords = {
+            "WEB": ["web", "www", "http", "frontend", "ui", "portal"],
+            "APP": ["app", "application", "svc", "service", "middleware"],
+            "DB": ["db", "database", "sql", "oracle", "mysql", "postgres", "mongo"],
+            "MQ": ["mq", "queue", "rabbit", "kafka", "jms", "messaging"],
+            "BAT": ["bat", "batch", "job", "scheduler", "cron"],
+            "API": ["api", "gateway", "rest", "endpoint"],
+        }
+        for comp_type, keywords in comp_keywords.items():
+            if any(kw in name_lower for kw in keywords):
+                # Verify this component type exists for the app
+                if any(c.get("component") == comp_type for c in app_components):
+                    return comp_type
+
+        # Strategy 4: Fallback — use the first available component type for this app
+        if app_components:
+            return app_components[0].get("component", "APP")
+        return "APP"
 
     # Group source IPs by component
     src_component_map: dict[str, list[str]] = {}

@@ -405,8 +405,8 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-5 gap-3">
                   <input className={inp} placeholder="App ID" value={newAppForm.app_id || ''} onChange={e => setNewAppForm({ ...newAppForm, app_id: e.target.value })} />
                   <input className={inp} placeholder="Name" value={newAppForm.name || ''} onChange={e => setNewAppForm({ ...newAppForm, name: e.target.value })} />
-                  <input className={inp} placeholder="NH" value={newAppForm.nh || ''} onChange={e => setNewAppForm({ ...newAppForm, nh: e.target.value })} />
-                  <input className={inp} placeholder="SZ" value={newAppForm.sz || ''} onChange={e => setNewAppForm({ ...newAppForm, sz: e.target.value })} />
+                  <input className={inp} placeholder="NH (e.g. NH02,NH14)" title="Comma-separated NHs for apps with components in multiple neighbourhoods" value={newAppForm.nh || ''} onChange={e => setNewAppForm({ ...newAppForm, nh: e.target.value })} />
+                  <input className={inp} placeholder="SZ (e.g. CCS,CDE,PAA)" title="Comma-separated SZs for apps with components in multiple security zones" value={newAppForm.sz || ''} onChange={e => setNewAppForm({ ...newAppForm, sz: e.target.value })} />
                   <input className={inp} placeholder="Owner" value={newAppForm.owner || ''} onChange={e => setNewAppForm({ ...newAppForm, owner: e.target.value })} />
                 </div>
                 <div className="flex justify-end gap-2">
@@ -439,10 +439,10 @@ export default function SettingsPage() {
                       <p className="text-sm font-semibold text-gray-800">{selectedAppData.app_id}</p></div>
                     <div><label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
                       <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">NH</label>
-                      <input className={inp} value={editAppForm.nh || ''} onChange={e => setEditAppForm({ ...editAppForm, nh: e.target.value })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">SZ</label>
-                      <input className={inp} value={editAppForm.sz || ''} onChange={e => setEditAppForm({ ...editAppForm, sz: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-medium text-gray-500 mb-1">NH <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+                                          <input className={inp} placeholder="e.g. NH02,NH14" title="Comma-separated NHs for apps with components in multiple neighbourhoods" value={editAppForm.nh || ''} onChange={e => setEditAppForm({ ...editAppForm, nh: e.target.value })} /></div>
+                                        <div><label className="block text-xs font-medium text-gray-500 mb-1">SZ <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+                                          <input className={inp} placeholder="e.g. CCS,CDE,PAA" title="Comma-separated SZs for apps with components in multiple security zones" value={editAppForm.sz || ''} onChange={e => setEditAppForm({ ...editAppForm, sz: e.target.value })} /></div>
                     <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label>
                       <input className={inp} value={editAppForm.owner || ''} onChange={e => setEditAppForm({ ...editAppForm, owner: e.target.value })} /></div>
                     <div><label className="block text-xs font-medium text-gray-500 mb-1">Criticality</label>

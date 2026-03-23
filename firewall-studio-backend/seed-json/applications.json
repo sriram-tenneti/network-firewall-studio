@@ -4,8 +4,8 @@
     "name": "Customer Relationship Manager",
     "app_distributed_id": "AD-1001",
     "owner": "Team Eta",
-    "nh": "NH02",
-    "sz": "CDE",
+    "nh": "NH02,NH14",
+    "sz": "CCS,CDE,PAA",
     "criticality": "High",
     "pci_scope": true,
     "components": [
@@ -39,8 +39,8 @@
     "name": "Trading Platform",
     "app_distributed_id": "AD-1003",
     "owner": "Team Xi",
-    "nh": "NH06",
-    "sz": "CDE",
+    "nh": "NH06,NH14",
+    "sz": "CCS,CDE,PAA",
     "criticality": "Critical",
     "pci_scope": true,
     "components": [
@@ -59,7 +59,7 @@
     "app_distributed_id": "AD-1004",
     "owner": "Team Epsilon",
     "nh": "NH07",
-    "sz": "CPA",
+    "sz": "CDE,CPA",
     "criticality": "Critical",
     "pci_scope": true,
     "components": [
@@ -76,7 +76,7 @@
     "app_distributed_id": "AD-1005",
     "owner": "Team Kappa",
     "nh": "NH04",
-    "sz": "GEN",
+    "sz": "CCS,GEN",
     "criticality": "High",
     "pci_scope": false,
     "components": [
@@ -93,7 +93,7 @@
     "app_distributed_id": "AD-1006",
     "owner": "Team Lambda",
     "nh": "NH05",
-    "sz": "GEN",
+    "sz": "CCS,GEN",
     "criticality": "High",
     "pci_scope": false,
     "components": [
@@ -110,7 +110,7 @@
     "app_distributed_id": "AD-1007",
     "owner": "Team Eta",
     "nh": "NH02",
-    "sz": "CDE",
+    "sz": "CCS,CDE",
     "criticality": "Critical",
     "pci_scope": true,
     "components": [
@@ -127,7 +127,7 @@
     "app_distributed_id": "AD-1008",
     "owner": "Team Iota",
     "nh": "NH09",
-    "sz": "CCS",
+    "sz": "CCS,GEN",
     "criticality": "High",
     "pci_scope": false,
     "components": [
@@ -143,8 +143,8 @@
     "name": "Wealth Management",
     "app_distributed_id": "AD-1009",
     "owner": "Team Mu",
-    "nh": "NH10",
-    "sz": "CDE",
+    "nh": "NH10,NH14",
+    "sz": "CDE,GEN,PAA",
     "criticality": "High",
     "pci_scope": true,
     "components": [
@@ -161,7 +161,7 @@
     "app_distributed_id": "AD-1010",
     "owner": "Team Theta",
     "nh": "NH08",
-    "sz": "CCS",
+    "sz": "CCS,CDE",
     "criticality": "Critical",
     "pci_scope": true,
     "components": [
@@ -178,8 +178,8 @@
     "name": "Enterprise Portal",
     "app_distributed_id": "AD-1011",
     "owner": "Team Platform",
-    "nh": "NH01",
-    "sz": "PAA",
+    "nh": "NH01,NH14",
+    "sz": "CCS,PAA",
     "criticality": "High",
     "pci_scope": false,
     "components": [
@@ -194,8 +194,8 @@
     "name": "Mobile Banking",
     "app_distributed_id": "AD-1012",
     "owner": "Team Epsilon",
-    "nh": "NH07",
-    "sz": "CPA",
+    "nh": "NH07,NH14",
+    "sz": "CPA,PAA",
     "criticality": "Critical",
     "pci_scope": true,
     "components": [
