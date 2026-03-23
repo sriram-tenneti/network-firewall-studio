@@ -15,9 +15,9 @@ from typing import Any
 # ============================================================
 
 SEED_NEIGHBOURHOODS = [
-    {"nh_id": "NH01", "name": "Platform Services", "environment": "Production",
+    {"nh_id": "NH01", "name": "Technology Enablement Services", "environment": "Production",
      "cidr": "10.0.0.0/16",
-     "description": "Platform and infrastructure services", "ip_ranges": [
+     "description": "Technology enablement and platform services", "ip_ranges": [
         {"cidr": "10.0.1.0/24", "description": "NH01 East Primary", "dc": "ALPHA_NGDC"},
         {"cidr": "10.0.2.0/24", "description": "NH01 East Secondary", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.50.0/24", "description": "NH01 West Primary", "dc": "BETA_NGDC"},
@@ -29,9 +29,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH01-sz06", "cidr": "10.0.2.0/25", "description": "Critical Payment Applications"},
         {"zone": "GEN", "vrf_id": "NH01-gen", "cidr": "10.0.2.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH02", "name": "Team Eta", "environment": "Production",
+    {"nh_id": "NH02", "name": "Core Banking", "environment": "Production",
      "cidr": "10.1.0.0/16",
-     "description": "Data processing and analytics platforms", "ip_ranges": [
+     "description": "Core banking services and data processing", "ip_ranges": [
         {"cidr": "10.1.1.0/24", "description": "NH02 East App Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "10.1.2.0/24", "description": "NH02 East DB Tier", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.1.0/24", "description": "NH02 West App", "dc": "BETA_NGDC"},
@@ -43,9 +43,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH02-sz06", "cidr": "10.1.2.0/25", "description": "Critical Payment Applications"},
         {"zone": "GEN", "vrf_id": "NH02-gen", "cidr": "10.1.2.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH03", "name": "Team Delta", "environment": "Production",
+    {"nh_id": "NH03", "name": "Digital Channels", "environment": "Production",
      "cidr": "10.2.0.0/16",
-     "description": "Web application and API hosting", "ip_ranges": [
+     "description": "Digital channels, web and API hosting", "ip_ranges": [
         {"cidr": "10.2.1.0/24", "description": "NH03 East Web Servers", "dc": "ALPHA_NGDC"},
         {"cidr": "10.2.2.0/24", "description": "NH03 East App Servers", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.3.0/24", "description": "NH03 West Web", "dc": "BETA_NGDC"},
@@ -55,9 +55,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CDE", "vrf_id": "NH03-sz05", "cidr": "10.2.1.128/25", "description": "Card Holder Data"},
         {"zone": "GEN", "vrf_id": "NH03-gen", "cidr": "10.2.2.0/24", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH04", "name": "Team Kappa", "environment": "Production",
+    {"nh_id": "NH04", "name": "Wealth Management", "environment": "Production",
      "cidr": "10.3.0.0/16",
-     "description": "Insurance and risk management", "ip_ranges": [
+     "description": "Wealth management and insurance", "ip_ranges": [
         {"cidr": "10.3.1.0/24", "description": "NH04 East Primary", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.4.0/24", "description": "NH04 West Primary", "dc": "BETA_NGDC"},
      ],
@@ -65,9 +65,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CCS", "vrf_id": "NH04-sz04", "cidr": "10.3.1.0/25", "description": "Critical Core Services"},
         {"zone": "GEN", "vrf_id": "NH04-gen", "cidr": "10.3.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH05", "name": "Team Lambda", "environment": "Production",
+    {"nh_id": "NH05", "name": "Enterprise Services", "environment": "Production",
      "cidr": "10.4.0.0/16",
-     "description": "Enterprise compliance and KYC", "ip_ranges": [
+     "description": "Enterprise services, compliance, and KYC", "ip_ranges": [
         {"cidr": "10.4.1.0/24", "description": "NH05 East App", "dc": "ALPHA_NGDC"},
         {"cidr": "10.4.2.0/24", "description": "NH05 East DB", "dc": "ALPHA_NGDC"},
      ],
@@ -75,9 +75,9 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CCS", "vrf_id": "NH05-sz04", "cidr": "10.4.1.0/25", "description": "Critical Core Services"},
         {"zone": "GEN", "vrf_id": "NH05-gen", "cidr": "10.4.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH06", "name": "Team Xi", "environment": "Production",
+    {"nh_id": "NH06", "name": "Wholesale Banking", "environment": "Production",
      "cidr": "10.5.0.0/16",
-     "description": "Trading platforms", "ip_ranges": [
+     "description": "Wholesale banking and trading platforms", "ip_ranges": [
         {"cidr": "10.5.1.0/24", "description": "NH06 East Primary", "dc": "ALPHA_NGDC"},
         {"cidr": "172.16.6.0/24", "description": "NH06 West Primary", "dc": "BETA_NGDC"},
         {"cidr": "172.16.20.0/24", "description": "NH06 Central Primary", "dc": "GAMMA_NGDC"},
@@ -88,89 +88,118 @@ SEED_NEIGHBOURHOODS = [
         {"zone": "CPA", "vrf_id": "NH06-sz06", "cidr": "10.5.1.128/26", "description": "Critical Payment Applications"},
         {"zone": "GEN", "vrf_id": "NH06-gen", "cidr": "10.5.1.192/26", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH07", "name": "Team Epsilon", "environment": "Production",
+    {"nh_id": "NH07", "name": "Global Payments and Liquidity", "environment": "Production",
      "cidr": "10.6.0.0/16",
-     "description": "Payment processing", "ip_ranges": [
+     "description": "Global payments, liquidity, and settlement", "ip_ranges": [
         {"cidr": "10.6.1.0/24", "description": "NH07 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CDE", "vrf_id": "NH07-sz05", "cidr": "10.6.1.0/25", "description": "Card Holder Data"},
         {"zone": "CPA", "vrf_id": "NH07-sz06", "cidr": "10.6.1.128/25", "description": "Critical Payment Applications"},
      ]},
-    {"nh_id": "NH08", "name": "Team Theta", "environment": "Production",
+    {"nh_id": "NH08", "name": "Data and Analytics", "environment": "Production",
      "cidr": "10.7.0.0/16",
-     "description": "Core banking services", "ip_ranges": [
+     "description": "Data analytics and core banking engine", "ip_ranges": [
         {"cidr": "10.7.1.0/24", "description": "NH08 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH08-sz04", "cidr": "10.7.1.0/25", "description": "Critical Core Services"},
         {"zone": "CDE", "vrf_id": "NH08-sz05", "cidr": "10.7.1.128/25", "description": "Card Holder Data"},
      ]},
-    {"nh_id": "NH09", "name": "Team Iota", "environment": "Production",
+    {"nh_id": "NH09", "name": "Assisted Channels", "environment": "Production",
      "cidr": "10.8.0.0/16",
-     "description": "Digital lending", "ip_ranges": [
+     "description": "Assisted channels and digital lending", "ip_ranges": [
         {"cidr": "10.8.1.0/24", "description": "NH09 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH09-sz04", "cidr": "10.8.1.0/25", "description": "Critical Core Services"},
         {"zone": "GEN", "vrf_id": "NH09-gen", "cidr": "10.8.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH10", "name": "Team Mu", "environment": "Production",
+    {"nh_id": "NH10", "name": "Consumer Lending", "environment": "Production",
      "cidr": "10.9.0.0/16",
-     "description": "Wealth management", "ip_ranges": [
+     "description": "Consumer lending and portfolio management", "ip_ranges": [
         {"cidr": "10.9.1.0/24", "description": "NH10 East Primary", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CDE", "vrf_id": "NH10-sz05", "cidr": "10.9.1.0/25", "description": "Card Holder Data"},
         {"zone": "GEN", "vrf_id": "NH10-gen", "cidr": "10.9.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH11", "name": "Team Sigma", "environment": "Production",
+    # --- Production Mainframe ---
+    {"nh_id": "NH11", "name": "Production Mainframe", "environment": "Production",
      "cidr": "10.10.0.0/16",
-     "description": "Cloud integration and middleware services", "ip_ranges": [
-        {"cidr": "10.10.1.0/24", "description": "NH11 East Primary", "dc": "ALPHA_NGDC"},
-        {"cidr": "172.16.11.0/24", "description": "NH11 West Primary", "dc": "BETA_NGDC"},
+     "description": "Production mainframe systems", "ip_ranges": [
+        {"cidr": "10.10.1.0/24", "description": "NH11 East Mainframe", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
         {"zone": "CCS", "vrf_id": "NH11-sz04", "cidr": "10.10.1.0/25", "description": "Critical Core Services"},
         {"zone": "GEN", "vrf_id": "NH11-gen", "cidr": "10.10.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH12", "name": "Team Omega", "environment": "Production",
+    # --- Non-Production Mainframe ---
+    {"nh_id": "NH12", "name": "Non-Production Mainframe", "environment": "Non-Production",
      "cidr": "10.11.0.0/16",
-     "description": "Regulatory reporting and audit", "ip_ranges": [
-        {"cidr": "10.11.1.0/24", "description": "NH12 East Primary", "dc": "ALPHA_NGDC"},
+     "description": "Non-production mainframe systems", "ip_ranges": [
+        {"cidr": "10.11.1.0/24", "description": "NH12 East NP Mainframe", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
-        {"zone": "CCS", "vrf_id": "NH12-sz04", "cidr": "10.11.1.0/25", "description": "Critical Core Services"},
-        {"zone": "CDE", "vrf_id": "NH12-sz05", "cidr": "10.11.1.128/25", "description": "Card Holder Data"},
-        {"zone": "GEN", "vrf_id": "NH12-gen", "cidr": "10.11.2.0/25", "transit_vni": 4000, "description": "Standard/General"},
+        {"zone": "UCCS", "vrf_id": "NH12-sz04", "cidr": "10.11.1.0/25", "description": "Non-Prod Critical Core Services"},
+        {"zone": "USTD", "vrf_id": "NH12-gen", "cidr": "10.11.1.128/25", "description": "Non-Prod Standard"},
      ]},
-    {"nh_id": "NH13", "name": "Team Rho", "environment": "Production",
+    # --- Non-Production Shared ---
+    {"nh_id": "NH13", "name": "Non-Production Shared", "environment": "Non-Production",
      "cidr": "10.12.0.0/16",
-     "description": "Data warehouse and analytics", "ip_ranges": [
-        {"cidr": "10.12.1.0/24", "description": "NH13 East Primary", "dc": "ALPHA_NGDC"},
-        {"cidr": "10.50.12.0/24", "description": "NH13 Central Primary", "dc": "GAMMA_NGDC"},
+     "description": "Shared non-production workloads (DEV/SIT/UAT/CTE)", "ip_ranges": [
+        {"cidr": "10.12.1.0/24", "description": "NH13 East NP Shared", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.12.2.0/24", "description": "NH13 East NP DB", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
-        {"zone": "CCS", "vrf_id": "NH13-sz04", "cidr": "10.12.1.0/25", "description": "Critical Core Services"},
-        {"zone": "GEN", "vrf_id": "NH13-gen", "cidr": "10.12.1.128/25", "transit_vni": 4000, "description": "Standard/General"},
+        {"zone": "USTD", "vrf_id": "NH13-gen", "cidr": "10.12.1.0/25", "description": "Non-Prod Standard"},
+        {"zone": "UCCS", "vrf_id": "NH13-sz04", "cidr": "10.12.1.128/25", "description": "Non-Prod Critical Core Services"},
+        {"zone": "UCDE", "vrf_id": "NH13-sz05", "cidr": "10.12.2.0/25", "description": "Non-Prod CDE"},
+        {"zone": "UCPA", "vrf_id": "NH13-sz06", "cidr": "10.12.2.128/25", "description": "Non-Prod CPA"},
      ]},
-    {"nh_id": "NH14", "name": "DMZ Services", "environment": "Production",
+    # --- DMZ ---
+    {"nh_id": "NH14", "name": "DMZ", "environment": "Production",
      "cidr": "10.70.0.0/16",
-     "description": "External-facing DMZ", "ip_ranges": [
+     "description": "External-facing DMZ / Publicly Accessible Applications", "ip_ranges": [
         {"cidr": "10.70.1.0/24", "description": "NH14 East DMZ", "dc": "ALPHA_NGDC"},
         {"cidr": "10.70.2.0/24", "description": "NH14 East External", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
-        {"zone": "DMZ", "vrf_id": "NH14-sz01", "cidr": "10.70.1.0/24", "description": "Demilitarized Zone"},
+        {"zone": "PAA", "vrf_id": "NH14-sz02", "cidr": "10.70.1.0/24", "description": "Publicly Accessible Applications"},
         {"zone": "GEN", "vrf_id": "NH14-gen", "cidr": "10.70.2.0/24", "transit_vni": 4000, "description": "Standard/General"},
      ]},
-    {"nh_id": "NH15", "name": "Management Zone", "environment": "Production",
+    # --- Non-Production DMZ ---
+    {"nh_id": "NH15", "name": "Non-Production DMZ", "environment": "Non-Production",
      "cidr": "10.80.0.0/16",
-     "description": "Network management and monitoring", "ip_ranges": [
-        {"cidr": "10.80.1.0/24", "description": "NH15 East Mgmt", "dc": "ALPHA_NGDC"},
+     "description": "Non-production DMZ and management", "ip_ranges": [
+        {"cidr": "10.80.1.0/24", "description": "NH15 East NP DMZ", "dc": "ALPHA_NGDC"},
      ],
      "security_zones": [
-        {"zone": "MGT", "vrf_id": "NH15-sz02", "cidr": "10.80.1.0/24", "description": "Management Zone"},
+        {"zone": "UPAA", "vrf_id": "NH15-sz02", "cidr": "10.80.1.0/25", "description": "Non-Prod PAA"},
+        {"zone": "USTD", "vrf_id": "NH15-gen", "cidr": "10.80.1.128/25", "description": "Non-Prod Standard"},
+     ]},
+    # --- Pre-Production (Non-Prod Shared) ---
+    {"nh_id": "NH16", "name": "Pre-Production", "environment": "Pre-Production",
+     "cidr": "10.13.0.0/16",
+     "description": "Pre-production / staging shared workloads", "ip_ranges": [
+        {"cidr": "10.13.1.0/24", "description": "NH16 East Pre-Prod", "dc": "ALPHA_NGDC"},
+        {"cidr": "10.13.2.0/24", "description": "NH16 East Pre-Prod DB", "dc": "ALPHA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "USTD", "vrf_id": "NH16-gen", "cidr": "10.13.1.0/25", "description": "Pre-Prod Standard"},
+        {"zone": "UCCS", "vrf_id": "NH16-sz04", "cidr": "10.13.1.128/25", "description": "Pre-Prod CCS"},
+        {"zone": "UCDE", "vrf_id": "NH16-sz05", "cidr": "10.13.2.0/25", "description": "Pre-Prod CDE"},
+        {"zone": "UCPA", "vrf_id": "NH16-sz06", "cidr": "10.13.2.128/25", "description": "Pre-Prod CPA"},
+     ]},
+    # --- Pre-Production DMZ ---
+    {"nh_id": "NH17", "name": "Pre-Production DMZ", "environment": "Pre-Production",
+     "cidr": "10.14.0.0/16",
+     "description": "Pre-production DMZ", "ip_ranges": [
+        {"cidr": "10.14.1.0/24", "description": "NH17 East Pre-Prod DMZ", "dc": "ALPHA_NGDC"},
+     ],
+     "security_zones": [
+        {"zone": "UPAA", "vrf_id": "NH17-sz02", "cidr": "10.14.1.0/25", "description": "Pre-Prod PAA"},
+        {"zone": "USTD", "vrf_id": "NH17-gen", "cidr": "10.14.1.128/25", "description": "Pre-Prod Standard"},
      ]},
 ]
 
@@ -180,30 +209,60 @@ SEED_NEIGHBOURHOODS = [
 # ============================================================
 
 SEED_SECURITY_ZONES = [
-    {"code": "CCS", "name": "Critical Core Services", "risk_level": "Critical", "pci_scope": True,
-     "cidr": "varies per NH", "description": "Houses critical core banking and financial services"},
-    {"code": "CDE", "name": "Card Holder Data Environment", "risk_level": "Critical", "pci_scope": True,
-     "cidr": "varies per NH", "description": "PCI DSS scope - cardholder data processing and storage"},
-    {"code": "CPA", "name": "Critical Payment Applications", "risk_level": "Critical", "pci_scope": True,
-     "cidr": "varies per NH", "description": "Payment processing applications and APIs"},
+    # ---- Production Fabric ----
+    {"code": "STD", "name": "Standard Zone", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "gen/SZ01",
+     "cidr": "varies per NH", "description": "General application zone – standard workloads, non-sensitive"},
     {"code": "GEN", "name": "General Zone", "risk_level": "Low", "pci_scope": False,
-     "cidr": "varies per NH", "description": "General-purpose compute, non-sensitive workloads"},
-    {"code": "DMZ", "name": "Demilitarized Zone", "risk_level": "High", "pci_scope": False,
-     "cidr": "10.70.0.0/16", "description": "External-facing services, API gateways, WAFs"},
-    {"code": "MGT", "name": "Management Zone", "risk_level": "High", "pci_scope": False,
-     "cidr": "10.80.0.0/16", "description": "Network management, monitoring, jump boxes"},
-    {"code": "DEV", "name": "Development Zone", "risk_level": "Low", "pci_scope": False,
-     "cidr": "10.200.0.0/16", "description": "Development and sandbox environments"},
-    {"code": "UAT", "name": "User Acceptance Testing", "risk_level": "Low", "pci_scope": False,
-     "cidr": "10.201.0.0/16", "description": "UAT environments for integration testing"},
-    {"code": "SIT", "name": "System Integration Testing", "risk_level": "Low", "pci_scope": False,
-     "cidr": "10.202.0.0/16", "description": "SIT environments for system testing"},
-    {"code": "STG", "name": "Staging Zone", "risk_level": "Medium", "pci_scope": False,
-     "cidr": "10.203.0.0/16", "description": "Pre-production staging with sanitized data"},
-    {"code": "DR", "name": "Disaster Recovery", "risk_level": "High", "pci_scope": True,
-     "cidr": "10.90.0.0/16", "description": "DR site with replicated critical systems"},
-    {"code": "EXT", "name": "External Zone", "risk_level": "Critical", "pci_scope": False,
-     "cidr": "0.0.0.0/0", "description": "External/internet-facing endpoints"},
+     "fabric": "Production", "vrf_prefix": "gen/SZ01",
+     "cidr": "varies per NH", "description": "General-purpose compute (alias for STD), routing/transit"},
+    {"code": "PAA", "name": "Publicly Accessible Applications", "risk_level": "High", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "paa/SZ02",
+     "cidr": "varies per NH", "description": "Front-end / internet-accessible applications in DMZ"},
+    {"code": "3PY", "name": "Third Party", "risk_level": "High", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "nh##-sz03",
+     "cidr": "varies per NH", "description": "Third-party owned or managed workloads"},
+    {"code": "CCS", "name": "Critical Core Services", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz04",
+     "cidr": "varies per NH", "description": "Management/control-plane and critical core banking services"},
+    {"code": "CDE", "name": "Card Holder Data Environment", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz05",
+     "cidr": "varies per NH", "description": "PCI DSS scope – cardholder/PAN data processing and storage"},
+    {"code": "CPA", "name": "Critical Payment Applications", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz06",
+     "cidr": "varies per NH", "description": "Enterprise payment applications and settlement"},
+    {"code": "PSE", "name": "Production Simulation", "risk_level": "High", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "nh##-sz07",
+     "cidr": "varies per NH", "description": "Technology enablement simulation – uses CCS firewall"},
+    {"code": "Swift", "name": "Swift Zone", "risk_level": "Critical", "pci_scope": True,
+     "fabric": "Production", "vrf_prefix": "nh##-sz08",
+     "cidr": "varies per NH", "description": "Dedicated Swift messaging applications – uses CPA firewall"},
+    {"code": "UC", "name": "Unified Communications", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Production", "vrf_prefix": "nh##-sz09",
+     "cidr": "varies per NH", "description": "Unified communications zone"},
+
+    # ---- Non-Production Fabric ----
+    {"code": "UGen", "name": "Non-Prod General", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "gen",
+     "cidr": "varies per NH", "description": "General zone for non-prod routing"},
+    {"code": "USTD", "name": "Non-Prod Standard", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "gen",
+     "cidr": "varies per NH", "description": "Non-prod/UAT/CTE/SIT/DEV standard workloads"},
+    {"code": "UPAA", "name": "Non-Prod PAA", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "paa/sz-02",
+     "cidr": "varies per NH", "description": "Non-prod front-end / internet-accessible applications"},
+    {"code": "UCPA", "name": "Non-Prod CPA", "risk_level": "High", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz06",
+     "cidr": "varies per NH", "description": "Non-prod critical payment applications"},
+    {"code": "UCDE", "name": "Non-Prod CDE", "risk_level": "High", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz05",
+     "cidr": "varies per NH", "description": "Non-prod cardholder data environment"},
+    {"code": "UCCS", "name": "Non-Prod CCS", "risk_level": "High", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz04",
+     "cidr": "varies per NH", "description": "Non-prod critical core services"},
+    {"code": "U3PY", "name": "Non-Prod Third Party", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Non-Production", "vrf_prefix": "nh##-sz03",
+     "cidr": "varies per NH", "description": "Non-prod third-party workloads"},
 ]
 
 
@@ -242,7 +301,7 @@ SEED_LEGACY_DATACENTERS = [
 
 SEED_APPLICATIONS = [
     {"app_id": "CRM", "name": "Customer Relationship Manager", "app_distributed_id": "AD-1001",
-     "owner": "Team Eta", "nh": "NH02", "sz": "CDE", "criticality": "High", "pci_scope": True,
+     "owner": "Team Eta", "nh": "NH02,NH14", "sz": "CCS,CDE,PAA", "criticality": "High", "pci_scope": True,
      "components": ["WEB", "APP", "DB", "BAT", "API"],
      "description": "CRM platform for customer data management"},
     {"app_id": "HRM", "name": "Human Resource Manager", "app_distributed_id": "AD-1002",
@@ -250,57 +309,196 @@ SEED_APPLICATIONS = [
      "components": ["WEB", "APP", "DB", "BAT"],
      "description": "HR management and employee portal"},
     {"app_id": "TRD", "name": "Trading Platform", "app_distributed_id": "AD-1003",
-     "owner": "Team Xi", "nh": "NH06", "sz": "CDE", "criticality": "Critical", "pci_scope": True,
+     "owner": "Team Xi", "nh": "NH06,NH14", "sz": "CCS,CDE,PAA", "criticality": "Critical", "pci_scope": True,
      "components": ["WEB", "APP", "DB", "MQ", "API", "BAT"],
      "description": "Real-time trading and market data"},
     {"app_id": "PAY", "name": "Payment Gateway", "app_distributed_id": "AD-1004",
-     "owner": "Team Epsilon", "nh": "NH07", "sz": "CPA", "criticality": "Critical", "pci_scope": True,
+     "owner": "Team Epsilon", "nh": "NH07", "sz": "CDE,CPA", "criticality": "Critical", "pci_scope": True,
      "components": ["APP", "DB", "MQ", "API"],
      "description": "Payment processing and settlement"},
     {"app_id": "INS", "name": "Insurance Portal", "app_distributed_id": "AD-1005",
-     "owner": "Team Kappa", "nh": "NH04", "sz": "GEN", "criticality": "High", "pci_scope": False,
+     "owner": "Team Kappa", "nh": "NH04", "sz": "CCS,GEN", "criticality": "High", "pci_scope": False,
      "components": ["WEB", "APP", "DB", "BAT"],
      "description": "Insurance policy management"},
     {"app_id": "KYC", "name": "KYC Compliance", "app_distributed_id": "AD-1006",
-     "owner": "Team Lambda", "nh": "NH05", "sz": "GEN", "criticality": "High", "pci_scope": False,
+     "owner": "Team Lambda", "nh": "NH05", "sz": "CCS,GEN", "criticality": "High", "pci_scope": False,
      "components": ["WEB", "APP", "DB", "API"],
      "description": "Know Your Customer compliance platform"},
     {"app_id": "FRD", "name": "Fraud Detection", "app_distributed_id": "AD-1007",
-     "owner": "Team Eta", "nh": "NH02", "sz": "CDE", "criticality": "Critical", "pci_scope": True,
+     "owner": "Team Eta", "nh": "NH02", "sz": "CCS,CDE", "criticality": "Critical", "pci_scope": True,
      "components": ["APP", "DB", "MQ", "API"],
      "description": "Real-time fraud detection engine"},
     {"app_id": "LND", "name": "Lending Platform", "app_distributed_id": "AD-1008",
-     "owner": "Team Iota", "nh": "NH09", "sz": "CCS", "criticality": "High", "pci_scope": False,
+     "owner": "Team Iota", "nh": "NH09", "sz": "CCS,GEN", "criticality": "High", "pci_scope": False,
      "components": ["WEB", "APP", "DB", "BAT"],
      "description": "Digital lending and loan origination"},
     {"app_id": "WLT", "name": "Wealth Management", "app_distributed_id": "AD-1009",
-     "owner": "Team Mu", "nh": "NH10", "sz": "CDE", "criticality": "High", "pci_scope": True,
+     "owner": "Team Mu", "nh": "NH10,NH14", "sz": "CDE,GEN,PAA", "criticality": "High", "pci_scope": True,
      "components": ["WEB", "APP", "DB", "API"],
      "description": "Portfolio and wealth management"},
     {"app_id": "CBK", "name": "Core Banking", "app_distributed_id": "AD-1010",
-     "owner": "Team Theta", "nh": "NH08", "sz": "CCS", "criticality": "Critical", "pci_scope": True,
+     "owner": "Team Theta", "nh": "NH08", "sz": "CCS,CDE", "criticality": "Critical", "pci_scope": True,
      "components": ["APP", "DB", "MQ", "API", "BAT"],
      "description": "Core banking transaction engine"},
     {"app_id": "EPT", "name": "Enterprise Portal", "app_distributed_id": "AD-1011",
-     "owner": "Team Platform", "nh": "NH01", "sz": "PAA", "criticality": "High", "pci_scope": False,
+     "owner": "Team Platform", "nh": "NH01,NH14", "sz": "CCS,PAA", "criticality": "High", "pci_scope": False,
      "components": ["WEB", "APP", "API"],
      "description": "Internet-facing enterprise portal (PAA zone)"},
     {"app_id": "MBK", "name": "Mobile Banking", "app_distributed_id": "AD-1012",
-     "owner": "Team Epsilon", "nh": "NH07", "sz": "CPA", "criticality": "Critical", "pci_scope": True,
+     "owner": "Team Epsilon", "nh": "NH07,NH14", "sz": "CPA,PAA", "criticality": "Critical", "pci_scope": True,
      "components": ["WEB", "APP", "DB", "API"],
      "description": "Mobile banking application"},
-    {"app_id": "MDW", "name": "Middleware Hub", "app_distributed_id": "AD-1013",
-     "owner": "Team Sigma", "nh": "NH11", "sz": "CCS", "criticality": "High", "pci_scope": False,
-     "components": ["APP", "DB", "MQ", "API"],
-     "description": "Cloud integration middleware and ESB"},
-    {"app_id": "RAP", "name": "Regulatory Reporting", "app_distributed_id": "AD-1014",
-     "owner": "Team Omega", "nh": "NH12", "sz": "CDE", "criticality": "High", "pci_scope": True,
-     "components": ["WEB", "APP", "DB", "BAT"],
-     "description": "Regulatory audit and compliance reporting"},
-    {"app_id": "DWH", "name": "Data Warehouse", "app_distributed_id": "AD-1015",
-     "owner": "Team Rho", "nh": "NH13", "sz": "CCS", "criticality": "High", "pci_scope": False,
-     "components": ["APP", "DB", "BAT", "API"],
-     "description": "Enterprise data warehouse and analytics platform"},
+]
+
+
+# ============================================================
+# App-to-DC/NH/SZ Component Mappings
+# Each app can span multiple DCs, same NH, and multiple SZs
+# depending on component type (WEB, APP, DB, MQ, BAT, API).
+# ============================================================
+
+SEED_APP_DC_MAPPINGS = [
+    # --- CRM: NH02, across ALPHA+BETA, WEB in PAA(NH14), APP in CCS, DB in CDE ---
+    {"app_id": "CRM", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.1.10/32", "status": "Active", "notes": "CRM internet-facing web tier"},
+    {"app_id": "CRM", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "10.1.1.0/28", "status": "Active", "notes": "CRM application servers"},
+    {"app_id": "CRM", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.128/28", "status": "Active", "notes": "CRM database – PCI CDE"},
+    {"app_id": "CRM", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "10.1.1.30/32", "status": "Active", "notes": "CRM batch processing"},
+    {"app_id": "CRM", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "10.1.1.40/30", "status": "Active", "notes": "CRM API gateway"},
+    {"app_id": "CRM", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "172.16.1.20/28", "status": "Active", "notes": "CRM Beta DR app tier"},
+    {"app_id": "CRM", "component": "DB", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "172.16.1.128/28", "status": "Active", "notes": "CRM Beta DR database"},
+
+    # --- HRM: NH01, ALPHA only, all in GEN ---
+    {"app_id": "HRM", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
+     "cidr": "10.0.2.130/31", "status": "Active", "notes": "HRM web servers"},
+    {"app_id": "HRM", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
+     "cidr": "10.0.2.140/30", "status": "Active", "notes": "HRM application servers"},
+    {"app_id": "HRM", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
+     "cidr": "10.0.2.150/31", "status": "Active", "notes": "HRM database"},
+    {"app_id": "HRM", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
+     "cidr": "10.0.2.160/32", "status": "Active", "notes": "HRM batch"},
+
+    # --- TRD: NH06, ALPHA+BETA+GAMMA, WEB in PAA, APP/DB/MQ in CDE ---
+    {"app_id": "TRD", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.1.65/30", "status": "Active", "notes": "TRD internet-facing trading UI"},
+    {"app_id": "TRD", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "10.5.1.64/27", "status": "Active", "notes": "TRD application servers"},
+    {"app_id": "TRD", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "10.5.1.80/30", "status": "Active", "notes": "TRD database cluster"},
+    {"app_id": "TRD", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "10.5.1.85/31", "status": "Active", "notes": "TRD message queue brokers"},
+    {"app_id": "TRD", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CCS",
+     "cidr": "10.5.1.0/28", "status": "Active", "notes": "TRD API layer in CCS"},
+    {"app_id": "TRD", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "10.5.1.95/32", "status": "Active", "notes": "TRD batch processing"},
+    {"app_id": "TRD", "component": "APP", "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "172.16.6.64/27", "status": "Active", "notes": "TRD Beta DR app tier"},
+    {"app_id": "TRD", "component": "DB", "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "172.16.6.80/30", "status": "Active", "notes": "TRD Beta DR database"},
+    {"app_id": "TRD", "component": "APP", "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "172.16.20.64/27", "status": "Active", "notes": "TRD Gamma DR app tier"},
+
+    # --- PAY: NH07, ALPHA only, APP/DB in CPA, API in CCS ---
+    {"app_id": "PAY", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+     "cidr": "10.6.1.128/27", "status": "Active", "notes": "PAY transaction processors"},
+    {"app_id": "PAY", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
+     "cidr": "10.6.1.0/28", "status": "Active", "notes": "PAY database – PCI CDE"},
+    {"app_id": "PAY", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+     "cidr": "10.6.1.160/30", "status": "Active", "notes": "PAY message queue"},
+    {"app_id": "PAY", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+     "cidr": "10.6.1.164/30", "status": "Active", "notes": "PAY API gateway"},
+
+    # --- INS: NH04, ALPHA+BETA, all in GEN ---
+    {"app_id": "INS", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "GEN",
+     "cidr": "10.3.1.128/28", "status": "Active", "notes": "INS web portal"},
+    {"app_id": "INS", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "GEN",
+     "cidr": "10.3.1.144/28", "status": "Active", "notes": "INS application servers"},
+    {"app_id": "INS", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "CCS",
+     "cidr": "10.3.1.0/28", "status": "Active", "notes": "INS database in CCS"},
+    {"app_id": "INS", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "GEN",
+     "cidr": "10.3.1.160/32", "status": "Active", "notes": "INS batch processing"},
+    {"app_id": "INS", "component": "APP", "dc": "BETA_NGDC", "nh": "NH04", "sz": "GEN",
+     "cidr": "172.16.4.144/28", "status": "Active", "notes": "INS Beta DR"},
+
+    # --- KYC: NH05, ALPHA only, WEB/APP in GEN, DB in CCS ---
+    {"app_id": "KYC", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "GEN",
+     "cidr": "10.4.1.128/28", "status": "Active", "notes": "KYC web portal"},
+    {"app_id": "KYC", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "GEN",
+     "cidr": "10.4.1.144/28", "status": "Active", "notes": "KYC application servers"},
+    {"app_id": "KYC", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
+     "cidr": "10.4.1.0/28", "status": "Active", "notes": "KYC database in CCS"},
+    {"app_id": "KYC", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "GEN",
+     "cidr": "10.4.1.160/30", "status": "Active", "notes": "KYC API layer"},
+
+    # --- FRD: NH02, ALPHA+BETA, APP/DB in CDE, API in CCS ---
+    {"app_id": "FRD", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.160/28", "status": "Active", "notes": "FRD fraud engine"},
+    {"app_id": "FRD", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.2.0/28", "status": "Active", "notes": "FRD database – PCI CDE"},
+    {"app_id": "FRD", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.176/30", "status": "Active", "notes": "FRD message queue"},
+    {"app_id": "FRD", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "10.1.1.0/30", "status": "Active", "notes": "FRD API in CCS"},
+    {"app_id": "FRD", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "172.16.1.160/28", "status": "Active", "notes": "FRD Beta DR"},
+
+    # --- LND: NH09, ALPHA only, WEB/APP in GEN, DB in CCS ---
+    {"app_id": "LND", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
+     "cidr": "10.8.1.128/28", "status": "Active", "notes": "LND web portal"},
+    {"app_id": "LND", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
+     "cidr": "10.8.1.144/28", "status": "Active", "notes": "LND application servers"},
+    {"app_id": "LND", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CCS",
+     "cidr": "10.8.1.0/28", "status": "Active", "notes": "LND database in CCS"},
+    {"app_id": "LND", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
+     "cidr": "10.8.1.160/32", "status": "Active", "notes": "LND batch processing"},
+
+    # --- WLT: NH10, ALPHA only, WEB in PAA, APP in GEN, DB in CDE ---
+    {"app_id": "WLT", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.1.100/30", "status": "Active", "notes": "WLT internet-facing portal"},
+    {"app_id": "WLT", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "GEN",
+     "cidr": "10.9.1.128/28", "status": "Active", "notes": "WLT application servers"},
+    {"app_id": "WLT", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "CDE",
+     "cidr": "10.9.1.0/28", "status": "Active", "notes": "WLT database – PCI CDE"},
+    {"app_id": "WLT", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "GEN",
+     "cidr": "10.9.1.144/30", "status": "Active", "notes": "WLT API layer"},
+
+    # --- CBK: NH08, ALPHA only, APP/DB in CCS, MQ in CDE ---
+    {"app_id": "CBK", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
+     "cidr": "10.7.1.0/28", "status": "Active", "notes": "CBK core banking engine"},
+    {"app_id": "CBK", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE",
+     "cidr": "10.7.1.128/28", "status": "Active", "notes": "CBK database – PCI CDE"},
+    {"app_id": "CBK", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
+     "cidr": "10.7.1.16/30", "status": "Active", "notes": "CBK message queue"},
+    {"app_id": "CBK", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
+     "cidr": "10.7.1.20/30", "status": "Active", "notes": "CBK API layer"},
+    {"app_id": "CBK", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
+     "cidr": "10.7.1.24/32", "status": "Active", "notes": "CBK batch processing"},
+
+    # --- EPT: NH01, ALPHA+BETA, WEB in PAA, APP/API in CCS ---
+    {"app_id": "EPT", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.1.20/30", "status": "Active", "notes": "EPT internet-facing portal"},
+    {"app_id": "EPT", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
+     "cidr": "10.0.1.0/28", "status": "Active", "notes": "EPT application servers"},
+    {"app_id": "EPT", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
+     "cidr": "10.0.1.16/30", "status": "Active", "notes": "EPT API gateway"},
+    {"app_id": "EPT", "component": "APP", "dc": "BETA_NGDC", "nh": "NH01", "sz": "CCS",
+     "cidr": "172.16.50.0/28", "status": "Active", "notes": "EPT Beta DR"},
+
+    # --- MBK: NH07, ALPHA only, WEB in PAA, APP in CPA, DB in CDE ---
+    {"app_id": "MBK", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.1.30/30", "status": "Active", "notes": "MBK mobile banking web"},
+    {"app_id": "MBK", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+     "cidr": "10.6.1.168/28", "status": "Active", "notes": "MBK application servers"},
+    {"app_id": "MBK", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
+     "cidr": "10.6.1.16/28", "status": "Active", "notes": "MBK database – PCI CDE"},
+    {"app_id": "MBK", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+     "cidr": "10.6.1.184/30", "status": "Active", "notes": "MBK API layer"},
 ]
 
 
@@ -367,286 +565,114 @@ SEED_NAMING_STANDARDS = [
 
 
 # ============================================================
-# Firewall Devices
+# Firewall Device Naming Patterns (Generic)
 # ============================================================
+# Instead of enumerating every individual firewall device, we define
+# naming patterns and categories.  The backend resolves the actual
+# device name at runtime using:  fw-{VENDOR}-{DC}-{NH}-{SZ}
+#
+# Device categories:
+#   perimeter  – DC-level north-south firewalls (HA pair per DC)
+#   dmz        – DMZ-specific firewall per DC
+#   paa        – PAA perimeter firewall per DC
+#   segmentation – Per-NH, per-SZ east-west firewall (only for SEGMENTED zones)
+#
+# Open zones (STD, GEN, UGen, USTD) do NOT have per-NH firewalls.
+# Segmented zones each get a dedicated per-NH firewall instance.
 
+SEED_FIREWALL_DEVICE_PATTERNS = [
+    # ---- Perimeter (one HA pair per DC) ----
+    {"pattern_id": "FWP-PERIM", "type": "perimeter",
+     "naming": "fw-{VENDOR}-{DC}-{SEQ}",
+     "example": "fw-PA-ALPHA-001 / fw-PA-ALPHA-002 (HA pair)",
+     "scope": "Per DC", "dc": "Any", "nh": "N/A", "sz": "N/A",
+     "description": "DC-level perimeter firewall – north-south traffic, HA pair",
+     "capabilities": ["L7 inspection", "URL filtering", "Threat prevention", "IPS", "VPN"]},
+
+    # ---- DMZ (one per DC) ----
+    {"pattern_id": "FWP-DMZ", "type": "dmz",
+     "naming": "fw-{VENDOR}-{DC}-DMZ",
+     "example": "fw-PA-ALPHA-DMZ, fw-CP-BETA-DMZ, fw-ASA-GAMMA-DMZ",
+     "scope": "Per DC", "dc": "Any", "nh": "N/A", "sz": "N/A",
+     "description": "DMZ firewall – external-facing traffic isolation",
+     "capabilities": ["L7 inspection", "SSL decryption", "WAF integration"]},
+
+    # ---- PAA Perimeter (one per DC) ----
+    {"pattern_id": "FWP-PAA", "type": "paa",
+     "naming": "fw-{VENDOR}-{DC}-PAA-{SEQ}",
+     "example": "fw-PA-PAA-001 (Alpha), fw-CP-BETA-PAA-001 (Beta)",
+     "scope": "Per DC", "dc": "Any", "nh": "N/A", "sz": "PAA",
+     "description": "PAA perimeter firewall – internet-accessible app zone enforcement",
+     "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
+
+    # ---- NH Segmentation (per NH, per segmented SZ, per DC) ----
+    {"pattern_id": "FWP-SEG", "type": "segmentation",
+     "naming": "fw-{VENDOR}-{DC}-{NH}-{SZ}",
+     "example": "fw-PA-NH01-CPA, fw-PA-NH02-CDE, fw-CP-BETA-NH06-CCS",
+     "scope": "Per NH per SZ per DC", "dc": "Any", "nh": "Any (with segmented SZ)", "sz": "Segmented only",
+     "description": "NH-level segmentation firewall – micro-segmentation, east-west enforcement. "
+                    "One instance per NH per segmented zone (CPA, CDE, CCS, PAA, 3PY, Swift, PSE, UC). "
+                    "Open zones (STD, GEN) do NOT get per-NH firewalls.",
+     "capabilities": ["Micro-segmentation", "East-West enforcement", "SZ-specific policy"]},
+
+    # ---- NP Segmentation (per NH, per NP segmented SZ) ----
+    {"pattern_id": "FWP-NP-SEG", "type": "np_segmentation",
+     "naming": "fw-{VENDOR}-{DC}-{NH}-{SZ}",
+     "example": "fw-PA-NH13-UCCS, fw-PA-NH13-UCDE",
+     "scope": "Per NH per NP-SZ per DC", "dc": "Any", "nh": "NP NHs (NH12-NH17)", "sz": "NP-Segmented only",
+     "description": "Non-Prod NH-level segmentation firewall for UCPA, UCDE, UCCS, UPAA, U3PY zones. "
+                    "Open NP zones (UGen, USTD) do NOT get per-NH firewalls.",
+     "capabilities": ["Micro-segmentation", "NP SZ enforcement"]},
+]
+
+# DC-level vendor assignments (used by backend to resolve actual device names)
+SEED_DC_VENDOR_MAP = {
+    "ALPHA_NGDC": {"perimeter": "palo_alto", "dmz": "palo_alto", "paa": "palo_alto", "segmentation": "palo_alto"},
+    "BETA_NGDC":  {"perimeter": "checkpoint", "dmz": "checkpoint", "paa": "checkpoint", "segmentation": "checkpoint"},
+    "GAMMA_NGDC": {"perimeter": "cisco_asa", "dmz": "cisco_asa", "paa": "cisco_asa", "segmentation": "palo_alto"},
+}
+
+# Keep SEED_FIREWALL_DEVICES for backward compatibility (existing CRUD endpoints).
+# This list now contains only representative examples; the backend auto-generates
+# the full device inventory from NH/SZ/DC data + patterns above.
 SEED_FIREWALL_DEVICES = [
-    # ================================================================
-    # ALPHA_NGDC (US-East) — Primary DC
-    # Vendor: Palo Alto (perimeter, segmentation, PAA, DMZ)
-    # ================================================================
-
-    # --- Perimeter / DC-level devices ---
+    # Representative perimeter devices
     {"device_id": "fw-PA-ALPHA-001", "name": "Palo Alto Alpha Primary", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "type": "perimeter", "status": "Active",
      "mgmt_ip": "10.0.254.1", "ha_pair": "fw-PA-ALPHA-002",
      "capabilities": ["L7 inspection", "URL filtering", "Threat prevention"]},
-    {"device_id": "fw-PA-ALPHA-002", "name": "Palo Alto Alpha Secondary", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "10.0.254.2", "ha_pair": "fw-PA-ALPHA-001",
-     "capabilities": ["L7 inspection", "URL filtering", "Threat prevention"]},
+    {"device_id": "fw-CP-BETA-001", "name": "Check Point Beta Primary", "vendor": "checkpoint",
+     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "172.16.254.1", "ha_pair": "fw-CP-BETA-002",
+     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
+    {"device_id": "fw-ASA-GAMMA-001", "name": "Cisco ASA Gamma Primary", "vendor": "cisco_asa",
+     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
+     "mgmt_ip": "10.50.254.1", "ha_pair": "fw-ASA-GAMMA-002",
+     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
+
+    # Representative DMZ devices
     {"device_id": "fw-PA-ALPHA-DMZ", "name": "Palo Alto Alpha DMZ", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "type": "dmz", "status": "Active",
-     "mgmt_ip": "10.70.254.1",
+     "dc": "ALPHA_NGDC", "type": "dmz", "status": "Active", "mgmt_ip": "10.70.254.1",
      "capabilities": ["L7 inspection", "SSL decryption", "WAF integration"]},
 
-    # --- ALPHA NH-specific segmentation firewalls ---
-    # Each NH that hosts a segmented zone (CPA, CDE, CCS) gets its own firewall.
-    # GEN/STD zones do NOT have per-NH firewalls.
+    # Representative PAA devices
+    {"device_id": "fw-PA-PAA-001", "name": "PAA Perimeter FW (Alpha)", "vendor": "palo_alto",
+     "dc": "ALPHA_NGDC", "type": "paa", "status": "Active", "mgmt_ip": "10.0.252.1",
+     "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
 
-    # NH01 — CPA, CDE, CCS (Platform Services)
+    # Representative segmentation devices (auto-generated from NH/SZ/DC at runtime)
     {"device_id": "fw-PA-NH01-CPA", "name": "NH01 CPA Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
      "mgmt_ip": "10.0.253.11",
-     "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH01-CDE", "name": "NH01 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.0.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH01-CCS", "name": "NH01 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.0.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH02 — CPA, CDE, CCS (Team Eta / Data Processing)
-    {"device_id": "fw-PA-NH02-CPA", "name": "NH02 CPA Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.1.253.11",
      "capabilities": ["Micro-segmentation", "East-West", "CPA enforcement"]},
     {"device_id": "fw-PA-NH02-CDE", "name": "NH02 CDE Segmentation FW", "vendor": "palo_alto",
      "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
      "mgmt_ip": "10.1.253.12",
      "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH02-CCS", "name": "NH02 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.1.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH03 — CDE, CCS (Team Delta / Web & API)
-    {"device_id": "fw-PA-NH03-CDE", "name": "NH03 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.2.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH03-CCS", "name": "NH03 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH03", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.2.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH04 — CCS (Team Kappa / Insurance)
-    {"device_id": "fw-CP-NH04-CCS", "name": "NH04 CCS Segmentation FW", "vendor": "checkpoint",
-     "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.3.253.13",
-     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
-
-    # NH05 — CCS (Team Lambda / Compliance)
-    {"device_id": "fw-CP-NH05-CCS", "name": "NH05 CCS Segmentation FW", "vendor": "checkpoint",
-     "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.4.253.13",
-     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
-
-    # NH06 — CPA, CDE, CCS (Team Xi / Trading)
-    {"device_id": "fw-PA-NH06-CPA", "name": "NH06 CPA Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.5.253.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH06-CDE", "name": "NH06 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.5.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-PA-NH06-CCS", "name": "NH06 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.5.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH07 — CPA, CDE (Team Epsilon / Payments)
-    {"device_id": "fw-PA-NH07-CPA", "name": "NH07 CPA Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.6.253.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-NH07-CDE", "name": "NH07 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.6.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH08 — CCS, CDE (Team Theta / Core Banking)
-    {"device_id": "fw-PA-NH08-CCS", "name": "NH08 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.7.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-    {"device_id": "fw-PA-NH08-CDE", "name": "NH08 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.7.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH09 — CCS (Team Iota / Lending)
-    {"device_id": "fw-PA-NH09-CCS", "name": "NH09 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.8.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH10 — CDE (Team Mu / Wealth)
-    {"device_id": "fw-PA-NH10-CDE", "name": "NH10 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.9.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH11 — CCS (Team Sigma / Middleware)
-    {"device_id": "fw-PA-NH11-CCS", "name": "NH11 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH11", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.10.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH12 — CCS, CDE (Team Omega / Regulatory)
-    {"device_id": "fw-PA-NH12-CCS", "name": "NH12 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH12", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.11.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-    {"device_id": "fw-PA-NH12-CDE", "name": "NH12 CDE Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH12", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.11.253.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH13 — CCS (Team Rho / Data Warehouse)
-    {"device_id": "fw-PA-NH13-CCS", "name": "NH13 CCS Segmentation FW", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "nh": "NH13", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.12.253.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # --- ALPHA PAA devices ---
-    {"device_id": "fw-PA-PAA-001", "name": "PAA Perimeter FW (Alpha)", "vendor": "palo_alto",
-     "dc": "ALPHA_NGDC", "type": "paa", "status": "Active",
-     "mgmt_ip": "10.0.252.1",
-     "capabilities": ["L7 inspection", "SSL decryption", "WAF", "PAA enforcement"]},
-
-    # ================================================================
-    # BETA_NGDC (US-West) — Secondary DC
-    # Vendor: Check Point (perimeter), Palo Alto (segmentation)
-    # NHs present in BETA: NH01, NH02, NH03, NH04, NH06
-    # ================================================================
-
-    # --- Perimeter ---
-    {"device_id": "fw-CP-BETA-001", "name": "Check Point Beta Primary", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "172.16.254.1", "ha_pair": "fw-CP-BETA-002",
-     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
-    {"device_id": "fw-CP-BETA-002", "name": "Check Point Beta Secondary", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "172.16.254.2", "ha_pair": "fw-CP-BETA-001",
-     "capabilities": ["Stateful inspection", "IPS", "VPN"]},
-    {"device_id": "fw-CP-BETA-DMZ", "name": "Check Point Beta DMZ", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "dmz", "status": "Active",
-     "mgmt_ip": "172.16.70.1",
-     "capabilities": ["Stateful inspection", "SSL inspection", "IPS"]},
-
-    # --- BETA NH segmentation firewalls ---
-    # NH01 in BETA
-    {"device_id": "fw-CP-BETA-NH01-CPA", "name": "Beta NH01 CPA Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.50.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-CP-BETA-NH01-CDE", "name": "Beta NH01 CDE Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.50.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-CP-BETA-NH01-CCS", "name": "Beta NH01 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.50.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH02 in BETA
-    {"device_id": "fw-CP-BETA-NH02-CDE", "name": "Beta NH02 CDE Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.1.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-    {"device_id": "fw-CP-BETA-NH02-CCS", "name": "Beta NH02 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.1.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH03 in BETA
-    {"device_id": "fw-CP-BETA-NH03-CCS", "name": "Beta NH03 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH03", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.3.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH04 in BETA
-    {"device_id": "fw-CP-BETA-NH04-CCS", "name": "Beta NH04 CCS Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH04", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.4.13",
-     "capabilities": ["Micro-segmentation", "CCS enforcement"]},
-
-    # NH06 in BETA
-    {"device_id": "fw-CP-BETA-NH06-CPA", "name": "Beta NH06 CPA Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.6.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-CP-BETA-NH06-CDE", "name": "Beta NH06 CDE Seg FW", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.6.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
     {"device_id": "fw-CP-BETA-NH06-CCS", "name": "Beta NH06 CCS Seg FW", "vendor": "checkpoint",
      "dc": "BETA_NGDC", "nh": "NH06", "sz": "CCS", "type": "segmentation", "status": "Active",
      "mgmt_ip": "172.16.6.13",
      "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # --- BETA PAA ---
-    {"device_id": "fw-CP-BETA-PAA-001", "name": "PAA Perimeter FW (Beta)", "vendor": "checkpoint",
-     "dc": "BETA_NGDC", "type": "paa", "status": "Active",
-     "mgmt_ip": "172.16.252.1",
-     "capabilities": ["Stateful inspection", "SSL inspection", "PAA enforcement"]},
-
-    # ================================================================
-    # GAMMA_NGDC (US-Central) — Tertiary DC
-    # Vendor: Cisco ASA (perimeter), Palo Alto (segmentation)
-    # NHs present in GAMMA: NH01, NH02, NH06
-    # ================================================================
-
-    # --- Perimeter ---
-    {"device_id": "fw-ASA-GAMMA-001", "name": "Cisco ASA Gamma Primary", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "10.50.254.1", "ha_pair": "fw-ASA-GAMMA-002",
-     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
-    {"device_id": "fw-ASA-GAMMA-002", "name": "Cisco ASA Gamma Secondary", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "perimeter", "status": "Active",
-     "mgmt_ip": "10.50.254.2", "ha_pair": "fw-ASA-GAMMA-001",
-     "capabilities": ["Stateful inspection", "VPN", "NAT"]},
-    {"device_id": "fw-ASA-GAMMA-DMZ", "name": "Cisco ASA Gamma DMZ", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "dmz", "status": "Active",
-     "mgmt_ip": "10.50.70.1",
-     "capabilities": ["Stateful inspection", "NAT", "ACL filtering"]},
-
-    # --- GAMMA NH segmentation firewalls ---
-    # NH01 in GAMMA
-    {"device_id": "fw-PA-GAMMA-NH01-CPA", "name": "Gamma NH01 CPA Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH01", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.50.50.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-GAMMA-NH01-CCS", "name": "Gamma NH01 CCS Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH01", "sz": "CCS", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.50.50.13",
-     "capabilities": ["Micro-segmentation", "Core Services enforcement"]},
-
-    # NH02 in GAMMA
-    {"device_id": "fw-PA-GAMMA-NH02-CDE", "name": "Gamma NH02 CDE Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH02", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "10.50.1.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # NH06 in GAMMA
-    {"device_id": "fw-PA-GAMMA-NH06-CPA", "name": "Gamma NH06 CPA Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CPA", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.20.11",
-     "capabilities": ["Micro-segmentation", "CPA enforcement"]},
-    {"device_id": "fw-PA-GAMMA-NH06-CDE", "name": "Gamma NH06 CDE Seg FW", "vendor": "palo_alto",
-     "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CDE", "type": "segmentation", "status": "Active",
-     "mgmt_ip": "172.16.20.12",
-     "capabilities": ["Micro-segmentation", "PCI CDE enforcement"]},
-
-    # --- GAMMA PAA ---
-    {"device_id": "fw-ASA-GAMMA-PAA-001", "name": "PAA Perimeter FW (Gamma)", "vendor": "cisco_asa",
-     "dc": "GAMMA_NGDC", "type": "paa", "status": "Active",
-     "mgmt_ip": "10.50.252.1",
-     "capabilities": ["Stateful inspection", "NAT", "PAA enforcement"]},
 ]
 
 
@@ -656,8 +682,10 @@ SEED_FIREWALL_DEVICES = [
 # based on source/destination NH and SZ placement.
 # ============================================================
 
-SEGMENTED_ZONES = {"CPA", "CDE", "CCS", "PAA"}
-# STD/GEN zones do NOT have per-NH firewalls
+SEGMENTED_ZONES = {"CPA", "CDE", "CCS", "PAA", "3PY", "Swift", "PSE", "UC"}
+NON_PROD_SEGMENTED_ZONES = {"UCPA", "UCDE", "UCCS", "UPAA", "U3PY"}
+# STD/GEN/UGen/USTD zones do NOT have per-NH firewalls
+OPEN_ZONES = {"STD", "GEN", "UGen", "USTD"}
 
 LOGICAL_FLOW_RULES = [
     {
@@ -724,174 +752,192 @@ SEED_HERITAGE_DC_MATRIX = [
      "action": "Permitted", "reason": "Heritage DC to General zone is allowed during migration"},
     {"heritage_zone": "Default", "new_dc_zone": "DMZ",
      "action": "Blocked", "reason": "Heritage DC to DMZ not permitted directly"},
-    {"heritage_zone": "Default", "new_dc_zone": "MGT",
-     "action": "Blocked", "reason": "Heritage DC to Management zone not permitted"},
-    {"heritage_zone": "Default", "new_dc_zone": "PAA",
-     "action": "Blocked - Exception Required", "reason": "Heritage DC to PAA requires exception with WAF"},
-    {"heritage_zone": "Default", "new_dc_zone": "DR",
-     "action": "Permitted", "reason": "Heritage DC to DR permitted for disaster recovery replication"},
-    {"heritage_zone": "Default", "new_dc_zone": "EXT",
-     "action": "Blocked", "reason": "Heritage DC to External zone blocked"},
 ]
 
+# ---- NGDC Production Matrix (Generic Pattern-Based) ----
+# Rules use generic patterns (source_zone/dest_zone as "Any", "Open", "Segmented",
+# "Same", etc.) instead of listing every SZ combination.
+# The backend resolve_policy() function interprets these patterns against actual
+# source/destination NH, SZ, and DC values at runtime.
+#
+# Zone categories used in patterns:
+#   OPEN  = {STD, GEN}  – no per-NH firewall needed
+#   SEGMENTED = {CPA, CDE, CCS, PAA, 3PY, Swift, PSE, UC} – require firewall
+#   NON_PROD_OPEN = {UGen, USTD}
+#   NON_PROD_SEGMENTED = {UCPA, UCDE, UCCS, UPAA, U3PY}
+#
 SEED_NGDC_PROD_MATRIX = [
-    # --- Same DC, Same NH (Intra-NH) ---
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CCS", "dst_sz": "CCS",
-     "action": "Permitted", "reason": "Same DC, same NH, CCS to CCS intra-zone traffic allowed"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CDE", "dst_sz": "CDE",
-     "action": "Permitted", "reason": "Same DC, same NH, CDE intra-zone traffic allowed"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CPA", "dst_sz": "CPA",
-     "action": "Permitted", "reason": "Same DC, same NH, CPA intra-zone traffic allowed"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "GEN", "dst_sz": "GEN",
-     "action": "Permitted", "reason": "Same DC, same NH, GEN intra-zone traffic allowed"},
-    # --- Same DC, Same NH, Cross-SZ ---
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CCS", "dst_sz": "CDE",
-     "action": "Permitted", "reason": "Same DC, same NH, CCS to CDE allowed with controls"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CDE", "dst_sz": "CCS",
-     "action": "Permitted", "reason": "Same DC, same NH, CDE to CCS allowed with controls"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CCS", "dst_sz": "CPA",
-     "action": "Blocked - Exception Required", "reason": "Same NH CCS to CPA requires exception approval"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "CPA", "dst_sz": "CDE",
-     "action": "Blocked - Exception Required", "reason": "Same NH CPA to CDE requires exception with PCI controls"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "GEN", "dst_sz": "CCS",
-     "action": "Blocked", "reason": "GEN to CCS not permitted within same NH"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "GEN", "dst_sz": "CDE",
-     "action": "Blocked", "reason": "GEN to CDE not permitted"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Same", "dst_nh": "Same",
-     "src_sz": "GEN", "dst_sz": "CPA",
-     "action": "Blocked", "reason": "GEN to CPA not permitted"},
-    # --- Same DC, Different NH (Cross-NH) ---
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CDE", "dst_sz": "CDE",
-     "action": "Blocked - Exception Required", "reason": "Cross-NH CDE traffic requires exception"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CCS", "dst_sz": "CCS",
-     "action": "Permitted", "reason": "Cross-NH CCS to CCS allowed (same DC)"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CCS", "dst_sz": "CPA",
-     "action": "Blocked", "reason": "Cross-NH CCS to CPA blocked"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CPA", "dst_sz": "CPA",
-     "action": "Blocked - Exception Required", "reason": "Cross-NH CPA to CPA requires exception"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CCS", "dst_sz": "GEN",
-     "action": "Permitted", "reason": "Cross-NH CCS to GEN permitted (egress only)"},
-    {"src_dc": "Same", "dst_dc": "Same", "src_nh": "Different", "dst_nh": "Different",
-     "src_sz": "CDE", "dst_sz": "GEN",
-     "action": "Blocked", "reason": "Cross-NH CDE to GEN not permitted"},
-    # --- Different DC (Cross-DC) ---
-    {"src_dc": "Different", "dst_dc": "Different", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "CDE", "dst_sz": "CDE",
-     "action": "Blocked - Exception Required", "reason": "Cross-DC CDE traffic requires exception and encryption"},
-    {"src_dc": "Different", "dst_dc": "Different", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "CCS", "dst_sz": "CCS",
-     "action": "Blocked - Exception Required", "reason": "Cross-DC CCS traffic requires exception"},
-    {"src_dc": "Different", "dst_dc": "Different", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "CPA", "dst_sz": "CPA",
-     "action": "Blocked", "reason": "Cross-DC CPA traffic blocked"},
-    {"src_dc": "Different", "dst_dc": "Different", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "GEN", "dst_sz": "GEN",
-     "action": "Permitted", "reason": "Cross-DC GEN traffic permitted"},
-    # --- Any DC, Any NH (Global rules) ---
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "GEN", "dst_sz": "GEN",
-     "action": "Permitted", "reason": "General zone traffic permitted"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "GEN", "dst_sz": "CDE",
-     "action": "Blocked", "reason": "GEN to CDE not permitted"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "GEN", "dst_sz": "CPA",
-     "action": "Blocked", "reason": "GEN to CPA not permitted"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "DMZ", "dst_sz": "CDE",
-     "action": "Blocked", "reason": "DMZ to CDE not permitted directly"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "DMZ", "dst_sz": "CPA",
-     "action": "Blocked", "reason": "DMZ to CPA not permitted directly"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "DMZ", "dst_sz": "GEN",
-     "action": "Permitted", "reason": "DMZ to GEN allowed through proxy"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "DMZ", "dst_sz": "CCS",
-     "action": "Blocked - Exception Required", "reason": "DMZ to CCS requires exception with WAF"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "MGT", "dst_sz": "Any",
-     "action": "Permitted", "reason": "Management zone can reach any zone for monitoring"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "Any", "dst_sz": "MGT",
-     "action": "Blocked - Exception Required", "reason": "Inbound to MGT requires exception"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "EXT", "dst_sz": "CDE",
-     "action": "Blocked", "reason": "External to CDE absolutely blocked"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "EXT", "dst_sz": "CPA",
-     "action": "Blocked", "reason": "External to CPA absolutely blocked"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "EXT", "dst_sz": "DMZ",
-     "action": "Permitted", "reason": "External to DMZ allowed (internet-facing services)"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "DR", "dst_sz": "DR",
-     "action": "Permitted", "reason": "DR to DR intra-zone replication allowed"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "CCS", "dst_sz": "DR",
-     "action": "Permitted", "reason": "CCS to DR allowed for disaster recovery"},
-    {"src_dc": "Any", "dst_dc": "Any", "src_nh": "Any", "dst_nh": "Any",
-     "src_sz": "CDE", "dst_sz": "DR",
-     "action": "Blocked - Exception Required", "reason": "CDE to DR requires PCI-compliant encryption"},
+    # ---- Row 1: Open Zone ↔ Open Zone (Any DC, Any NH) ----
+    {"id": "PM-PROD-01", "matrix_type": "NGDC-Prod",
+     "source_zone": "Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Open zone (STD/GEN) traffic is permitted across any NH/DC without firewall"},
+
+    # ---- Row 2: Same SZ, Same NH, Any DC ----
+    {"id": "PM-PROD-02", "matrix_type": "NGDC-Prod",
+     "source_zone": "Same", "source_nh": "Same", "source_dc": "Any",
+     "dest_zone": "Same", "dest_nh": "Same", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Intra-zone, intra-NH traffic is permitted – no firewall boundary"},
+
+    # ---- Row 3: Same SZ (Segmented), Cross NH, Same DC ----
+    # Same SZ is always PERMITTED regardless of NH/DC. Traffic still passes
+    # through FW devices (egress + ingress) but no firewall rule is required.
+    {"id": "PM-PROD-03", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented (Same)", "source_nh": "Different", "source_dc": "Same",
+     "dest_zone": "Segmented (Same)", "dest_nh": "Different", "dest_dc": "Same",
+     "action": "Permitted", "firewall_traversal": "Egress (src NH) + Ingress (dst NH) [informational]",
+     "reason": "Same segmented zone across different NHs – permitted per birthright. Traffic passes through egress (src NH FW) and ingress (dst NH FW) but no firewall rule is required."},
+
+    # ---- Row 4: Same SZ (Segmented), Cross NH, Cross DC ----
+    {"id": "PM-PROD-04", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented (Same)", "source_nh": "Different", "source_dc": "Different",
+     "dest_zone": "Segmented (Same)", "dest_nh": "Different", "dest_dc": "Different",
+     "action": "Permitted", "firewall_traversal": "Egress (src NH) + Ingress (dst NH) [informational]",
+     "reason": "Same segmented zone, cross NH and cross DC – permitted per birthright. Traffic passes through egress and ingress FW devices but no rule is required."},
+
+    # ---- Row 5: Cross SZ (both Segmented), Same NH, Any DC ----
+    {"id": "PM-PROD-05", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented", "source_nh": "Same", "source_dc": "Any",
+     "dest_zone": "Segmented (Different)", "dest_nh": "Same", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "NH SZ Boundary FW",
+     "reason": "Cross-zone within same NH requires traversing the NH segmentation firewall"},
+
+    # ---- Row 6: Cross SZ (both Segmented), Cross NH, Any DC ----
+    {"id": "PM-PROD-06", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented", "source_nh": "Different", "source_dc": "Any",
+     "dest_zone": "Segmented (Different)", "dest_nh": "Different", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH src SZ FW) + Ingress (dst NH dst SZ FW)",
+     "reason": "Cross-SZ cross-NH requires egress through source SZ FW and ingress through destination SZ FW"},
+
+    # ---- Row 7: Open Zone → Segmented Zone (Any NH/DC) ----
+    {"id": "PM-PROD-07", "matrix_type": "NGDC-Prod",
+     "source_zone": "Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Ingress (dst NH dst SZ FW)",
+     "reason": "Open zone to segmented zone requires ingress through destination NH SZ firewall"},
+
+    # ---- Row 8: Segmented Zone → Open Zone (Any NH/DC) ----
+    {"id": "PM-PROD-08", "matrix_type": "NGDC-Prod",
+     "source_zone": "Segmented", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress (src NH src SZ FW)",
+     "reason": "Segmented zone to open zone requires egress through source NH SZ firewall"},
+
+    # ---- Row 9: Open/STD ↔ CDE (Blocked – CDE is isolated) ----
+    {"id": "PM-PROD-09", "matrix_type": "NGDC-Prod",
+     "source_zone": "Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "CDE", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Direct access from Open zone to CDE is not permitted – CDE is isolated"},
+
+    # ---- Row 10: CDE → Open (Blocked) ----
+    {"id": "PM-PROD-10", "matrix_type": "NGDC-Prod",
+     "source_zone": "CDE", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "CDE to Open zone not permitted – CDE is isolated"},
+
+    # ---- Row 11: Non-Prod → Prod (Blocked) ----
+    {"id": "PM-PROD-11", "matrix_type": "NGDC-Prod",
+     "source_zone": "Non-Prod (Any)", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Prod (Any)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Production to Production traffic is unconditionally blocked"},
+
+    # ---- Row 12: PAA → Internal Segmented (PAA perimeter + internal FW) ----
+    {"id": "PM-PROD-12", "matrix_type": "NGDC-Prod",
+     "source_zone": "PAA", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "PAA Perimeter FW + Ingress (dst NH dst SZ FW)",
+     "reason": "PAA traffic must traverse PAA perimeter firewall and destination NH internal firewall"},
 ]
 
+# ---- Non-Production Matrix (Generic Pattern-Based) ----
 SEED_NONPROD_MATRIX = [
-    {"source_zone": "DEV", "dest_zone": "DEV", "action": "Permitted", "reason": "Dev to Dev allowed"},
-    {"source_zone": "DEV", "dest_zone": "SIT", "action": "Permitted", "reason": "Dev to SIT allowed for integration testing"},
-    {"source_zone": "DEV", "dest_zone": "UAT", "action": "Blocked", "reason": "Dev to UAT not allowed - different lifecycle"},
-    {"source_zone": "DEV", "dest_zone": "GEN", "action": "Permitted", "reason": "Dev to GEN allowed for shared services"},
-    {"source_zone": "SIT", "dest_zone": "SIT", "action": "Permitted", "reason": "SIT intra-zone allowed"},
-    {"source_zone": "SIT", "dest_zone": "UAT", "action": "Permitted", "reason": "SIT to UAT allowed for promotion"},
-    {"source_zone": "SIT", "dest_zone": "DEV", "action": "Blocked", "reason": "SIT to DEV not allowed - no backward flow"},
-    {"source_zone": "UAT", "dest_zone": "UAT", "action": "Permitted", "reason": "UAT intra-zone allowed"},
-    {"source_zone": "UAT", "dest_zone": "DEV", "action": "Blocked", "reason": "UAT to DEV not allowed"},
-    {"source_zone": "UAT", "dest_zone": "SIT", "action": "Blocked", "reason": "UAT to SIT not allowed - no backward flow"},
-    {"source_zone": "Any", "dest_zone": "CDE", "action": "Blocked", "reason": "Non-prod to CDE blocked - PCI violation"},
-    {"source_zone": "Any", "dest_zone": "CPA", "action": "Blocked", "reason": "Non-prod to CPA blocked - payment zone"},
-    {"source_zone": "Any", "dest_zone": "CCS", "action": "Blocked", "reason": "Non-prod to CCS blocked - critical core"},
-    {"source_zone": "GEN", "dest_zone": "GEN", "action": "Permitted", "reason": "GEN intra-zone allowed"},
-    {"source_zone": "GEN", "dest_zone": "DEV", "action": "Permitted", "reason": "GEN to DEV allowed for shared services"},
-    {"source_zone": "GEN", "dest_zone": "SIT", "action": "Permitted", "reason": "GEN to SIT allowed for shared services"},
-    {"source_zone": "GEN", "dest_zone": "UAT", "action": "Permitted", "reason": "GEN to UAT allowed for shared services"},
-    {"source_zone": "Any", "dest_zone": "MGT", "action": "Blocked", "reason": "Non-prod to MGT blocked"},
-    {"source_zone": "Any", "dest_zone": "DMZ", "action": "Blocked", "reason": "Non-prod to DMZ blocked"},
+    # ---- Row 1: NP Open ↔ NP Open (Any NH/DC) ----
+    {"id": "PM-NPROD-01", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "NP-Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Non-Prod open zone (UGen/USTD) traffic is permitted without firewall"},
+
+    # ---- Row 2: Same NP-SZ, Same NH ----
+    {"id": "PM-NPROD-02", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Segmented (Same)", "source_nh": "Same", "source_dc": "Any",
+     "dest_zone": "NP-Segmented (Same)", "dest_nh": "Same", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Same NP segmented zone within same NH – permitted"},
+
+    # ---- Row 3: Cross NP-SZ (both Segmented), Any NH ----
+    {"id": "PM-NPROD-03", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Segmented", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "NP-Segmented (Different)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Egress + Ingress (NP SZ FWs)",
+     "reason": "Cross-SZ within Non-Prod requires egress + ingress through NP segmentation FWs"},
+
+    # ---- Row 4: NP-Open → NP-Segmented ----
+    {"id": "PM-NPROD-04", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "NP-Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Firewall Request Required", "firewall_traversal": "Ingress (dst NP SZ FW)",
+     "reason": "NP Open zone to NP Segmented requires ingress through destination FW"},
+
+    # ---- Row 5: NP-Open → UCDE (Blocked) ----
+    {"id": "PM-NPROD-05", "matrix_type": "Non-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "UCDE", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "NP Open to UCDE not permitted – UCDE is isolated in Non-Prod"},
+
+    # ---- Row 6: Non-Prod → Prod (Blocked) ----
+    {"id": "PM-NPROD-06", "matrix_type": "Non-Prod",
+     "source_zone": "Non-Prod (Any)", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Prod (Any)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Prod to Prod traffic is unconditionally blocked"},
 ]
 
+# ---- Pre-Production Matrix (Generic Pattern-Based) ----
 SEED_PREPROD_MATRIX = [
-    {"source_zone": "STG", "dest_zone": "STG", "action": "Permitted", "reason": "Staging intra-zone allowed"},
-    {"source_zone": "STG", "dest_zone": "GEN", "action": "Permitted", "reason": "Staging to GEN allowed"},
-    {"source_zone": "STG", "dest_zone": "CDE", "action": "Blocked - Exception Required",
-     "reason": "Staging to CDE requires exception with data masking"},
-    {"source_zone": "STG", "dest_zone": "CCS", "action": "Blocked - Exception Required",
-     "reason": "Staging to CCS requires exception approval"},
-    {"source_zone": "GEN", "dest_zone": "STG", "action": "Permitted", "reason": "GEN to staging allowed"},
-    {"source_zone": "GEN", "dest_zone": "GEN", "action": "Permitted", "reason": "GEN intra-zone allowed in pre-prod"},
-    {"source_zone": "Any", "dest_zone": "CPA", "action": "Blocked", "reason": "Pre-prod to CPA blocked"},
-    {"source_zone": "Any", "dest_zone": "DMZ", "action": "Blocked", "reason": "Pre-prod to DMZ blocked"},
-    {"source_zone": "Any", "dest_zone": "MGT", "action": "Blocked", "reason": "Pre-prod to MGT blocked"},
-    {"source_zone": "STG", "dest_zone": "DR", "action": "Blocked - Exception Required",
-     "reason": "Staging to DR requires exception for DR testing"},
+    # ---- Row 1: PP Open ↔ PP Open ----
+    {"id": "PM-PPROD-01", "matrix_type": "Pre-Prod",
+     "source_zone": "PP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Pre-Prod open zone traffic is permitted"},
+
+    # ---- Row 2: NP-Open → PP-Open (Cross-Env Permitted) ----
+    {"id": "PM-PPROD-02", "matrix_type": "Pre-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Open", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Permitted", "firewall_traversal": "None",
+     "reason": "Non-Prod open to Pre-Prod open – permitted"},
+
+    # ---- Row 3: NP-Open → PP-Segmented (Blocked) ----
+    {"id": "PM-PPROD-03", "matrix_type": "Pre-Prod",
+     "source_zone": "NP-Open", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Prod open to Pre-Prod segmented – blocked"},
+
+    # ---- Row 4: NP-Segmented → PP-Segmented (Blocked) ----
+    {"id": "PM-PPROD-04", "matrix_type": "Pre-Prod",
+     "source_zone": "NP-Segmented", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "PP-Segmented", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Non-Prod segmented to Pre-Prod segmented – blocked"},
+
+    # ---- Row 5: Pre-Prod → Prod (Blocked) ----
+    {"id": "PM-PPROD-05", "matrix_type": "Pre-Prod",
+     "source_zone": "Pre-Prod (Any)", "source_nh": "Any", "source_dc": "Any",
+     "dest_zone": "Prod (Any)", "dest_nh": "Any", "dest_dc": "Any",
+     "action": "Blocked", "firewall_traversal": "N/A",
+     "reason": "Pre-Prod to Prod traffic is unconditionally blocked"},
 ]
 
-SEED_POLICY_MATRIX = SEED_NGDC_PROD_MATRIX + [
-    {"env": "Non-Production", "entries": SEED_NONPROD_MATRIX},
-    {"env": "Pre-Production", "entries": SEED_PREPROD_MATRIX},
-]
+SEED_POLICY_MATRIX = SEED_NGDC_PROD_MATRIX + SEED_NONPROD_MATRIX + SEED_PREPROD_MATRIX
 
 
 # ============================================================
@@ -920,330 +966,267 @@ SEED_ORG_CONFIG = {
 # ============================================================
 
 SEED_GROUPS = [
-    # --- CRM (NH02, CDE) ---
-    {"name": "grp-CRM-NH02-CDE-WEB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "WEB",
-     "description": "CRM Web Servers", "members": [
-        {"type": "ip", "value": "svr-10.1.1.10", "description": "CRM Web 1"},
-        {"type": "ip", "value": "svr-10.1.1.11", "description": "CRM Web 2"},
+    # --- CRM: WEB in NH14/PAA, APP/BAT/API in NH02/CCS, DB in NH02/CDE ---
+    {"name": "grp-CRM-WEB-NH14-PAA", "app_id": "CRM", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+     "description": "CRM Web Servers (PAA zone)", "members": [
+        {"type": "ip", "value": "svr-10.70.1.10", "description": "CRM Web 1"},
+        {"type": "ip", "value": "svr-10.70.1.11", "description": "CRM Web 2"},
      ]},
-    {"name": "grp-CRM-NH02-CDE-APP", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-CRM-APP-NH02-CCS", "app_id": "CRM", "nh": "NH02", "sz": "CCS", "subtype": "APP",
      "description": "CRM Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.1.1.20", "description": "CRM App 1"},
-        {"type": "ip", "value": "svr-10.1.1.21", "description": "CRM App 2"},
-        {"type": "ip", "value": "svr-10.1.1.22", "description": "CRM App 3"},
+        {"type": "ip", "value": "svr-10.1.1.1", "description": "CRM App 1"},
+        {"type": "ip", "value": "svr-10.1.1.2", "description": "CRM App 2"},
+        {"type": "ip", "value": "svr-10.1.1.3", "description": "CRM App 3"},
      ]},
-    {"name": "grp-CRM-NH02-CDE-DB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "DB",
-     "description": "CRM Database Servers", "members": [
-        {"type": "ip", "value": "svr-10.1.2.10", "description": "CRM DB Primary"},
-        {"type": "ip", "value": "svr-10.1.2.11", "description": "CRM DB Standby"},
+    {"name": "grp-CRM-DB-NH02-CDE", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+     "description": "CRM Database Servers (PCI CDE)", "members": [
+        {"type": "ip", "value": "svr-10.1.1.129", "description": "CRM DB Primary"},
+        {"type": "ip", "value": "svr-10.1.1.130", "description": "CRM DB Standby"},
      ]},
-    {"name": "grp-CRM-NH02-CDE-BAT", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "BAT",
+    {"name": "grp-CRM-BAT-NH02-CCS", "app_id": "CRM", "nh": "NH02", "sz": "CCS", "subtype": "BAT",
      "description": "CRM Batch Servers", "members": [
         {"type": "ip", "value": "svr-10.1.1.30", "description": "CRM Batch 1"},
      ]},
-    {"name": "grp-CRM-NH02-CDE-API", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "API",
+    {"name": "grp-CRM-API-NH02-CCS", "app_id": "CRM", "nh": "NH02", "sz": "CCS", "subtype": "API",
      "description": "CRM API Gateway", "members": [
         {"type": "ip", "value": "svr-10.1.1.40", "description": "CRM API 1"},
         {"type": "ip", "value": "svr-10.1.1.41", "description": "CRM API 2"},
      ]},
 
-    # --- HRM (NH01, GEN) ---
-    {"name": "grp-HRM-NH01-GEN-WEB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
+    # --- HRM: all components in NH01/GEN ---
+    {"name": "grp-HRM-WEB-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
      "description": "HRM Web Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.130", "description": "HRM Web 1"},
         {"type": "ip", "value": "svr-10.0.2.131", "description": "HRM Web 2"},
      ]},
-    {"name": "grp-HRM-NH01-GEN-APP", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-HRM-APP-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "APP",
      "description": "HRM Application Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.140", "description": "HRM App 1"},
         {"type": "ip", "value": "svr-10.0.2.141", "description": "HRM App 2"},
      ]},
-    {"name": "grp-HRM-NH01-GEN-DB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "DB",
+    {"name": "grp-HRM-DB-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "DB",
      "description": "HRM Database", "members": [
         {"type": "ip", "value": "svr-10.0.2.150", "description": "HRM DB Primary"},
         {"type": "ip", "value": "svr-10.0.2.151", "description": "HRM DB Replica"},
      ]},
-    {"name": "grp-HRM-NH01-GEN-BAT", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
+    {"name": "grp-HRM-BAT-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
      "description": "HRM Batch Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.160", "description": "HRM Batch 1"},
      ]},
 
-    # --- TRD (NH06, CDE) ---
-    {"name": "grp-TRD-NH06-CDE-WEB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
-     "description": "TRD Web Frontend", "members": [
-        {"type": "ip", "value": "svr-10.5.1.65", "description": "TRD Web 1"},
-        {"type": "ip", "value": "svr-10.5.1.66", "description": "TRD Web 2"},
+    # --- TRD: WEB in NH14/PAA, APP/DB/MQ/BAT in NH06/CDE, API in NH06/CCS ---
+    {"name": "grp-TRD-WEB-NH14-PAA", "app_id": "TRD", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+     "description": "TRD Web Frontend (PAA zone)", "members": [
+        {"type": "ip", "value": "svr-10.70.1.65", "description": "TRD Web 1"},
+        {"type": "ip", "value": "svr-10.70.1.66", "description": "TRD Web 2"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-APP", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-TRD-APP-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
      "description": "TRD Application Servers", "members": [
         {"type": "ip", "value": "svr-10.5.1.70", "description": "TRD App 1"},
         {"type": "ip", "value": "svr-10.5.1.71", "description": "TRD App 2"},
         {"type": "ip", "value": "svr-10.5.1.72", "description": "TRD App 3"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-DB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-TRD-DB-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "DB",
      "description": "TRD Database Cluster", "members": [
         {"type": "ip", "value": "svr-10.5.1.80", "description": "TRD DB Primary"},
         {"type": "ip", "value": "svr-10.5.1.81", "description": "TRD DB Standby"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-MQ", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-TRD-MQ-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "MQ",
      "description": "TRD Message Queue", "members": [
         {"type": "ip", "value": "svr-10.5.1.85", "description": "TRD MQ Broker 1"},
         {"type": "ip", "value": "svr-10.5.1.86", "description": "TRD MQ Broker 2"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-API", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "API",
-     "description": "TRD API Layer", "members": [
-        {"type": "ip", "value": "svr-10.5.1.90", "description": "TRD API 1"},
+    {"name": "grp-TRD-API-NH06-CCS", "app_id": "TRD", "nh": "NH06", "sz": "CCS", "subtype": "API",
+     "description": "TRD API Layer (CCS zone)", "members": [
+        {"type": "ip", "value": "svr-10.5.1.1", "description": "TRD API 1"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-BAT", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "BAT",
+    {"name": "grp-TRD-BAT-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "BAT",
      "description": "TRD Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.5.1.95", "description": "TRD Batch 1"},
      ]},
 
-    # --- PAY (NH07, CPA) ---
-    {"name": "grp-PAY-NH07-CPA-APP", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "APP",
+    # --- PAY: APP/MQ/API in NH07/CPA, DB in NH07/CDE ---
+    {"name": "grp-PAY-APP-NH07-CPA", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "APP",
      "description": "PAY Transaction Processors", "members": [
         {"type": "ip", "value": "svr-10.6.1.130", "description": "PAY App 1"},
         {"type": "ip", "value": "svr-10.6.1.131", "description": "PAY App 2"},
         {"type": "range", "value": "rng-10.6.1.132-140", "description": "PAY App Pool"},
      ]},
-    {"name": "grp-PAY-NH07-CPA-DB", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "DB",
-     "description": "PAY Database", "members": [
-        {"type": "ip", "value": "svr-10.6.1.150", "description": "PAY DB Primary"},
-        {"type": "ip", "value": "svr-10.6.1.151", "description": "PAY DB Standby"},
+    {"name": "grp-PAY-DB-NH07-CDE", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "DB",
+     "description": "PAY Database (PCI CDE)", "members": [
+        {"type": "ip", "value": "svr-10.6.1.1", "description": "PAY DB Primary"},
+        {"type": "ip", "value": "svr-10.6.1.2", "description": "PAY DB Standby"},
      ]},
-    {"name": "grp-PAY-NH07-CPA-MQ", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
+    {"name": "grp-PAY-MQ-NH07-CPA", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
      "description": "PAY Message Queue", "members": [
         {"type": "ip", "value": "svr-10.6.1.160", "description": "PAY MQ 1"},
      ]},
-    {"name": "grp-PAY-NH07-CPA-API", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "API",
+    {"name": "grp-PAY-API-NH07-CPA", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "API",
      "description": "PAY API Endpoint", "members": [
-        {"type": "ip", "value": "svr-10.6.1.170", "description": "PAY API 1"},
-        {"type": "ip", "value": "svr-10.6.1.171", "description": "PAY API 2"},
+        {"type": "ip", "value": "svr-10.6.1.164", "description": "PAY API 1"},
+        {"type": "ip", "value": "svr-10.6.1.165", "description": "PAY API 2"},
      ]},
 
-    # --- INS (NH04, GEN) ---
-    {"name": "grp-INS-NH04-GEN-WEB", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "WEB",
+    # --- INS: WEB/APP/BAT in NH04/GEN, DB in NH04/CCS ---
+    {"name": "grp-INS-WEB-NH04-GEN", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "WEB",
      "description": "INS Web Portal", "members": [
         {"type": "ip", "value": "svr-10.3.1.130", "description": "INS Web 1"},
         {"type": "ip", "value": "svr-10.3.1.131", "description": "INS Web 2"},
      ]},
-    {"name": "grp-INS-NH04-GEN-APP", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-INS-APP-NH04-GEN", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "APP",
      "description": "INS Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.3.1.140", "description": "INS App 1"},
-        {"type": "ip", "value": "svr-10.3.1.141", "description": "INS App 2"},
+        {"type": "ip", "value": "svr-10.3.1.144", "description": "INS App 1"},
+        {"type": "ip", "value": "svr-10.3.1.145", "description": "INS App 2"},
      ]},
-    {"name": "grp-INS-NH04-GEN-DB", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "DB",
-     "description": "INS Database", "members": [
-        {"type": "ip", "value": "svr-10.3.1.150", "description": "INS DB Primary"},
+    {"name": "grp-INS-DB-NH04-CCS", "app_id": "INS", "nh": "NH04", "sz": "CCS", "subtype": "DB",
+     "description": "INS Database (CCS zone)", "members": [
+        {"type": "ip", "value": "svr-10.3.1.1", "description": "INS DB Primary"},
      ]},
-    {"name": "grp-INS-NH04-GEN-BAT", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "BAT",
+    {"name": "grp-INS-BAT-NH04-GEN", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "BAT",
      "description": "INS Batch Jobs", "members": [
         {"type": "ip", "value": "svr-10.3.1.160", "description": "INS Batch 1"},
      ]},
 
-    # --- KYC (NH05, GEN) ---
-    {"name": "grp-KYC-NH05-GEN-WEB", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "WEB",
+    # --- KYC: WEB/APP/API in NH05/GEN, DB in NH05/CCS ---
+    {"name": "grp-KYC-WEB-NH05-GEN", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "WEB",
      "description": "KYC Web Interface", "members": [
         {"type": "ip", "value": "svr-10.4.1.130", "description": "KYC Web 1"},
      ]},
-    {"name": "grp-KYC-NH05-GEN-APP", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-KYC-APP-NH05-GEN", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "APP",
      "description": "KYC Application", "members": [
-        {"type": "ip", "value": "svr-10.4.1.140", "description": "KYC App 1"},
-        {"type": "ip", "value": "svr-10.4.1.141", "description": "KYC App 2"},
+        {"type": "ip", "value": "svr-10.4.1.144", "description": "KYC App 1"},
+        {"type": "ip", "value": "svr-10.4.1.145", "description": "KYC App 2"},
      ]},
-    {"name": "grp-KYC-NH05-GEN-DB", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "DB",
-     "description": "KYC Database", "members": [
-        {"type": "ip", "value": "svr-10.4.2.10", "description": "KYC DB Primary"},
-        {"type": "ip", "value": "svr-10.4.2.11", "description": "KYC DB Replica"},
+    {"name": "grp-KYC-DB-NH05-CCS", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "DB",
+     "description": "KYC Database (CCS zone)", "members": [
+        {"type": "ip", "value": "svr-10.4.1.1", "description": "KYC DB Primary"},
+        {"type": "ip", "value": "svr-10.4.1.2", "description": "KYC DB Replica"},
      ]},
-    {"name": "grp-KYC-NH05-GEN-API", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "API",
+    {"name": "grp-KYC-API-NH05-GEN", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "API",
      "description": "KYC API", "members": [
-        {"type": "ip", "value": "svr-10.4.1.150", "description": "KYC API 1"},
+        {"type": "ip", "value": "svr-10.4.1.160", "description": "KYC API 1"},
      ]},
 
-    # --- FRD (NH02, CDE) ---
-    {"name": "grp-FRD-NH02-CDE-APP", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+    # --- FRD: APP/DB/MQ in NH02/CDE, API in NH02/CCS ---
+    {"name": "grp-FRD-APP-NH02-CDE", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
      "description": "FRD Detection Engine", "members": [
-        {"type": "ip", "value": "svr-10.1.1.50", "description": "FRD Engine 1"},
-        {"type": "ip", "value": "svr-10.1.1.51", "description": "FRD Engine 2"},
+        {"type": "ip", "value": "svr-10.1.1.161", "description": "FRD Engine 1"},
+        {"type": "ip", "value": "svr-10.1.1.162", "description": "FRD Engine 2"},
      ]},
-    {"name": "grp-FRD-NH02-CDE-DB", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "DB",
-     "description": "FRD Database", "members": [
-        {"type": "ip", "value": "svr-10.1.2.20", "description": "FRD DB Primary"},
-        {"type": "ip", "value": "svr-10.1.2.21", "description": "FRD DB Standby"},
+    {"name": "grp-FRD-DB-NH02-CDE", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+     "description": "FRD Database (PCI CDE)", "members": [
+        {"type": "ip", "value": "svr-10.1.2.1", "description": "FRD DB Primary"},
+        {"type": "ip", "value": "svr-10.1.2.2", "description": "FRD DB Standby"},
      ]},
-    {"name": "grp-FRD-NH02-CDE-MQ", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-FRD-MQ-NH02-CDE", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "MQ",
      "description": "FRD Event Stream", "members": [
-        {"type": "ip", "value": "svr-10.1.1.55", "description": "FRD Kafka 1"},
-        {"type": "ip", "value": "svr-10.1.1.56", "description": "FRD Kafka 2"},
+        {"type": "ip", "value": "svr-10.1.1.176", "description": "FRD Kafka 1"},
+        {"type": "ip", "value": "svr-10.1.1.177", "description": "FRD Kafka 2"},
      ]},
-    {"name": "grp-FRD-NH02-CDE-API", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "API",
-     "description": "FRD API", "members": [
-        {"type": "ip", "value": "svr-10.1.1.60", "description": "FRD API 1"},
+    {"name": "grp-FRD-API-NH02-CCS", "app_id": "FRD", "nh": "NH02", "sz": "CCS", "subtype": "API",
+     "description": "FRD API (CCS zone)", "members": [
+        {"type": "ip", "value": "svr-10.1.1.1", "description": "FRD API 1"},
      ]},
 
-    # --- LND (NH09, CCS) ---
-    {"name": "grp-LND-NH09-CCS-WEB", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "WEB",
+    # --- LND: WEB/APP/BAT in NH09/GEN, DB in NH09/CCS ---
+    {"name": "grp-LND-WEB-NH09-GEN", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "WEB",
      "description": "LND Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.8.1.10", "description": "LND Web 1"},
+        {"type": "ip", "value": "svr-10.8.1.130", "description": "LND Web 1"},
      ]},
-    {"name": "grp-LND-NH09-CCS-APP", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "APP",
+    {"name": "grp-LND-APP-NH09-GEN", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "APP",
      "description": "LND Loan Engine", "members": [
-        {"type": "ip", "value": "svr-10.8.1.20", "description": "LND App 1"},
-        {"type": "ip", "value": "svr-10.8.1.21", "description": "LND App 2"},
+        {"type": "ip", "value": "svr-10.8.1.144", "description": "LND App 1"},
+        {"type": "ip", "value": "svr-10.8.1.145", "description": "LND App 2"},
      ]},
-    {"name": "grp-LND-NH09-CCS-DB", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "DB",
-     "description": "LND Database", "members": [
-        {"type": "ip", "value": "svr-10.8.1.30", "description": "LND DB Primary"},
+    {"name": "grp-LND-DB-NH09-CCS", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "DB",
+     "description": "LND Database (CCS zone)", "members": [
+        {"type": "ip", "value": "svr-10.8.1.1", "description": "LND DB Primary"},
      ]},
-    {"name": "grp-LND-NH09-CCS-BAT", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "BAT",
+    {"name": "grp-LND-BAT-NH09-GEN", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "BAT",
      "description": "LND Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.8.1.40", "description": "LND Batch 1"},
+        {"type": "ip", "value": "svr-10.8.1.160", "description": "LND Batch 1"},
      ]},
 
-    # --- WLT (NH10, CDE) ---
-    {"name": "grp-WLT-NH10-CDE-WEB", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "WEB",
-     "description": "WLT Web Interface", "members": [
-        {"type": "ip", "value": "svr-10.9.1.10", "description": "WLT Web 1"},
+    # --- WLT: WEB in NH14/PAA, APP/API in NH10/GEN, DB in NH10/CDE ---
+    {"name": "grp-WLT-WEB-NH14-PAA", "app_id": "WLT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+     "description": "WLT Web Interface (PAA zone)", "members": [
+        {"type": "ip", "value": "svr-10.70.1.100", "description": "WLT Web 1"},
      ]},
-    {"name": "grp-WLT-NH10-CDE-APP", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-WLT-APP-NH10-GEN", "app_id": "WLT", "nh": "NH10", "sz": "GEN", "subtype": "APP",
      "description": "WLT Portfolio Engine", "members": [
-        {"type": "ip", "value": "svr-10.9.1.20", "description": "WLT App 1"},
-        {"type": "ip", "value": "svr-10.9.1.21", "description": "WLT App 2"},
+        {"type": "ip", "value": "svr-10.9.1.130", "description": "WLT App 1"},
+        {"type": "ip", "value": "svr-10.9.1.131", "description": "WLT App 2"},
      ]},
-    {"name": "grp-WLT-NH10-CDE-DB", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "DB",
-     "description": "WLT Database", "members": [
-        {"type": "ip", "value": "svr-10.9.1.30", "description": "WLT DB Primary"},
-        {"type": "ip", "value": "svr-10.9.1.31", "description": "WLT DB Replica"},
+    {"name": "grp-WLT-DB-NH10-CDE", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "DB",
+     "description": "WLT Database (PCI CDE)", "members": [
+        {"type": "ip", "value": "svr-10.9.1.1", "description": "WLT DB Primary"},
+        {"type": "ip", "value": "svr-10.9.1.2", "description": "WLT DB Replica"},
      ]},
-    {"name": "grp-WLT-NH10-CDE-API", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "API",
+    {"name": "grp-WLT-API-NH10-GEN", "app_id": "WLT", "nh": "NH10", "sz": "GEN", "subtype": "API",
      "description": "WLT API", "members": [
-        {"type": "ip", "value": "svr-10.9.1.40", "description": "WLT API 1"},
+        {"type": "ip", "value": "svr-10.9.1.144", "description": "WLT API 1"},
      ]},
 
-    # --- CBK (NH08, CCS) ---
-    {"name": "grp-CBK-NH08-CCS-APP", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "APP",
+    # --- CBK: APP/MQ/API/BAT in NH08/CCS, DB in NH08/CDE ---
+    {"name": "grp-CBK-APP-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "APP",
      "description": "CBK Core Engine", "members": [
-        {"type": "ip", "value": "svr-10.7.1.10", "description": "CBK App 1"},
-        {"type": "ip", "value": "svr-10.7.1.11", "description": "CBK App 2"},
-        {"type": "ip", "value": "svr-10.7.1.12", "description": "CBK App 3"},
+        {"type": "ip", "value": "svr-10.7.1.1", "description": "CBK App 1"},
+        {"type": "ip", "value": "svr-10.7.1.2", "description": "CBK App 2"},
+        {"type": "ip", "value": "svr-10.7.1.3", "description": "CBK App 3"},
      ]},
-    {"name": "grp-CBK-NH08-CCS-DB", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "DB",
-     "description": "CBK Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK DB Primary"},
-        {"type": "ip", "value": "svr-10.7.1.21", "description": "CBK DB Standby"},
-        {"type": "ip", "value": "svr-10.7.1.22", "description": "CBK DB Archive"},
+    {"name": "grp-CBK-DB-NH08-CDE", "app_id": "CBK", "nh": "NH08", "sz": "CDE", "subtype": "DB",
+     "description": "CBK Database Cluster (PCI CDE)", "members": [
+        {"type": "ip", "value": "svr-10.7.1.129", "description": "CBK DB Primary"},
+        {"type": "ip", "value": "svr-10.7.1.130", "description": "CBK DB Standby"},
+        {"type": "ip", "value": "svr-10.7.1.131", "description": "CBK DB Archive"},
      ]},
-    {"name": "grp-CBK-NH08-CCS-MQ", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "MQ",
+    {"name": "grp-CBK-MQ-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "MQ",
      "description": "CBK Message Bus", "members": [
-        {"type": "ip", "value": "svr-10.7.1.30", "description": "CBK MQ 1"},
-        {"type": "ip", "value": "svr-10.7.1.31", "description": "CBK MQ 2"},
+        {"type": "ip", "value": "svr-10.7.1.16", "description": "CBK MQ 1"},
+        {"type": "ip", "value": "svr-10.7.1.17", "description": "CBK MQ 2"},
      ]},
-    {"name": "grp-CBK-NH08-CCS-API", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "API",
+    {"name": "grp-CBK-API-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "API",
      "description": "CBK API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.7.1.40", "description": "CBK API 1"},
+        {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK API 1"},
      ]},
-    {"name": "grp-CBK-NH08-CCS-BAT", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
+    {"name": "grp-CBK-BAT-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
      "description": "CBK Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.7.1.50", "description": "CBK Batch 1"},
-        {"type": "ip", "value": "svr-10.7.1.51", "description": "CBK Batch 2"},
+        {"type": "ip", "value": "svr-10.7.1.24", "description": "CBK Batch 1"},
      ]},
 
-    # --- EPT (NH01, PAA) - Enterprise Portal (PAA zone, internet-facing) ---
-    {"name": "grp-EPT-NH01-PAA-WEB", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "WEB",
-     "description": "EPT Web Frontend (PAA)", "members": [
-        {"type": "ip", "value": "svr-10.0.3.10", "description": "EPT Web 1"},
-        {"type": "ip", "value": "svr-10.0.3.11", "description": "EPT Web 2"},
+    # --- EPT: WEB in NH14/PAA, APP/API in NH01/CCS ---
+    {"name": "grp-EPT-WEB-NH14-PAA", "app_id": "EPT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+     "description": "EPT Web Frontend (PAA zone)", "members": [
+        {"type": "ip", "value": "svr-10.70.1.20", "description": "EPT Web 1"},
+        {"type": "ip", "value": "svr-10.70.1.21", "description": "EPT Web 2"},
      ]},
-    {"name": "grp-EPT-NH01-PAA-APP", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "APP",
-     "description": "EPT App Backend (PAA)", "members": [
-        {"type": "ip", "value": "svr-10.0.3.20", "description": "EPT App 1"},
-        {"type": "ip", "value": "svr-10.0.3.21", "description": "EPT App 2"},
+    {"name": "grp-EPT-APP-NH01-CCS", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "APP",
+     "description": "EPT App Backend (CCS zone)", "members": [
+        {"type": "ip", "value": "svr-10.0.1.1", "description": "EPT App 1"},
+        {"type": "ip", "value": "svr-10.0.1.2", "description": "EPT App 2"},
      ]},
-    {"name": "grp-EPT-NH01-PAA-API", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "API",
-     "description": "EPT API Gateway (PAA)", "members": [
-        {"type": "ip", "value": "svr-10.0.3.30", "description": "EPT API 1"},
+    {"name": "grp-EPT-API-NH01-CCS", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "API",
+     "description": "EPT API Gateway (CCS zone)", "members": [
+        {"type": "ip", "value": "svr-10.0.1.16", "description": "EPT API 1"},
      ]},
 
-    # --- MBK (NH07, CPA) - Mobile Banking ---
-    {"name": "grp-MBK-NH07-CPA-WEB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "WEB",
-     "description": "MBK Mobile Web", "members": [
-        {"type": "ip", "value": "svr-10.6.1.170", "description": "MBK Web 1"},
+    # --- MBK: WEB in NH14/PAA, APP/DB/API in NH07/CPA ---
+    {"name": "grp-MBK-WEB-NH14-PAA", "app_id": "MBK", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+     "description": "MBK Mobile Web (PAA zone)", "members": [
+        {"type": "ip", "value": "svr-10.70.1.50", "description": "MBK Web 1"},
      ]},
-    {"name": "grp-MBK-NH07-CPA-APP", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "APP",
+    {"name": "grp-MBK-APP-NH07-CPA", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "APP",
      "description": "MBK App Engine", "members": [
         {"type": "ip", "value": "svr-10.6.1.180", "description": "MBK App 1"},
         {"type": "ip", "value": "svr-10.6.1.181", "description": "MBK App 2"},
      ]},
-    {"name": "grp-MBK-NH07-CPA-DB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "DB",
+    {"name": "grp-MBK-DB-NH07-CPA", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "DB",
      "description": "MBK Database", "members": [
         {"type": "ip", "value": "svr-10.6.1.190", "description": "MBK DB Primary"},
      ]},
-    {"name": "grp-MBK-NH07-CPA-API", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "API",
+    {"name": "grp-MBK-API-NH07-CPA", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "API",
      "description": "MBK API Gateway", "members": [
         {"type": "ip", "value": "svr-10.6.1.200", "description": "MBK API 1"},
-     ]},
-
-    # --- MDW (NH11, CCS) - Middleware Hub ---
-    {"name": "grp-MDW-NH11-CCS-APP", "app_id": "MDW", "nh": "NH11", "sz": "CCS", "subtype": "APP",
-     "description": "MDW ESB Engine", "members": [
-        {"type": "ip", "value": "svr-10.10.1.10", "description": "MDW App 1"},
-        {"type": "ip", "value": "svr-10.10.1.11", "description": "MDW App 2"},
-     ]},
-    {"name": "grp-MDW-NH11-CCS-DB", "app_id": "MDW", "nh": "NH11", "sz": "CCS", "subtype": "DB",
-     "description": "MDW Config Database", "members": [
-        {"type": "ip", "value": "svr-10.10.1.20", "description": "MDW DB Primary"},
-     ]},
-    {"name": "grp-MDW-NH11-CCS-MQ", "app_id": "MDW", "nh": "NH11", "sz": "CCS", "subtype": "MQ",
-     "description": "MDW Message Bus", "members": [
-        {"type": "ip", "value": "svr-10.10.1.30", "description": "MDW MQ 1"},
-        {"type": "ip", "value": "svr-10.10.1.31", "description": "MDW MQ 2"},
-     ]},
-    {"name": "grp-MDW-NH11-CCS-API", "app_id": "MDW", "nh": "NH11", "sz": "CCS", "subtype": "API",
-     "description": "MDW API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.10.1.40", "description": "MDW API 1"},
-     ]},
-
-    # --- RAP (NH12, CDE) - Regulatory Reporting ---
-    {"name": "grp-RAP-NH12-CDE-WEB", "app_id": "RAP", "nh": "NH12", "sz": "CDE", "subtype": "WEB",
-     "description": "RAP Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.11.1.10", "description": "RAP Web 1"},
-     ]},
-    {"name": "grp-RAP-NH12-CDE-APP", "app_id": "RAP", "nh": "NH12", "sz": "CDE", "subtype": "APP",
-     "description": "RAP Report Engine", "members": [
-        {"type": "ip", "value": "svr-10.11.1.20", "description": "RAP App 1"},
-        {"type": "ip", "value": "svr-10.11.1.21", "description": "RAP App 2"},
-     ]},
-    {"name": "grp-RAP-NH12-CDE-DB", "app_id": "RAP", "nh": "NH12", "sz": "CDE", "subtype": "DB",
-     "description": "RAP Database", "members": [
-        {"type": "ip", "value": "svr-10.11.1.30", "description": "RAP DB Primary"},
-        {"type": "ip", "value": "svr-10.11.1.31", "description": "RAP DB Standby"},
-     ]},
-    {"name": "grp-RAP-NH12-CDE-BAT", "app_id": "RAP", "nh": "NH12", "sz": "CDE", "subtype": "BAT",
-     "description": "RAP Batch Reports", "members": [
-        {"type": "ip", "value": "svr-10.11.1.40", "description": "RAP Batch 1"},
-     ]},
-
-    # --- DWH (NH13, CCS) - Data Warehouse ---
-    {"name": "grp-DWH-NH13-CCS-APP", "app_id": "DWH", "nh": "NH13", "sz": "CCS", "subtype": "APP",
-     "description": "DWH ETL Engine", "members": [
-        {"type": "ip", "value": "svr-10.12.1.10", "description": "DWH App 1"},
-        {"type": "ip", "value": "svr-10.12.1.11", "description": "DWH App 2"},
-     ]},
-    {"name": "grp-DWH-NH13-CCS-DB", "app_id": "DWH", "nh": "NH13", "sz": "CCS", "subtype": "DB",
-     "description": "DWH Data Store", "members": [
-        {"type": "ip", "value": "svr-10.12.1.20", "description": "DWH DB Primary"},
-        {"type": "ip", "value": "svr-10.12.1.21", "description": "DWH DB Replica"},
-        {"type": "ip", "value": "svr-10.12.1.22", "description": "DWH DB Archive"},
-     ]},
-    {"name": "grp-DWH-NH13-CCS-BAT", "app_id": "DWH", "nh": "NH13", "sz": "CCS", "subtype": "BAT",
-     "description": "DWH Batch ETL", "members": [
-        {"type": "ip", "value": "svr-10.12.1.30", "description": "DWH Batch 1"},
-        {"type": "ip", "value": "svr-10.12.1.31", "description": "DWH Batch 2"},
-     ]},
-    {"name": "grp-DWH-NH13-CCS-API", "app_id": "DWH", "nh": "NH13", "sz": "CCS", "subtype": "API",
-     "description": "DWH Query API", "members": [
-        {"type": "ip", "value": "svr-10.12.1.40", "description": "DWH API 1"},
      ]},
 ]
 
@@ -1261,49 +1244,41 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
     seq = 1000
 
     # App configs: (app_id, name, dist_id, legacy_dc, envs_with_rules)
+    # Zone names use actual NGDC Security Zones: Production Fabric (STD, GEN, PAA, 3PY, CCS, CDE, CPA, Swift, PSE, UC)
+    # and Non-Production Fabric (UGen, USTD, UPAA, UCPA, UCDE, UCCS, U3PY)
     app_configs = [
         ("CRM", "Customer Relationship Manager", "AD-1001", "DC_LEGACY_A",
-         {"Production": ("pol-CRM-legacy", "LegacyFW-A", "Zone-A-Internal", "Zone-A-DB"),
-          "Non-Production": ("pol-CRM-np-legacy", "LegacyFW-A-NP", "Zone-A-Dev", "Zone-A-Dev-DB"),
-          "Pre-Production": ("pol-CRM-pp-legacy", "LegacyFW-A-PP", "Zone-A-STG", "Zone-A-STG-DB")}),
+         {"Production": ("pol-CRM-legacy", "LegacyFW-A", "STD", "GEN"),
+          "Non-Production": ("pol-CRM-np-legacy", "LegacyFW-A-NP", "USTD", "UGen"),
+          "Pre-Production": ("pol-CRM-pp-legacy", "LegacyFW-A-PP", "USTD", "UGen")}),
         ("HRM", "Human Resource Manager", "AD-1002", "DC_LEGACY_B",
-         {"Production": ("pol-HRM-legacy", "LegacyFW-B", "Zone-B-Internal", "Zone-B-DB"),
-          "Non-Production": ("pol-HRM-np-legacy", "LegacyFW-B-NP", "Zone-B-Dev", "Zone-B-Dev-DB")}),
+         {"Production": ("pol-HRM-legacy", "LegacyFW-B", "GEN", "STD"),
+          "Non-Production": ("pol-HRM-np-legacy", "LegacyFW-B-NP", "UGen", "USTD")}),
         ("TRD", "Trading Platform", "AD-1003", "DC_LEGACY_C",
-         {"Production": ("pol-TRD-legacy", "LegacyFW-C", "Zone-C-Trade", "Zone-C-Trade-DB"),
-          "Non-Production": ("pol-TRD-np-legacy", "LegacyFW-C-NP", "Zone-C-Dev", "Zone-C-Dev-DB"),
-          "Pre-Production": ("pol-TRD-pp-legacy", "LegacyFW-C-PP", "Zone-C-STG", "Zone-C-STG-DB")}),
+         {"Production": ("pol-TRD-legacy", "LegacyFW-C", "CDE", "CPA"),
+          "Non-Production": ("pol-TRD-np-legacy", "LegacyFW-C-NP", "UCDE", "UCPA"),
+          "Pre-Production": ("pol-TRD-pp-legacy", "LegacyFW-C-PP", "UCDE", "UCPA")}),
         ("PAY", "Payment Gateway", "AD-1004", "DC_LEGACY_A",
-         {"Production": ("pol-PAY-legacy", "LegacyFW-A", "Zone-A-Pay", "Zone-A-Pay-DB"),
-          "Pre-Production": ("pol-PAY-pp-legacy", "LegacyFW-A-PP", "Zone-A-STG-Pay", "Zone-A-STG-Pay-DB")}),
+         {"Production": ("pol-PAY-legacy", "LegacyFW-A", "CCS", "CDE"),
+          "Pre-Production": ("pol-PAY-pp-legacy", "LegacyFW-A-PP", "UCCS", "UCDE")}),
         ("INS", "Insurance Portal", "AD-1005", "DC_LEGACY_D",
-         {"Production": ("pol-INS-legacy", "LegacyFW-D", "Zone-D-Internal", "Zone-D-DB"),
-          "Non-Production": ("pol-INS-np-legacy", "LegacyFW-D-NP", "Zone-D-Dev", "Zone-D-Dev-DB")}),
+         {"Production": ("pol-INS-legacy", "LegacyFW-D", "STD", "PAA"),
+          "Non-Production": ("pol-INS-np-legacy", "LegacyFW-D-NP", "USTD", "UPAA")}),
         ("KYC", "KYC Compliance", "AD-1006", "DC_LEGACY_F",
-         {"Production": ("pol-KYC-legacy", "LegacyFW-F", "Zone-F-Internal", "Zone-F-DB"),
-          "Non-Production": ("pol-KYC-np-legacy", "LegacyFW-F-NP", "Zone-F-Dev", "Zone-F-Dev-DB")}),
+         {"Production": ("pol-KYC-legacy", "LegacyFW-F", "CCS", "CDE"),
+          "Non-Production": ("pol-KYC-np-legacy", "LegacyFW-F-NP", "UCCS", "UCDE")}),
         ("FRD", "Fraud Detection", "AD-1007", "DC_LEGACY_E",
-         {"Production": ("pol-FRD-legacy", "LegacyFW-E", "Zone-E-Internal", "Zone-E-DB")}),
+         {"Production": ("pol-FRD-legacy", "LegacyFW-E", "CDE", "Swift")}),
         ("LND", "Lending Platform", "AD-1008", "DC_LEGACY_D",
-         {"Production": ("pol-LND-legacy", "LegacyFW-D", "Zone-D-Lending", "Zone-D-Lending-DB"),
-          "Non-Production": ("pol-LND-np-legacy", "LegacyFW-D-NP", "Zone-D-Dev-Lend", "Zone-D-Dev-Lend-DB")}),
+         {"Production": ("pol-LND-legacy", "LegacyFW-D", "GEN", "CPA"),
+          "Non-Production": ("pol-LND-np-legacy", "LegacyFW-D-NP", "UGen", "UCPA")}),
         ("WLT", "Wealth Management", "AD-1009", "DC_LEGACY_B",
-         {"Production": ("pol-WLT-legacy", "LegacyFW-B", "Zone-B-Wealth", "Zone-B-Wealth-DB"),
-          "Pre-Production": ("pol-WLT-pp-legacy", "LegacyFW-B-PP", "Zone-B-STG-W", "Zone-B-STG-W-DB")}),
+         {"Production": ("pol-WLT-legacy", "LegacyFW-B", "PAA", "3PY"),
+          "Pre-Production": ("pol-WLT-pp-legacy", "LegacyFW-B-PP", "UPAA", "U3PY")}),
         ("CBK", "Core Banking", "AD-1010", "DC_LEGACY_A",
-         {"Production": ("pol-CBK-legacy", "LegacyFW-A", "Zone-A-Core", "Zone-A-Core-DB"),
-          "Non-Production": ("pol-CBK-np-legacy", "LegacyFW-A-NP", "Zone-A-Dev-Core", "Zone-A-Dev-Core-DB"),
-          "Pre-Production": ("pol-CBK-pp-legacy", "LegacyFW-A-PP", "Zone-A-STG-Core", "Zone-A-STG-Core-DB")}),
-        ("MDW", "Middleware Hub", "AD-1013", "DC_LEGACY_F",
-         {"Production": ("pol-MDW-legacy", "LegacyFW-F", "Zone-F-Middleware", "Zone-F-MW-DB"),
-          "Non-Production": ("pol-MDW-np-legacy", "LegacyFW-F-NP", "Zone-F-Dev-MW", "Zone-F-Dev-MW-DB")}),
-        ("RAP", "Regulatory Reporting", "AD-1014", "DC_LEGACY_D",
-         {"Production": ("pol-RAP-legacy", "LegacyFW-D", "Zone-D-Regulatory", "Zone-D-Reg-DB"),
-          "Non-Production": ("pol-RAP-np-legacy", "LegacyFW-D-NP", "Zone-D-Dev-Reg", "Zone-D-Dev-Reg-DB"),
-          "Pre-Production": ("pol-RAP-pp-legacy", "LegacyFW-D-PP", "Zone-D-STG-Reg", "Zone-D-STG-Reg-DB")}),
-        ("DWH", "Data Warehouse", "AD-1015", "DC_LEGACY_B",
-         {"Production": ("pol-DWH-legacy", "LegacyFW-B", "Zone-B-DWH", "Zone-B-DWH-DB"),
-          "Non-Production": ("pol-DWH-np-legacy", "LegacyFW-B-NP", "Zone-B-Dev-DWH", "Zone-B-Dev-DWH-DB")}),
+         {"Production": ("pol-CBK-legacy", "LegacyFW-A", "CPA", "CDE"),
+          "Non-Production": ("pol-CBK-np-legacy", "LegacyFW-A-NP", "UCPA", "UCDE"),
+          "Pre-Production": ("pol-CBK-pp-legacy", "LegacyFW-A-PP", "UCPA", "UCDE")}),
     ]
 
     # IP base per legacy DC
@@ -1320,10 +1295,10 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": False, "rule_action": "Accept",
-                "rule_source": f"{base}.1.10\n{base}.1.11",
+                "rule_source": f"svr-{base}.1.10\nsvr-{base}.1.11",
                 "rule_source_expanded": f"svr-{base}.1.10\n  {base}.1.10 (Web Server 1)\nsvr-{base}.1.11\n  {base}.1.11 (Web Server 2)",
                 "rule_source_zone": src_zone,
-                "rule_destination": f"{base}.2.10\n{base}.2.11\n{base}.2.12",
+                "rule_destination": f"svr-{base}.2.10\nsvr-{base}.2.11\nsvr-{base}.2.12",
                 "rule_destination_expanded": f"svr-{base}.2.10\n  {base}.2.10 (App Server 1)\nsvr-{base}.2.11\n  {base}.2.11 (App Server 2)\nsvr-{base}.2.12\n  {base}.2.12 (App Server 3)",
                 "rule_destination_zone": dst_zone,
                 "rule_service": "tcp/443",
@@ -1338,10 +1313,10 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": False, "rule_action": "Accept",
-                "rule_source": f"{base}.2.10\n{base}.2.11\n{base}.2.12",
+                "rule_source": f"svr-{base}.2.10\nsvr-{base}.2.11\nsvr-{base}.2.12",
                 "rule_source_expanded": f"svr-{base}.2.10\n  {base}.2.10 (App 1)\nsvr-{base}.2.11\n  {base}.2.11 (App 2)\nsvr-{base}.2.12\n  {base}.2.12 (App 3)",
                 "rule_source_zone": src_zone,
-                "rule_destination": f"{base}.3.10\n{base}.3.11",
+                "rule_destination": f"svr-{base}.3.10\nsvr-{base}.3.11",
                 "rule_destination_expanded": f"svr-{base}.3.10\n  {base}.3.10 (DB Primary)\nsvr-{base}.3.11\n  {base}.3.11 (DB Standby)",
                 "rule_destination_zone": dst_zone,
                 "rule_service": "tcp/1521\ntcp/1433",
@@ -1350,17 +1325,17 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "migration_status": "Not Started",
             })
             # Rule 3: APP -> MQ (if app has MQ)
-            if app_id in ("TRD", "PAY", "FRD", "CBK", "MDW"):
+            if app_id in ("TRD", "PAY", "FRD", "CBK"):
                 seq += 1
                 rules.append({
                     "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
                     "app_name": app_name, "inventory_item": inventory,
                     "policy_name": policy, "environment": env_name,
                     "rule_global": False, "rule_action": "Accept",
-                    "rule_source": f"{base}.2.10\n{base}.2.11",
+                    "rule_source": f"svr-{base}.2.10\nsvr-{base}.2.11",
                     "rule_source_expanded": f"svr-{base}.2.10\n  App 1\nsvr-{base}.2.11\n  App 2",
                     "rule_source_zone": src_zone,
-                    "rule_destination": f"{base}.4.10\n{base}.4.11",
+                    "rule_destination": f"svr-{base}.4.10\nsvr-{base}.4.11",
                     "rule_destination_expanded": f"svr-{base}.4.10\n  MQ Broker 1\nsvr-{base}.4.11\n  MQ Broker 2",
                     "rule_destination_zone": dst_zone,
                     "rule_service": "tcp/5672\ntcp/9092",
@@ -1375,29 +1350,29 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": False, "rule_action": "Accept",
-                "rule_source": f"{base}.2.10",
+                "rule_source": f"svr-{base}.2.10",
                 "rule_source_expanded": f"svr-{base}.2.10\n  App Server 1",
                 "rule_source_zone": src_zone,
-                "rule_destination": f"10.70.1.10\n10.70.1.11",
+                "rule_destination": "svr-10.70.1.10\nsvr-10.70.1.11",
                 "rule_destination_expanded": "svr-10.70.1.10\n  DMZ API 1\nsvr-10.70.1.11\n  DMZ API 2",
-                "rule_destination_zone": "Zone-DMZ",
+                "rule_destination_zone": "PSE",
                 "rule_service": "tcp/443\ntcp/8443",
                 "rule_service_expanded": "tcp/443 (HTTPS)\ntcp/8443 (Alt HTTPS)",
                 "is_standard": False, "rn": 4, "rc": 1,
                 "migration_status": "Not Started",
             })
             # Rule 5: Batch -> DB
-            if app_id in ("CRM", "HRM", "TRD", "INS", "LND", "CBK", "RAP", "DWH"):
+            if app_id in ("CRM", "HRM", "TRD", "INS", "LND", "CBK"):
                 seq += 1
                 rules.append({
                     "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
                     "app_name": app_name, "inventory_item": inventory,
                     "policy_name": policy, "environment": env_name,
                     "rule_global": False, "rule_action": "Accept",
-                    "rule_source": f"{base}.5.10",
+                    "rule_source": f"svr-{base}.5.10",
                     "rule_source_expanded": f"svr-{base}.5.10\n  Batch Server 1",
                     "rule_source_zone": src_zone,
-                    "rule_destination": f"{base}.3.10",
+                    "rule_destination": f"svr-{base}.3.10",
                     "rule_destination_expanded": f"svr-{base}.3.10\n  DB Primary",
                     "rule_destination_zone": dst_zone,
                     "rule_service": "tcp/1521",
@@ -1412,10 +1387,10 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": True, "rule_action": "Accept",
-                "rule_source": f"10.80.1.100\n10.80.1.101",
+                "rule_source": "svr-10.80.1.100\nsvr-10.80.1.101",
                 "rule_source_expanded": "svr-10.80.1.100\n  Monitor Agent 1\nsvr-10.80.1.101\n  Monitor Agent 2",
-                "rule_source_zone": "Zone-MGT",
-                "rule_destination": f"{base}.1.10\n{base}.2.10\n{base}.3.10",
+                "rule_source_zone": "UC",
+                "rule_destination": f"rng-{base}.1.10-12\nsvr-{base}.3.10",
                 "rule_destination_expanded": f"rng-{base}.1.10-12\n  Web/App range\nsvr-{base}.3.10\n  DB Primary",
                 "rule_destination_zone": dst_zone,
                 "rule_service": "tcp/161\ntcp/22\ntcp/10050",
@@ -1434,144 +1409,224 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
 SEED_IP_MAPPINGS: list[dict[str, Any]] = []
 
 def _build_ip_mappings() -> list[dict[str, Any]]:
-    """Build comprehensive app-based IP mappings."""
+    """Build comprehensive app-based IP mappings covering ALL legacy rule IPs.
+
+    Each legacy rule has source and destination IPs that may map to DIFFERENT
+    NGDC zones/NHs.  We provide separate source-side and destination-side
+    mappings so that `_lookup_ngdc_ip` can resolve every IP used in seed rules.
+
+    Legacy rule IP pattern per app (base = dc_ip[legacy_dc]):
+      Rule 1 WEB→APP : src {base}.1.10/.11     dst {base}.2.10/.11/.12
+      Rule 2 APP→DB  : src {base}.2.10/.11/.12  dst {base}.3.10/.11
+      Rule 3 APP→MQ  : src {base}.2.10/.11      dst {base}.4.10/.11
+      Rule 4 APP→Ext : src {base}.2.10           dst 10.70.1.10/.11 (PSE)
+      Rule 5 BAT→DB  : src {base}.5.10           dst {base}.3.10
+      Rule 6 MON→ALL : src 10.80.1.100/.101 (UC) dst rng-{base}.1.10-12, svr-{base}.3.10
+    """
     mappings: list[dict[str, Any]] = []
     idx = 0
 
-    # Mapping config: (app_id, legacy_dc, ngdc_dc, nh, sz, legacy_base, ngdc_entries)
-    # Each entry: (legacy_ip, ngdc_ip, ngdc_group, description) — 1-1 IP mapping
+    # Full mapping config per app.
+    # Each entry: (app_id, legacy_dc, ngdc_dc, entries_list)
+    # entries_list items: (legacy_ip, ngdc_ip, ngdc_group, desc, nh, sz)
     mapping_configs = [
-        # CRM: DC_LEGACY_A -> GAMMA_NGDC
-        ("CRM", "DC_LEGACY_A", "GAMMA_NGDC", "NH02", "CDE", "10.25", [
-            ("10.25.1.10", "svr-10.50.1.10", "grp-CRM-NH02-CDE-WEB", "CRM Web 1"),
-            ("10.25.1.11", "svr-10.50.1.11", "grp-CRM-NH02-CDE-WEB", "CRM Web 2"),
-            ("10.25.2.10", "svr-10.50.1.20", "grp-CRM-NH02-CDE-APP", "CRM App 1"),
-            ("10.25.2.11", "svr-10.50.1.21", "grp-CRM-NH02-CDE-APP", "CRM App 2"),
-            ("10.25.2.12", "svr-10.50.1.22", "grp-CRM-NH02-CDE-APP", "CRM App 3"),
-            ("10.25.3.10", "svr-10.50.1.30", "grp-CRM-NH02-CDE-DB", "CRM DB Primary"),
-            ("10.25.3.11", "svr-10.50.1.31", "grp-CRM-NH02-CDE-DB", "CRM DB Standby"),
-            ("10.25.5.10", "svr-10.50.1.40", "grp-CRM-NH02-CDE-BAT", "CRM Batch 1"),
+        # ================================================================
+        # CRM: DC_LEGACY_A, src_zone=STD, dst_zone=GEN
+        # Source side: NH02/STD (CRM WEB/APP/BAT), Destination side: NH02/GEN
+        # ================================================================
+        ("CRM", "DC_LEGACY_A", "GAMMA_NGDC", [
+            # Source IPs (STD zone)
+            ("10.25.1.10", "svr-10.50.1.10", "grp-CRM-NH02-STD-WEB", "CRM Web 1", "NH02", "STD"),
+            ("10.25.1.11", "svr-10.50.1.11", "grp-CRM-NH02-STD-WEB", "CRM Web 2", "NH02", "STD"),
+            ("10.25.2.10", "svr-10.50.1.20", "grp-CRM-NH02-STD-APP", "CRM App 1", "NH02", "STD"),
+            ("10.25.2.11", "svr-10.50.1.21", "grp-CRM-NH02-STD-APP", "CRM App 2", "NH02", "STD"),
+            ("10.25.2.12", "svr-10.50.1.22", "grp-CRM-NH02-STD-APP", "CRM App 3", "NH02", "STD"),
+            ("10.25.5.10", "svr-10.50.1.40", "grp-CRM-NH02-STD-BAT", "CRM Batch 1", "NH02", "STD"),
+            # Destination IPs (GEN zone)
+            ("10.25.3.10", "svr-10.50.1.30", "grp-CRM-NH02-GEN-DB", "CRM DB Primary", "NH02", "GEN"),
+            ("10.25.3.11", "svr-10.50.1.31", "grp-CRM-NH02-GEN-DB", "CRM DB Standby", "NH02", "GEN"),
+            ("10.25.4.10", "svr-10.50.1.42", "grp-CRM-NH02-GEN-MQ", "CRM MQ 1", "NH02", "GEN"),
+            ("10.25.4.11", "svr-10.50.1.43", "grp-CRM-NH02-GEN-MQ", "CRM MQ 2", "NH02", "GEN"),
         ]),
-        # HRM: DC_LEGACY_B -> ALPHA_NGDC
-        ("HRM", "DC_LEGACY_B", "ALPHA_NGDC", "NH01", "GEN", "10.26", [
-            ("10.26.1.10", "svr-10.0.2.130", "grp-HRM-NH01-GEN-WEB", "HRM Web 1"),
-            ("10.26.1.11", "svr-10.0.2.131", "grp-HRM-NH01-GEN-WEB", "HRM Web 2"),
-            ("10.26.2.10", "svr-10.0.2.140", "grp-HRM-NH01-GEN-APP", "HRM App 1"),
-            ("10.26.2.11", "svr-10.0.2.141", "grp-HRM-NH01-GEN-APP", "HRM App 2"),
-            ("10.26.3.10", "svr-10.0.2.150", "grp-HRM-NH01-GEN-DB", "HRM DB Primary"),
-            ("10.26.3.11", "svr-10.0.2.151", "grp-HRM-NH01-GEN-DB", "HRM DB Replica"),
-            ("10.26.5.10", "svr-10.0.2.160", "grp-HRM-NH01-GEN-BAT", "HRM Batch 1"),
+        # ================================================================
+        # HRM: DC_LEGACY_B, src_zone=GEN, dst_zone=STD
+        # Source side: NH01/GEN, Destination side: NH01/STD
+        # ================================================================
+        ("HRM", "DC_LEGACY_B", "ALPHA_NGDC", [
+            # Source IPs (GEN zone)
+            ("10.26.1.10", "svr-10.0.2.130", "grp-HRM-NH01-GEN-WEB", "HRM Web 1", "NH01", "GEN"),
+            ("10.26.1.11", "svr-10.0.2.131", "grp-HRM-NH01-GEN-WEB", "HRM Web 2", "NH01", "GEN"),
+            ("10.26.2.10", "svr-10.0.2.140", "grp-HRM-NH01-GEN-APP", "HRM App 1", "NH01", "GEN"),
+            ("10.26.2.11", "svr-10.0.2.141", "grp-HRM-NH01-GEN-APP", "HRM App 2", "NH01", "GEN"),
+            ("10.26.2.12", "svr-10.0.2.142", "grp-HRM-NH01-GEN-APP", "HRM App 3", "NH01", "GEN"),
+            ("10.26.5.10", "svr-10.0.2.160", "grp-HRM-NH01-GEN-BAT", "HRM Batch 1", "NH01", "GEN"),
+            # Destination IPs (STD zone)
+            ("10.26.3.10", "svr-10.0.2.150", "grp-HRM-NH01-STD-DB", "HRM DB Primary", "NH01", "STD"),
+            ("10.26.3.11", "svr-10.0.2.151", "grp-HRM-NH01-STD-DB", "HRM DB Replica", "NH01", "STD"),
+            ("10.26.4.10", "svr-10.0.2.162", "grp-HRM-NH01-STD-MQ", "HRM MQ 1", "NH01", "STD"),
+            ("10.26.4.11", "svr-10.0.2.163", "grp-HRM-NH01-STD-MQ", "HRM MQ 2", "NH01", "STD"),
         ]),
-        # TRD: DC_LEGACY_C -> BETA_NGDC
-        ("TRD", "DC_LEGACY_C", "BETA_NGDC", "NH06", "CDE", "10.27", [
-            ("10.27.1.10", "svr-172.16.20.10", "grp-TRD-NH06-CDE-WEB", "TRD Web 1"),
-            ("10.27.1.11", "svr-172.16.20.11", "grp-TRD-NH06-CDE-WEB", "TRD Web 2"),
-            ("10.27.2.10", "svr-172.16.20.20", "grp-TRD-NH06-CDE-APP", "TRD App 1"),
-            ("10.27.2.11", "svr-172.16.20.21", "grp-TRD-NH06-CDE-APP", "TRD App 2"),
-            ("10.27.3.10", "svr-172.16.20.30", "grp-TRD-NH06-CDE-DB", "TRD DB Primary"),
-            ("10.27.3.11", "svr-172.16.20.31", "grp-TRD-NH06-CDE-DB", "TRD DB Standby"),
-            ("10.27.4.10", "svr-172.16.20.40", "grp-TRD-NH06-CDE-MQ", "TRD MQ 1"),
+        # ================================================================
+        # TRD: DC_LEGACY_C, src_zone=CDE, dst_zone=CPA
+        # Source side: NH06/CDE, Destination side: NH07/CPA
+        # ================================================================
+        ("TRD", "DC_LEGACY_C", "BETA_NGDC", [
+            # Source IPs (CDE zone, NH06)
+            ("10.27.1.10", "svr-172.16.20.10", "grp-TRD-NH06-CDE-WEB", "TRD Web 1", "NH06", "CDE"),
+            ("10.27.1.11", "svr-172.16.20.11", "grp-TRD-NH06-CDE-WEB", "TRD Web 2", "NH06", "CDE"),
+            ("10.27.2.10", "svr-172.16.20.20", "grp-TRD-NH06-CDE-APP", "TRD App 1", "NH06", "CDE"),
+            ("10.27.2.11", "svr-172.16.20.21", "grp-TRD-NH06-CDE-APP", "TRD App 2", "NH06", "CDE"),
+            ("10.27.2.12", "svr-172.16.20.22", "grp-TRD-NH06-CDE-APP", "TRD App 3", "NH06", "CDE"),
+            ("10.27.5.10", "svr-172.16.20.50", "grp-TRD-NH06-CDE-BAT", "TRD Batch 1", "NH06", "CDE"),
+            # Destination IPs (CPA zone, NH07)
+            ("10.27.3.10", "svr-10.6.1.30", "grp-TRD-NH07-CPA-DB", "TRD DB Primary", "NH07", "CPA"),
+            ("10.27.3.11", "svr-10.6.1.31", "grp-TRD-NH07-CPA-DB", "TRD DB Standby", "NH07", "CPA"),
+            ("10.27.4.10", "svr-10.6.1.40", "grp-TRD-NH07-CPA-MQ", "TRD MQ Broker 1", "NH07", "CPA"),
+            ("10.27.4.11", "svr-10.6.1.41", "grp-TRD-NH07-CPA-MQ", "TRD MQ Broker 2", "NH07", "CPA"),
         ]),
-        # PAY: DC_LEGACY_A -> GAMMA_NGDC
-        ("PAY", "DC_LEGACY_A", "GAMMA_NGDC", "NH07", "CPA", "10.25", [
-            ("10.25.10.10", "svr-10.50.6.130", "grp-PAY-NH07-CPA-APP", "PAY App 1"),
-            ("10.25.10.11", "svr-10.50.6.131", "grp-PAY-NH07-CPA-APP", "PAY App 2"),
-            ("10.25.11.10", "svr-10.50.6.150", "grp-PAY-NH07-CPA-DB", "PAY DB Primary"),
-            ("10.25.12.10", "svr-10.50.6.160", "grp-PAY-NH07-CPA-MQ", "PAY MQ 1"),
+        # ================================================================
+        # PAY: DC_LEGACY_A, src_zone=CCS, dst_zone=CDE
+        # Source side: NH08/CCS, Destination side: NH07/CDE
+        # ================================================================
+        ("PAY", "DC_LEGACY_A", "GAMMA_NGDC", [
+            # Source IPs (CCS zone, NH08)
+            ("10.25.1.10", "svr-10.50.8.10", "grp-PAY-NH08-CCS-WEB", "PAY Web 1", "NH08", "CCS"),
+            ("10.25.1.11", "svr-10.50.8.11", "grp-PAY-NH08-CCS-WEB", "PAY Web 2", "NH08", "CCS"),
+            ("10.25.2.10", "svr-10.50.8.20", "grp-PAY-NH08-CCS-APP", "PAY App 1", "NH08", "CCS"),
+            ("10.25.2.11", "svr-10.50.8.21", "grp-PAY-NH08-CCS-APP", "PAY App 2", "NH08", "CCS"),
+            ("10.25.2.12", "svr-10.50.8.22", "grp-PAY-NH08-CCS-APP", "PAY App 3", "NH08", "CCS"),
+            # Destination IPs (CDE zone, NH07)
+            ("10.25.3.10", "svr-10.50.7.30", "grp-PAY-NH07-CDE-DB", "PAY DB Primary", "NH07", "CDE"),
+            ("10.25.3.11", "svr-10.50.7.31", "grp-PAY-NH07-CDE-DB", "PAY DB Standby", "NH07", "CDE"),
+            ("10.25.4.10", "svr-10.50.7.40", "grp-PAY-NH07-CDE-MQ", "PAY MQ 1", "NH07", "CDE"),
+            ("10.25.4.11", "svr-10.50.7.41", "grp-PAY-NH07-CDE-MQ", "PAY MQ 2", "NH07", "CDE"),
+            ("10.25.5.10", "svr-10.50.8.50", "grp-PAY-NH08-CCS-BAT", "PAY Batch 1", "NH08", "CCS"),
         ]),
-        # INS: DC_LEGACY_D -> ALPHA_NGDC
-        ("INS", "DC_LEGACY_D", "ALPHA_NGDC", "NH04", "GEN", "10.28", [
-            ("10.28.1.10", "svr-10.3.1.130", "grp-INS-NH04-GEN-WEB", "INS Web 1"),
-            ("10.28.1.11", "svr-10.3.1.131", "grp-INS-NH04-GEN-WEB", "INS Web 2"),
-            ("10.28.2.10", "svr-10.3.1.140", "grp-INS-NH04-GEN-APP", "INS App 1"),
-            ("10.28.3.10", "svr-10.3.1.150", "grp-INS-NH04-GEN-DB", "INS DB Primary"),
-            ("10.28.5.10", "svr-10.3.1.160", "grp-INS-NH04-GEN-BAT", "INS Batch 1"),
+        # ================================================================
+        # INS: DC_LEGACY_D, src_zone=STD, dst_zone=PAA
+        # Source side: NH04/STD, Destination side: NH14/PAA
+        # ================================================================
+        ("INS", "DC_LEGACY_D", "ALPHA_NGDC", [
+            # Source IPs (STD zone, NH04)
+            ("10.28.1.10", "svr-10.3.1.130", "grp-INS-NH04-STD-WEB", "INS Web 1", "NH04", "STD"),
+            ("10.28.1.11", "svr-10.3.1.131", "grp-INS-NH04-STD-WEB", "INS Web 2", "NH04", "STD"),
+            ("10.28.2.10", "svr-10.3.1.140", "grp-INS-NH04-STD-APP", "INS App 1", "NH04", "STD"),
+            ("10.28.2.11", "svr-10.3.1.141", "grp-INS-NH04-STD-APP", "INS App 2", "NH04", "STD"),
+            ("10.28.2.12", "svr-10.3.1.142", "grp-INS-NH04-STD-APP", "INS App 3", "NH04", "STD"),
+            ("10.28.5.10", "svr-10.3.1.160", "grp-INS-NH04-STD-BAT", "INS Batch 1", "NH04", "STD"),
+            # Destination IPs (PAA zone, NH14)
+            ("10.28.3.10", "svr-10.70.4.30", "grp-INS-NH14-PAA-DB", "INS DB Primary", "NH14", "PAA"),
+            ("10.28.3.11", "svr-10.70.4.31", "grp-INS-NH14-PAA-DB", "INS DB Standby", "NH14", "PAA"),
+            ("10.28.4.10", "svr-10.70.4.40", "grp-INS-NH14-PAA-MQ", "INS MQ 1", "NH14", "PAA"),
+            ("10.28.4.11", "svr-10.70.4.41", "grp-INS-NH14-PAA-MQ", "INS MQ 2", "NH14", "PAA"),
         ]),
-        # KYC: DC_LEGACY_F -> ALPHA_NGDC
-        ("KYC", "DC_LEGACY_F", "ALPHA_NGDC", "NH05", "GEN", "10.30", [
-            ("10.30.1.10", "svr-10.4.1.130", "grp-KYC-NH05-GEN-WEB", "KYC Web 1"),
-            ("10.30.2.10", "svr-10.4.1.140", "grp-KYC-NH05-GEN-APP", "KYC App 1"),
-            ("10.30.2.11", "svr-10.4.1.141", "grp-KYC-NH05-GEN-APP", "KYC App 2"),
-            ("10.30.3.10", "svr-10.4.2.10", "grp-KYC-NH05-GEN-DB", "KYC DB Primary"),
+        # ================================================================
+        # KYC: DC_LEGACY_F, src_zone=CCS, dst_zone=CDE
+        # Source side: NH05/CCS, Destination side: NH05/CDE
+        # ================================================================
+        ("KYC", "DC_LEGACY_F", "ALPHA_NGDC", [
+            # Source IPs (CCS zone, NH05)
+            ("10.30.1.10", "svr-10.4.1.130", "grp-KYC-NH05-CCS-WEB", "KYC Web 1", "NH05", "CCS"),
+            ("10.30.1.11", "svr-10.4.1.131", "grp-KYC-NH05-CCS-WEB", "KYC Web 2", "NH05", "CCS"),
+            ("10.30.2.10", "svr-10.4.1.140", "grp-KYC-NH05-CCS-APP", "KYC App 1", "NH05", "CCS"),
+            ("10.30.2.11", "svr-10.4.1.141", "grp-KYC-NH05-CCS-APP", "KYC App 2", "NH05", "CCS"),
+            ("10.30.2.12", "svr-10.4.1.142", "grp-KYC-NH05-CCS-APP", "KYC App 3", "NH05", "CCS"),
+            # Destination IPs (CDE zone, NH05)
+            ("10.30.3.10", "svr-10.4.2.10", "grp-KYC-NH05-CDE-DB", "KYC DB Primary", "NH05", "CDE"),
+            ("10.30.3.11", "svr-10.4.2.11", "grp-KYC-NH05-CDE-DB", "KYC DB Standby", "NH05", "CDE"),
+            ("10.30.4.10", "svr-10.4.2.20", "grp-KYC-NH05-CDE-MQ", "KYC MQ 1", "NH05", "CDE"),
+            ("10.30.4.11", "svr-10.4.2.21", "grp-KYC-NH05-CDE-MQ", "KYC MQ 2", "NH05", "CDE"),
+            ("10.30.5.10", "svr-10.4.1.160", "grp-KYC-NH05-CCS-BAT", "KYC Batch 1", "NH05", "CCS"),
         ]),
-        # FRD: DC_LEGACY_E -> ALPHA_NGDC
-        ("FRD", "DC_LEGACY_E", "ALPHA_NGDC", "NH02", "CDE", "10.29", [
-            ("10.29.2.10", "svr-10.1.1.50", "grp-FRD-NH02-CDE-APP", "FRD Engine 1"),
-            ("10.29.2.11", "svr-10.1.1.51", "grp-FRD-NH02-CDE-APP", "FRD Engine 2"),
-            ("10.29.3.10", "svr-10.1.2.20", "grp-FRD-NH02-CDE-DB", "FRD DB Primary"),
-            ("10.29.4.10", "svr-10.1.1.55", "grp-FRD-NH02-CDE-MQ", "FRD Kafka 1"),
+        # ================================================================
+        # FRD: DC_LEGACY_E, src_zone=CDE, dst_zone=Swift
+        # Source side: NH02/CDE, Destination side: NH02/Swift
+        # ================================================================
+        ("FRD", "DC_LEGACY_E", "ALPHA_NGDC", [
+            # Source IPs (CDE zone, NH02)
+            ("10.29.1.10", "svr-10.1.1.110", "grp-FRD-NH02-CDE-WEB", "FRD Web 1", "NH02", "CDE"),
+            ("10.29.1.11", "svr-10.1.1.111", "grp-FRD-NH02-CDE-WEB", "FRD Web 2", "NH02", "CDE"),
+            ("10.29.2.10", "svr-10.1.1.50", "grp-FRD-NH02-CDE-APP", "FRD Engine 1", "NH02", "CDE"),
+            ("10.29.2.11", "svr-10.1.1.51", "grp-FRD-NH02-CDE-APP", "FRD Engine 2", "NH02", "CDE"),
+            ("10.29.2.12", "svr-10.1.1.52", "grp-FRD-NH02-CDE-APP", "FRD Engine 3", "NH02", "CDE"),
+            ("10.29.5.10", "svr-10.1.1.60", "grp-FRD-NH02-CDE-BAT", "FRD Batch 1", "NH02", "CDE"),
+            # Destination IPs (Swift zone, NH02)
+            ("10.29.3.10", "svr-10.1.2.20", "grp-FRD-NH02-Swift-DB", "FRD DB Primary", "NH02", "Swift"),
+            ("10.29.3.11", "svr-10.1.2.21", "grp-FRD-NH02-Swift-DB", "FRD DB Standby", "NH02", "Swift"),
+            ("10.29.4.10", "svr-10.1.1.55", "grp-FRD-NH02-Swift-MQ", "FRD Kafka 1", "NH02", "Swift"),
+            ("10.29.4.11", "svr-10.1.1.56", "grp-FRD-NH02-Swift-MQ", "FRD Kafka 2", "NH02", "Swift"),
         ]),
-        # LND: DC_LEGACY_D -> ALPHA_NGDC
-        ("LND", "DC_LEGACY_D", "ALPHA_NGDC", "NH09", "CCS", "10.28", [
-            ("10.28.10.10", "svr-10.8.1.10", "grp-LND-NH09-CCS-WEB", "LND Web 1"),
-            ("10.28.11.10", "svr-10.8.1.20", "grp-LND-NH09-CCS-APP", "LND App 1"),
-            ("10.28.12.10", "svr-10.8.1.30", "grp-LND-NH09-CCS-DB", "LND DB Primary"),
-            ("10.28.13.10", "svr-10.8.1.40", "grp-LND-NH09-CCS-BAT", "LND Batch 1"),
+        # ================================================================
+        # LND: DC_LEGACY_D, src_zone=GEN, dst_zone=CPA
+        # Source side: NH09/GEN, Destination side: NH09/CPA
+        # ================================================================
+        ("LND", "DC_LEGACY_D", "ALPHA_NGDC", [
+            # Source IPs (GEN zone, NH09)
+            ("10.28.1.10", "svr-10.8.1.130", "grp-LND-NH09-GEN-WEB", "LND Web 1", "NH09", "GEN"),
+            ("10.28.1.11", "svr-10.8.1.131", "grp-LND-NH09-GEN-WEB", "LND Web 2", "NH09", "GEN"),
+            ("10.28.2.10", "svr-10.8.1.140", "grp-LND-NH09-GEN-APP", "LND App 1", "NH09", "GEN"),
+            ("10.28.2.11", "svr-10.8.1.141", "grp-LND-NH09-GEN-APP", "LND App 2", "NH09", "GEN"),
+            ("10.28.2.12", "svr-10.8.1.142", "grp-LND-NH09-GEN-APP", "LND App 3", "NH09", "GEN"),
+            ("10.28.5.10", "svr-10.8.1.160", "grp-LND-NH09-GEN-BAT", "LND Batch 1", "NH09", "GEN"),
+            # Destination IPs (CPA zone, NH09)
+            ("10.28.3.10", "svr-10.8.2.30", "grp-LND-NH09-CPA-DB", "LND DB Primary", "NH09", "CPA"),
+            ("10.28.3.11", "svr-10.8.2.31", "grp-LND-NH09-CPA-DB", "LND DB Standby", "NH09", "CPA"),
+            ("10.28.4.10", "svr-10.8.2.40", "grp-LND-NH09-CPA-MQ", "LND MQ 1", "NH09", "CPA"),
+            ("10.28.4.11", "svr-10.8.2.41", "grp-LND-NH09-CPA-MQ", "LND MQ 2", "NH09", "CPA"),
         ]),
-        # WLT: DC_LEGACY_B -> ALPHA_NGDC
-        ("WLT", "DC_LEGACY_B", "ALPHA_NGDC", "NH10", "CDE", "10.26", [
-            ("10.26.10.10", "svr-10.9.1.10", "grp-WLT-NH10-CDE-WEB", "WLT Web 1"),
-            ("10.26.11.10", "svr-10.9.1.20", "grp-WLT-NH10-CDE-APP", "WLT App 1"),
-            ("10.26.11.11", "svr-10.9.1.21", "grp-WLT-NH10-CDE-APP", "WLT App 2"),
-            ("10.26.12.10", "svr-10.9.1.30", "grp-WLT-NH10-CDE-DB", "WLT DB Primary"),
+        # ================================================================
+        # WLT: DC_LEGACY_B, src_zone=PAA, dst_zone=3PY
+        # Source side: NH14/PAA, Destination side: NH10/3PY
+        # ================================================================
+        ("WLT", "DC_LEGACY_B", "ALPHA_NGDC", [
+            # Source IPs (PAA zone, NH14)
+            ("10.26.1.10", "svr-10.70.1.100", "grp-WLT-NH14-PAA-WEB", "WLT Web 1", "NH14", "PAA"),
+            ("10.26.1.11", "svr-10.70.1.101", "grp-WLT-NH14-PAA-WEB", "WLT Web 2", "NH14", "PAA"),
+            ("10.26.2.10", "svr-10.9.1.20", "grp-WLT-NH10-PAA-APP", "WLT App 1", "NH10", "PAA"),
+            ("10.26.2.11", "svr-10.9.1.21", "grp-WLT-NH10-PAA-APP", "WLT App 2", "NH10", "PAA"),
+            ("10.26.2.12", "svr-10.9.1.22", "grp-WLT-NH10-PAA-APP", "WLT App 3", "NH10", "PAA"),
+            # Destination IPs (3PY zone, NH10)
+            ("10.26.3.10", "svr-10.9.1.30", "grp-WLT-NH10-3PY-DB", "WLT DB Primary", "NH10", "3PY"),
+            ("10.26.3.11", "svr-10.9.1.31", "grp-WLT-NH10-3PY-DB", "WLT DB Standby", "NH10", "3PY"),
+            ("10.26.4.10", "svr-10.9.1.40", "grp-WLT-NH10-3PY-MQ", "WLT MQ 1", "NH10", "3PY"),
+            ("10.26.4.11", "svr-10.9.1.41", "grp-WLT-NH10-3PY-MQ", "WLT MQ 2", "NH10", "3PY"),
+            ("10.26.5.10", "svr-10.9.1.50", "grp-WLT-NH10-PAA-BAT", "WLT Batch 1", "NH10", "PAA"),
         ]),
-        # CBK: DC_LEGACY_A -> ALPHA_NGDC (note: different target than CRM)
-        ("CBK", "DC_LEGACY_A", "ALPHA_NGDC", "NH08", "CCS", "10.25", [
-            ("10.25.20.10", "svr-10.7.1.10", "grp-CBK-NH08-CCS-APP", "CBK App 1"),
-            ("10.25.20.11", "svr-10.7.1.11", "grp-CBK-NH08-CCS-APP", "CBK App 2"),
-            ("10.25.21.10", "svr-10.7.1.20", "grp-CBK-NH08-CCS-DB", "CBK DB Primary"),
-            ("10.25.21.11", "svr-10.7.1.21", "grp-CBK-NH08-CCS-DB", "CBK DB Standby"),
-            ("10.25.22.10", "svr-10.7.1.30", "grp-CBK-NH08-CCS-MQ", "CBK MQ 1"),
+        # ================================================================
+        # CBK: DC_LEGACY_A, src_zone=CPA, dst_zone=CDE
+        # Source side: NH08/CPA, Destination side: NH08/CDE
+        # ================================================================
+        ("CBK", "DC_LEGACY_A", "ALPHA_NGDC", [
+            # Source IPs (CPA zone, NH08)
+            ("10.25.1.10", "svr-10.7.1.10", "grp-CBK-NH08-CPA-WEB", "CBK Web 1", "NH08", "CPA"),
+            ("10.25.1.11", "svr-10.7.1.11", "grp-CBK-NH08-CPA-WEB", "CBK Web 2", "NH08", "CPA"),
+            ("10.25.2.10", "svr-10.7.1.20", "grp-CBK-NH08-CPA-APP", "CBK App 1", "NH08", "CPA"),
+            ("10.25.2.11", "svr-10.7.1.21", "grp-CBK-NH08-CPA-APP", "CBK App 2", "NH08", "CPA"),
+            ("10.25.2.12", "svr-10.7.1.22", "grp-CBK-NH08-CPA-APP", "CBK App 3", "NH08", "CPA"),
+            ("10.25.5.10", "svr-10.7.1.50", "grp-CBK-NH08-CPA-BAT", "CBK Batch 1", "NH08", "CPA"),
+            # Destination IPs (CDE zone, NH08)
+            ("10.25.3.10", "svr-10.7.2.30", "grp-CBK-NH08-CDE-DB", "CBK DB Primary", "NH08", "CDE"),
+            ("10.25.3.11", "svr-10.7.2.31", "grp-CBK-NH08-CDE-DB", "CBK DB Standby", "NH08", "CDE"),
+            ("10.25.4.10", "svr-10.7.2.40", "grp-CBK-NH08-CDE-MQ", "CBK MQ 1", "NH08", "CDE"),
+            ("10.25.4.11", "svr-10.7.2.41", "grp-CBK-NH08-CDE-MQ", "CBK MQ 2", "NH08", "CDE"),
         ]),
-        # EPT: DC_LEGACY_B -> ALPHA_NGDC (PAA zone)
-        ("EPT", "DC_LEGACY_B", "ALPHA_NGDC", "NH01", "PAA", "10.26", [
-            ("10.26.30.10", "svr-10.0.3.10", "grp-EPT-NH01-PAA-WEB", "EPT Web 1"),
-            ("10.26.30.11", "svr-10.0.3.11", "grp-EPT-NH01-PAA-WEB", "EPT Web 2"),
-            ("10.26.31.10", "svr-10.0.3.20", "grp-EPT-NH01-PAA-APP", "EPT App 1"),
-            ("10.26.31.11", "svr-10.0.3.21", "grp-EPT-NH01-PAA-APP", "EPT App 2"),
-            ("10.26.32.10", "svr-10.0.3.30", "grp-EPT-NH01-PAA-API", "EPT API 1"),
-        ]),
-        # MBK: DC_LEGACY_C -> ALPHA_NGDC
-        ("MBK", "DC_LEGACY_C", "ALPHA_NGDC", "NH07", "CPA", "10.27", [
-            ("10.27.30.10", "svr-10.6.1.170", "grp-MBK-NH07-CPA-WEB", "MBK Web 1"),
-            ("10.27.31.10", "svr-10.6.1.180", "grp-MBK-NH07-CPA-APP", "MBK App 1"),
-            ("10.27.31.11", "svr-10.6.1.181", "grp-MBK-NH07-CPA-APP", "MBK App 2"),
-            ("10.27.32.10", "svr-10.6.1.190", "grp-MBK-NH07-CPA-DB", "MBK DB Primary"),
-            ("10.27.33.10", "svr-10.6.1.200", "grp-MBK-NH07-CPA-API", "MBK API 1"),
-        ]),
-        # MDW: DC_LEGACY_F -> ALPHA_NGDC
-        ("MDW", "DC_LEGACY_F", "ALPHA_NGDC", "NH11", "CCS", "10.30", [
-            ("10.30.10.10", "svr-10.10.1.10", "grp-MDW-NH11-CCS-APP", "MDW App 1"),
-            ("10.30.10.11", "svr-10.10.1.11", "grp-MDW-NH11-CCS-APP", "MDW App 2"),
-            ("10.30.11.10", "svr-10.10.1.20", "grp-MDW-NH11-CCS-DB", "MDW DB Primary"),
-            ("10.30.12.10", "svr-10.10.1.30", "grp-MDW-NH11-CCS-MQ", "MDW MQ 1"),
-            ("10.30.12.11", "svr-10.10.1.31", "grp-MDW-NH11-CCS-MQ", "MDW MQ 2"),
-            ("10.30.13.10", "svr-10.10.1.40", "grp-MDW-NH11-CCS-API", "MDW API 1"),
-        ]),
-        # RAP: DC_LEGACY_D -> ALPHA_NGDC
-        ("RAP", "DC_LEGACY_D", "ALPHA_NGDC", "NH12", "CDE", "10.28", [
-            ("10.28.20.10", "svr-10.11.1.10", "grp-RAP-NH12-CDE-WEB", "RAP Web 1"),
-            ("10.28.21.10", "svr-10.11.1.20", "grp-RAP-NH12-CDE-APP", "RAP App 1"),
-            ("10.28.21.11", "svr-10.11.1.21", "grp-RAP-NH12-CDE-APP", "RAP App 2"),
-            ("10.28.22.10", "svr-10.11.1.30", "grp-RAP-NH12-CDE-DB", "RAP DB Primary"),
-            ("10.28.22.11", "svr-10.11.1.31", "grp-RAP-NH12-CDE-DB", "RAP DB Standby"),
-            ("10.28.23.10", "svr-10.11.1.40", "grp-RAP-NH12-CDE-BAT", "RAP Batch 1"),
-        ]),
-        # DWH: DC_LEGACY_B -> ALPHA_NGDC
-        ("DWH", "DC_LEGACY_B", "ALPHA_NGDC", "NH13", "CCS", "10.26", [
-            ("10.26.20.10", "svr-10.12.1.10", "grp-DWH-NH13-CCS-APP", "DWH App 1"),
-            ("10.26.20.11", "svr-10.12.1.11", "grp-DWH-NH13-CCS-APP", "DWH App 2"),
-            ("10.26.21.10", "svr-10.12.1.20", "grp-DWH-NH13-CCS-DB", "DWH DB Primary"),
-            ("10.26.21.11", "svr-10.12.1.21", "grp-DWH-NH13-CCS-DB", "DWH DB Replica"),
-            ("10.26.21.12", "svr-10.12.1.22", "grp-DWH-NH13-CCS-DB", "DWH DB Archive"),
-            ("10.26.22.10", "svr-10.12.1.30", "grp-DWH-NH13-CCS-BAT", "DWH Batch 1"),
-            ("10.26.22.11", "svr-10.12.1.31", "grp-DWH-NH13-CCS-BAT", "DWH Batch 2"),
-            ("10.26.23.10", "svr-10.12.1.40", "grp-DWH-NH13-CCS-API", "DWH API 1"),
+        # ================================================================
+        # Shared / Cross-app IPs (PSE zone, UC zone)
+        # Rule 4: APP→External API destinations (10.70.1.10/.11 in PSE)
+        # Rule 6: Monitoring source IPs (10.80.1.100/.101 in UC)
+        # ================================================================
+        ("SHARED", "SHARED", "ALPHA_NGDC", [
+            # PSE zone destinations (used by all apps Rule 4)
+            ("10.70.1.10", "svr-10.70.1.10", "grp-SHARED-NH14-PSE-API", "DMZ API 1", "NH14", "PSE"),
+            ("10.70.1.11", "svr-10.70.1.11", "grp-SHARED-NH14-PSE-API", "DMZ API 2", "NH14", "PSE"),
+            # UC zone monitoring sources (used by all apps Rule 6)
+            ("10.80.1.100", "svr-10.80.1.100", "grp-SHARED-NH01-UC-MON", "Monitor Agent 1", "NH01", "UC"),
+            ("10.80.1.101", "svr-10.80.1.101", "grp-SHARED-NH01-UC-MON", "Monitor Agent 2", "NH01", "UC"),
         ]),
     ]
 
-    for app_id, legacy_dc, ngdc_dc, nh, sz, _, entries in mapping_configs:
-        for legacy_ip, ngdc_ip, ngdc_group, desc in entries:
+    for app_id, legacy_dc, ngdc_dc, entries in mapping_configs:
+        for legacy_ip, ngdc_ip, ngdc_group, desc, nh, sz in entries:
             idx += 1
             mappings.append({
                 "id": f"ipm-{idx:04d}",
@@ -1606,9 +1661,6 @@ def build_seed_migrations() -> list[dict[str, Any]]:
         ("mig-008", "LND", "DC_LEGACY_D", "ALPHA_NGDC", "In Progress", 50, 30, 15, 2, -35),
         ("mig-009", "WLT", "DC_LEGACY_B", "ALPHA_NGDC", "Planning", 0, 35, 0, 0, -5),
         ("mig-010", "CBK", "DC_LEGACY_A", "ALPHA_NGDC", "In Progress", 20, 55, 11, 4, -25),
-        ("mig-011", "MDW", "DC_LEGACY_F", "ALPHA_NGDC", "Planning", 0, 24, 0, 0, -3),
-        ("mig-012", "RAP", "DC_LEGACY_D", "ALPHA_NGDC", "In Progress", 30, 36, 10, 1, -18),
-        ("mig-013", "DWH", "DC_LEGACY_B", "ALPHA_NGDC", "Planning", 5, 28, 0, 0, -7),
     ]
     for mid, app, src, tgt, status, prog, total, migrated, failed, days in apps_mig:
         migrations.append({
@@ -1693,7 +1745,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "submitted_at": (now + timedelta(days=-7)).isoformat(),
          "reviewed_at": (now + timedelta(days=-6)).isoformat(),
          "comments": "HRM needs access to CRM database for employee data sync",
-         "review_notes": "REJECTED: GEN to CDE cross-zone traffic is blocked per NGDC Prod Policy Matrix. HRM (NH01/GEN) cannot access CRM (NH02/CDE) directly.",
+         "review_notes": "REJECTED: GEN to CDE cross-zone traffic is blocked per NGDC Prod Policy Matrix.",
          "rule_summary": {"application": "HRM", "source": "grp-HRM-NH01-GEN-APP",
                           "destination": "grp-CRM-NH02-CDE-DB", "ports": "tcp/1521",
                           "environment": "Production"},
@@ -1709,8 +1761,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "rule_summary": {"application": "FRD", "source": "grp-FRD-NH02-CDE-APP",
                           "destination": "grp-FRD-NH02-CDE-DB", "ports": "tcp/1521\ntcp/1433",
                           "environment": "Production"},
-         "delta": {"added": {},
-                   "removed": {},
+         "delta": {"added": {}, "removed": {},
                    "changed": {"rule_source": {"from": "10.29.2.10\n10.29.2.11", "to": "svr-10.1.1.50\nsvr-10.1.1.51"},
                                "rule_destination": {"from": "10.29.3.10", "to": "svr-10.1.2.20"},
                                "rule_source_zone": {"from": "Zone-E-Internal", "to": "CDE"},
@@ -1728,13 +1779,13 @@ def build_seed_reviews() -> list[dict[str, Any]]:
                           "environment": "Production"},
          "delta": {"added": {"rule_source": ["svr-10.7.1.41"]},
                    "removed": {}, "changed": {}}},
-        # 7. Pending - cross-NH CDE exception request (LDF-004 scenario)
+        # 7. Pending - cross-NH CDE exception request
         {"id": "REV-seed-007", "rule_id": "SEED-RULE-007",
          "rule_name": "CRM to WLT Cross-NH CDE", "request_type": "new_rule",
          "requestor": "Team Eta", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-3)).isoformat(),
          "reviewed_at": None,
-         "comments": "CRM (NH02/CDE) needs to reach WLT (NH10/CDE) for portfolio data. Cross-NH CDE requires exception.",
+         "comments": "CRM (NH02/CDE) needs to reach WLT (NH10/CDE) for portfolio data.",
          "review_notes": None,
          "rule_summary": {"application": "CRM", "source": "grp-CRM-NH02-CDE-APP",
                           "destination": "grp-WLT-NH10-CDE-API", "ports": "tcp/443",
@@ -1746,8 +1797,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "requestor": "Team Platform", "reviewer": "Security Team", "status": "Rejected",
          "submitted_at": (now + timedelta(days=-5)).isoformat(),
          "reviewed_at": (now + timedelta(days=-4)).isoformat(),
-         "comments": "Enterprise Portal needs direct CRM database access for customer lookup",
-         "review_notes": "REJECTED: PAA/DMZ to CDE is blocked per policy matrix. Use API layer through GEN zone instead.",
+         "comments": "Enterprise Portal needs direct CRM database access",
+         "review_notes": "REJECTED: PAA/DMZ to CDE is blocked per policy matrix.",
          "rule_summary": {"application": "EPT", "source": "grp-EPT-NH01-PAA-APP",
                           "destination": "grp-CRM-NH02-CDE-DB", "ports": "tcp/1521",
                           "environment": "Production"},
@@ -1772,7 +1823,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "submitted_at": (now + timedelta(days=-12)).isoformat(),
          "reviewed_at": (now + timedelta(days=-11)).isoformat(),
          "comments": "Insurance Portal needs KYC validation - both in GEN zone",
-         "review_notes": "Approved - GEN to GEN cross-NH is permitted per policy matrix (LDF-001)",
+         "review_notes": "Approved - GEN to GEN cross-NH is permitted per policy matrix",
          "rule_summary": {"application": "INS", "source": "grp-INS-NH04-GEN-APP",
                           "destination": "grp-KYC-NH05-GEN-API", "ports": "tcp/443",
                           "environment": "Production"},
@@ -1783,7 +1834,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "requestor": "Team Sigma", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-2)).isoformat(),
          "reviewed_at": None,
-         "comments": "Middleware ESB needs to integrate with Core Banking API for transaction routing",
+         "comments": "Middleware ESB needs to integrate with Core Banking API",
          "review_notes": None,
          "rule_summary": {"application": "MDW", "source": "grp-MDW-NH11-CCS-APP",
                           "destination": "grp-CBK-NH08-CCS-API", "ports": "tcp/8443",

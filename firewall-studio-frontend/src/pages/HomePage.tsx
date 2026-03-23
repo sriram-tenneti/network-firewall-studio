@@ -142,8 +142,8 @@ export default function HomePage() {
           {[
             { label: 'NGDC Data Centers', value: '3', sub: 'Alpha, Beta, Gamma' },
             { label: 'Neighbourhoods', value: '17', sub: 'Production & Non-Prod' },
-            { label: 'Security Zones', value: '6', sub: 'CCS, CDE, CPA, PSE, GEN, STD' },
-            { label: 'Policy Matrices', value: '3', sub: 'Heritage, NGDC, Non-Prod' },
+            { label: 'Security Zones', value: '17', sub: 'Prod: STD, GEN, PAA, CDE, CPA, CCS, 3PY, Swift, PSE, UC' },
+            { label: 'Policy Matrices', value: '3', sub: 'Production, Non-Production, Pre-Production' },
           ].map((stat, i) => (
             <div key={i} className="rounded-xl bg-slate-800/30 border border-slate-700/30 p-4">
               <div className="text-2xl font-bold text-white">{stat.value}</div>

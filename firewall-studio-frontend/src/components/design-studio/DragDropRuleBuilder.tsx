@@ -28,12 +28,16 @@ const NEIGHBOURHOODS = [
 ];
 
 const PROD_ZONES = [
+  { code: 'STD', name: 'Standard' },
   { code: 'GEN', name: 'General' },
   { code: 'PAA', name: 'PAA Zone' },
   { code: 'CDE', name: 'Cardholder Data Environment' },
   { code: 'CPA', name: 'Critical Payment Application' },
   { code: 'CCS', name: 'Common Card Services' },
   { code: '3PY', name: 'Third Party' },
+  { code: 'Swift', name: 'Swift' },
+  { code: 'PSE', name: 'Payment Security Environment' },
+  { code: 'UC', name: 'Unified Communications' },
 ];
 
 const NONPROD_ZONES = [
@@ -116,6 +120,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
         const result = await api.validateBirthright({
           source_zone: form.src_sz, destination_zone: form.dst_sz,
           source_sz: form.src_sz, destination_sz: form.dst_sz,
+          source_nh: form.src_nh, destination_nh: form.dst_nh,
           source_dc: form.datacenter, destination_dc: form.datacenter,
           environment: form.environment,
         });
@@ -124,12 +129,12 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
       setValidatingBR(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [form.src_sz, form.dst_sz, form.datacenter, form.environment]);
+  }, [form.src_sz, form.dst_sz, form.src_nh, form.dst_nh, form.datacenter, form.environment]);
 
   const canStep1 = form.application && form.environment && form.datacenter;
   const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz;
   const canStep3 = effectivePort && form.protocol;
-  const canSubmit = canStep1 && canStep2 && canStep3 && !(birthrightResult && !birthrightResult.compliant);
+  const canSubmit = canStep1 && canStep2 && canStep3;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -283,8 +288,12 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 <div className="text-[10px] text-gray-400 font-semibold uppercase">Policy</div>
                 {validatingBR && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600" />}
                 {birthrightResult && !validatingBR && (
-                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                    {birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
+                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
+                    birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
+                    birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  )}>
+                    {birthrightResult.firewall_request_required ? 'FW REQUIRED' :
+                     birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
                   </span>
                 )}
                 <div className="w-px h-8 bg-gray-300" />
@@ -332,24 +341,76 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
             </div>
 
             {birthrightResult && !validatingBR && (
-              <div className={'p-3 rounded-lg border text-sm ' + (birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={'font-bold text-xs ' + (birthrightResult.compliant ? 'text-green-700' : 'text-red-700')}>
-                    Birthright: {birthrightResult.matrix_used || ''}
-                  </span>
-                  <span className={'text-xs ' + (birthrightResult.compliant ? 'text-green-600' : 'text-red-600')}>
-                    {birthrightResult.summary}
-                  </span>
+              <div className="space-y-2">
+                {/* Policy Status */}
+                <div className={'p-3 rounded-lg border text-sm ' + (
+                  birthrightResult.firewall_request_required ? 'bg-amber-50 border-amber-200' :
+                  birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                )}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={'font-bold text-xs ' + (
+                      birthrightResult.firewall_request_required ? 'text-amber-700' :
+                      birthrightResult.compliant ? 'text-green-700' : 'text-red-700'
+                    )}>
+                      Policy: {birthrightResult.matrix_used || ''}
+                    </span>
+                    <span className={'text-xs ' + (
+                      birthrightResult.firewall_request_required ? 'text-amber-600' :
+                      birthrightResult.compliant ? 'text-green-600' : 'text-red-600'
+                    )}>
+                      {birthrightResult.firewall_request_required
+                        ? 'Firewall rule required for this cross-zone traffic'
+                        : birthrightResult.compliant ? 'Permitted' : 'Blocked by policy'}
+                    </span>
+                  </div>
+                  {birthrightResult.permitted.length > 0 && (
+                    <ul className="text-xs text-green-700 list-disc list-inside mt-1">
+                      {birthrightResult.permitted.map((p, i) => (<li key={i}>{p.rule} &mdash; {p.reason}</li>))}
+                    </ul>
+                  )}
+                  {birthrightResult.warnings.length > 0 && (
+                    <ul className="text-xs text-amber-700 list-disc list-inside mt-1">
+                      {birthrightResult.warnings.map((w, i) => (<li key={i}>{w.rule} &mdash; {w.reason}</li>))}
+                    </ul>
+                  )}
                 </div>
-                {birthrightResult.violations.length > 0 && (
-                  <ul className="text-xs text-red-700 list-disc list-inside mt-1">
-                    {birthrightResult.violations.map((v, i) => (<li key={i}>{v.matrix}: {v.rule} &mdash; {v.reason}</li>))}
-                  </ul>
+
+                {/* Firewall Device Hops — rule required */}
+                {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
+                  <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-sm">
+                    <div className="font-bold text-xs text-amber-800 mb-1">Firewall Rule Required — {birthrightResult.firewall_devices_needed.length} device{birthrightResult.firewall_devices_needed.length > 1 ? 's' : ''}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {birthrightResult.firewall_devices_needed.map((dev, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-amber-300 text-xs font-mono text-amber-800">
+                          {dev}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-amber-600 mt-1">
+                      DC: {DATACENTERS.find(d => d.code === form.datacenter)?.name || form.datacenter}
+                    </div>
+                  </div>
                 )}
-                {birthrightResult.permitted.length > 0 && birthrightResult.compliant && (
-                  <ul className="text-xs text-green-700 list-disc list-inside mt-1">
-                    {birthrightResult.permitted.map((p, i) => (<li key={i}>{p.matrix}: {p.rule} &mdash; {p.reason}</li>))}
-                  </ul>
+
+                {/* Informational FW path — same SZ cross NH (permitted, no rule required) */}
+                {birthrightResult.firewall_path_info && birthrightResult.firewall_path_info.length > 0 && !birthrightResult.firewall_request_required && (
+                  <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50 text-sm">
+                    <div className="font-bold text-xs text-blue-700 mb-1">Traffic Path (informational — no firewall rule required)</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2 py-1 rounded bg-blue-100 border border-blue-200 text-xs font-mono text-blue-800">{form.src_nh} {form.src_sz}</span>
+                      {birthrightResult.firewall_path_info.map((fw, i) => (
+                        <span key={i} className="inline-flex items-center gap-1">
+                          <span className="text-gray-400">&rarr;</span>
+                          <span className="px-2 py-1 rounded bg-white border border-blue-200 text-xs font-mono text-blue-700">{fw}</span>
+                        </span>
+                      ))}
+                      <span className="text-gray-400">&rarr;</span>
+                      <span className="px-2 py-1 rounded bg-purple-100 border border-purple-200 text-xs font-mono text-purple-800">{form.dst_nh} {form.dst_sz}</span>
+                    </div>
+                    <div className="text-[10px] text-blue-500 mt-1">
+                      DC: {DATACENTERS.find(d => d.code === form.datacenter)?.name || form.datacenter} — Permitted per birthright
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -436,10 +497,20 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                   </div>
                 </div>
                 {birthrightResult && (
-                  <div className="col-span-2 mt-1">
-                    <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
-                      {birthrightResult.compliant ? 'Birthright: Permitted' : 'Birthright: Blocked'}
+                  <div className="col-span-2 mt-1 space-y-1">
+                    <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (
+                      birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
+                      birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    )}>
+                      {birthrightResult.firewall_request_required
+                        ? 'Firewall Rule Required'
+                        : birthrightResult.compliant ? 'Policy: Permitted' : 'Policy: Blocked'}
                     </span>
+                    {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
+                      <div className="text-[10px] text-blue-700 font-mono">
+                        {birthrightResult.firewall_devices_needed.join(' → ')}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
