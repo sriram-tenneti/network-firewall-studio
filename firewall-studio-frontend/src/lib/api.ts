@@ -827,3 +827,55 @@ export const getRealReviews = () =>
 /** Helper: check localStorage for hide-seed preference */
 export const isHideSeedEnabled = (): boolean =>
   typeof window !== 'undefined' && localStorage.getItem('nfs_hide_seed') === 'true';
+
+// ============================================================
+// Integration Placeholders (PR 2)
+// ============================================================
+
+// ---- Audit Log ----
+export const getAuditLogs = (ruleId?: string, limit?: number) => {
+  const params = new URLSearchParams();
+  if (ruleId) params.set('rule_id', ruleId);
+  if (limit) params.set('limit', String(limit));
+  const qs = params.toString();
+  return fetchJSON<import('../types').AuditLogEntry[]>(`/api/integrations/audit-log${qs ? `?${qs}` : ''}`);
+};
+
+export const createAuditLog = (data: { rule_id: string; action: string; actor?: string; details?: string; chg_number?: string }) =>
+  fetchJSON<import('../types').AuditLogEntry>('/api/integrations/audit-log', { method: 'POST', body: JSON.stringify(data) });
+
+// ---- Rule Versioning ----
+export const getRuleVersions = (ruleId: string) =>
+  fetchJSON<import('../types').RuleVersion[]>(`/api/integrations/rule-versions/${ruleId}`);
+
+export const snapshotRuleVersion = (ruleId: string, changeSummary?: string) =>
+  fetchJSON<import('../types').RuleVersion>(`/api/integrations/rule-versions/${ruleId}`, { method: 'POST', body: JSON.stringify({ change_summary: changeSummary || '' }) });
+
+// ---- ServiceNow CHG ----
+export const submitServiceNowCHG = (data: { rule_ids: string[]; description?: string; requested_by?: string }) =>
+  fetchJSON<{ chg_id: string; chg_number: string; status: string; servicenow_url: string; message: string }>(
+    '/api/integrations/servicenow/chg', { method: 'POST', body: JSON.stringify(data) }
+  );
+
+export const closeServiceNowCHG = (chgId: string) =>
+  fetchJSON<{ chg_id: string; status: string; message: string }>(
+    `/api/integrations/servicenow/chg/${chgId}/close`, { method: 'POST' }
+  );
+
+// ---- Work Request Portal ----
+export const getWorkRequests = () =>
+  fetchJSON<import('../types').WorkRequest[]>('/api/integrations/work-requests');
+
+export const submitWorkRequest = (data: { app_id: string; app_name?: string; environment?: string; notes?: string }) =>
+  fetchJSON<{ wr_id: string; status: string; portal_url: string; message: string }>(
+    '/api/integrations/work-requests', { method: 'POST', body: JSON.stringify(data) }
+  );
+
+// ---- GitOps ----
+export const getGitOpsLog = () =>
+  fetchJSON<import('../types').GitOpsLogEntry[]>('/api/integrations/gitops/log');
+
+export const pushToGitOps = (data: { rule_id: string; vendor?: string }) =>
+  fetchJSON<import('../types').GitOpsLogEntry & { message: string }>(
+    '/api/integrations/gitops/push', { method: 'POST', body: JSON.stringify(data) }
+  );

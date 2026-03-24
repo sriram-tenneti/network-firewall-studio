@@ -501,6 +501,56 @@ export interface AppDCMapping {
   notes?: string;
 }
 
+// Audit Log Entry
+export interface AuditLogEntry {
+  id: string;
+  rule_id: string;
+  action: string;
+  actor: string;
+  details: string;
+  previous_state?: string;
+  new_state?: string;
+  chg_number?: string;
+  timestamp: string;
+}
+
+// Rule Version Snapshot
+export interface RuleVersion {
+  id: string;
+  rule_id: string;
+  version: number;
+  snapshot: Record<string, unknown>;
+  change_summary: string;
+  created_at: string;
+}
+
+// Work Request
+export interface WorkRequest {
+  wr_id: string;
+  app_id: string;
+  app_name: string;
+  request_type: string;
+  environment: string;
+  requested_by: string;
+  status: string;
+  spreadsheet_ref: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// GitOps Log Entry
+export interface GitOpsLogEntry {
+  id: string;
+  rule_id: string;
+  vendor: string;
+  branch: string;
+  commit_sha: string;
+  pr_url: string;
+  status: string;
+  created_at: string;
+}
+
 // Exception request for individual IPs/subnets
 export interface ExceptionRequest {
   id: string;

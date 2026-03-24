@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Modal } from '@/components/shared/Modal';
 // RuleFormModal kept only for editing existing draft rules
 import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
@@ -14,7 +15,7 @@ import type { RuleModification } from '@/components/design-studio/RuleModifyModa
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import type { FirewallRule, Application } from '@/types';
+import type { FirewallRule, Application, AuditLogEntry, RuleVersion } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 import * as api from '@/lib/api';
 
@@ -33,6 +34,10 @@ export function DesignStudioPage() {
   const compilerModal = useModal<string>();
   const groupModal = useModal();
   const deleteConfirm = useModal<string>();
+  const auditModal = useModal<string>();
+  const versionModal = useModal<string>();
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [ruleVersions, setRuleVersions] = useState<RuleVersion[]>([]);
   const { notification, showNotification } = useNotification();
 
   const loadData = useCallback(async () => {
@@ -133,12 +138,41 @@ export function DesignStudioPage() {
 
   const handleSubmitChange = async (ruleId: string) => {
     try {
-      // Placeholder: In production this calls ServiceNow API to create CHG
-      const placeholderCHG = `CHG${String(Date.now()).slice(-7)}`;
-      showNotification(`Change ${placeholderCHG} submitted for rule ${ruleId}. Rule will be deployed upon CHG closure.`, 'success');
+      const result = await api.submitServiceNowCHG({ rule_ids: [ruleId], description: `CHG for rule ${ruleId}` });
+      await api.snapshotRuleVersion(ruleId, `CHG ${result.chg_number} submitted`);
+      showNotification(`${result.chg_number} submitted for rule ${ruleId}. Rule will be deployed upon CHG closure.`, 'success');
       loadData();
     } catch {
       showNotification('Failed to submit change request', 'error');
+    }
+  };
+
+  const handleGitOpsPush = async (ruleId: string) => {
+    try {
+      const result = await api.pushToGitOps({ rule_id: ruleId });
+      showNotification(`Rule ${ruleId} pushed to GitOps branch ${result.branch}`, 'success');
+    } catch {
+      showNotification('Failed to push to GitOps', 'error');
+    }
+  };
+
+  const openAuditLog = async (ruleId: string) => {
+    auditModal.open(ruleId);
+    try {
+      const logs = await api.getAuditLogs(ruleId);
+      setAuditLogs(logs);
+    } catch {
+      setAuditLogs([]);
+    }
+  };
+
+  const openVersionHistory = async (ruleId: string) => {
+    versionModal.open(ruleId);
+    try {
+      const versions = await api.getRuleVersions(ruleId);
+      setRuleVersions(versions);
+    } catch {
+      setRuleVersions([]);
     }
   };
 
@@ -205,6 +239,10 @@ export function DesignStudioPage() {
           {(row.status === 'Pending Review' || row.status === 'Approved' || row.status === 'Deployed' || row.status === 'Certified') && (
             <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
           )}
+          {(row.status === 'Deployed' || row.status === 'Certified') && (
+            <button onClick={() => handleGitOpsPush(row.rule_id)} className="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-50 rounded hover:bg-gray-100">GitOps</button>
+          )}
+          <button onClick={() => openAuditLog(row.rule_id)} className="px-2 py-1 text-xs font-medium text-gray-500 bg-white rounded border border-gray-200 hover:bg-gray-50" title="Audit Trail">Audit</button>
           {row.status === 'Draft' && (
             <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
           )}
@@ -341,6 +379,52 @@ export function DesignStudioPage() {
         confirmLabel="Delete"
         confirmVariant="danger"
       />
+
+      {/* Audit Trail Modal */}
+      <Modal isOpen={auditModal.isOpen} onClose={() => { auditModal.close(); setAuditLogs([]); }} title={`Audit Trail — ${auditModal.data || ''}`} size="lg">
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {auditLogs.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No audit entries yet for this rule.</p>
+          ) : auditLogs.map(log => (
+            <div key={log.id} className="p-3 bg-gray-50 rounded-lg border text-xs">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="font-semibold text-gray-800">{log.action}</span>
+                  {log.chg_number && <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-mono text-[10px]">{log.chg_number}</span>}
+                </div>
+                <span className="text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+              </div>
+              <div className="text-gray-600 mt-1">{log.details}</div>
+              {log.previous_state && <div className="mt-1 text-gray-400">State: {log.previous_state} → {log.new_state}</div>}
+              <div className="text-gray-400 mt-0.5">Actor: {log.actor}</div>
+            </div>
+          ))}
+          <div className="flex justify-end pt-2">
+            <button onClick={() => openVersionHistory(auditModal.data || '')} className="text-xs text-indigo-600 hover:underline">View Version History</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Version History Modal */}
+      <Modal isOpen={versionModal.isOpen} onClose={() => { versionModal.close(); setRuleVersions([]); }} title={`Version History — ${versionModal.data || ''}`} size="lg">
+        <div className="space-y-3 max-h-96 overflow-y-auto">
+          {ruleVersions.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No versions recorded yet. Versions are created on CHG submission and modifications.</p>
+          ) : ruleVersions.map(ver => (
+            <div key={ver.id} className="p-3 bg-gray-50 rounded-lg border">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-semibold text-gray-800">Version {ver.version}</span>
+                <span className="text-xs text-gray-400">{new Date(ver.created_at).toLocaleString()}</span>
+              </div>
+              {ver.change_summary && <p className="text-xs text-gray-600 mb-2">{ver.change_summary}</p>}
+              <details className="text-xs">
+                <summary className="cursor-pointer text-indigo-600 hover:underline">View Snapshot</summary>
+                <pre className="mt-2 p-2 bg-white rounded border text-[10px] overflow-x-auto max-h-40">{JSON.stringify(ver.snapshot, null, 2)}</pre>
+              </details>
+            </div>
+          ))}
+        </div>
+      </Modal>
 
     </div>
   );

@@ -5,8 +5,8 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled } from '@/lib/api';
-import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled, getAuditLogs } from '@/lib/api';
+import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application, AuditLogEntry } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -542,6 +542,9 @@ export default function FirewallManagementPage() {
   const [sourceEntries, setSourceEntries] = useState<ResourceEntry[]>([]);
   const [destEntries, setDestEntries] = useState<ResourceEntry[]>([]);
   const [serviceEntries, setServiceEntries] = useState<ResourceEntry[]>([]);
+  // Audit trail
+  const [auditRuleId, setAuditRuleId] = useState<string | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -720,6 +723,16 @@ export default function FirewallManagementPage() {
     showNotification('Spreadsheet exported', 'success');
   };
 
+  const handleViewAudit = async (ruleId: string) => {
+    setAuditRuleId(ruleId);
+    try {
+      const logs = await getAuditLogs(ruleId);
+      setAuditLogs(logs);
+    } catch {
+      setAuditLogs([]);
+    }
+  };
+
   const columns: Column<LegacyRule>[] = [
     { key: 'id', header: 'Rule ID', sortable: true, width: '80px' },
     { key: 'app_id', header: 'App ID', sortable: true, width: '70px',
@@ -760,7 +773,7 @@ export default function FirewallManagementPage() {
         </span>
       ),
     },
-    { key: '_actions', header: 'Actions', width: '140px', sortable: false,
+    { key: '_actions', header: 'Actions', width: '160px', sortable: false,
       render: (_, row) => {
         const isNGDC = row.migration_status === 'Completed' || (row as unknown as Record<string, unknown>).studio_imported === true;
         return (
@@ -771,6 +784,7 @@ export default function FirewallManagementPage() {
             ) : (
               <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">modify</button>
             )}
+            <button onClick={() => handleViewAudit(row.id)} className="text-xs text-gray-500 hover:text-gray-700 font-medium" title="Audit Trail">Audit</button>
           </div>
         );
       },
@@ -1171,6 +1185,28 @@ export default function FirewallManagementPage() {
           </div>
           );
         })()}
+      </Modal>
+
+      {/* Audit Trail Modal */}
+      <Modal isOpen={!!auditRuleId} onClose={() => { setAuditRuleId(null); setAuditLogs([]); }} title={`Audit Trail — ${auditRuleId || ''}`} size="lg">
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {auditLogs.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No audit entries yet for this rule.</p>
+          ) : auditLogs.map(log => (
+            <div key={log.id} className="p-3 bg-gray-50 rounded-lg border text-xs">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="font-semibold text-gray-800">{log.action}</span>
+                  {log.chg_number && <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-mono text-[10px]">{log.chg_number}</span>}
+                </div>
+                <span className="text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+              </div>
+              <div className="text-gray-600 mt-1">{log.details}</div>
+              {log.previous_state && <div className="mt-1 text-gray-400">State: {log.previous_state} &rarr; {log.new_state}</div>}
+              <div className="text-gray-400 mt-0.5">Actor: {log.actor}</div>
+            </div>
+          ))}
+        </div>
       </Modal>
     </div>
   );
