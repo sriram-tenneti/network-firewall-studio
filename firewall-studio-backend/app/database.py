@@ -622,14 +622,45 @@ def _rule_fingerprint(rule: dict[str, Any]) -> str:
     return "|".join(parts)
 
 
+def _load_superseded_fingerprints() -> set[str]:
+    """Load the set of fingerprints that have been superseded by approved modifications.
+    If an imported rule matches a superseded fingerprint, it means the rule was the
+    *original* version before a modification was applied — so we skip it on re-import."""
+    data = _load_separate("superseded_fingerprints")
+    if data is None:
+        return set()
+    return set(data)
+
+
+def _add_superseded_fingerprint(fp: str) -> None:
+    """Record a fingerprint as superseded (the original version before modification)."""
+    existing = _load_superseded_fingerprints()
+    existing.add(fp)
+    _save_separate("superseded_fingerprints", list(existing))
+
+
+def clear_superseded_fingerprints() -> int:
+    """Clear all superseded fingerprints. Returns count of cleared entries.
+    Called during full data reset so re-imports work cleanly."""
+    existing = _load_superseded_fingerprints()
+    count = len(existing)
+    _save_separate("superseded_fingerprints", [])
+    return count
+
+
 async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]:
     """Import legacy rules from Excel, dedup against existing rules using ALL columns.
     Optimised for large imports (50K+ rows). Delta-based — only new/changed rows are added.
+    Also skips rows that match superseded fingerprints (original versions of modified rules).
     NGDC auto-promotion is deferred — use the dedicated auto-import endpoint instead."""
     existing = _load("legacy_rules") or []
     existing_keys: set[str] = set()
     for r in existing:
         existing_keys.add(_rule_fingerprint(r))
+
+    # Also load superseded fingerprints — these are originals of rules that were modified.
+    # Re-importing the old version should be skipped since the modification supersedes it.
+    superseded = _load_superseded_fingerprints()
 
     max_num = 0
     for r in existing:
@@ -642,10 +673,15 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
 
     added = 0
     duplicates = 0
+    superseded_skipped = 0
     for rule in new_rules:
         fp = _rule_fingerprint(rule)
         if fp in existing_keys:
             duplicates += 1
+            continue
+        if fp in superseded:
+            superseded_skipped += 1
+            duplicates += 1  # count as duplicate for the caller
             continue
         max_num += 1
         rule["id"] = f"LR-{max_num:05d}"
@@ -656,7 +692,7 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         added += 1
 
     _save("legacy_rules", existing)
-    return {"added": added, "duplicates": duplicates, "total": len(existing)}
+    return {"added": added, "duplicates": duplicates, "superseded_skipped": superseded_skipped, "total": len(existing)}
 
 
 async def get_migration_history() -> list[dict[str, Any]]:
@@ -886,8 +922,23 @@ async def update_rule(rule_id: str, updates: dict[str, Any]) -> dict[str, Any] |
             r.update(updates)
             r["updated_at"] = _now()
             _save("firewall_rules", rules)
+            # Also update the copy in studio_rules.json
+            await _sync_studio_rule(r)
             return r
     return None
+
+
+async def _sync_studio_rule(rule: dict[str, Any]) -> None:
+    """Upsert a rule into studio_rules.json (by rule_id)."""
+    data = _load_separate("studio_rules") or []
+    rid = rule.get("rule_id")
+    for i, existing in enumerate(data):
+        if existing.get("rule_id") == rid:
+            data[i] = rule
+            _save_separate("studio_rules", data)
+            return
+    data.append(rule)
+    _save_separate("studio_rules", data)
 
 
 async def update_rule_status(rule_id: str, new_status: str) -> dict[str, Any] | None:
@@ -1721,13 +1772,18 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             r["review_notes"] = notes
             r["reviewer"] = "sns_user"
             _save("reviews", reviews)
-            rule_id = r.get("rule_id")
-            if rule_id:
-                await update_rule_status(rule_id, "Approved")
-                # Also update in separate studio_rules.json
-                rule = await get_rule(rule_id)
-                if rule:
-                    await add_studio_rule(rule)
+            # If this review is linked to a rule modification, approve it too
+            mod_id = r.get("modification_id")
+            if mod_id:
+                await approve_rule_modification(mod_id, notes)
+            else:
+                rule_id = r.get("rule_id")
+                if rule_id:
+                    await update_rule_status(rule_id, "Approved")
+                    # Also update in separate studio_rules.json
+                    rule = await get_rule(rule_id)
+                    if rule:
+                        await add_studio_rule(rule)
             return r
     return None
 
@@ -1742,9 +1798,14 @@ async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
             r["review_notes"] = notes
             r["reviewer"] = "sns_user"
             _save("reviews", reviews)
-            rule_id = r.get("rule_id")
-            if rule_id:
-                await update_rule_status(rule_id, "Rejected")
+            # If this review is linked to a rule modification, reject it too
+            mod_id = r.get("modification_id")
+            if mod_id:
+                await reject_rule_modification(mod_id, notes)
+            else:
+                rule_id = r.get("rule_id")
+                if rule_id:
+                    await update_rule_status(rule_id, "Rejected")
             return r
     return None
 
@@ -1851,7 +1912,9 @@ async def get_rule_modifications(rule_id: str | None = None) -> list[dict[str, A
 
 
 async def approve_rule_modification(mod_id: str, notes: str = "") -> dict[str, Any] | None:
-    """Approve a modification and apply changes to the rule."""
+    """Approve a modification and apply changes to the rule.
+    Also records the original rule's fingerprint as superseded so that
+    re-importing the old version from Excel is intelligently skipped."""
     mods = _load("rule_modifications") or []
     now = _now()
     for m in mods:
@@ -1861,13 +1924,42 @@ async def approve_rule_modification(mod_id: str, notes: str = "") -> dict[str, A
             m["reviewer"] = "sns_user"
             m["review_notes"] = notes
             _save("rule_modifications", mods)
-            # Apply modification to rule
+            # Record original fingerprint as superseded before applying changes
             rule_id = m.get("rule_id")
             if rule_id:
+                rules = _load("legacy_rules") or []
+                original_rule = next((r for r in rules if r["id"] == rule_id), None)
+                if original_rule:
+                    orig_fp = _rule_fingerprint(original_rule)
+                    _add_superseded_fingerprint(orig_fp)
+                # Apply modification to rule
                 modified = m.get("modified", {})
                 await update_legacy_rule(rule_id, modified)
+            # Also persist the completed modification record in studio_rules.json
+            await _record_completed_modification(m)
             return m
     return None
+
+
+async def _record_completed_modification(mod: dict[str, Any]) -> None:
+    """Record a completed (approved) modification in studio_rules.json for tracking."""
+    data = _load_separate("studio_rules") or []
+    record = {
+        "modification_id": mod.get("id"),
+        "rule_id": mod.get("rule_id"),
+        "type": "modification",
+        "original": mod.get("original", {}),
+        "modified": mod.get("modified", {}),
+        "delta": mod.get("delta", {}),
+        "approved_at": mod.get("reviewed_at"),
+        "reviewer": mod.get("reviewer"),
+    }
+    # Avoid duplicates by modification_id
+    existing_ids = {r.get("modification_id") for r in data if r.get("type") == "modification"}
+    if record["modification_id"] not in existing_ids:
+        data.append(record)
+        _save_separate("studio_rules", data)
+
 
 
 async def reject_rule_modification(mod_id: str, notes: str) -> dict[str, Any] | None:
@@ -3980,6 +4072,8 @@ async def clear_all_user_data() -> dict[str, int]:
     reviews_count = await clear_reviews()
     fw_rules_count = await clear_firewall_rules()
     mods_count = await clear_modifications()
+    # Also clear superseded fingerprints so re-imports work cleanly after full reset
+    superseded_count = clear_superseded_fingerprints()
     return {
         "legacy_rules": legacy_count,
         "migration_history": migration_counts.get("migration_history", 0),
@@ -3990,6 +4084,7 @@ async def clear_all_user_data() -> dict[str, int]:
         "reviews": reviews_count,
         "firewall_rules": fw_rules_count,
         "modifications": mods_count,
+        "superseded_fingerprints": superseded_count,
     }
 
 
