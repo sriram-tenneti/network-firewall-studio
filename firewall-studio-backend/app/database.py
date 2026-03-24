@@ -1807,34 +1807,45 @@ async def remove_group_member(group_name: str, member_value: str) -> dict[str, A
 
 # ============================================================
 # VRF Convention Helper
-# Maps NH + SZ to the proper VRF name based on fabric type.
-# Production fabric: STD/GEN, PAA, 3PY, CCS, CDE, CPA, Swift, PSE, UC
-# Non-Production fabric: UGen, USTD, UPAA, UCPA, UCDE, UCCS, U3PY
+# Uses the vrf_prefix from SEED_SECURITY_ZONES to produce NH##-sz## format.
+# e.g. NH08 + CPA → NH08-sz06, NH13 + UCCS → NH13-sz04
 # ============================================================
+
+# SZ code → vrf_prefix template (from seed data)
+# The template uses "nh##" as a placeholder for the actual NH number.
+_SZ_VRF_PREFIX: dict[str, str] = {
+    # Production
+    "STD": "gen/SZ01", "GEN": "gen/SZ01",
+    "PAA": "paa/SZ02",
+    "3PY": "nh##-sz03",
+    "CCS": "nh##-sz04",
+    "CDE": "nh##-sz05",
+    "CPA": "nh##-sz06",
+    "PSE": "nh##-sz07",
+    "Swift": "nh##-sz08",
+    "UC": "nh##-sz09",
+    # Non-Production / Pre-Production
+    "UGen": "gen", "USTD": "gen",
+    "UPAA": "paa/sz-02",
+    "U3PY": "nh##-sz03",
+    "UCCS": "nh##-sz04",
+    "UCDE": "nh##-sz05",
+    "UCPA": "nh##-sz06",
+}
+
+# Map prod SZ codes to their non-prod equivalents for auto-mapping
+_PROD_TO_NONPROD_SZ: dict[str, str] = {
+    "GEN": "UGen", "STD": "USTD", "PAA": "UPAA",
+    "3PY": "U3PY", "CCS": "UCCS", "CDE": "UCDE", "CPA": "UCPA",
+}
 
 # Non-prod/preprod NHs (common for all apps)
 _NONPROD_NHS = {"NH11", "NH12", "NH13", "NH15", "NH16", "NH17"}
 
-# Production SZ→VRF mapping
-_PROD_VRF_MAP: dict[str, str] = {
-    "STD": "STD", "GEN": "GEN", "PAA": "PAA", "3PY": "3PY",
-    "CCS": "CCS", "CDE": "CDE", "CPA": "CPA", "Swift": "Swift",
-    "PSE": "PSE", "UC": "UC",
-}
-
-# Non-Production SZ→VRF mapping
-_NONPROD_VRF_MAP: dict[str, str] = {
-    "UGen": "UGen", "USTD": "USTD", "UPAA": "UPAA", "UCPA": "UCPA",
-    "UCDE": "UCDE", "UCCS": "UCCS", "U3PY": "U3PY",
-    # Allow prod SZ names in non-prod context — auto-map to non-prod VRF
-    "GEN": "UGen", "STD": "USTD", "PAA": "UPAA", "CPA": "UCPA",
-    "CDE": "UCDE", "CCS": "UCCS", "3PY": "U3PY",
-}
-
 
 def _resolve_vrf(nh: str, sz: str, environment: str = "") -> str:
-    """Resolve the NH-SZ VRF convention string.
-    Returns e.g. 'NH02-CCS' for production or 'NH12-UCCS' for non-prod."""
+    """Resolve the NH-SZ VRF convention string using NH##-sz## format.
+    Returns e.g. 'NH08-sz06' for CPA in NH08, 'NH13-sz04' for UCCS in NH13."""
     nh_upper = nh.upper().strip() if nh else ""
     sz_val = sz.strip() if sz else ""
     env_lower = environment.lower().strip() if environment else ""
@@ -1844,12 +1855,28 @@ def _resolve_vrf(nh: str, sz: str, environment: str = "") -> str:
         or "non" in env_lower
         or "pre" in env_lower
     )
-    if is_nonprod:
-        vrf = _NONPROD_VRF_MAP.get(sz_val, sz_val)
-    else:
-        vrf = _PROD_VRF_MAP.get(sz_val, sz_val)
 
-    return f"{nh_upper}-{vrf}" if nh_upper else vrf
+    # If in non-prod context and a prod SZ code is given, map to non-prod equivalent
+    if is_nonprod and sz_val in _PROD_TO_NONPROD_SZ:
+        sz_val = _PROD_TO_NONPROD_SZ[sz_val]
+
+    # Look up the vrf_prefix template for this SZ
+    template = _SZ_VRF_PREFIX.get(sz_val, "")
+    if not template:
+        # Fallback: try reference data from disk
+        szs = _load_ref("security_zones") or []
+        for s in szs:
+            if s.get("code") == sz_val and s.get("vrf_prefix"):
+                template = s["vrf_prefix"]
+                break
+
+    if not template:
+        # Last resort: return NH-SZCode as fallback
+        return f"{nh_upper}-{sz_val}" if nh_upper else sz_val
+
+    # Replace nh## placeholder with actual NH number
+    vrf = template.replace("nh##", nh_upper.lower() if nh_upper else "nh00")
+    return f"{nh_upper}-{vrf}" if nh_upper and not vrf.lower().startswith(nh_upper.lower()) else vrf
 
 
 # ============================================================
