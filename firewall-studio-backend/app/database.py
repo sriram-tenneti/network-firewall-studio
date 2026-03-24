@@ -1772,13 +1772,18 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             r["review_notes"] = notes
             r["reviewer"] = "sns_user"
             _save("reviews", reviews)
-            rule_id = r.get("rule_id")
-            if rule_id:
-                await update_rule_status(rule_id, "Approved")
-                # Also update in separate studio_rules.json
-                rule = await get_rule(rule_id)
-                if rule:
-                    await add_studio_rule(rule)
+            # If this review is linked to a rule modification, approve it too
+            mod_id = r.get("modification_id")
+            if mod_id:
+                await approve_rule_modification(mod_id, notes)
+            else:
+                rule_id = r.get("rule_id")
+                if rule_id:
+                    await update_rule_status(rule_id, "Approved")
+                    # Also update in separate studio_rules.json
+                    rule = await get_rule(rule_id)
+                    if rule:
+                        await add_studio_rule(rule)
             return r
     return None
 
@@ -1793,9 +1798,14 @@ async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
             r["review_notes"] = notes
             r["reviewer"] = "sns_user"
             _save("reviews", reviews)
-            rule_id = r.get("rule_id")
-            if rule_id:
-                await update_rule_status(rule_id, "Rejected")
+            # If this review is linked to a rule modification, reject it too
+            mod_id = r.get("modification_id")
+            if mod_id:
+                await reject_rule_modification(mod_id, notes)
+            else:
+                rule_id = r.get("rule_id")
+                if rule_id:
+                    await update_rule_status(rule_id, "Rejected")
             return r
     return None
 
