@@ -6,9 +6,35 @@ import { Notification } from '@/components/shared/Notification';
 import { ApprovalModal } from '@/components/review/ApprovalModal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import { getReviewRequests, approveReview, rejectReview, compileRule } from '@/lib/api';
-import type { ReviewRequest } from '@/types';
+import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification } from '@/lib/api';
+import type { ReviewRequest, RuleModification } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
+
+/** Convert a RuleModification into a ReviewRequest shape so both appear in the same table. */
+function modToReview(m: RuleModification): ReviewRequest {
+  return {
+    id: m.id,
+    rule_id: m.rule_id,
+    rule_name: m.rule_id,
+    request_type: 'modify_rule',
+    requestor: 'sns_user',
+    reviewer: m.reviewer,
+    status: m.status as ReviewRequest['status'],
+    submitted_at: m.created_at,
+    reviewed_at: m.reviewed_at,
+    comments: m.comments,
+    review_notes: m.review_notes,
+    modification_id: m.id,
+    delta: m.delta,
+    rule_summary: {
+      application: m.original?.app_name || m.original?.app_id || 'N/A',
+      source: m.original?.rule_source || 'N/A',
+      destination: m.original?.rule_destination || 'N/A',
+      ports: m.original?.rule_service || 'N/A',
+      environment: m.original?.environment || '',
+    },
+  };
+}
 
 export default function ReviewPage(props: { context?: string }) {
   void props;
@@ -22,8 +48,16 @@ export default function ReviewPage(props: { context?: string }) {
   const loadReviews = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getReviewRequests();
-      setReviews(data);
+      const [reviewData, modData] = await Promise.all([
+        getReviewRequests(),
+        getRuleModifications(),
+      ]);
+      // Merge rule modifications into reviews as modify_rule entries
+      const modReviews = modData.map(modToReview);
+      // Avoid duplicates — if a review already references the same modification_id, skip
+      const existingModIds = new Set(reviewData.filter(r => r.modification_id).map(r => r.modification_id));
+      const uniqueModReviews = modReviews.filter(mr => !existingModIds.has(mr.modification_id));
+      setReviews([...reviewData, ...uniqueModReviews]);
     } catch {
       showNotification('Failed to load reviews', 'error');
     }
@@ -51,21 +85,34 @@ export default function ReviewPage(props: { context?: string }) {
 
   const handleApprove = async (reviewId: string, notes: string) => {
     try {
-      await approveReview(reviewId, notes);
-      showNotification('Review approved successfully', 'success');
+      // Check if this is a rule modification (MOD-xxx) or a regular review
+      const isModification = reviewId.startsWith('MOD-');
+      if (isModification) {
+        await approveRuleModification(reviewId, notes);
+        showNotification('Rule modification approved successfully', 'success');
+      } else {
+        await approveReview(reviewId, notes);
+        showNotification('Review approved successfully', 'success');
+      }
       loadReviews();
     } catch {
-      showNotification('Failed to approve review', 'error');
+      showNotification('Failed to approve', 'error');
     }
   };
 
   const handleReject = async (reviewId: string, notes: string) => {
     try {
-      await rejectReview(reviewId, notes);
-      showNotification('Review rejected', 'warning');
+      const isModification = reviewId.startsWith('MOD-');
+      if (isModification) {
+        await rejectRuleModification(reviewId, notes);
+        showNotification('Rule modification rejected', 'warning');
+      } else {
+        await rejectReview(reviewId, notes);
+        showNotification('Review rejected', 'warning');
+      }
       loadReviews();
     } catch {
-      showNotification('Failed to reject review', 'error');
+      showNotification('Failed to reject', 'error');
     }
   };
 
