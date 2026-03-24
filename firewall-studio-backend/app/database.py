@@ -1915,6 +1915,8 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
             f"    set action {'accept' if action == 'Allow' else 'deny'}\n"
             f"    set logtraffic all\n"
             f"    set comments \"{desc}\"\n"
+            f"    set src-vrf \"{src_vrf}\"\n"
+            f"    set dst-vrf \"{dst_vrf}\"\n"
             f"  next\n"
             f"end"
         )
@@ -2316,6 +2318,8 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
                 f"    set service \"{sv}\"\n"
                 f"    set action {'accept' if action == 'Accept' else 'deny'}\n"
                 f"    set logtraffic all\n"
+                f"    set src-vrf \"{src_vrf}\"\n"
+                f"    set dst-vrf \"{dst_vrf}\"\n"
                 f"  next"
                 for s in src_objs for d in dst_objs for sv in svc_list
             )
@@ -4029,6 +4033,10 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
         elif vendor == "fortigate":
             objs = src_objs if direction == "egress" else dst_objs
             lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
+            # Resolve VRF for this device
+            env = rule.get("environment", "")
+            dev_src_vrf = _resolve_vrf(src_nh, src_zone, env)
+            dev_dst_vrf = _resolve_vrf(dst_nh, dst_zone, env)
             lines.append("config firewall policy")
             for obj in objs:
                 s_val = obj if direction == "egress" else "any"
@@ -4042,6 +4050,8 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
                 lines.append(f"    set service \"{proto}/{svc}\"")
                 lines.append(f"    set action accept")
                 lines.append(f"    set logtraffic all")
+                lines.append(f"    set src-vrf \"{dev_src_vrf}\"")
+                lines.append(f"    set dst-vrf \"{dev_dst_vrf}\"")
                 lines.append(f"  next")
             lines.append("end")
         else:
