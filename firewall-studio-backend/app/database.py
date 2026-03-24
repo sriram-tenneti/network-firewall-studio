@@ -88,7 +88,31 @@ def set_data_mode(mode: str) -> str:
     # Ensure live-data dir exists when switching to live
     if mode == "live":
         LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _bootstrap_live_reference_data()
     return _data_mode
+
+
+# Reference data files that are org-level (names are real, values are editable).
+# These get auto-copied from seed to live-data the first time live mode is activated,
+# so the user starts with the same org structure and can then edit CIDR/metadata values.
+_REFERENCE_DATA_FILES = [
+    "neighbourhoods", "security_zones", "ngdc_datacenters", "legacy_datacenters",
+    "applications", "environments", "predefined_destinations", "naming_standards",
+    "policy_matrix", "heritage_dc_matrix", "ngdc_prod_matrix", "nonprod_matrix",
+    "preprod_matrix", "org_config", "firewall_devices", "ip_mappings",
+    "app_dc_mappings",
+]
+
+
+def _bootstrap_live_reference_data() -> None:
+    """Copy org reference data from seed to live-data if not already present.
+    Only copies files that don't exist yet in live-data, so user edits are preserved."""
+    import shutil
+    for name in _REFERENCE_DATA_FILES:
+        live_path = LIVE_DATA_DIR / f"{name}.json"
+        seed_path = SEED_DATA_DIR / f"{name}.json"
+        if not live_path.exists() and seed_path.exists():
+            shutil.copy2(seed_path, live_path)
 
 
 def _id() -> str:
@@ -140,6 +164,28 @@ def _load(name: str) -> Any:
 def _save(name: str, data: Any) -> None:
     _ensure_dir()
     path = _get_data_dir() / f"{name}.json"
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+
+# --- Org-level reference data helpers (always use SEED_DATA_DIR) ---
+# NHs, SZs, DCs, policy matrices, naming standards, org_config, environments,
+# predefined_destinations, firewall_devices, app_dc_mappings, ip_mappings
+# are org-level reference data shared across seed and live modes.
+
+def _load_ref(name: str) -> Any:
+    """Load org-level reference data — always from SEED_DATA_DIR regardless of data mode."""
+    path = SEED_DATA_DIR / f"{name}.json"
+    if not path.exists():
+        return None
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _save_ref(name: str, data: Any) -> None:
+    """Save org-level reference data — always to SEED_DATA_DIR regardless of data mode."""
+    SEED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = SEED_DATA_DIR / f"{name}.json"
     with open(path, "w") as f:
         json.dump(data, f, indent=2, default=str)
 
