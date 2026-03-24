@@ -164,8 +164,10 @@ def _load(name: str) -> Any:
 def _save(name: str, data: Any) -> None:
     _ensure_dir()
     path = _get_data_dir() / f"{name}.json"
+    # Skip pretty-printing for large datasets (>5000 items) to improve write performance
+    indent = None if isinstance(data, list) and len(data) > 5000 else 2
     with open(path, "w") as f:
-        json.dump(data, f, indent=2, default=str)
+        json.dump(data, f, indent=indent, default=str)
 
 
 # --- Org-level reference data helpers (always use SEED_DATA_DIR) ---

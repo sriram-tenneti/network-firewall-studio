@@ -71,7 +71,7 @@ async def reset_seed_data():
 
 def _parse_excel_bytes(contents: bytes, filename: str = "") -> list[tuple]:
     """Parse Excel/CSV file bytes into a list of row tuples.
-    Tries: CSV (if .csv), openpyxl (.xlsx), xlrd (.xls), HTML-table fallback.
+    Tries multiple strategies in order: CSV, openpyxl (all sheets), xlrd, HTML-table, ZIP-extract.
     Returns list of tuples where first tuple is headers."""
     import logging
     logger = logging.getLogger("excel_import")
@@ -79,45 +79,64 @@ def _parse_excel_bytes(contents: bytes, filename: str = "") -> list[tuple]:
 
     errors: list[str] = []
 
-    # Strategy 0: CSV file
+    # Strategy 0: CSV file (explicit .csv extension or BOM/text heuristic)
     if filename.lower().endswith(".csv") or (not filename and contents[:3] in (b'\xef\xbb\xbf', b'App')):
         try:
-            text = contents.decode("utf-8-sig")  # handles BOM
+            # Try multiple encodings
+            for encoding in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
+                try:
+                    text = contents.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                text = contents.decode("utf-8", errors="replace")
             reader = csv.reader(io.StringIO(text))
             rows = [tuple(row) for row in reader if any(cell.strip() for cell in row)]
             if rows:
-                logger.info(f"CSV success: {len(rows)} rows")
+                logger.info(f"CSV success: {len(rows)} rows (encoding={encoding})")
                 return rows
         except Exception as exc:
             errors.append(f"csv: {exc}")
             logger.warning(f"CSV parse failed: {exc}")
 
     # Strategy 1: openpyxl for .xlsx (Office Open XML)
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
-        ws = wb.active
-        if ws is None:
+    # Try read_only=True first for performance, fall back to read_only=False for protected files
+    for read_only in (True, False):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=read_only, data_only=True)
+            # Try active sheet first, then iterate all sheets to find the one with most rows
+            best_rows: list[tuple] = []
+            for ws in wb.worksheets:
+                try:
+                    sheet_rows = list(ws.iter_rows(values_only=True))
+                    if len(sheet_rows) > len(best_rows):
+                        best_rows = sheet_rows
+                except Exception:
+                    continue
             wb.close()
-            raise ValueError("Empty workbook")
-        rows = list(ws.iter_rows(values_only=True))
-        wb.close()
-        if rows:
-            logger.info(f"openpyxl success: {len(rows)} rows")
-            return rows
-    except Exception as exc:
-        errors.append(f"xlsx: {exc}")
-        logger.warning(f"openpyxl failed: {exc}")
+            if best_rows:
+                logger.info(f"openpyxl success (read_only={read_only}): {len(best_rows)} rows")
+                return best_rows
+        except Exception as exc:
+            errors.append(f"xlsx(read_only={read_only}): {exc}")
+            logger.warning(f"openpyxl (read_only={read_only}) failed: {exc}")
 
     # Strategy 2: xlrd for old .xls (Excel 97-2003 binary BIFF format)
     try:
         import xlrd
         wb = xlrd.open_workbook(file_contents=contents)
-        ws = wb.sheet_by_index(0)
+        # Find the sheet with the most rows
+        best_sheet = wb.sheet_by_index(0)
+        for i in range(wb.nsheets):
+            s = wb.sheet_by_index(i)
+            if s.nrows > best_sheet.nrows:
+                best_sheet = s
         rows_list: list[tuple] = []
-        for row_idx in range(ws.nrows):
-            rows_list.append(tuple(ws.cell_value(row_idx, col_idx) for col_idx in range(ws.ncols)))
+        for row_idx in range(best_sheet.nrows):
+            rows_list.append(tuple(best_sheet.cell_value(row_idx, col_idx) for col_idx in range(best_sheet.ncols)))
         if rows_list:
-            logger.info(f"xlrd success: {len(rows_list)} rows")
+            logger.info(f"xlrd success: {len(rows_list)} rows from sheet '{best_sheet.name}'")
             return rows_list
     except Exception as exc:
         errors.append(f"xls: {exc}")
@@ -161,6 +180,22 @@ def _parse_excel_bytes(contents: bytes, filename: str = "") -> list[tuple]:
                 return html_rows
     except Exception as exc:
         errors.append(f"html: {exc}")
+
+    # Strategy 4: Try extracting CSV from inside a ZIP (some encrypted xlsx are just ZIPs)
+    try:
+        if contents[:2] == b'PK':
+            zf = zipfile.ZipFile(io.BytesIO(contents))
+            for name in zf.namelist():
+                if name.lower().endswith(('.csv', '.txt')):
+                    csv_bytes = zf.read(name)
+                    text = csv_bytes.decode("utf-8-sig", errors="replace")
+                    reader = csv.reader(io.StringIO(text))
+                    rows = [tuple(row) for row in reader if any(cell.strip() for cell in row)]
+                    if rows:
+                        logger.info(f"ZIP-CSV success: {len(rows)} rows from {name}")
+                        return rows
+    except Exception as exc:
+        errors.append(f"zip-csv: {exc}")
 
     error_detail = "; ".join(errors) if errors else "unknown format"
     raise ValueError(
@@ -652,45 +687,105 @@ async def delete_legacy_rule_endpoint(rule_id: str):
     return {"message": "Deleted"}
 
 
+def _normalize_header(h: str) -> str:
+    """Normalize a header string for flexible matching: lowercase, strip whitespace, collapse spaces."""
+    return " ".join(str(h).strip().lower().split())
+
+
+# Known header → internal field name mapping (normalised keys).
+# Any column NOT in this map is still imported using a slugified version of the original header.
+_KNOWN_COL_MAP: dict[str, str] = {
+    "app id": "app_id",
+    "app current distributed id": "app_distributed_id",
+    "app name": "app_name",
+    "inventory item": "inventory_item",
+    "policy name": "policy_name",
+    "rule global": "rule_global",
+    "rule action": "rule_action",
+    "rule source": "rule_source",
+    "rule source expanded": "rule_source_expanded",
+    "rule source zone": "rule_source_zone",
+    "rule destination": "rule_destination",
+    "rule destination expanded": "rule_destination_expanded",
+    "rule destination zone": "rule_destination_zone",
+    "rule service": "rule_service",
+    "rule service expanded": "rule_service_expanded",
+    "rn": "rn",
+    "rc": "rc",
+}
+
+
+def _header_to_field(header: str) -> str:
+    """Convert an Excel header to an internal field name.
+    Known headers map to their predefined field names.
+    Unknown headers are slugified: lowercased, spaces→underscores, non-alnum stripped."""
+    norm = _normalize_header(header)
+    if norm in _KNOWN_COL_MAP:
+        return _KNOWN_COL_MAP[norm]
+    # Slugify: lowercase, replace spaces/special chars with underscore
+    slug = norm.replace(" ", "_").replace("-", "_")
+    slug = "".join(c for c in slug if c.isalnum() or c == "_")
+    # Remove leading/trailing/double underscores
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug.strip("_") or f"col_{id(header)}"
+
+
 @router.post("/legacy-rules/import")
 async def import_legacy_rules_excel(file: UploadFile = File(...)):
-    """Import legacy rules from Excel (.xlsx/.xls) or CSV file with deduplication."""
+    """Import legacy rules from Excel (.xlsx/.xls) or CSV file with deduplication.
+    ALL columns from the spreadsheet are preserved as-is.  Known columns
+    (App ID, Rule Source, etc.) are mapped to canonical internal names;
+    unknown columns are imported using a slugified version of the header."""
+    import logging
+    logger = logging.getLogger("excel_import")
     fname = file.filename or ""
     if not fname.endswith((".xlsx", ".xls", ".csv")):
         raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
     contents = await file.read()
+    logger.info(f"Import request: file={fname}, size={len(contents)} bytes")
     try:
         rows = _parse_excel_bytes(contents, filename=fname)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if not rows:
         raise HTTPException(status_code=400, detail="Empty workbook")
-    headers = list(rows[0])
-    col_map = {
-        "App ID": "app_id", "App Current Distributed ID": "app_distributed_id",
-        "App Name": "app_name", "Inventory Item": "inventory_item",
-        "Policy Name": "policy_name", "Rule Global": "rule_global",
-        "Rule Action": "rule_action", "Rule Source": "rule_source",
-        "Rule Source Expanded": "rule_source_expanded", "Rule Source Zone": "rule_source_zone",
-        "Rule Destination": "rule_destination",
-        "Rule Destination Expanded": "rule_destination_expanded",
-        "Rule Destination Zone": "rule_destination_zone",
-        "Rule Service": "rule_service", "Rule Service Expanded": "rule_service_expanded",
-        "RN": "rn", "RC": "rc",
-    }
-    parsed_rules = []
+    raw_headers = [str(h).strip() if h is not None else "" for h in rows[0]]
+    # Build field name list — every column is imported
+    field_names: list[str] = []
+    mapped_headers: list[str] = []
+    unmapped_headers: list[str] = []
+    for h in raw_headers:
+        fn = _header_to_field(h)
+        field_names.append(fn)
+        if _normalize_header(h) in _KNOWN_COL_MAP:
+            mapped_headers.append(h)
+        elif h:
+            unmapped_headers.append(h)
+    logger.info(f"Headers ({len(raw_headers)}): mapped={len(mapped_headers)}, unmapped={len(unmapped_headers)}, total_data_rows={len(rows) - 1}")
+    parsed_rules: list[dict] = []
+    skipped_empty = 0
     for row_vals in rows[1:]:
-        if not any(row_vals):
+        if not any(v is not None and str(v).strip() for v in row_vals):
+            skipped_empty += 1
             continue
         rule: dict = {}
-        for i, h in enumerate(headers):
-            if h in col_map and i < len(row_vals):
+        for i, fn in enumerate(field_names):
+            if i < len(row_vals) and fn:
                 val = row_vals[i]
-                rule[col_map[h]] = str(val) if val is not None else ""
+                rule[fn] = str(val).strip() if val is not None else ""
         rule["is_standard"] = False
-        rule["migration_status"] = "Not Started"
+        rule.setdefault("migration_status", "Not Started")
         parsed_rules.append(rule)
+    logger.info(f"Parsed {len(parsed_rules)} rules (skipped {skipped_empty} empty rows)")
     result = await import_legacy_rules(parsed_rules)
+    # Add diagnostics to the response
+    result["parsed_rows"] = len(parsed_rules)
+    result["skipped_empty"] = skipped_empty
+    result["total_file_rows"] = len(rows) - 1
+    result["headers_found"] = raw_headers
+    result["mapped_headers"] = mapped_headers
+    result["unmapped_headers"] = unmapped_headers
     return result
 
 
