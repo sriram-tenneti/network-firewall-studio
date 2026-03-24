@@ -143,7 +143,10 @@ export function MigrationStudioPage() {
   const [migrateComments, setMigrateComments] = useState('');
   const [submittingMigration, setSubmittingMigration] = useState(false);
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
-  const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit'>('review');
+  const [migrationStep, setMigrationStep] = useState<'review' | 'mapping' | 'compile' | 'submit' | 'change'>('review');
+  const [chgNumber, setChgNumber] = useState('');
+  const [chgSubmitting, setChgSubmitting] = useState(false);
+  const [chgSubmitted, setChgSubmitted] = useState(false);
   const [boundaryAnalysis, setBoundaryAnalysis] = useState<Record<string, unknown> | null>(null);
   const [boundaryLoading, setBoundaryLoading] = useState(false);
   const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
@@ -327,7 +330,7 @@ export function MigrationStudioPage() {
 
   const closeMigratePopup = () => {
     setMigrateRule(null); setRecommendation(null); setCustomMappings([]);
-    setCustomDestMappings([]); setCompiledRule(null); setBirthrightResult(null); setAppGroups([]); setComponentGroups([]); setIsModifyMode(false); setOriginalRuleSnapshot(null);
+    setCustomDestMappings([]); setCompiledRule(null); setBirthrightResult(null); setAppGroups([]); setComponentGroups([]); setIsModifyMode(false); setOriginalRuleSnapshot(null); setChgNumber(''); setChgSubmitted(false);
   };
 
   const handleCompileMigration = async () => {
@@ -465,11 +468,39 @@ export function MigrationStudioPage() {
     { id: 'Migrated', label: 'Migrated', count: legacyRules.filter(r => r.migration_status === 'Mapped' || r.migration_status === 'Completed').length },
   ];
 
+  const handleSubmitChange = async () => {
+    if (!migrateRule) return;
+    setChgSubmitting(true);
+    try {
+      // Placeholder: In production, this would call ServiceNow API to create a CHG
+      const placeholderCHG = `CHG${String(Date.now()).slice(-7)}`;
+      setChgNumber(placeholderCHG);
+      setChgSubmitted(true);
+      showNotification(`Change ${placeholderCHG} submitted successfully. Rule will be deployed upon CHG closure.`, 'success');
+    } catch {
+      showNotification('Failed to submit change request', 'error');
+    }
+    setChgSubmitting(false);
+  };
+
+  const handleDeployAfterCHG = async () => {
+    if (!migrateRule || !chgNumber) return;
+    try {
+      await migrateRulesToNGDC([migrateRule.id]);
+      showNotification(`Rule deployed via ${chgNumber}. Now visible in Design Studio.`, 'success');
+      closeMigratePopup();
+      loadData();
+    } catch {
+      showNotification('Failed to deploy rule', 'error');
+    }
+  };
+
   const migrationSteps = [
     { id: 'review', label: '1. Review' },
     { id: 'mapping', label: '2. Group Mapping' },
     { id: 'compile', label: '3. Compile' },
     { id: 'submit', label: '4. Submit' },
+    { id: 'change', label: '5. Change' },
   ];
 
   return (
@@ -1423,6 +1454,71 @@ export function MigrationStudioPage() {
                         {submittingMigration ? 'Submitting...' : 'Submit Migration for Review'}
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Step 5: Submit Change - After approval, submit CHG and deploy */}
+                {migrationStep === 'change' && (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h3 className="text-sm font-semibold text-blue-800 mb-1">Submit Change Request</h3>
+                      <p className="text-xs text-blue-600">Rule has been approved. Submit a ServiceNow Change Request (CHG) to deploy this rule to production firewalls.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-gray-50 rounded-lg border">
+                        <span className="text-[10px] text-gray-500 uppercase">Rule ID</span>
+                        <div className="text-sm font-medium">{migrateRule?.id}</div>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg border">
+                        <span className="text-[10px] text-gray-500 uppercase">Application</span>
+                        <div className="text-sm font-medium">{migrateRule?.app_name} ({migrateRule?.app_id})</div>
+                      </div>
+                    </div>
+
+                    {!chgSubmitted ? (
+                      <div className="space-y-3">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <h4 className="text-xs font-semibold text-amber-800 mb-1">CHG Template</h4>
+                          <div className="text-xs text-amber-700 space-y-1">
+                            <div>Type: Normal Change</div>
+                            <div>Category: Firewall Rule Deployment</div>
+                            <div>Environment: {migrateRule ? (migrateRule as unknown as Record<string, string>).environment || 'Production' : 'Production'}</div>
+                            <div>CI: Firewall Management System</div>
+                            <div>Impact: Low | Risk: Low</div>
+                          </div>
+                        </div>
+                        <div className="flex justify-between">
+                          <button onClick={() => setMigrationStep('submit')} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                            Back
+                          </button>
+                          <button onClick={handleSubmitChange} disabled={chgSubmitting}
+                            className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 shadow-sm">
+                            {chgSubmitting ? 'Submitting CHG...' : 'Submit Change Request'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="p-4 bg-green-50 border-2 border-green-400 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">&#9989;</span>
+                            <span className="font-bold text-green-800">Change Request Submitted</span>
+                          </div>
+                          <div className="text-sm text-green-700">
+                            <div>CHG Number: <strong className="font-mono">{chgNumber}</strong></div>
+                            <div className="mt-1">Status: Approved &mdash; Ready for Deployment</div>
+                          </div>
+                        </div>
+                        <div className="flex justify-between">
+                          <div className="text-xs text-gray-500 self-center">CHG {chgNumber} approved. Click Deploy to push rule to firewalls.</div>
+                          <button onClick={handleDeployAfterCHG}
+                            className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 shadow-sm">
+                            Deploy Rule via {chgNumber}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

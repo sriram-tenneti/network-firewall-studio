@@ -131,6 +131,17 @@ export function DesignStudioPage() {
     }
   };
 
+  const handleSubmitChange = async (ruleId: string) => {
+    try {
+      // Placeholder: In production this calls ServiceNow API to create CHG
+      const placeholderCHG = `CHG${String(Date.now()).slice(-7)}`;
+      showNotification(`Change ${placeholderCHG} submitted for rule ${ruleId}. Rule will be deployed upon CHG closure.`, 'success');
+      loadData();
+    } catch {
+      showNotification('Failed to submit change request', 'error');
+    }
+  };
+
 
 
   function getSourceDisplay(rule: FirewallRule): string {
@@ -184,6 +195,9 @@ export function DesignStudioPage() {
           )}
           {(row.status !== 'Deleted') && (
             <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100">modify</button>
+          )}
+          {row.status === 'Approved' && (
+            <button onClick={() => handleSubmitChange(row.rule_id)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Submit CHG</button>
           )}
           {(row.status === 'Approved' || row.status === 'Deployed') && (
             <button onClick={() => handleCertify(row.rule_id)} className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded hover:bg-purple-100">Certify</button>

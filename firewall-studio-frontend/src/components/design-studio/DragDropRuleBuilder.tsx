@@ -69,7 +69,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+    application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
     src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
     dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
     port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
@@ -77,51 +77,86 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [validatingBR, setValidatingBR] = useState(false);
 
-  // Dynamic NH/SZ/DC from API based on environment + app
-  const [dynNHs, setDynNHs] = useState<NeighbourhoodRegistry[]>([]);
-  const [dynSZs, setDynSZs] = useState<SecurityZone[]>([]);
-  const [dynDCs, setDynDCs] = useState<NGDCDataCenter[]>([]);
-  const [loadingFiltered, setLoadingFiltered] = useState(false);
+  // Source NH/SZ/DC from source app
+  const [srcNHs, setSrcNHs] = useState<NeighbourhoodRegistry[]>([]);
+  const [srcSZs, setSrcSZs] = useState<SecurityZone[]>([]);
+  const [srcDCs, setSrcDCs] = useState<NGDCDataCenter[]>([]);
+  const [loadingSrc, setLoadingSrc] = useState(false);
 
-  const loadFilteredData = useCallback(async (env: string, appId: string) => {
+  // Destination NH/SZ/DC from destination app
+  const [dstNHs, setDstNHs] = useState<NeighbourhoodRegistry[]>([]);
+  const [dstSZs, setDstSZs] = useState<SecurityZone[]>([]);
+  const [dstDCs, setDstDCs] = useState<NGDCDataCenter[]>([]);
+  const [loadingDst, setLoadingDst] = useState(false);
+
+  const loadSrcData = useCallback(async (env: string, appId: string) => {
     if (!env) return;
-    setLoadingFiltered(true);
+    setLoadingSrc(true);
     try {
       const data = await api.getFilteredNhSzDc(env, appId || undefined);
-      setDynNHs(data.neighbourhoods || []);
-      setDynSZs(data.security_zones || []);
-      setDynDCs(data.datacenters || []);
+      setSrcNHs(data.neighbourhoods || []);
+      setSrcSZs(data.security_zones || []);
+      setSrcDCs(data.datacenters || []);
     } catch {
-      setDynNHs([]); setDynSZs([]); setDynDCs([]);
+      setSrcNHs([]); setSrcSZs([]); setSrcDCs([]);
     }
-    setLoadingFiltered(false);
+    setLoadingSrc(false);
+  }, []);
+
+  const loadDstData = useCallback(async (env: string, appId: string) => {
+    if (!env || !appId) return;
+    setLoadingDst(true);
+    try {
+      const data = await api.getFilteredNhSzDc(env, appId);
+      setDstNHs(data.neighbourhoods || []);
+      setDstSZs(data.security_zones || []);
+      setDstDCs(data.datacenters || []);
+    } catch {
+      setDstNHs([]); setDstSZs([]); setDstDCs([]);
+    }
+    setLoadingDst(false);
   }, []);
 
   useEffect(() => {
-    loadFilteredData(form.environment, form.application);
-  }, [form.environment, form.application, loadFilteredData]);
+    loadSrcData(form.environment, form.application);
+  }, [form.environment, form.application, loadSrcData]);
 
-  // Use dynamic data if available, otherwise fallback
-  const neighbourhoods = useMemo(() =>
-    dynNHs.length > 0
-      ? dynNHs.map(nh => ({ id: nh.nh_id, name: nh.name }))
-      : FALLBACK_NEIGHBOURHOODS,
-    [dynNHs]
+  useEffect(() => {
+    if (form.dst_application) {
+      loadDstData(form.environment, form.dst_application);
+    } else {
+      setDstNHs(srcNHs); setDstSZs(srcSZs); setDstDCs(srcDCs);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.environment, form.dst_application, loadDstData, srcNHs, srcSZs, srcDCs]);
+
+  const srcNeighbourhoods = useMemo(() =>
+    srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS,
+    [srcNHs]
+  );
+  const srcZones = useMemo(() =>
+    srcSZs.length > 0 ? srcSZs.map(sz => ({ code: sz.code, name: sz.name })) : [],
+    [srcSZs]
+  );
+  const dstNeighbourhoods = useMemo(() =>
+    dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS,
+    [dstNHs]
+  );
+  const dstZones = useMemo(() =>
+    dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [],
+    [dstSZs]
   );
 
-  const zones = useMemo(() =>
-    dynSZs.length > 0
-      ? dynSZs.map(sz => ({ code: sz.code, name: sz.name }))
-      : [],
-    [dynSZs]
-  );
-
-  const datacenters = useMemo(() =>
-    dynDCs.length > 0
-      ? dynDCs.map(dc => ({ code: dc.dc_id, name: dc.name }))
-      : FALLBACK_DATACENTERS,
-    [dynDCs]
-  );
+  const datacenters = useMemo(() => {
+    const all = [...srcDCs, ...dstDCs];
+    const seen = new Set<string>();
+    const unique: { code: string; name: string }[] = [];
+    for (const dc of all) {
+      const key = dc.dc_id || dc.code;
+      if (!seen.has(key)) { seen.add(key); unique.push({ code: key, name: dc.name }); }
+    }
+    return unique.length > 0 ? unique : FALLBACK_DATACENTERS;
+  }, [srcDCs, dstDCs]);
 
   const srcName = useMemo(() => {
     if (!form.application || !form.src_nh || !form.src_sz) return '';
@@ -129,9 +164,10 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   }, [form.application, form.src_nh, form.src_sz, form.src_subtype]);
 
   const dstName = useMemo(() => {
-    if (!form.application || !form.dst_nh || !form.dst_sz) return '';
-    return `grp-${form.application}-${form.dst_nh}-${form.dst_sz}-${form.dst_subtype}`;
-  }, [form.application, form.dst_nh, form.dst_sz, form.dst_subtype]);
+    const dstApp = form.dst_application || form.application;
+    if (!dstApp || !form.dst_nh || !form.dst_sz) return '';
+    return `grp-${dstApp}-${form.dst_nh}-${form.dst_sz}-${form.dst_subtype}`;
+  }, [form.application, form.dst_application, form.dst_nh, form.dst_sz, form.dst_subtype]);
 
   const effectivePort = form.port === 'custom' ? form.customPort : form.port;
 
@@ -154,10 +190,15 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
     return () => clearTimeout(timer);
   }, [form.src_sz, form.dst_sz, form.src_nh, form.dst_nh, form.datacenter, form.environment]);
 
+  // Birthright already permitted = no FW rule needed, block submission
+  const isBirthrightPermitted = birthrightResult
+    && birthrightResult.compliant
+    && !birthrightResult.firewall_request_required;
+
   const canStep1 = form.application && form.environment && form.datacenter;
   const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz;
   const canStep3 = effectivePort && form.protocol;
-  const canSubmit = canStep1 && canStep2 && canStep3;
+  const canSubmit = canStep1 && canStep2 && canStep3 && !isBirthrightPermitted;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -171,10 +212,12 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
         destination: finalDst, destination_zone: form.dst_sz,
         port: effectivePort, protocol: form.protocol, action: form.action,
         description: form.description, is_group_to_group: true,
+        source_nh: form.src_nh, destination_nh: form.dst_nh,
+        dst_application: form.dst_application || undefined,
       });
       onRuleCreated();
       setStep(1);
-      setForm({ application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+      setForm({ application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
         src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
         dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
         port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '' });
@@ -217,19 +260,32 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
         {/* Step 1: Application & Environment */}
         {step === 1 && (
           <div className="space-y-5">
-            <div className="grid grid-cols-3 gap-5">
+            <div className="grid grid-cols-2 gap-5">
               <div>
-                <label className={lbl}>Application</label>
-                <select className={sel} value={form.application} onChange={e => upd('application', e.target.value)}>
-                  <option value="">Select Application...</option>
+                <label className={lbl}>Source Application</label>
+                <select className={sel} value={form.application} onChange={e => { upd('application', e.target.value); upd('src_nh', ''); upd('src_sz', ''); }}>
+                  <option value="">Select Source Application...</option>
                   {applications.map(app => (
                     <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
                   ))}
                 </select>
+                <p className="text-[10px] text-gray-400 mt-1">Populates source NH and SZ dropdowns</p>
               </div>
               <div>
+                <label className={lbl}>Destination Application</label>
+                <select className={sel} value={form.dst_application} onChange={e => { upd('dst_application', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); }}>
+                  <option value="">Same as Source / All</option>
+                  {applications.map(app => (
+                    <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Populates destination NH and SZ dropdowns</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+              <div>
                 <label className={lbl}>Environment</label>
-                <select className={sel} value={form.environment} onChange={e => { upd('environment', e.target.value); upd('src_sz', ''); upd('dst_sz', ''); }}>
+                <select className={sel} value={form.environment} onChange={e => { upd('environment', e.target.value); upd('src_nh', ''); upd('src_sz', ''); upd('dst_nh', ''); upd('dst_sz', ''); }}>
                   <option value="Production">Production</option>
                   <option value="Non-Production">Non-Production</option>
                   <option value="Pre-Production">Pre-Production</option>
@@ -247,7 +303,11 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
             {form.application && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <span className="text-sm text-blue-800 font-medium">
-                  Building rule for <strong>{form.application}</strong> in <strong>{form.environment}</strong> at <strong>{datacenters.find(d => d.code === form.datacenter)?.name}</strong>
+                  Building rule: <strong>{form.application}</strong>
+                  {form.dst_application && form.dst_application !== form.application && (
+                    <> &rarr; <strong>{form.dst_application}</strong></>
+                  )}
+                  {' '}in <strong>{form.environment}</strong> at <strong>{datacenters.find(d => d.code === form.datacenter)?.name}</strong>
                 </span>
               </div>
             )}
@@ -269,21 +329,22 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 <div className="flex items-center gap-2 mb-4">
                   <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-bold">SRC</span>
                   <h3 className="text-sm font-bold text-blue-800">Source</h3>
+                  {form.application && <span className="text-[10px] text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded">App: {form.application}</span>}
                 </div>
                 <div className="space-y-3">
                   <div>
                     <label className={lbl}>Neighbourhood</label>
                     <select className={sel} value={form.src_nh} onChange={e => upd('src_nh', e.target.value)}>
                       <option value="">Select Neighbourhood...</option>
-                      {neighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
+                      {srcNeighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
                     </select>
-                    {loadingFiltered && <span className="text-[10px] text-blue-500 animate-pulse">Loading...</span>}
+                    {loadingSrc && <span className="text-[10px] text-blue-500 animate-pulse">Loading...</span>}
                   </div>
                   <div>
                     <label className={lbl}>Security Zone</label>
                     <select className={sel} value={form.src_sz} onChange={e => upd('src_sz', e.target.value)}>
                       <option value="">Select Zone...</option>
-                      {zones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
+                      {srcZones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
                     </select>
                   </div>
                   <div>
@@ -315,10 +376,12 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 {validatingBR && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600" />}
                 {birthrightResult && !validatingBR && (
                   <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
+                    isBirthrightPermitted ? 'bg-green-100 text-green-700' :
                     birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
                     birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                   )}>
-                    {birthrightResult.firewall_request_required ? 'FW REQUIRED' :
+                    {isBirthrightPermitted ? 'ALREADY PERMITTED' :
+                     birthrightResult.firewall_request_required ? 'FW REQUIRED' :
                      birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
                   </span>
                 )}
@@ -330,20 +393,22 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 <div className="flex items-center gap-2 mb-4">
                   <span className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">DST</span>
                   <h3 className="text-sm font-bold text-emerald-800">Destination</h3>
+                  {(form.dst_application || form.application) && <span className="text-[10px] text-emerald-500 bg-emerald-100 px-1.5 py-0.5 rounded">App: {form.dst_application || form.application}</span>}
                 </div>
                 <div className="space-y-3">
                   <div>
                     <label className={lbl}>Neighbourhood</label>
                     <select className={sel} value={form.dst_nh} onChange={e => upd('dst_nh', e.target.value)}>
                       <option value="">Select Neighbourhood...</option>
-                      {neighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
+                      {dstNeighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
                     </select>
+                    {loadingDst && <span className="text-[10px] text-emerald-500 animate-pulse">Loading...</span>}
                   </div>
                   <div>
                     <label className={lbl}>Security Zone</label>
                     <select className={sel} value={form.dst_sz} onChange={e => upd('dst_sz', e.target.value)}>
                       <option value="">Select Zone...</option>
-                      {zones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
+                      {dstZones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
                     </select>
                   </div>
                   <div>
@@ -368,8 +433,25 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
 
             {birthrightResult && !validatingBR && (
               <div className="space-y-2">
+                {/* Already permitted - block submission */}
+                {isBirthrightPermitted && (
+                  <div className="p-4 rounded-lg border-2 border-green-400 bg-green-50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-bold text-green-800">Already Permitted &mdash; No Firewall Rule Needed</span>
+                    </div>
+                    <p className="text-sm text-green-700">
+                      This traffic is already allowed by birthright policy. No additional firewall rule is required.
+                      You cannot submit a rule for traffic that is already permitted.
+                    </p>
+                    {birthrightResult.permitted.length > 0 && (
+                      <ul className="text-xs text-green-700 list-disc list-inside mt-2">
+                        {birthrightResult.permitted.map((p, i) => (<li key={i}>{p.rule} &mdash; {p.reason}</li>))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 {/* Policy Status */}
-                <div className={'p-3 rounded-lg border text-sm ' + (
+                {!isBirthrightPermitted && <div className={'p-3 rounded-lg border text-sm ' + (
                   birthrightResult.firewall_request_required ? 'bg-amber-50 border-amber-200' :
                   birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
                 )}>
@@ -399,7 +481,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                       {birthrightResult.warnings.map((w, i) => (<li key={i}>{w.rule} &mdash; {w.reason}</li>))}
                     </ul>
                   )}
-                </div>
+                </div>}
 
                 {/* Firewall Device Hops — rule required */}
                 {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
@@ -487,13 +569,29 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
               <textarea className={sel + ' h-16 resize-none'} placeholder="Brief description of this rule..." value={form.description} onChange={e => upd('description', e.target.value)} />
             </div>
 
+            {/* Birthright block banner */}
+            {isBirthrightPermitted && (
+              <div className="p-4 rounded-lg border-2 border-green-400 bg-green-50">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-green-800">Already Permitted &mdash; No Firewall Rule Needed</span>
+                </div>
+                <p className="text-sm text-green-700 mt-1">
+                  This traffic is already allowed by birthright policy. Rule creation is blocked.
+                </p>
+              </div>
+            )}
+
             {/* Review summary */}
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Rule Summary</h4>
               <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Application:</span>
+                  <span className="text-gray-500">Source App:</span>
                   <span className="font-medium text-gray-900">{form.application || '\u2014'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Destination App:</span>
+                  <span className="font-medium text-gray-900">{form.dst_application || form.application || '\u2014'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Environment:</span>
@@ -501,7 +599,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Datacenter:</span>
-                  <span className="font-medium text-gray-900">{DATACENTERS.find(d => d.code === form.datacenter)?.name}</span>
+                  <span className="font-medium text-gray-900">{datacenters.find(d => d.code === form.datacenter)?.name}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Protocol/Port:</span>
@@ -525,10 +623,13 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 {birthrightResult && (
                   <div className="col-span-2 mt-1 space-y-1">
                     <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (
+                      isBirthrightPermitted ? 'bg-green-100 text-green-700' :
                       birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
                       birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     )}>
-                      {birthrightResult.firewall_request_required
+                      {isBirthrightPermitted
+                        ? 'Already Permitted \u2014 No FW Rule Needed'
+                        : birthrightResult.firewall_request_required
                         ? 'Firewall Rule Required'
                         : birthrightResult.compliant ? 'Policy: Permitted' : 'Policy: Blocked'}
                     </span>
@@ -548,7 +649,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
               </button>
               <button onClick={handleSubmit} disabled={!canSubmit || submitting}
                 className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
-                {submitting ? 'Creating...' : 'Create Firewall Rule'}
+                {submitting ? 'Creating...' : isBirthrightPermitted ? 'Already Permitted (Cannot Create)' : 'Create Firewall Rule'}
               </button>
             </div>
           </div>
