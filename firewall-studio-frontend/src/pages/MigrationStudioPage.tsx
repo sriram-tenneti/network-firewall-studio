@@ -240,9 +240,9 @@ export function MigrationStudioPage() {
     'In Progress': envFilteredRules.filter(r => r.migration_status === 'In Progress').length,
   };
 
-  const appOptions = Array.from(new Set(legacyRules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
-    const [appId, distId, appName] = key.split('|');
-    return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
+  const appOptions = Array.from(new Set(legacyRules.map(r => `${r.app_distributed_id || r.app_id}|${r.app_id}|${r.app_name}`))).map(key => {
+    const [distId, appId, appName] = key.split('|');
+    return { value: distId, label: `${distId} - ${appName || appId}` };
   });
 
   const toggleSelection = (ruleId: string) => {
@@ -572,7 +572,7 @@ export function MigrationStudioPage() {
               <select value={groupMappingsFilter} onChange={e => setGroupMappingsFilter(e.target.value)}
                 className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white">
                 <option value="">All Applications</option>
-                {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_id} - {a.name}</option>)}
+                {applications.map(a => <option key={a.app_distributed_id || a.app_id} value={a.app_distributed_id || a.app_id}>{a.app_distributed_id || a.app_id} - {a.name}</option>)}
               </select>
               <button onClick={() => loadIPMappings(groupMappingsFilter)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">Refresh</button>
               <label className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 cursor-pointer">

@@ -574,9 +574,9 @@ export default function FirewallManagementPage() {
   const standardCount = envFilteredRules.filter(r => r.is_standard).length;
   const nonStandardCount = envFilteredRules.filter(r => !r.is_standard).length;
 
-  const appOptions = Array.from(new Set(rules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
-    const [appId, distId, appName] = key.split('|');
-    return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
+  const appOptions = Array.from(new Set(rules.map(r => `${r.app_distributed_id || r.app_id}|${r.app_id}|${r.app_name}`))).map(key => {
+    const [distId, appId, appName] = key.split('|');
+    return { value: distId, label: `${distId} - ${appName || appId}` };
   });
 
   const parseExpandedTree = (text: string): string[] => {

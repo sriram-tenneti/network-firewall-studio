@@ -90,9 +90,9 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         environment: 'Production',
       })) as unknown as FirewallRule[];
       setNfrRules(mapped);
-      const apps = Array.from(new Set(legacyRules.map((r: LegacyRule) => `${r.app_id}|${r.app_name || r.app_id}`))).map(key => {
-        const [appId, appName] = (key as string).split('|');
-        return { value: appId, label: `${appId} - ${appName}` };
+      const apps = Array.from(new Set(legacyRules.map((r: LegacyRule) => `${r.app_distributed_id || r.app_id}|${r.app_name || r.app_id}`))).map(key => {
+        const [distId, appName] = (key as string).split('|');
+        return { value: distId, label: `${distId} - ${appName}` };
       });
       setNfrApps(apps);
     } catch { setNfrApps([]); }
@@ -249,7 +249,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
 
   const getFilteredImportedRules = () => {
     let filtered = importedRules;
-    if (rulesAppFilter) filtered = filtered.filter(r => String(r.app_id) === rulesAppFilter);
+    if (rulesAppFilter) filtered = filtered.filter(r => (r.app_distributed_id || String(r.app_id)) === rulesAppFilter);
     if (rulesSearchQuery.trim()) {
       const q = rulesSearchQuery.toLowerCase();
       filtered = filtered.filter(r => {
@@ -489,8 +489,8 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             <div className="flex items-center gap-3">
               <select className="px-2 py-1.5 text-xs border rounded-md" value={rulesAppFilter} onChange={e => setRulesAppFilter(e.target.value)}>
                 <option value="">All Apps</option>
-                {Array.from(new Set(importedRules.map(r => String(r.app_id)))).sort().map(appId => (
-                  <option key={appId} value={appId}>{appId}</option>
+                {Array.from(new Set(importedRules.map(r => r.app_distributed_id || String(r.app_id)))).sort().map(distId => (
+                  <option key={distId} value={distId}>{distId}</option>
                 ))}
               </select>
               <input

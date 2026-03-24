@@ -246,7 +246,7 @@ export function DesignStudioPage() {
           >
             <option value="">All Applications</option>
             {applications.map(app => (
-              <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+              <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
             ))}
           </select>
           <select

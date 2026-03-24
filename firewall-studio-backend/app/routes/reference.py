@@ -701,13 +701,15 @@ def _strip_all(s: str) -> str:
 # _KNOWN_COL_MAP_NOSPACE has the same entries but with all spaces removed for
 # matching concatenated headers like "Appid", "AppName", "ActionType", etc.
 _KNOWN_COL_MAP: dict[str, str] = {
-    # Standard rule fields (spaced form, e.g. "App ID", "Rule Source")
+    # ── Standard rule fields (spaced form, e.g. "App ID", "Rule Source") ──
     "app id": "app_id",
     "app current distributed id": "app_distributed_id",
+    "app distributed id": "app_distributed_id",
     "app name": "app_name",
     "inventory item": "inventory_item",
     "policy name": "policy_name",
     "rule global": "rule_global",
+    "global rule": "rule_global",
     "rule action": "rule_action",
     "rule source": "rule_source",
     "rule source expanded": "rule_source_expanded",
@@ -719,42 +721,88 @@ _KNOWN_COL_MAP: dict[str, str] = {
     "rule service expanded": "rule_service_expanded",
     "rn": "rn",
     "rc": "rc",
-    # Alternate / concatenated header names from real enterprise exports
+    # ── Concatenated / PascalCase / alternate header names ──
+    # App identifiers
     "appid": "app_id",
     "appname": "app_name",
+    "appnme": "app_name",           # real variant seen in enterprise exports
+    "app nme": "app_name",           # spaced variant
     "appdistributedid": "app_distributed_id",
     "appcurrentdistributedid": "app_distributed_id",
+    "distributedid": "app_distributed_id",
+    "distributed id": "app_distributed_id",
+    "dist id": "app_distributed_id",
+    "distid": "app_distributed_id",
+    # App metadata (enterprise exports)
+    "app asset status": "app_asset_status",
+    "appassetstatus": "app_asset_status",
+    "app portfolio": "app_portfolio",
+    "appportfolio": "app_portfolio",
+    "app manager": "app_manager",
+    "appmanager": "app_manager",
+    "appmana": "app_manager",        # real variant seen in enterprise exports
+    "firewall name": "firewall_name",
+    "firewallname": "firewall_name",
+    # Inventory / policy
     "inventoryitem": "inventory_item",
     "policyname": "policy_name",
+    "access policy": "policy_name",
+    "accesspolicy": "policy_name",
+    # Global rule
     "ruleglobal": "rule_global",
+    "globalrule": "rule_global",
+    "globalru": "rule_global",       # real variant seen in enterprise exports
+    "global": "rule_global",
+    # Action
     "ruleaction": "rule_action",
     "actiontype": "rule_action",
     "action type": "rule_action",
+    "actiontyp": "rule_action",      # real variant seen in enterprise exports
     "action": "rule_action",
+    # Source (semantic: Source = summary, SourceDetail/SourceExpanded = full list)
     "rulesource": "rule_source",
     "source": "rule_source",
+    "src": "rule_source",
     "rulesourceexpanded": "rule_source_expanded",
     "sourceexpanded": "rule_source_expanded",
     "sourcedetail": "rule_source_expanded",
     "source detail": "rule_source_expanded",
+    "source expanded": "rule_source_expanded",
+    "srcdetail": "rule_source_expanded",
+    "srcexpanded": "rule_source_expanded",
     "rulesourcezone": "rule_source_zone",
     "sourcezone": "rule_source_zone",
     "source zone": "rule_source_zone",
+    "srczone": "rule_source_zone",
+    # Destination (semantic: same pattern as source)
     "ruledestination": "rule_destination",
     "destination": "rule_destination",
+    "dest": "rule_destination",
+    "dst": "rule_destination",
     "ruledestinationexpanded": "rule_destination_expanded",
     "destinationexpanded": "rule_destination_expanded",
     "destinationdetail": "rule_destination_expanded",
     "destination detail": "rule_destination_expanded",
+    "destination expanded": "rule_destination_expanded",
+    "destdetail": "rule_destination_expanded",
+    "destexpanded": "rule_destination_expanded",
+    "dstdetail": "rule_destination_expanded",
     "ruledestinationzone": "rule_destination_zone",
     "destinationzone": "rule_destination_zone",
     "destination zone": "rule_destination_zone",
+    "destzone": "rule_destination_zone",
+    "dstzone": "rule_destination_zone",
+    # Service (semantic: same pattern)
     "ruleservice": "rule_service",
     "service": "rule_service",
+    "svc": "rule_service",
     "ruleserviceexpanded": "rule_service_expanded",
     "serviceexpanded": "rule_service_expanded",
     "servicedetail": "rule_service_expanded",
     "service detail": "rule_service_expanded",
+    "service expanded": "rule_service_expanded",
+    "svcdetail": "rule_service_expanded",
+    "svcexpanded": "rule_service_expanded",
 }
 
 # Build a no-space lookup for ultra-flexible matching (catches "AppId", "App_ID", "APP-ID", etc.)
@@ -902,7 +950,7 @@ async def export_legacy_rules_excel(app_id: str = ""):
     """Export imported legacy rules as an Excel (.xlsx) file."""
     rules = await get_legacy_rules()
     if app_id:
-        rules = [r for r in rules if r.get("app_id") == app_id]
+        rules = [r for r in rules if str(r.get("app_id", "")) == str(app_id) or r.get("app_distributed_id", "") == app_id]
 
     wb = openpyxl.Workbook()
     ws = wb.active
