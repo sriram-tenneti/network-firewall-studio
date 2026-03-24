@@ -692,9 +692,16 @@ def _normalize_header(h: str) -> str:
     return " ".join(str(h).strip().lower().split())
 
 
-# Known header → internal field name mapping (normalised keys).
-# Any column NOT in this map is still imported using a slugified version of the original header.
+def _strip_all(s: str) -> str:
+    """Remove ALL non-alphanumeric characters for ultra-flexible matching."""
+    return "".join(c for c in s.lower() if c.isalnum())
+
+
+# Known header → internal field name mapping (normalised keys with spaces).
+# _KNOWN_COL_MAP_NOSPACE has the same entries but with all spaces removed for
+# matching concatenated headers like "Appid", "AppName", "ActionType", etc.
 _KNOWN_COL_MAP: dict[str, str] = {
+    # Standard rule fields (spaced form, e.g. "App ID", "Rule Source")
     "app id": "app_id",
     "app current distributed id": "app_distributed_id",
     "app name": "app_name",
@@ -712,16 +719,64 @@ _KNOWN_COL_MAP: dict[str, str] = {
     "rule service expanded": "rule_service_expanded",
     "rn": "rn",
     "rc": "rc",
+    # Alternate / concatenated header names from real enterprise exports
+    "appid": "app_id",
+    "appname": "app_name",
+    "appdistributedid": "app_distributed_id",
+    "appcurrentdistributedid": "app_distributed_id",
+    "inventoryitem": "inventory_item",
+    "policyname": "policy_name",
+    "ruleglobal": "rule_global",
+    "ruleaction": "rule_action",
+    "actiontype": "rule_action",
+    "action type": "rule_action",
+    "action": "rule_action",
+    "rulesource": "rule_source",
+    "source": "rule_source",
+    "rulesourceexpanded": "rule_source_expanded",
+    "sourceexpanded": "rule_source_expanded",
+    "sourcedetail": "rule_source_expanded",
+    "source detail": "rule_source_expanded",
+    "rulesourcezone": "rule_source_zone",
+    "sourcezone": "rule_source_zone",
+    "source zone": "rule_source_zone",
+    "ruledestination": "rule_destination",
+    "destination": "rule_destination",
+    "ruledestinationexpanded": "rule_destination_expanded",
+    "destinationexpanded": "rule_destination_expanded",
+    "destinationdetail": "rule_destination_expanded",
+    "destination detail": "rule_destination_expanded",
+    "ruledestinationzone": "rule_destination_zone",
+    "destinationzone": "rule_destination_zone",
+    "destination zone": "rule_destination_zone",
+    "ruleservice": "rule_service",
+    "service": "rule_service",
+    "ruleserviceexpanded": "rule_service_expanded",
+    "serviceexpanded": "rule_service_expanded",
+    "servicedetail": "rule_service_expanded",
+    "service detail": "rule_service_expanded",
 }
+
+# Build a no-space lookup for ultra-flexible matching (catches "AppId", "App_ID", "APP-ID", etc.)
+_KNOWN_COL_MAP_NOSPACE: dict[str, str] = {}
+for _k, _v in _KNOWN_COL_MAP.items():
+    ns = _strip_all(_k)
+    if ns not in _KNOWN_COL_MAP_NOSPACE:
+        _KNOWN_COL_MAP_NOSPACE[ns] = _v
 
 
 def _header_to_field(header: str) -> str:
     """Convert an Excel header to an internal field name.
     Known headers map to their predefined field names.
+    Tries: exact normalised match → no-space match → slugified fallback.
     Unknown headers are slugified: lowercased, spaces→underscores, non-alnum stripped."""
     norm = _normalize_header(header)
     if norm in _KNOWN_COL_MAP:
         return _KNOWN_COL_MAP[norm]
+    # Try no-space match (catches "Appid", "AppName", "ActionType", etc.)
+    ns = _strip_all(header)
+    if ns in _KNOWN_COL_MAP_NOSPACE:
+        return _KNOWN_COL_MAP_NOSPACE[ns]
     # Slugify: lowercase, replace spaces/special chars with underscore
     slug = norm.replace(" ", "_").replace("-", "_")
     slug = "".join(c for c in slug if c.isalnum() or c == "_")
@@ -758,7 +813,7 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
     for h in raw_headers:
         fn = _header_to_field(h)
         field_names.append(fn)
-        if _normalize_header(h) in _KNOWN_COL_MAP:
+        if _normalize_header(h) in _KNOWN_COL_MAP or _strip_all(h) in _KNOWN_COL_MAP_NOSPACE:
             mapped_headers.append(h)
         elif h:
             unmapped_headers.append(h)
