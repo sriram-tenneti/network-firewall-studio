@@ -158,7 +158,7 @@ export function MigrationStudioPage() {
     setLoading(true);
     try {
       const [rulesData, appsData] = await Promise.all([
-        getLegacyRules(selectedApp || undefined, true),
+        getLegacyRules(selectedApp || undefined, true, undefined, true),
         getApplications(),
       ]);
       setLegacyRules(rulesData);

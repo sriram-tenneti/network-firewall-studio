@@ -606,8 +606,11 @@ async def remove_member_from_group(name: str, member_value: str):
 # ---- Legacy Rules (for Migration Studio & Firewall Management) ----
 
 @router.get("/legacy-rules")
-async def list_legacy_rules(app_id: str | None = None, exclude_migrated: bool = False):
+async def list_legacy_rules(app_id: str | None = None, exclude_migrated: bool = False, migration_only: bool = False):
     rules = await get_legacy_rules()
+    if migration_only:
+        # Only return rules explicitly imported into the Migration module (ngdc_imported flag)
+        rules = [r for r in rules if r.get("ngdc_imported") is True]
     if app_id:
         rules = [r for r in rules if str(r.get("app_id")) == str(app_id) or r.get("app_distributed_id") == app_id]
     if exclude_migrated:
@@ -786,9 +789,10 @@ async def export_legacy_rules_excel(app_id: str = ""):
 async def get_imported_apps():
     """Return unique apps from imported legacy rules with their mapping status.
     For each app, indicates whether it already has app-dc-mappings (NH/SZ/DC)
-    and lists its existing component mappings if any."""
-    from app.database import get_app_dc_mappings
-    rules = await get_legacy_rules()
+    and lists its existing component mappings if any.
+    Reads from BOTH seed and live directories so apps are always visible regardless of data mode."""
+    from app.database import get_app_dc_mappings, get_all_legacy_rules_across_modes
+    rules = await get_all_legacy_rules_across_modes()
     app_dc_mappings = await get_app_dc_mappings()
 
     # Build lookup of existing mappings by app_id

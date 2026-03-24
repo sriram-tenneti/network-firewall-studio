@@ -580,6 +580,28 @@ async def get_legacy_rules() -> list[dict[str, Any]]:
     return _load("legacy_rules") or []
 
 
+async def get_all_legacy_rules_across_modes() -> list[dict[str, Any]]:
+    """Read legacy rules from BOTH seed and live directories, deduplicated by id.
+    Used by endpoints that need to see all imported apps regardless of data mode."""
+    seen_ids: set[str] = set()
+    combined: list[dict[str, Any]] = []
+    for data_dir in [SEED_DATA_DIR, LIVE_DATA_DIR]:
+        path = data_dir / "legacy_rules.json"
+        if path.exists():
+            try:
+                with open(path, "r") as f:
+                    rules = json.load(f)
+                if isinstance(rules, list):
+                    for r in rules:
+                        rid = r.get("id", "")
+                        if rid and rid not in seen_ids:
+                            seen_ids.add(rid)
+                            combined.append(r)
+            except Exception:
+                pass
+    return combined
+
+
 async def update_legacy_rule(rule_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
     rules = _load("legacy_rules") or []
     for r in rules:

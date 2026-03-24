@@ -362,11 +362,12 @@ export const removeGroupMember = (groupName: string, memberValue: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
 
 // Legacy Rules (for Migration Studio & Firewall Management)
-export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string) => {
+export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string, migrationOnly?: boolean) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
   if (excludeMigrated) params.set('exclude_migrated', 'true');
   if (environment) params.set('environment', environment);
+  if (migrationOnly) params.set('migration_only', 'true');
   const qs = params.toString();
   return fetchJSON<LegacyRule[]>(`/api/reference/legacy-rules${qs ? `?${qs}` : ''}`);
 };

@@ -778,7 +778,7 @@ export default function FirewallManagementPage() {
   ];
 
   const tabs = [
-    { id: 'all', label: `All Rules (${rules.length})` },
+    { id: 'all', label: `All Rules (${envFilteredRules.length})` },
     { id: 'standard', label: `Standard (${standardCount})` },
     { id: 'non_standard', label: `Non-Standard (${nonStandardCount})` },
   ];
@@ -820,10 +820,10 @@ export default function FirewallManagementPage() {
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Rules', value: rules.length, color: 'from-slate-100 to-slate-200 text-slate-800' },
+          { label: 'Total Rules', value: envFilteredRules.length, color: 'from-slate-100 to-slate-200 text-slate-800' },
           { label: 'Standard', value: standardCount, color: 'from-green-100 to-green-200 text-green-800' },
           { label: 'Non-Standard', value: nonStandardCount, color: 'from-red-100 to-red-200 text-red-800' },
-          { label: 'Modifications', value: rules.filter(r => r.rule_action === 'Modify').length, color: 'from-amber-100 to-amber-200 text-amber-800' },
+          { label: 'Modifications', value: envFilteredRules.filter(r => r.rule_action === 'Modify').length, color: 'from-amber-100 to-amber-200 text-amber-800' },
         ].map(card => (
           <div key={card.label} className={`p-4 rounded-lg bg-gradient-to-br ${card.color}`}>
             <div className="text-2xl font-bold">{card.value}</div>
