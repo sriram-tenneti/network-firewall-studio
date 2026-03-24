@@ -81,6 +81,24 @@ export default function SettingsPage() {
   const [dcVendorMap, setDcVendorMap] = useState<Record<string, Record<string, string>>>({});
   const [fwViewMode, setFwViewMode] = useState<'patterns' | 'devices'>('patterns');
 
+  // NH/SZ/DC Management state
+  const [neighbourhoods, setNeighbourhoods] = useState<Record<string, unknown>[]>([]);
+  const [securityZones, setSecurityZones] = useState<Record<string, unknown>[]>([]);
+  const [ngdcDatacenters, setNgdcDatacenters] = useState<Record<string, unknown>[]>([]);
+  const [editingNhId, setEditingNhId] = useState<string | null>(null);
+  const [editNhForm, setEditNhForm] = useState<Record<string, unknown>>({});
+  const [showAddNh, setShowAddNh] = useState(false);
+  const [newNhForm, setNewNhForm] = useState<Record<string, unknown>>({ nh_id: '', name: '', environment: 'Production', cidr: '', description: '' });
+  const [editingSzCode, setEditingSzCode] = useState<string | null>(null);
+  const [editSzForm, setEditSzForm] = useState<Record<string, unknown>>({});
+  const [showAddSz, setShowAddSz] = useState(false);
+  const [newSzForm, setNewSzForm] = useState<Record<string, unknown>>({ code: '', name: '', risk_level: 'Low', pci_scope: false, fabric: 'Production', vrf_prefix: '', cidr: '', description: '' });
+  const [editingDcId, setEditingDcId] = useState<string | null>(null);
+  const [editDcForm, setEditDcForm] = useState<Record<string, unknown>>({});
+  const [showAddDc, setShowAddDc] = useState(false);
+  const [newDcForm, setNewDcForm] = useState<Record<string, unknown>>({ dc_id: '', name: '', region: '', status: 'Active', cidr: '', description: '' });
+  const [nhEnvFilter, setNhEnvFilter] = useState<string>('all');
+
   // Data Mode state (seed vs live)
   const [dataMode, setDataModeState] = useState<string>('seed');
   const [switchingMode, setSwitchingMode] = useState(false);
@@ -112,7 +130,9 @@ export default function SettingsPage() {
   const [editingAppId, setEditingAppId] = useState<string | null>(null);
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
   const [showAddApp, setShowAddApp] = useState(false);
-  const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', name: '', nh: '', sz: '', owner: '' });
+  const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
+  const [importingApps, setImportingApps] = useState(false);
+  const [importResult, setImportResult] = useState<{ added: number; updated: number; skipped: number; total: number; overrides: { app_distributed_id: string; app_id: string }[] } | null>(null);
 
   // Edit states for Policy Matrix
   const [editingPolicyIdx, setEditingPolicyIdx] = useState<number | null>(null);
@@ -169,7 +189,7 @@ export default function SettingsPage() {
   const loadRefData = useCallback(async () => {
     setLoadingRef(true);
     try {
-      const [appsData, policyData, namingData, devicesData, dcMappings, prodMtx, nprodMtx, pprodMtx, fwPatternsData] = await Promise.all([
+      const [appsData, policyData, namingData, devicesData, dcMappings, prodMtx, nprodMtx, pprodMtx, fwPatternsData, nhData, szData, dcData] = await Promise.all([
         api.getApplications(),
         api.getAllPolicyMatrices(),
         api.getNamingStandards(),
@@ -179,6 +199,9 @@ export default function SettingsPage() {
         api.getNonprodMatrix(),
         api.getPreprodMatrix(),
         api.getFirewallDevicePatterns().catch(() => ({ patterns: [], dc_vendor_map: {} })),
+        api.getNeighbourhoods(),
+        api.getSecurityZones(),
+        api.getNGDCDatacenters(),
       ]);
       setApplications(appsData);
       setPolicyMatrix(policyData.combined || []);
@@ -190,6 +213,9 @@ export default function SettingsPage() {
       setPreprodMatrix(pprodMtx);
       setFwPatterns(fwPatternsData.patterns || []);
       setDcVendorMap(fwPatternsData.dc_vendor_map || {});
+      setNeighbourhoods(nhData as unknown as Record<string, unknown>[]);
+      setSecurityZones(szData as unknown as Record<string, unknown>[]);
+      setNgdcDatacenters(dcData as unknown as Record<string, unknown>[]);
     } catch {
       showNotification('Failed to load reference data', 'error');
     }
@@ -245,7 +271,7 @@ export default function SettingsPage() {
       await api.createApplication(newAppForm as Record<string, unknown>);
       showNotification('Application added', 'success');
       setShowAddApp(false);
-      setNewAppForm({ app_id: '', name: '', nh: '', sz: '', owner: '' });
+      setNewAppForm({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
       loadRefData();
     } catch {
       showNotification('Failed to add application', 'error');
@@ -569,11 +595,96 @@ export default function SettingsPage() {
     setClearingAll(false);
   };
 
+  // ── NH CRUD handlers ──
+  const handleSaveNh = async (nhId: string) => {
+    try {
+      await api.updateNeighbourhood(nhId, editNhForm);
+      setNeighbourhoods(prev => prev.map(n => String(n.nh_id || n.id) === nhId ? { ...n, ...editNhForm } : n));
+      setEditingNhId(null);
+      showNotification('Neighbourhood updated', 'success');
+    } catch { showNotification('Failed to update neighbourhood', 'error'); }
+  };
+  const handleAddNh = async () => {
+    try {
+      const created = await api.createNeighbourhood(newNhForm);
+      setNeighbourhoods(prev => [...prev, created]);
+      setShowAddNh(false);
+      setNewNhForm({ nh_id: '', name: '', environment: 'Production', cidr: '', description: '' });
+      showNotification('Neighbourhood added', 'success');
+    } catch { showNotification('Failed to add neighbourhood', 'error'); }
+  };
+  const handleDeleteNh = async (nhId: string) => {
+    if (!confirm(`Delete neighbourhood ${nhId}?`)) return;
+    try {
+      await api.deleteNeighbourhood(nhId);
+      setNeighbourhoods(prev => prev.filter(n => String(n.nh_id || n.id) !== nhId));
+      showNotification('Neighbourhood deleted', 'success');
+    } catch { showNotification('Failed to delete neighbourhood', 'error'); }
+  };
+
+  // ── SZ CRUD handlers ──
+  const handleSaveSz = async (code: string) => {
+    try {
+      await api.updateSecurityZone(code, editSzForm);
+      setSecurityZones(prev => prev.map(s => String(s.code) === code ? { ...s, ...editSzForm } : s));
+      setEditingSzCode(null);
+      showNotification('Security Zone updated', 'success');
+    } catch { showNotification('Failed to update security zone', 'error'); }
+  };
+  const handleAddSz = async () => {
+    try {
+      const created = await api.createSecurityZone(newSzForm);
+      setSecurityZones(prev => [...prev, created]);
+      setShowAddSz(false);
+      setNewSzForm({ code: '', name: '', risk_level: 'Low', pci_scope: false, fabric: 'Production', vrf_prefix: '', cidr: '', description: '' });
+      showNotification('Security Zone added', 'success');
+    } catch { showNotification('Failed to add security zone', 'error'); }
+  };
+  const handleDeleteSz = async (code: string) => {
+    if (!confirm(`Delete security zone ${code}?`)) return;
+    try {
+      await api.deleteSecurityZone(code);
+      setSecurityZones(prev => prev.filter(s => String(s.code) !== code));
+      showNotification('Security Zone deleted', 'success');
+    } catch { showNotification('Failed to delete security zone', 'error'); }
+  };
+
+  // ── DC CRUD handlers ──
+  const handleSaveDc = async (dcId: string) => {
+    try {
+      await api.updateNGDCDatacenter(dcId, editDcForm);
+      setNgdcDatacenters(prev => prev.map(d => String(d.dc_id || d.code) === dcId ? { ...d, ...editDcForm } : d));
+      setEditingDcId(null);
+      showNotification('Data Center updated', 'success');
+    } catch { showNotification('Failed to update data center', 'error'); }
+  };
+  const handleAddDc = async () => {
+    try {
+      const created = await api.createNGDCDatacenter(newDcForm);
+      setNgdcDatacenters(prev => [...prev, created]);
+      setShowAddDc(false);
+      setNewDcForm({ dc_id: '', name: '', region: '', status: 'Active', cidr: '', description: '' });
+      showNotification('Data Center added', 'success');
+    } catch { showNotification('Failed to add data center', 'error'); }
+  };
+  const handleDeleteDc = async (dcId: string) => {
+    if (!confirm(`Delete data center ${dcId}?`)) return;
+    try {
+      await api.deleteNGDCDatacenter(dcId);
+      setNgdcDatacenters(prev => prev.filter(d => String(d.dc_id || d.code) !== dcId));
+      showNotification('Data Center deleted', 'success');
+    } catch { showNotification('Failed to delete data center', 'error'); }
+  };
+
+  const filteredNhs = nhEnvFilter === 'all' ? neighbourhoods : neighbourhoods.filter(n => String(n.environment || '').toLowerCase().includes(nhEnvFilter.toLowerCase()));
+
   const tabs = [
     { id: 'data_mode', label: 'Data Mode' },
     { id: 'data_management', label: 'Data Management' },
+    { id: 'neighbourhoods', label: 'Neighbourhoods' },
+    { id: 'security_zones', label: 'Security Zones' },
+    { id: 'datacenters', label: 'Data Centers' },
     { id: 'app_management', label: 'App Management' },
-    { id: 'app_ngdc_mappings', label: 'App NGDC Mappings' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
@@ -945,35 +1056,349 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* ── Neighbourhoods Tab ── */}
+        {activeTab === 'neighbourhoods' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Neighbourhoods</h2>
+                  <p className="text-xs text-gray-500 mt-1">Manage neighbourhood definitions with CIDR ranges, metadata, and environment assignments. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white" value={nhEnvFilter} onChange={e => setNhEnvFilter(e.target.value)}>
+                    <option value="all">All Environments</option>
+                    <option value="Production">Production</option>
+                    <option value="Pre-Production">Pre-Production</option>
+                    <option value="Non-Production">Non-Production</option>
+                  </select>
+                  <button onClick={() => setShowAddNh(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add NH</button>
+                </div>
+              </div>
+
+              {showAddNh && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <h3 className="text-sm font-semibold text-blue-800">Add New Neighbourhood</h3>
+                  <div className="grid grid-cols-5 gap-2">
+                    <input className={inp} placeholder="NH ID (e.g. NH01)" value={String(newNhForm.nh_id || '')} onChange={e => setNewNhForm({ ...newNhForm, nh_id: e.target.value })} />
+                    <input className={inp} placeholder="Name" value={String(newNhForm.name || '')} onChange={e => setNewNhForm({ ...newNhForm, name: e.target.value })} />
+                    <select className={inp} value={String(newNhForm.environment || 'Production')} onChange={e => setNewNhForm({ ...newNhForm, environment: e.target.value })}>
+                      <option value="Production">Production</option>
+                      <option value="Pre-Production">Pre-Production</option>
+                      <option value="Non-Production">Non-Production</option>
+                    </select>
+                    <input className={inp} placeholder="CIDR (e.g. 10.1.0.0/16)" value={String(newNhForm.cidr || '')} onChange={e => setNewNhForm({ ...newNhForm, cidr: e.target.value })} />
+                    <input className={inp} placeholder="Description" value={String(newNhForm.description || '')} onChange={e => setNewNhForm({ ...newNhForm, description: e.target.value })} />
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={handleAddNh} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save</button>
+                    <button onClick={() => setShowAddNh(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">NH ID</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Environment</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CIDR Range</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredNhs.map((nh, idx) => {
+                      const nhId = String(nh.nh_id || nh.id || idx);
+                      const isEditing = editingNhId === nhId;
+                      return (
+                        <tr key={nhId} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{nhId}</td>
+                          <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editNhForm.name || '')} onChange={e => setEditNhForm({ ...editNhForm, name: e.target.value })} /> : String(nh.name || '')}</td>
+                          <td className="px-3 py-2">{isEditing ? (
+                            <select className={inp} value={String(editNhForm.environment || '')} onChange={e => setEditNhForm({ ...editNhForm, environment: e.target.value })}>
+                              <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option>
+                            </select>
+                          ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(nh.environment) === 'Production' ? 'bg-green-100 text-green-800' : String(nh.environment) === 'Pre-Production' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{String(nh.environment || 'N/A')}</span>}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editNhForm.cidr || '')} onChange={e => setEditNhForm({ ...editNhForm, cidr: e.target.value })} /> : String(nh.cidr || nh.cidr_range || '—')}</td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editNhForm.description || '')} onChange={e => setEditNhForm({ ...editNhForm, description: e.target.value })} /> : String(nh.description || '—')}</td>
+                          <td className="px-3 py-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <button onClick={() => handleSaveNh(nhId)} className="px-2 py-1 text-xs text-white bg-green-600 rounded hover:bg-green-700">Save</button>
+                                <button onClick={() => setEditingNhId(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-50">Cancel</button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1">
+                                <button onClick={() => { setEditingNhId(nhId); setEditNhForm({ name: nh.name, environment: nh.environment, cidr: nh.cidr || nh.cidr_range, description: nh.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => handleDeleteNh(nhId)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredNhs.length === 0 && (
+                      <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-500">No neighbourhoods found. {nhEnvFilter !== 'all' ? 'Try a different filter.' : 'Click "+ Add NH" to create one.'}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 text-xs text-gray-400">Total: {filteredNhs.length} neighbourhood{filteredNhs.length !== 1 ? 's' : ''}{nhEnvFilter !== 'all' ? ` (filtered from ${neighbourhoods.length})` : ''}</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Security Zones Tab ── */}
+        {activeTab === 'security_zones' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Security Zones</h2>
+                  <p className="text-xs text-gray-500 mt-1">Manage security zone definitions with risk levels, PCI scope, fabric, VRF prefix, and CIDR ranges. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
+                </div>
+                <button onClick={() => setShowAddSz(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add SZ</button>
+              </div>
+
+              {showAddSz && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <h3 className="text-sm font-semibold text-blue-800">Add New Security Zone</h3>
+                  <div className="grid grid-cols-4 gap-2">
+                    <input className={inp} placeholder="Code (e.g. STD)" value={String(newSzForm.code || '')} onChange={e => setNewSzForm({ ...newSzForm, code: e.target.value })} />
+                    <input className={inp} placeholder="Name (e.g. Standard)" value={String(newSzForm.name || '')} onChange={e => setNewSzForm({ ...newSzForm, name: e.target.value })} />
+                    <select className={inp} value={String(newSzForm.risk_level || 'Low')} onChange={e => setNewSzForm({ ...newSzForm, risk_level: e.target.value })}>
+                      <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option>
+                    </select>
+                    <select className={inp} value={String(newSzForm.fabric || 'Production')} onChange={e => setNewSzForm({ ...newSzForm, fabric: e.target.value })}>
+                      <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option><option value="All">All</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    <input className={inp} placeholder="VRF Prefix (e.g. VRF-STD)" value={String(newSzForm.vrf_prefix || '')} onChange={e => setNewSzForm({ ...newSzForm, vrf_prefix: e.target.value })} />
+                    <input className={inp} placeholder="CIDR (e.g. 10.1.0.0/16)" value={String(newSzForm.cidr || '')} onChange={e => setNewSzForm({ ...newSzForm, cidr: e.target.value })} />
+                    <input className={inp} placeholder="Description" value={String(newSzForm.description || '')} onChange={e => setNewSzForm({ ...newSzForm, description: e.target.value })} />
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!newSzForm.pci_scope} onChange={e => setNewSzForm({ ...newSzForm, pci_scope: e.target.checked })} className="rounded border-gray-300 text-indigo-600" /> PCI Scope</label>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={handleAddSz} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save</button>
+                    <button onClick={() => setShowAddSz(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Risk Level</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">PCI</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fabric</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">VRF Prefix</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CIDR</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {securityZones.map((sz, idx) => {
+                      const code = String(sz.code || idx);
+                      const isEditing = editingSzCode === code;
+                      return (
+                        <tr key={code} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{code}</td>
+                          <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editSzForm.name || '')} onChange={e => setEditSzForm({ ...editSzForm, name: e.target.value })} /> : String(sz.name || '')}</td>
+                          <td className="px-3 py-2">{isEditing ? (
+                            <select className={inp} value={String(editSzForm.risk_level || '')} onChange={e => setEditSzForm({ ...editSzForm, risk_level: e.target.value })}>
+                              <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option>
+                            </select>
+                          ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(sz.risk_level) === 'Critical' ? 'bg-red-100 text-red-800' : String(sz.risk_level) === 'High' ? 'bg-orange-100 text-orange-800' : String(sz.risk_level) === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{String(sz.risk_level || 'Low')}</span>}</td>
+                          <td className="px-3 py-2">{isEditing ? <input type="checkbox" checked={!!editSzForm.pci_scope} onChange={e => setEditSzForm({ ...editSzForm, pci_scope: e.target.checked })} className="rounded border-gray-300 text-indigo-600" /> : (sz.pci_scope ? <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800">Yes</span> : <span className="text-xs text-gray-400">No</span>)}</td>
+                          <td className="px-3 py-2 text-xs">{isEditing ? (
+                            <select className={inp} value={String(editSzForm.fabric || '')} onChange={e => setEditSzForm({ ...editSzForm, fabric: e.target.value })}>
+                              <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option><option value="All">All</option>
+                            </select>
+                          ) : String(sz.fabric || '—')}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '—')}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editSzForm.cidr || '')} onChange={e => setEditSzForm({ ...editSzForm, cidr: e.target.value })} /> : String(sz.cidr || sz.cidr_range || '—')}</td>
+                          <td className="px-3 py-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <button onClick={() => handleSaveSz(code)} className="px-2 py-1 text-xs text-white bg-green-600 rounded hover:bg-green-700">Save</button>
+                                <button onClick={() => setEditingSzCode(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-50">Cancel</button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1">
+                                <button onClick={() => { setEditingSzCode(code); setEditSzForm({ name: sz.name, risk_level: sz.risk_level, pci_scope: sz.pci_scope, fabric: sz.fabric, vrf_prefix: sz.vrf_prefix, cidr: sz.cidr || sz.cidr_range, description: sz.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => handleDeleteSz(code)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {securityZones.length === 0 && (
+                      <tr><td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">No security zones found. Click &quot;+ Add SZ&quot; to create one.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 text-xs text-gray-400">Total: {securityZones.length} security zone{securityZones.length !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Data Centers Tab ── */}
+        {activeTab === 'datacenters' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">NGDC Data Centers</h2>
+                  <p className="text-xs text-gray-500 mt-1">Manage data center definitions. {dataMode === 'live' ? 'Live mode — DC names and all fields are fully editable (names may differ from seed).' : 'Viewing seeded defaults.'}</p>
+                </div>
+                <button onClick={() => setShowAddDc(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add DC</button>
+              </div>
+
+              {showAddDc && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <h3 className="text-sm font-semibold text-blue-800">Add New Data Center</h3>
+                  <div className="grid grid-cols-5 gap-2">
+                    <input className={inp} placeholder="DC ID / Code" value={String(newDcForm.dc_id || '')} onChange={e => setNewDcForm({ ...newDcForm, dc_id: e.target.value })} />
+                    <input className={inp} placeholder="Name" value={String(newDcForm.name || '')} onChange={e => setNewDcForm({ ...newDcForm, name: e.target.value })} />
+                    <input className={inp} placeholder="Region" value={String(newDcForm.region || '')} onChange={e => setNewDcForm({ ...newDcForm, region: e.target.value })} />
+                    <select className={inp} value={String(newDcForm.status || 'Active')} onChange={e => setNewDcForm({ ...newDcForm, status: e.target.value })}>
+                      <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option>
+                    </select>
+                    <input className={inp} placeholder="CIDR (e.g. 10.0.0.0/8)" value={String(newDcForm.cidr || '')} onChange={e => setNewDcForm({ ...newDcForm, cidr: e.target.value })} />
+                  </div>
+                  <input className={`${inp} w-full`} placeholder="Description" value={String(newDcForm.description || '')} onChange={e => setNewDcForm({ ...newDcForm, description: e.target.value })} />
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={handleAddDc} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save</button>
+                    <button onClick={() => setShowAddDc(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">DC ID / Code</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Region</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CIDR</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {ngdcDatacenters.map((dc, idx) => {
+                      const dcId = String(dc.dc_id || dc.code || idx);
+                      const isEditing = editingDcId === dcId;
+                      return (
+                        <tr key={dcId} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{isEditing ? <input className={inp} value={String(editDcForm.dc_id || '')} onChange={e => setEditDcForm({ ...editDcForm, dc_id: e.target.value })} /> : dcId}</td>
+                          <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editDcForm.name || '')} onChange={e => setEditDcForm({ ...editDcForm, name: e.target.value })} /> : String(dc.name || '')}</td>
+                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String(dc.region || '—')}</td>
+                          <td className="px-3 py-2">{isEditing ? (
+                            <select className={inp} value={String(editDcForm.status || 'Active')} onChange={e => setEditDcForm({ ...editDcForm, status: e.target.value })}>
+                              <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option>
+                            </select>
+                          ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(dc.status) === 'Active' ? 'bg-green-100 text-green-800' : String(dc.status) === 'Planned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{String(dc.status || 'Active')}</span>}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editDcForm.cidr || '')} onChange={e => setEditDcForm({ ...editDcForm, cidr: e.target.value })} /> : String(dc.cidr || dc.cidr_range || '—')}</td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String(dc.description || '—')}</td>
+                          <td className="px-3 py-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <button onClick={() => handleSaveDc(dcId)} className="px-2 py-1 text-xs text-white bg-green-600 rounded hover:bg-green-700">Save</button>
+                                <button onClick={() => setEditingDcId(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-50">Cancel</button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1">
+                                <button onClick={() => { setEditingDcId(dcId); setEditDcForm({ dc_id: dc.dc_id || dc.code, name: dc.name, region: dc.region, status: dc.status, cidr: dc.cidr || dc.cidr_range, description: dc.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => handleDeleteDc(dcId)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {ngdcDatacenters.length === 0 && (
+                      <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-500">No data centers found. Click &quot;+ Add DC&quot; to create one.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 text-xs text-gray-400">Total: {ngdcDatacenters.length} data center{ngdcDatacenters.length !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        )}
+
         {/* ── App Management Tab ── */}
         {activeTab === 'app_management' && (
           <div className="space-y-6">
             <div className="p-4 bg-white border border-gray-200 rounded-lg">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <label className="text-sm font-semibold text-gray-700">Select Application:</label>
-                  <select className="flex-1 max-w-md px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
-                    value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
-                    <option value="">-- All Applications --</option>
-                    {applications.map(app => (
-                      <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <button onClick={() => setShowAddApp(true)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Application</button>
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm font-semibold text-gray-700">Select Application:</label>
+                    <select className="flex-1 max-w-md px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
+                      value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
+                      <option value="">-- All Applications --</option>
+                      {applications.map(app => (
+                        <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <label className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 cursor-pointer">
+                      {importingApps ? 'Importing...' : 'Import Apps'}
+                      <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={importingApps} onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setImportingApps(true);
+                        try {
+                          const result = await api.importAppManagement(file);
+                          setImportResult(result);
+                          showNotification(`Import: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged`, 'success');
+                          loadRefData();
+                        } catch { showNotification('Import failed', 'error'); }
+                        setImportingApps(false);
+                        e.target.value = '';
+                      }} />
+                    </label>
+                    <button onClick={async () => {
+                      if (!confirm('Clear ALL imported app data? Seed apps will remain.')) return;
+                      try {
+                        await api.clearAppManagement();
+                        showNotification('All imported apps cleared', 'success');
+                        loadRefData();
+                      } catch { showNotification('Clear failed', 'error'); }
+                    }} className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100">Clear Apps</button>
+                    <button onClick={() => setShowAddApp(true)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Application</button>
+                  </div>
               </div>
             </div>
 
             {showAddApp && (
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
                 <h3 className="text-sm font-semibold text-blue-800">Add New Application</h3>
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   <input className={inp} placeholder="App ID" value={newAppForm.app_id || ''} onChange={e => setNewAppForm({ ...newAppForm, app_id: e.target.value })} />
-                  <input className={inp} placeholder="Name" value={newAppForm.name || ''} onChange={e => setNewAppForm({ ...newAppForm, name: e.target.value })} />
-                  <input className={inp} placeholder="NH (e.g. NH02,NH14)" title="Comma-separated NHs for apps with components in multiple neighbourhoods" value={newAppForm.nh || ''} onChange={e => setNewAppForm({ ...newAppForm, nh: e.target.value })} />
-                  <input className={inp} placeholder="SZ (e.g. CCS,CDE,PAA)" title="Comma-separated SZs for apps with components in multiple security zones" value={newAppForm.sz || ''} onChange={e => setNewAppForm({ ...newAppForm, sz: e.target.value })} />
+                  <input className={inp} placeholder="App Distributed Id" value={newAppForm.app_distributed_id || ''} onChange={e => setNewAppForm({ ...newAppForm, app_distributed_id: e.target.value })} />
+                  <input className={inp} placeholder="App Name" value={newAppForm.name || ''} onChange={e => setNewAppForm({ ...newAppForm, name: e.target.value })} />
                   <input className={inp} placeholder="Owner" value={newAppForm.owner || ''} onChange={e => setNewAppForm({ ...newAppForm, owner: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-4 gap-3">
+                  <input className={inp} placeholder="Neighborhoods (e.g. NH02,NH14)" value={newAppForm.neighborhoods || ''} onChange={e => setNewAppForm({ ...newAppForm, neighborhoods: e.target.value })} />
+                  <input className={inp} placeholder="SZs (e.g. CCS,CDE,PAA)" value={newAppForm.szs || ''} onChange={e => setNewAppForm({ ...newAppForm, szs: e.target.value })} />
+                  <input className={inp} placeholder="DCs (e.g. ALPHA_NGDC,BETA_NGDC)" value={newAppForm.dcs || ''} onChange={e => setNewAppForm({ ...newAppForm, dcs: e.target.value })} />
+                  <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setShowAddApp(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
@@ -1000,39 +1425,41 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 {editingAppId === selectedApp ? (
-                  <div className="grid grid-cols-4 gap-4">
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">App ID</label>
-                      <p className="text-sm font-semibold text-gray-800">{selectedAppData.app_id}</p></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                      <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /></div>
-                                        <div><label className="block text-xs font-medium text-gray-500 mb-1">NH <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                                          <input className={inp} placeholder="e.g. NH02,NH14" title="Comma-separated NHs for apps with components in multiple neighbourhoods" value={editAppForm.nh || ''} onChange={e => setEditAppForm({ ...editAppForm, nh: e.target.value })} /></div>
-                                        <div><label className="block text-xs font-medium text-gray-500 mb-1">SZ <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                                          <input className={inp} placeholder="e.g. CCS,CDE,PAA" title="Comma-separated SZs for apps with components in multiple security zones" value={editAppForm.sz || ''} onChange={e => setEditAppForm({ ...editAppForm, sz: e.target.value })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label>
-                      <input className={inp} value={editAppForm.owner || ''} onChange={e => setEditAppForm({ ...editAppForm, owner: e.target.value })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Criticality</label>
-                      <input className={inp} value={String(editAppForm.criticality ?? '')} onChange={e => setEditAppForm({ ...editAppForm, criticality: Number(e.target.value) || 0 })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">PCI Scope</label>
-                      <select className={inp} value={editAppForm.pci_scope ? 'true' : 'false'} onChange={e => setEditAppForm({ ...editAppForm, pci_scope: e.target.value === 'true' })}>
-                        <option value="true">Yes</option><option value="false">No</option>
-                      </select></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Dist ID</label>
-                      <input className={inp} value={String(editAppForm.app_distributed_id ?? '')} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /></div>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-4 gap-4">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App ID</label>
+                        <p className="text-sm font-semibold text-gray-800">{selectedAppData.app_id}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Distributed Id</label>
+                        <input className={inp} value={String(editAppForm.app_distributed_id ?? '')} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Name</label>
+                        <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label>
+                        <input className={inp} value={editAppForm.owner || ''} onChange={e => setEditAppForm({ ...editAppForm, owner: e.target.value })} /></div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods</label>
+                        <input className={inp} placeholder="e.g. NH02,NH14" value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SZs</label>
+                        <input className={inp} placeholder="e.g. CCS,CDE,PAA" value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label>
+                        <input className={inp} placeholder="e.g. ALPHA_NGDC,BETA_NGDC" value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label>
+                        <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
+                    </div>
                   </div>
                 ) : (
                   <>
                     <div className="grid grid-cols-4 gap-4">
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">App ID</label><p className="text-sm font-semibold text-gray-800">{selectedAppData.app_id}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Name</label><p className="text-sm text-gray-800">{selectedAppData.name}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighbourhood</label><p className="text-sm font-mono text-gray-800">{selectedAppData.nh || 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Security Zone</label><p className="text-sm font-mono text-gray-800">{selectedAppData.sz || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Distributed Id</label><p className="text-sm font-mono text-gray-800">{selectedAppData.app_distributed_id || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Name</label><p className="text-sm text-gray-800">{selectedAppData.name}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label><p className="text-sm text-gray-800">{selectedAppData.owner || 'N/A'}</p></div>
                     </div>
                     <div className="grid grid-cols-4 gap-4">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label><p className="text-sm text-gray-800">{selectedAppData.owner || 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Criticality</label><p className="text-sm text-gray-800">{selectedAppData.criticality ?? 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">PCI Scope</label><p className="text-sm text-gray-800">{selectedAppData.pci_scope ? 'Yes' : 'No'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Dist ID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.app_distributed_id ?? 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods</label><p className="text-sm font-mono text-gray-800">{selectedAppData.neighborhoods || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SZs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.szs || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.dcs || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.snow_sysid || 'N/A'}</p></div>
                     </div>
                   </>
                 )}
@@ -1137,205 +1564,56 @@ export default function SettingsPage() {
                   <h3 className="text-sm font-semibold text-gray-800">All Applications ({applications.length})</h3>
                 </div>
                 {loadingRef ? (<div className="p-8 text-center text-gray-400">Loading...</div>) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50"><tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Name</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">NH</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">SZ</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Owner</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                      <thead className="bg-gray-50 sticky top-0"><tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Distributed Id</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Neighborhoods</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZs</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DCs</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SNow SysID</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                       </tr></thead>
                       <tbody className="divide-y divide-gray-100">
-                        {applications.map(app => (
-                          <tr key={app.app_id} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 font-mono font-semibold text-blue-700 cursor-pointer" onClick={() => setSelectedApp(app.app_id)}>{app.app_id}</td>
-                            <td className="px-4 py-2 text-gray-800">{app.name}</td>
-                            <td className="px-4 py-2 font-mono text-gray-600">{app.nh || '-'}</td>
-                            <td className="px-4 py-2 font-mono text-gray-600">{app.sz || '-'}</td>
-                            <td className="px-4 py-2 text-gray-600">{app.owner || '-'}</td>
-                            <td className="px-4 py-2">
-                              <div className="flex gap-1">
-                                <button onClick={() => { setSelectedApp(app.app_id); setEditingAppId(app.app_id); setEditAppForm(app); }}
-                                  className="px-2 py-1 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
-                                <button onClick={() => handleDeleteApp(app.app_id)}
-                                  className="px-2 py-1 text-xs text-red-700 bg-red-50 rounded hover:bg-red-100">Delete</button>
-                              </div>
+                        {applications.map(app => {
+                          const isEditing = editingAppId === app.app_id;
+                          return (
+                          <tr key={app.app_id} className={isEditing ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                            <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700">{app.app_id}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.app_distributed_id ?? ''} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /> : <span className="font-mono text-xs text-gray-700">{app.app_distributed_id || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /> : <span className="text-xs text-gray-800">{app.name}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.dcs || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /> : <span className="font-mono text-xs text-gray-500">{app.snow_sysid || '-'}</span>}</td>
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <div className="flex gap-1">
+                                  <button onClick={() => { handleSaveApp(); setEditingAppId(null); }}
+                                    className="px-2 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
+                                  <button onClick={() => setEditingAppId(null)}
+                                    className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1">
+                                  <button onClick={() => { setEditingAppId(app.app_id); setEditAppForm(app); }}
+                                    className="px-2 py-1 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
+                                  <button onClick={() => handleDeleteApp(app.app_id)}
+                                    className="px-2 py-1 text-xs text-red-700 bg-red-50 rounded hover:bg-red-100">Delete</button>
+                                </div>
+                              )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 )}
               </div>
             )}
-          </div>
-        )}
-
-        {/* ── App NGDC Mappings Tab ── */}
-        {activeTab === 'app_ngdc_mappings' && (
-          <div className="space-y-6">
-            <div className="p-6 bg-white border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold">App NGDC Mappings (DC / NH / SZ)</h2>
-                  <p className="text-xs text-gray-500 mt-1">Map imported apps to NGDC Data Centers, Neighbourhoods, and Security Zones. Add components (WEB, APP, DB, etc.) per app.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <select className="px-2 py-1.5 text-xs border rounded-md" value={ngdcAppFilter} onChange={e => setNgdcAppFilter(e.target.value as 'all'|'unmapped'|'mapped')}>
-                    <option value="all">All Apps</option>
-                    <option value="unmapped">Unmapped Only</option>
-                    <option value="mapped">Mapped Only</option>
-                  </select>
-                  <button onClick={loadNgdcApps} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-                    {ngdcLoaded ? 'Refresh' : 'Load Apps'}
-                  </button>
-                </div>
-              </div>
-
-              {ngdcLoaded && ngdcImportedApps.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex gap-4 text-xs text-gray-500 mb-2">
-                    <span>Total: <strong className="text-gray-700">{ngdcImportedApps.length}</strong></span>
-                    <span>Mapped: <strong className="text-green-700">{ngdcImportedApps.filter(a => a.has_mapping).length}</strong></span>
-                    <span>Unmapped: <strong className="text-amber-700">{ngdcImportedApps.filter(a => !a.has_mapping).length}</strong></span>
-                  </div>
-                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dist ID</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Rules</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Components</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {ngdcImportedApps
-                          .filter(a => ngdcAppFilter === 'all' || (ngdcAppFilter === 'unmapped' ? !a.has_mapping : a.has_mapping))
-                          .map(app => (
-                          <React.Fragment key={app.app_id}>
-                            <tr className={`hover:bg-gray-50 ${ngdcExpandedAppId === app.app_id ? 'bg-blue-50' : ''}`}>
-                              <td className="px-3 py-2 font-mono text-xs font-medium">{app.app_id}</td>
-                              <td className="px-3 py-2 text-xs">{app.app_name}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-500">{app.app_distributed_id}</td>
-                              <td className="px-3 py-2 text-xs">{app.rule_count}</td>
-                              <td className="px-3 py-2">
-                                {app.has_mapping ? (
-                                  <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">Mapped ({app.components.length})</span>
-                                ) : (
-                                  <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">Unmapped</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-gray-500">
-                                {app.components.length > 0
-                                  ? app.components.map(c => String(c.component || '')).join(', ')
-                                  : <span className="text-gray-400 italic">None</span>}
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-1">
-                                  <button onClick={() => setNgdcExpandedAppId(ngdcExpandedAppId === app.app_id ? null : app.app_id)}
-                                    className="px-2 py-0.5 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">
-                                    {ngdcExpandedAppId === app.app_id ? 'Collapse' : 'Edit'}
-                                  </button>
-                                  <button onClick={() => { setNgdcAddingForApp(app.app_id); setNgdcExpandedAppId(app.app_id); }}
-                                    className="px-2 py-0.5 text-xs text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">
-                                    + Component
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                            {ngdcExpandedAppId === app.app_id && (
-                              <tr>
-                                <td colSpan={7} className="px-4 py-3 bg-blue-50/50">
-                                  {app.components.length > 0 && (
-                                    <div className="mb-3">
-                                      <h4 className="text-xs font-semibold text-gray-600 mb-2">Existing Component Mappings</h4>
-                                      <table className="w-full text-xs">
-                                        <thead><tr className="text-gray-500">
-                                          <th className="px-2 py-1 text-left">Component</th>
-                                          <th className="px-2 py-1 text-left">DC</th>
-                                          <th className="px-2 py-1 text-left">NH</th>
-                                          <th className="px-2 py-1 text-left">SZ</th>
-                                          <th className="px-2 py-1 text-left">CIDR</th>
-                                          <th className="px-2 py-1 text-left">Status</th>
-                                          <th className="px-2 py-1 text-left">Actions</th>
-                                        </tr></thead>
-                                        <tbody>
-                                          {app.components.map((c, idx) => (
-                                            <tr key={idx} className="border-t border-gray-200">
-                                              <td className="px-2 py-1"><span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">{String(c.component || '')}</span></td>
-                                              <td className="px-2 py-1 font-mono">{String(c.dc || '')}</td>
-                                              <td className="px-2 py-1 font-mono">{String(c.nh || '')}</td>
-                                              <td className="px-2 py-1 font-mono">{String(c.sz || '')}</td>
-                                              <td className="px-2 py-1 font-mono">{String(c.cidr || '')}</td>
-                                              <td className="px-2 py-1"><span className={`px-1.5 py-0.5 rounded-full ${c.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{String(c.status || 'Active')}</span></td>
-                                              <td className="px-2 py-1">
-                                                <button onClick={() => handleNgdcDeleteComponent(String(c.id || ''))} className="text-red-500 hover:text-red-700">Delete</button>
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
-                                  {ngdcAddingForApp === app.app_id && (
-                                    <div className="p-3 bg-white border border-blue-200 rounded-lg">
-                                      <h4 className="text-xs font-semibold text-blue-700 mb-2">Add Component for {app.app_id} - {app.app_name}</h4>
-                                      <div className="grid grid-cols-7 gap-2">
-                                        <select className="px-2 py-1.5 text-xs border rounded" value={ngdcComponentForm.component} onChange={e => setNgdcComponentForm(p => ({ ...p, component: e.target.value }))}>
-                                          {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                        <select className="px-2 py-1.5 text-xs border rounded" value={ngdcComponentForm.dc} onChange={e => setNgdcComponentForm(p => ({ ...p, dc: e.target.value }))}>
-                                          <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                                          <option value="BETA_NGDC">BETA_NGDC</option>
-                                          <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                                        </select>
-                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="NH (e.g. NH02,NH14)" value={ngdcComponentForm.nh} onChange={e => setNgdcComponentForm(p => ({ ...p, nh: e.target.value }))} />
-                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="SZ (e.g. CCS,PAA)" value={ngdcComponentForm.sz} onChange={e => setNgdcComponentForm(p => ({ ...p, sz: e.target.value }))} />
-                                        <input className="px-2 py-1.5 text-xs border rounded font-mono" placeholder="CIDR" value={ngdcComponentForm.cidr} onChange={e => setNgdcComponentForm(p => ({ ...p, cidr: e.target.value }))} />
-                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="Notes" value={ngdcComponentForm.notes} onChange={e => setNgdcComponentForm(p => ({ ...p, notes: e.target.value }))} />
-                                        <div className="flex gap-1">
-                                          <button onClick={() => setNgdcAddingForApp(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
-                                          <button onClick={() => handleNgdcAddComponent(app.app_id)} disabled={ngdcSaving || !ngdcComponentForm.nh || !ngdcComponentForm.sz}
-                                            className="px-2 py-1 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50">
-                                            {ngdcSaving ? '...' : 'Add'}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                  {!ngdcAddingForApp && app.components.length === 0 && (
-                                    <p className="text-xs text-gray-400 italic">No component mappings yet. Click &quot;+ Component&quot; to add DC/NH/SZ mapping for this app.</p>
-                                  )}
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {ngdcLoaded && ngdcImportedApps.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-gray-500">No imported apps found. Import legacy rules first via Firewall Management &rarr; Import.</p>
-                </div>
-              )}
-
-              {!ngdcLoaded && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-gray-500">Click &quot;Load Apps&quot; to view imported apps and manage their NGDC component mappings.</p>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -1648,7 +1926,7 @@ export default function SettingsPage() {
                     <option value="">All Vendors</option>
                     <option value="palo_alto">Palo Alto</option>
                     <option value="checkpoint">Check Point</option>
-                    <option value="cisco_asa">Cisco ASA</option>
+                    <option value="fortigate">FortiGate</option>
                   </select>
                   <span className="text-xs text-gray-500 ml-auto">{filteredDevices.length} devices</span>
                 </div>
@@ -1664,8 +1942,8 @@ export default function SettingsPage() {
                         <input type="text" className={inp} value={newDeviceForm.name as string} onChange={e => setNewDeviceForm(f => ({ ...f, name: e.target.value }))} placeholder="Palo Alto NH01 CPA" /></div>
                       <div><label className="block text-xs font-medium text-gray-700 mb-1">Vendor</label>
                         <select className={inp} value={newDeviceForm.vendor as string} onChange={e => setNewDeviceForm(f => ({ ...f, vendor: e.target.value }))}>
-                          <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="cisco_asa">Cisco ASA</option>
-                        </select></div>
+                                                  <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="fortigate">FortiGate</option>
+                                                </select></div>
                       <div><label className="block text-xs font-medium text-gray-700 mb-1">DC</label>
                         <select className={inp} value={newDeviceForm.dc as string} onChange={e => setNewDeviceForm(f => ({ ...f, dc: e.target.value }))}>
                           <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
@@ -1722,13 +2000,13 @@ export default function SettingsPage() {
                                 : (dev.name as string)}</td>
                               <td className="px-3 py-2">{isEditing
                                 ? <select className="px-2 py-1 text-xs border rounded" value={(editDeviceForm.vendor as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, vendor: e.target.value }))}>
-                                    <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="cisco_asa">Cisco ASA</option>
-                                  </select>
+                                                  <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="fortigate">FortiGate</option>
+                                                </select>
                                 : <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                                     dev.vendor === 'palo_alto' ? 'bg-blue-100 text-blue-700' :
                                     dev.vendor === 'checkpoint' ? 'bg-purple-100 text-purple-700' :
                                     'bg-amber-100 text-amber-700'
-                                  }`}>{dev.vendor === 'palo_alto' ? 'Palo Alto' : dev.vendor === 'checkpoint' ? 'Check Point' : 'Cisco ASA'}</span>}</td>
+                                  }`}>{dev.vendor === 'palo_alto' ? 'Palo Alto' : dev.vendor === 'checkpoint' ? 'Check Point' : dev.vendor === 'fortigate' ? 'FortiGate' : String(dev.vendor)}</span>}</td>
                               <td className="px-3 py-2">{dev.dc as string}</td>
                               <td className="px-3 py-2">{isEditing
                                 ? <input type="text" className="px-2 py-1 text-xs border rounded w-16" value={(editDeviceForm.nh as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, nh: e.target.value }))} />

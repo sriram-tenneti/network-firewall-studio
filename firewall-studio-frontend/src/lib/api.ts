@@ -362,11 +362,12 @@ export const removeGroupMember = (groupName: string, memberValue: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
 
 // Legacy Rules (for Migration Studio & Firewall Management)
-export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string) => {
+export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string, migrationOnly?: boolean) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
   if (excludeMigrated) params.set('exclude_migrated', 'true');
   if (environment) params.set('environment', environment);
+  if (migrationOnly) params.set('migration_only', 'true');
   const qs = params.toString();
   return fetchJSON<LegacyRule[]>(`/api/reference/legacy-rules${qs ? `?${qs}` : ''}`);
 };
@@ -551,6 +552,30 @@ export const setDataMode = (mode: string) =>
   fetchJSON<{ mode: string }>('/api/reference/data-mode', { method: 'POST', body: JSON.stringify({ mode }) });
 export const resetSeedData = () =>
   fetchJSON<{ message: string; current_mode: string }>('/api/reference/data-mode/reset-seed', { method: 'POST' });
+
+// Auto-populate NH/SZ/DC filtered by environment + app
+export const getFilteredNhSzDc = (environment: string, appId?: string) => {
+  const params = new URLSearchParams({ environment });
+  if (appId) params.append('app_id', appId);
+  return fetchJSON<{
+    neighbourhoods: NeighbourhoodRegistry[];
+    security_zones: SecurityZone[];
+    datacenters: NGDCDataCenter[];
+  }>(`/api/reference/filtered-nh-sz-dc?${params}`);
+};
+
+// Clear all imported app data
+export const clearAppManagement = () =>
+  fetchJSON<{ message: string }>('/api/reference/applications/clear', { method: 'POST' });
+
+// App Management delta-based import
+export const importAppManagement = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/api/reference/applications/import`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json() as Promise<{ added: number; updated: number; skipped: number; total: number; overrides: { app_distributed_id: string; app_id: string }[] }>;
+};
 
 // Imported Apps from Legacy Rules (with mapping status)
 export const getImportedApps = () =>

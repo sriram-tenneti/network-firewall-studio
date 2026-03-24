@@ -36,7 +36,7 @@ interface LDFFlowVisualizationProps {
 }
 
 const VENDOR_LABELS: Record<string, string> = {
-  palo_alto: 'Palo Alto', checkpoint: 'Check Point', cisco_asa: 'Cisco ASA', generic: 'Generic',
+  palo_alto: 'Palo Alto', checkpoint: 'Check Point', fortigate: 'FortiGate', generic: 'Generic',
 };
 
 const LDF_RULE_LABELS: Record<string, string> = {

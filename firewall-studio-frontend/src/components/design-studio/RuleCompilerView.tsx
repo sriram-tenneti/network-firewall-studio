@@ -100,7 +100,7 @@ export function RuleCompilerView({ isOpen, onClose, ruleId }: RuleCompilerViewPr
               { value: 'generic', label: 'Generic YAML' },
               { value: 'palo_alto', label: 'Palo Alto' },
               { value: 'checkpoint', label: 'Check Point' },
-              { value: 'cisco_asa', label: 'Cisco ASA' },
+              { value: 'fortigate', label: 'FortiGate' },
             ].map(opt => (
               <button
                 key={opt.value}
