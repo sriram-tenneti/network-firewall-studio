@@ -263,6 +263,29 @@ SEED_SECURITY_ZONES = [
     {"code": "U3PY", "name": "Non-Prod Third Party", "risk_level": "Medium", "pci_scope": False,
      "fabric": "Non-Production", "vrf_prefix": "nh##-sz03",
      "cidr": "10.206.0.0/16", "description": "Non-prod third-party workloads"},
+
+    # ---- Pre-Production Fabric ----
+    {"code": "UGen", "name": "Pre-Prod General", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Pre-Production", "vrf_prefix": "gen",
+     "cidr": "10.210.0.0/16", "description": "General zone for pre-prod routing"},
+    {"code": "USTD", "name": "Pre-Prod Standard", "risk_level": "Low", "pci_scope": False,
+     "fabric": "Pre-Production", "vrf_prefix": "gen",
+     "cidr": "10.211.0.0/16", "description": "Pre-prod/staging standard workloads"},
+    {"code": "UPAA", "name": "Pre-Prod PAA", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Pre-Production", "vrf_prefix": "paa/sz-02",
+     "cidr": "10.212.0.0/16", "description": "Pre-prod front-end / internet-accessible applications"},
+    {"code": "UCPA", "name": "Pre-Prod CPA", "risk_level": "High", "pci_scope": False,
+     "fabric": "Pre-Production", "vrf_prefix": "nh##-sz06",
+     "cidr": "10.213.0.0/16", "description": "Pre-prod critical payment applications"},
+    {"code": "UCDE", "name": "Pre-Prod CDE", "risk_level": "High", "pci_scope": False,
+     "fabric": "Pre-Production", "vrf_prefix": "nh##-sz05",
+     "cidr": "10.214.0.0/16", "description": "Pre-prod cardholder data environment"},
+    {"code": "UCCS", "name": "Pre-Prod CCS", "risk_level": "High", "pci_scope": False,
+     "fabric": "Pre-Production", "vrf_prefix": "nh##-sz04",
+     "cidr": "10.215.0.0/16", "description": "Pre-prod critical core services"},
+    {"code": "U3PY", "name": "Pre-Prod Third Party", "risk_level": "Medium", "pci_scope": False,
+     "fabric": "Pre-Production", "vrf_prefix": "nh##-sz03",
+     "cidr": "10.216.0.0/16", "description": "Pre-prod third-party workloads"},
 ]
 
 
