@@ -1577,25 +1577,37 @@ export default function SettingsPage() {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                       </tr></thead>
                       <tbody className="divide-y divide-gray-100">
-                        {applications.map(app => (
-                          <tr key={app.app_id} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700 cursor-pointer" onClick={() => setSelectedApp(app.app_id)}>{app.app_id}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-700">{app.app_distributed_id || '-'}</td>
-                            <td className="px-3 py-2 text-xs text-gray-800">{app.name}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{app.dcs || '-'}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-500">{app.snow_sysid || '-'}</td>
+                        {applications.map(app => {
+                          const isEditing = editingAppId === app.app_id;
+                          return (
+                          <tr key={app.app_id} className={isEditing ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                            <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700">{app.app_id}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.app_distributed_id ?? ''} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /> : <span className="font-mono text-xs text-gray-700">{app.app_distributed_id || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /> : <span className="text-xs text-gray-800">{app.name}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.dcs || '-'}</span>}</td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /> : <span className="font-mono text-xs text-gray-500">{app.snow_sysid || '-'}</span>}</td>
                             <td className="px-3 py-2">
-                              <div className="flex gap-1">
-                                <button onClick={() => { setSelectedApp(app.app_id); setEditingAppId(app.app_id); setEditAppForm(app); }}
-                                  className="px-2 py-1 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
-                                <button onClick={() => handleDeleteApp(app.app_id)}
-                                  className="px-2 py-1 text-xs text-red-700 bg-red-50 rounded hover:bg-red-100">Delete</button>
-                              </div>
+                              {isEditing ? (
+                                <div className="flex gap-1">
+                                  <button onClick={() => { handleSaveApp(); setEditingAppId(null); }}
+                                    className="px-2 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
+                                  <button onClick={() => setEditingAppId(null)}
+                                    className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1">
+                                  <button onClick={() => { setEditingAppId(app.app_id); setEditAppForm(app); }}
+                                    className="px-2 py-1 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
+                                  <button onClick={() => handleDeleteApp(app.app_id)}
+                                    className="px-2 py-1 text-xs text-red-700 bg-red-50 rounded hover:bg-red-100">Delete</button>
+                                </div>
+                              )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
