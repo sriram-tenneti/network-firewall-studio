@@ -1051,7 +1051,7 @@ export default function FirewallManagementPage() {
                       <option value="generic">Generic</option>
                       <option value="palo_alto">Palo Alto</option>
                       <option value="checkpoint">Check Point</option>
-                      <option value="cisco_asa">Cisco ASA</option>
+                      <option value="fortigate">FortiGate</option>
                     </select>
                     <button onClick={() => handleCompile(modifyRule.id)} disabled={compiling} className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
                       {compiling ? 'Compiling...' : 'Compile'}
@@ -1143,7 +1143,7 @@ export default function FirewallManagementPage() {
                       <option value="generic">Generic</option>
                       <option value="palo_alto">Palo Alto</option>
                       <option value="checkpoint">Check Point</option>
-                      <option value="cisco_asa">Cisco ASA</option>
+                      <option value="fortigate">FortiGate</option>
                     </select>
                     <button onClick={() => handleCompile(modifyRule.id)} disabled={compiling} className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
                       {compiling ? 'Compiling...' : 'Compile'}

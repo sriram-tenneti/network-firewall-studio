@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import type { Application, BirthrightValidation } from '@/types';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
 import * as api from '@/lib/api';
 import { autoPrefix } from '@/lib/utils';
 
@@ -8,7 +8,8 @@ interface DragDropRuleBuilderProps {
   onRuleCreated: () => void;
 }
 
-const NEIGHBOURHOODS = [
+// Fallback static data (used while API data loads)
+const FALLBACK_NEIGHBOURHOODS = [
   { id: 'NH01', name: 'Technology Enablement Services' },
   { id: 'NH02', name: 'Core Banking' },
   { id: 'NH03', name: 'Digital Channels' },
@@ -28,30 +29,7 @@ const NEIGHBOURHOODS = [
   { id: 'NH17', name: 'Pre-Production DMZ' },
 ];
 
-const PROD_ZONES = [
-  { code: 'STD', name: 'Standard' },
-  { code: 'GEN', name: 'General' },
-  { code: 'PAA', name: 'PAA Zone' },
-  { code: 'CDE', name: 'Cardholder Data Environment' },
-  { code: 'CPA', name: 'Critical Payment Application' },
-  { code: 'CCS', name: 'Common Card Services' },
-  { code: '3PY', name: 'Third Party' },
-  { code: 'Swift', name: 'Swift' },
-  { code: 'PSE', name: 'Payment Security Environment' },
-  { code: 'UC', name: 'Unified Communications' },
-];
-
-const NONPROD_ZONES = [
-  { code: 'UGEN', name: 'UAT General' },
-  { code: 'USTD', name: 'UAT Standard' },
-  { code: 'UCCS', name: 'UAT Common Card Services' },
-  { code: 'UPAA', name: 'UAT PAA' },
-  { code: 'UCPA', name: 'UAT Critical Payment' },
-  { code: 'UCDE', name: 'UAT Cardholder Data Env' },
-  { code: 'U3PY', name: 'UAT Third Party' },
-];
-
-const DATACENTERS = [
+const FALLBACK_DATACENTERS = [
   { code: 'ALPHA_NGDC', name: 'Alpha NGDC' },
   { code: 'BETA_NGDC', name: 'Beta NGDC' },
   { code: 'GAMMA_NGDC', name: 'Gamma NGDC' },
@@ -99,7 +77,51 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [validatingBR, setValidatingBR] = useState(false);
 
-  const zones = useMemo(() => form.environment === 'Production' ? PROD_ZONES : NONPROD_ZONES, [form.environment]);
+  // Dynamic NH/SZ/DC from API based on environment + app
+  const [dynNHs, setDynNHs] = useState<NeighbourhoodRegistry[]>([]);
+  const [dynSZs, setDynSZs] = useState<SecurityZone[]>([]);
+  const [dynDCs, setDynDCs] = useState<NGDCDataCenter[]>([]);
+  const [loadingFiltered, setLoadingFiltered] = useState(false);
+
+  const loadFilteredData = useCallback(async (env: string, appId: string) => {
+    if (!env) return;
+    setLoadingFiltered(true);
+    try {
+      const data = await api.getFilteredNhSzDc(env, appId || undefined);
+      setDynNHs(data.neighbourhoods || []);
+      setDynSZs(data.security_zones || []);
+      setDynDCs(data.datacenters || []);
+    } catch {
+      setDynNHs([]); setDynSZs([]); setDynDCs([]);
+    }
+    setLoadingFiltered(false);
+  }, []);
+
+  useEffect(() => {
+    loadFilteredData(form.environment, form.application);
+  }, [form.environment, form.application, loadFilteredData]);
+
+  // Use dynamic data if available, otherwise fallback
+  const neighbourhoods = useMemo(() =>
+    dynNHs.length > 0
+      ? dynNHs.map(nh => ({ id: nh.nh_id, name: nh.name }))
+      : FALLBACK_NEIGHBOURHOODS,
+    [dynNHs]
+  );
+
+  const zones = useMemo(() =>
+    dynSZs.length > 0
+      ? dynSZs.map(sz => ({ code: sz.code, name: sz.name }))
+      : [],
+    [dynSZs]
+  );
+
+  const datacenters = useMemo(() =>
+    dynDCs.length > 0
+      ? dynDCs.map(dc => ({ code: dc.dc_id, name: dc.name }))
+      : FALLBACK_DATACENTERS,
+    [dynDCs]
+  );
 
   const srcName = useMemo(() => {
     if (!form.application || !form.src_nh || !form.src_sz) return '';
@@ -216,7 +238,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
               <div>
                 <label className={lbl}>Datacenter</label>
                 <select className={sel} value={form.datacenter} onChange={e => upd('datacenter', e.target.value)}>
-                  {DATACENTERS.map(dc => (
+                  {datacenters.map(dc => (
                     <option key={dc.code} value={dc.code}>{dc.name}</option>
                   ))}
                 </select>
@@ -225,7 +247,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
             {form.application && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <span className="text-sm text-blue-800 font-medium">
-                  Building rule for <strong>{form.application}</strong> in <strong>{form.environment}</strong> at <strong>{DATACENTERS.find(d => d.code === form.datacenter)?.name}</strong>
+                  Building rule for <strong>{form.application}</strong> in <strong>{form.environment}</strong> at <strong>{datacenters.find(d => d.code === form.datacenter)?.name}</strong>
                 </span>
               </div>
             )}
@@ -253,8 +275,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                     <label className={lbl}>Neighbourhood</label>
                     <select className={sel} value={form.src_nh} onChange={e => upd('src_nh', e.target.value)}>
                       <option value="">Select Neighbourhood...</option>
-                      {NEIGHBOURHOODS.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
+                      {neighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
                     </select>
+                    {loadingFiltered && <span className="text-[10px] text-blue-500 animate-pulse">Loading...</span>}
                   </div>
                   <div>
                     <label className={lbl}>Security Zone</label>
@@ -313,7 +336,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                     <label className={lbl}>Neighbourhood</label>
                     <select className={sel} value={form.dst_nh} onChange={e => upd('dst_nh', e.target.value)}>
                       <option value="">Select Neighbourhood...</option>
-                      {NEIGHBOURHOODS.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
+                      {neighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
                     </select>
                   </div>
                   <div>
@@ -390,7 +413,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                       ))}
                     </div>
                     <div className="text-[10px] text-amber-600 mt-1">
-                      DC: {DATACENTERS.find(d => d.code === form.datacenter)?.name || form.datacenter}
+                      DC: {datacenters.find(d => d.code === form.datacenter)?.name || form.datacenter}
                     </div>
                   </div>
                 )}
@@ -411,7 +434,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                       <span className="px-2 py-1 rounded bg-purple-100 border border-purple-200 text-xs font-mono text-purple-800">{form.dst_nh} {form.dst_sz}</span>
                     </div>
                     <div className="text-[10px] text-blue-500 mt-1">
-                      DC: {DATACENTERS.find(d => d.code === form.datacenter)?.name || form.datacenter} — Permitted per birthright
+                      DC: {datacenters.find(d => d.code === form.datacenter)?.name || form.datacenter} — Permitted per birthright
                     </div>
                   </div>
                 )}

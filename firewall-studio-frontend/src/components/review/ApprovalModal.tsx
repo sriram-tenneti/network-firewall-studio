@@ -332,7 +332,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
                 <option value="generic">Generic</option>
                 <option value="palo_alto">Palo Alto</option>
                 <option value="checkpoint">Check Point</option>
-                <option value="cisco_asa">Cisco ASA</option>
+                <option value="fortigate">FortiGate</option>
               </select>
               <button
                 onClick={handleCompile}
@@ -364,7 +364,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
             </div>
           </div>
         ) : (
-          <p className="text-xs text-indigo-600 italic">Select a vendor format and click &quot;Compile Rule&quot; to generate device-specific deployable output (Palo Alto, Check Point, Cisco ASA, or Generic).</p>
+          <p className="text-xs text-indigo-600 italic">Select a vendor format and click &quot;Compile Rule&quot; to generate device-specific deployable output (Palo Alto, Check Point, FortiGate, or Generic).</p>
         )}
       </div>
 

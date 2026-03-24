@@ -1450,6 +1450,128 @@ async def delete_application(app_id: str) -> bool:
     return True
 
 
+async def get_filtered_nh_sz_dc(environment: str, app_id: str | None = None) -> dict[str, Any]:
+    """Return NHs/SZs/DCs filtered by environment and optionally by app.
+
+    - Non-Production / Pre-Production: return ALL NHs for that environment (common for all apps).
+    - Production: return app-specific NHs from the app's neighborhoods field.
+    SZs and DCs are similarly filtered from the app's szs/dcs fields for prod,
+    or all SZs matching the fabric for non-prod/preprod.
+    """
+    all_nhs = _load("neighbourhoods") or []
+    all_szs = _load("security_zones") or []
+    all_dcs = _load("ngdc_datacenters") or []
+    all_apps = _load("applications") or []
+
+    env_lower = environment.lower().strip()
+    is_prod = env_lower in ("production", "prod")
+
+    # Find the app record
+    app_record = None
+    if app_id:
+        app_record = next(
+            (a for a in all_apps
+             if a.get("app_id") == app_id or a.get("app_distributed_id") == app_id),
+            None,
+        )
+
+    if is_prod and app_record:
+        # Production: app-specific NHs/SZs/DCs from the app's mapped fields
+        app_nhs = [n.strip() for n in (app_record.get("neighborhoods") or app_record.get("nh") or "").split(",") if n.strip()]
+        app_szs = [s.strip() for s in (app_record.get("szs") or app_record.get("sz") or "").split(",") if s.strip()]
+        app_dcs = [d.strip() for d in (app_record.get("dcs") or "").split(",") if d.strip()]
+
+        filtered_nhs = [nh for nh in all_nhs if nh.get("nh_id") in app_nhs]
+        filtered_szs = [sz for sz in all_szs if sz.get("code") in app_szs]
+        filtered_dcs = [dc for dc in all_dcs if dc.get("dc_id") in app_dcs] if app_dcs else all_dcs
+    else:
+        # Non-prod / Pre-prod: all NHs for that environment (common for all apps)
+        env_map = {
+            "non-production": "Non-Production", "nonprod": "Non-Production",
+            "non_production": "Non-Production", "np": "Non-Production",
+            "pre-production": "Pre-Production", "preprod": "Pre-Production",
+            "pre_production": "Pre-Production",
+            "production": "Production", "prod": "Production",
+        }
+        target_env = env_map.get(env_lower, environment)
+
+        filtered_nhs = [nh for nh in all_nhs if nh.get("environment") == target_env]
+        # SZs: match fabric
+        fabric = "Production" if is_prod else "Non-Production"
+        filtered_szs = [sz for sz in all_szs if sz.get("fabric") == fabric]
+        # DCs: all DCs for non-prod/preprod (or app-specific if app has dcs)
+        if app_record and app_record.get("dcs"):
+            app_dcs = [d.strip() for d in app_record["dcs"].split(",") if d.strip()]
+            filtered_dcs = [dc for dc in all_dcs if dc.get("dc_id") in app_dcs] if app_dcs else all_dcs
+        else:
+            filtered_dcs = all_dcs
+
+    return {
+        "neighbourhoods": filtered_nhs,
+        "security_zones": filtered_szs,
+        "datacenters": filtered_dcs,
+    }
+
+
+async def import_app_management(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Delta-based import of app management records using app_distributed_id as dedup key.
+
+    Returns counts of added, updated, and skipped records.
+    """
+    items = _load("applications") or []
+    existing_map: dict[str, int] = {}
+    for idx, item in enumerate(items):
+        adid = item.get("app_distributed_id")
+        if adid:
+            existing_map[adid] = idx
+
+    added = 0
+    updated = 0
+    skipped = 0
+    overrides: list[dict[str, Any]] = []
+
+    for rec in records:
+        adid = rec.get("app_distributed_id", "").strip()
+        if not adid:
+            skipped += 1
+            continue
+
+        if adid in existing_map:
+            idx = existing_map[adid]
+            existing = items[idx]
+            # Check if anything changed
+            changed = False
+            for key in ("app_id", "name", "owner", "neighborhoods", "szs", "dcs", "snow_sysid",
+                        "nh", "sz", "criticality", "pci_scope"):
+                new_val = rec.get(key)
+                if new_val is not None and str(new_val) != str(existing.get(key, "")):
+                    changed = True
+                    break
+            if changed:
+                # Override existing record with new data, preserving fields not in import
+                for key, val in rec.items():
+                    if val is not None and str(val).strip():
+                        existing[key] = val
+                items[idx] = existing
+                updated += 1
+                overrides.append({"app_distributed_id": adid, "app_id": existing.get("app_id", "")})
+            else:
+                skipped += 1
+        else:
+            items.append(dict(rec))
+            existing_map[adid] = len(items) - 1
+            added += 1
+
+    _save("applications", items)
+    return {
+        "added": added,
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(records),
+        "overrides": overrides,
+    }
+
+
 async def create_datacenter(data: dict[str, Any], dc_type: str = "ngdc") -> dict[str, Any]:
     coll = "ngdc_datacenters" if dc_type == "ngdc" else "legacy_datacenters"
     items = _load(coll) or []
@@ -1678,6 +1800,53 @@ async def remove_group_member(group_name: str, member_value: str) -> dict[str, A
 
 
 # ============================================================
+# VRF Convention Helper
+# Maps NH + SZ to the proper VRF name based on fabric type.
+# Production fabric: STD/GEN, PAA, 3PY, CCS, CDE, CPA, Swift, PSE, UC
+# Non-Production fabric: UGen, USTD, UPAA, UCPA, UCDE, UCCS, U3PY
+# ============================================================
+
+# Non-prod/preprod NHs (common for all apps)
+_NONPROD_NHS = {"NH11", "NH12", "NH13", "NH15", "NH16", "NH17"}
+
+# Production SZ→VRF mapping
+_PROD_VRF_MAP: dict[str, str] = {
+    "STD": "STD", "GEN": "GEN", "PAA": "PAA", "3PY": "3PY",
+    "CCS": "CCS", "CDE": "CDE", "CPA": "CPA", "Swift": "Swift",
+    "PSE": "PSE", "UC": "UC",
+}
+
+# Non-Production SZ→VRF mapping
+_NONPROD_VRF_MAP: dict[str, str] = {
+    "UGen": "UGen", "USTD": "USTD", "UPAA": "UPAA", "UCPA": "UCPA",
+    "UCDE": "UCDE", "UCCS": "UCCS", "U3PY": "U3PY",
+    # Allow prod SZ names in non-prod context — auto-map to non-prod VRF
+    "GEN": "UGen", "STD": "USTD", "PAA": "UPAA", "CPA": "UCPA",
+    "CDE": "UCDE", "CCS": "UCCS", "3PY": "U3PY",
+}
+
+
+def _resolve_vrf(nh: str, sz: str, environment: str = "") -> str:
+    """Resolve the NH-SZ VRF convention string.
+    Returns e.g. 'NH02-CCS' for production or 'NH12-UCCS' for non-prod."""
+    nh_upper = nh.upper().strip() if nh else ""
+    sz_val = sz.strip() if sz else ""
+    env_lower = environment.lower().strip() if environment else ""
+
+    is_nonprod = (
+        nh_upper in _NONPROD_NHS
+        or "non" in env_lower
+        or "pre" in env_lower
+    )
+    if is_nonprod:
+        vrf = _NONPROD_VRF_MAP.get(sz_val, sz_val)
+    else:
+        vrf = _PROD_VRF_MAP.get(sz_val, sz_val)
+
+    return f"{nh_upper}-{vrf}" if nh_upper else vrf
+
+
+# ============================================================
 # Rule Compiler
 # ============================================================
 
@@ -1691,6 +1860,15 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
     proto = rule.get("protocol", "TCP")
     action = rule.get("action", "Allow")
     desc = rule.get("description", "")
+    env = rule.get("environment", "")
+    src_nh = rule.get("source_nh", rule.get("nh", ""))
+    dst_nh = rule.get("destination_nh", rule.get("dst_nh", ""))
+    src_sz = rule.get("source_zone", "any")
+    dst_sz = rule.get("destination_zone", "any")
+
+    # Resolve NH-SZ VRF conventions
+    src_vrf = _resolve_vrf(src_nh, src_sz, env)
+    dst_vrf = _resolve_vrf(dst_nh, dst_sz, env)
 
     src_objs = [src] if src else ["any"]
     dst_objs = [dst] if dst else ["any"]
@@ -1718,29 +1896,42 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
             f"  track \"Log\" \\\n"
             f"  comments \"{desc}\""
         )
-    elif vendor == "cisco_asa":
+    elif vendor == "fortigate":
         compiled = (
-            f"access-list ACL_{'IN' if action == 'Allow' else 'OUT'} extended "
-            f"{'permit' if action == 'Allow' else 'deny'} "
-            f"{proto.lower()} object-group {src} object-group {dst} eq {port}\n"
-            f"! {desc}"
+            f"config firewall policy\n"
+            f"  edit 0\n"
+            f"    set name \"{rule_id}\"\n"
+            f"    set srcintf \"{rule.get('source_zone', 'any')}\"\n"
+            f"    set dstintf \"{rule.get('destination_zone', 'any')}\"\n"
+            f"    set srcaddr \"{src}\"\n"
+            f"    set dstaddr \"{dst}\"\n"
+            f"    set service \"{proto}/{port}\"\n"
+            f"    set action {'accept' if action == 'Allow' else 'deny'}\n"
+            f"    set logtraffic all\n"
+            f"    set comments \"{desc}\"\n"
+            f"  next\n"
+            f"end"
         )
     else:
         compiled = (
             f"# Firewall Rule: {rule_id}\n"
             f"# Description: {desc}\n"
             f"# Application: {rule.get('application', 'N/A')}\n"
-            f"# Environment: {rule.get('environment', 'N/A')}\n"
+            f"# Environment: {env or 'N/A'}\n"
+            f"# Source VRF: {src_vrf}\n"
+            f"# Destination VRF: {dst_vrf}\n"
             f"---\n"
             f"rule:\n"
             f"  id: {rule_id}\n"
             f"  action: {action.lower()}\n"
             f"  source:\n"
             f"    objects: [{src}]\n"
-            f"    zone: {rule.get('source_zone', 'any')}\n"
+            f"    zone: {src_sz}\n"
+            f"    vrf: {src_vrf}\n"
             f"  destination:\n"
             f"    objects: [{dst}]\n"
-            f"    zone: {rule.get('destination_zone', 'any')}\n"
+            f"    zone: {dst_sz}\n"
+            f"    vrf: {dst_vrf}\n"
             f"  service:\n"
             f"    protocol: {proto.lower()}\n"
             f"    port: {port}\n"
@@ -1764,6 +1955,8 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
         "action": action.lower(),
         "logging": True,
         "comment": desc,
+        "source_vrf": src_vrf,
+        "destination_vrf": dst_vrf,
     }
     if group_provisioning:
         result["group_provisioning"] = group_provisioning
@@ -2063,6 +2256,13 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
     dst_zone = rule.get("rule_destination_zone", "any")
     app_name = rule.get("app_name", "N/A")
     policy = rule.get("policy_name", "N/A")
+    env = rule.get("environment", "")
+    src_nh = rule.get("source_nh", rule.get("nh", ""))
+    dst_nh = rule.get("destination_nh", rule.get("dst_nh", ""))
+
+    # Resolve NH-SZ VRF conventions
+    src_vrf = _resolve_vrf(src_nh, src_zone, env)
+    dst_vrf = _resolve_vrf(dst_nh, dst_zone, env)
 
     src_objs = [s.strip() for s in src.split("\n") if s.strip()] or ["any"]
     dst_objs = [d.strip() for d in dst.split("\n") if d.strip()] or ["any"]
@@ -2096,21 +2296,32 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
                 for s in src_objs for d in dst_objs for sv in svc_list
             )
         )
-    elif vendor == "cisco_asa":
+    elif vendor == "fortigate":
         compiled = (
-            f"! Cisco ASA - {app_name} - {rule_id}\n"
+            f"# FortiGate - {app_name} - {rule_id}\n"
+            f"config firewall policy\n"
             + "\n".join(
-                f"access-list ACL_{'IN' if action == 'Accept' else 'OUT'} extended "
-                f"{'permit' if action == 'Accept' else 'deny'} "
-                f"tcp object-group {s} object-group {d} eq {sv}"
+                f"  edit 0\n"
+                f"    set name \"{rule_id}\"\n"
+                f"    set srcintf \"{src_zone}\"\n"
+                f"    set dstintf \"{dst_zone}\"\n"
+                f"    set srcaddr \"{s}\"\n"
+                f"    set dstaddr \"{d}\"\n"
+                f"    set service \"{sv}\"\n"
+                f"    set action {'accept' if action == 'Accept' else 'deny'}\n"
+                f"    set logtraffic all\n"
+                f"  next"
                 for s in src_objs for d in dst_objs for sv in svc_list
             )
+            + "\nend"
         )
     else:
         compiled = (
             f"# Firewall Rule: {rule_id}\n"
             f"# Application: {app_name}\n"
             f"# Policy: {policy}\n"
+            f"# Source VRF: {src_vrf}\n"
+            f"# Destination VRF: {dst_vrf}\n"
             f"---\n"
             f"rule:\n"
             f"  id: {rule_id}\n"
@@ -2118,9 +2329,11 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
             f"  source:\n"
             f"    objects: [{', '.join(src_objs)}]\n"
             f"    zone: {src_zone}\n"
+            f"    vrf: {src_vrf}\n"
             f"  destination:\n"
             f"    objects: [{', '.join(dst_objs)}]\n"
             f"    zone: {dst_zone}\n"
+            f"    vrf: {dst_vrf}\n"
             f"  service: [{', '.join(svc_list)}]\n"
             f"  logging: true\n"
             f"  enabled: true"
@@ -2142,6 +2355,8 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
         "action": action.lower(),
         "logging": True,
         "comment": f"{app_name} - {policy}",
+        "source_vrf": src_vrf,
+        "destination_vrf": dst_vrf,
     }
     if group_provisioning:
         result["group_provisioning"] = group_provisioning
@@ -3805,16 +4020,24 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
                 f'  track "Log" \\\n'
                 f'  comments "{suffix}: {desc}"'
             )
-        elif vendor == "cisco_asa":
+        elif vendor == "fortigate":
             objs = src_objs if direction == "egress" else dst_objs
-            lines.append(f"! {suffix} Rule — Device: {dev_name} ({dev_id})")
+            lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
+            lines.append("config firewall policy")
             for obj in objs:
-                if direction == "egress":
-                    lines.append(f"access-list ACL_{suffix} extended permit "
-                                 f"{proto.lower()} object-group {obj} any eq {svc}")
-                else:
-                    lines.append(f"access-list ACL_{suffix} extended permit "
-                                 f"{proto.lower()} any object-group {obj} eq {svc}")
+                s_val = obj if direction == "egress" else "any"
+                d_val = "any" if direction == "egress" else obj
+                lines.append(f"  edit 0")
+                lines.append(f"    set name \"{rid}-{suffix}\"")
+                lines.append(f"    set srcintf \"{src_zone}\"")
+                lines.append(f"    set dstintf \"{dst_zone}\"")
+                lines.append(f"    set srcaddr \"{s_val}\"")
+                lines.append(f"    set dstaddr \"{d_val}\"")
+                lines.append(f"    set service \"{proto}/{svc}\"")
+                lines.append(f"    set action accept")
+                lines.append(f"    set logtraffic all")
+                lines.append(f"  next")
+            lines.append("end")
         else:
             lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
             lines.append(f"# NH: {dev_nh}  SZ: {dev_sz}  Role: {role}")

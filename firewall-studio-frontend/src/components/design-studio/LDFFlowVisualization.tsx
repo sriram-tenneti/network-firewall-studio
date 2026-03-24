@@ -36,7 +36,7 @@ interface LDFFlowVisualizationProps {
 }
 
 const VENDOR_LABELS: Record<string, string> = {
-  palo_alto: 'Palo Alto', checkpoint: 'Check Point', cisco_asa: 'Cisco ASA', generic: 'Generic',
+  palo_alto: 'Palo Alto', checkpoint: 'Check Point', fortigate: 'FortiGate', generic: 'Generic',
 };
 
 const LDF_RULE_LABELS: Record<string, string> = {
@@ -119,6 +119,18 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
   const enrichDevice = (dev: BoundaryDevice): BoundaryDevice & Partial<FWDevice> => {
     const full = allDevices.find(fd => fd.device_id === dev.device_id);
     return { ...dev, ...full };
+  };
+
+  // Generate naming-standard device label: fw-{APP}-{NH}-{SZ}
+  const stdDeviceName = (dev: BoundaryDevice): string => {
+    const appId = data.source_objects?.[0]?.match(/^grp-([A-Z0-9-]+)/i)?.[1]
+      || data.destination_objects?.[0]?.match(/^grp-([A-Z0-9-]+)/i)?.[1]
+      || '';
+    const nh = dev.nh || '';
+    const sz = dev.sz || '';
+    if (appId && nh && sz) return `fw-${appId}-${nh}-${sz}`.toUpperCase();
+    if (nh && sz) return `fw-${nh}-${sz}`.toUpperCase();
+    return dev.device_name || dev.device_id;
   };
 
   // When existing_rule is true (LDF-002 segmented same-SZ same-NH), render in green
@@ -230,7 +242,7 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
                   const enriched = enrichDevice(dev);
                   return (
                     <div key={i}>
-                      <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                      <div className="text-[11px] font-bold text-gray-900">{stdDeviceName(dev)}</div>
                       <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
                       <div className="text-[9px] text-blue-600 font-medium mt-0.5">Rule Active</div>
                     </div>
@@ -252,7 +264,7 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
                         const enriched = enrichDevice(dev);
                         return (
                           <div key={i}>
-                            <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                            <div className="text-[11px] font-bold text-gray-900">{stdDeviceName(dev)}</div>
                             <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
                           </div>
                         );
@@ -275,7 +287,7 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
                         const enriched = enrichDevice(dev);
                         return (
                           <div key={i}>
-                            <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                            <div className="text-[11px] font-bold text-gray-900">{stdDeviceName(dev)}</div>
                             <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
                           </div>
                         );
@@ -291,7 +303,7 @@ export function LDFFlowVisualization({ ruleId, vendor = 'generic', boundaryData,
                         const enriched = enrichDevice(dev);
                         return (
                           <div key={i}>
-                            <div className="text-[11px] font-bold text-gray-900">{dev.nh} {dev.sz} FW</div>
+                            <div className="text-[11px] font-bold text-gray-900">{stdDeviceName(dev)}</div>
                             <div className="text-[9px] text-gray-500">{enriched.name || dev.device_name}</div>
                           </div>
                         );

@@ -130,7 +130,9 @@ export default function SettingsPage() {
   const [editingAppId, setEditingAppId] = useState<string | null>(null);
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
   const [showAddApp, setShowAddApp] = useState(false);
-  const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', name: '', nh: '', sz: '', owner: '' });
+  const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
+  const [importingApps, setImportingApps] = useState(false);
+  const [importResult, setImportResult] = useState<{ added: number; updated: number; skipped: number; total: number; overrides: { app_distributed_id: string; app_id: string }[] } | null>(null);
 
   // Edit states for Policy Matrix
   const [editingPolicyIdx, setEditingPolicyIdx] = useState<number | null>(null);
@@ -269,7 +271,7 @@ export default function SettingsPage() {
       await api.createApplication(newAppForm as Record<string, unknown>);
       showNotification('Application added', 'success');
       setShowAddApp(false);
-      setNewAppForm({ app_id: '', name: '', nh: '', sz: '', owner: '' });
+      setNewAppForm({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
       loadRefData();
     } catch {
       showNotification('Failed to add application', 'error');
@@ -683,7 +685,6 @@ export default function SettingsPage() {
     { id: 'security_zones', label: 'Security Zones' },
     { id: 'datacenters', label: 'Data Centers' },
     { id: 'app_management', label: 'App Management' },
-    { id: 'app_ngdc_mappings', label: 'App NGDC Mappings' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
@@ -1343,30 +1344,53 @@ export default function SettingsPage() {
           <div className="space-y-6">
             <div className="p-4 bg-white border border-gray-200 rounded-lg">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <label className="text-sm font-semibold text-gray-700">Select Application:</label>
-                  <select className="flex-1 max-w-md px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
-                    value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
-                    <option value="">-- All Applications --</option>
-                    {applications.map(app => (
-                      <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <button onClick={() => setShowAddApp(true)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Application</button>
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm font-semibold text-gray-700">Select Application:</label>
+                    <select className="flex-1 max-w-md px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
+                      value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
+                      <option value="">-- All Applications --</option>
+                      {applications.map(app => (
+                        <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <label className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 cursor-pointer">
+                      {importingApps ? 'Importing...' : 'Import Apps'}
+                      <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={importingApps} onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setImportingApps(true);
+                        try {
+                          const result = await api.importAppManagement(file);
+                          setImportResult(result);
+                          showNotification(`Import: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged`, 'success');
+                          loadRefData();
+                        } catch { showNotification('Import failed', 'error'); }
+                        setImportingApps(false);
+                        e.target.value = '';
+                      }} />
+                    </label>
+                    <button onClick={() => setShowAddApp(true)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Application</button>
+                  </div>
               </div>
             </div>
 
             {showAddApp && (
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
                 <h3 className="text-sm font-semibold text-blue-800">Add New Application</h3>
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   <input className={inp} placeholder="App ID" value={newAppForm.app_id || ''} onChange={e => setNewAppForm({ ...newAppForm, app_id: e.target.value })} />
-                  <input className={inp} placeholder="Name" value={newAppForm.name || ''} onChange={e => setNewAppForm({ ...newAppForm, name: e.target.value })} />
-                  <input className={inp} placeholder="NH (e.g. NH02,NH14)" title="Comma-separated NHs for apps with components in multiple neighbourhoods" value={newAppForm.nh || ''} onChange={e => setNewAppForm({ ...newAppForm, nh: e.target.value })} />
-                  <input className={inp} placeholder="SZ (e.g. CCS,CDE,PAA)" title="Comma-separated SZs for apps with components in multiple security zones" value={newAppForm.sz || ''} onChange={e => setNewAppForm({ ...newAppForm, sz: e.target.value })} />
+                  <input className={inp} placeholder="App Distributed Id" value={newAppForm.app_distributed_id || ''} onChange={e => setNewAppForm({ ...newAppForm, app_distributed_id: e.target.value })} />
+                  <input className={inp} placeholder="App Name" value={newAppForm.name || ''} onChange={e => setNewAppForm({ ...newAppForm, name: e.target.value })} />
                   <input className={inp} placeholder="Owner" value={newAppForm.owner || ''} onChange={e => setNewAppForm({ ...newAppForm, owner: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-4 gap-3">
+                  <input className={inp} placeholder="Neighborhoods (e.g. NH02,NH14)" value={newAppForm.neighborhoods || ''} onChange={e => setNewAppForm({ ...newAppForm, neighborhoods: e.target.value })} />
+                  <input className={inp} placeholder="SZs (e.g. CCS,CDE,PAA)" value={newAppForm.szs || ''} onChange={e => setNewAppForm({ ...newAppForm, szs: e.target.value })} />
+                  <input className={inp} placeholder="DCs (e.g. ALPHA_NGDC,BETA_NGDC)" value={newAppForm.dcs || ''} onChange={e => setNewAppForm({ ...newAppForm, dcs: e.target.value })} />
+                  <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setShowAddApp(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
@@ -1393,39 +1417,41 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 {editingAppId === selectedApp ? (
-                  <div className="grid grid-cols-4 gap-4">
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">App ID</label>
-                      <p className="text-sm font-semibold text-gray-800">{selectedAppData.app_id}</p></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                      <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /></div>
-                                        <div><label className="block text-xs font-medium text-gray-500 mb-1">NH <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                                          <input className={inp} placeholder="e.g. NH02,NH14" title="Comma-separated NHs for apps with components in multiple neighbourhoods" value={editAppForm.nh || ''} onChange={e => setEditAppForm({ ...editAppForm, nh: e.target.value })} /></div>
-                                        <div><label className="block text-xs font-medium text-gray-500 mb-1">SZ <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                                          <input className={inp} placeholder="e.g. CCS,CDE,PAA" title="Comma-separated SZs for apps with components in multiple security zones" value={editAppForm.sz || ''} onChange={e => setEditAppForm({ ...editAppForm, sz: e.target.value })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label>
-                      <input className={inp} value={editAppForm.owner || ''} onChange={e => setEditAppForm({ ...editAppForm, owner: e.target.value })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Criticality</label>
-                      <input className={inp} value={String(editAppForm.criticality ?? '')} onChange={e => setEditAppForm({ ...editAppForm, criticality: Number(e.target.value) || 0 })} /></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">PCI Scope</label>
-                      <select className={inp} value={editAppForm.pci_scope ? 'true' : 'false'} onChange={e => setEditAppForm({ ...editAppForm, pci_scope: e.target.value === 'true' })}>
-                        <option value="true">Yes</option><option value="false">No</option>
-                      </select></div>
-                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Dist ID</label>
-                      <input className={inp} value={String(editAppForm.app_distributed_id ?? '')} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /></div>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-4 gap-4">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App ID</label>
+                        <p className="text-sm font-semibold text-gray-800">{selectedAppData.app_id}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Distributed Id</label>
+                        <input className={inp} value={String(editAppForm.app_distributed_id ?? '')} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Name</label>
+                        <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label>
+                        <input className={inp} value={editAppForm.owner || ''} onChange={e => setEditAppForm({ ...editAppForm, owner: e.target.value })} /></div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods</label>
+                        <input className={inp} placeholder="e.g. NH02,NH14" value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SZs</label>
+                        <input className={inp} placeholder="e.g. CCS,CDE,PAA" value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label>
+                        <input className={inp} placeholder="e.g. ALPHA_NGDC,BETA_NGDC" value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label>
+                        <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
+                    </div>
                   </div>
                 ) : (
                   <>
                     <div className="grid grid-cols-4 gap-4">
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">App ID</label><p className="text-sm font-semibold text-gray-800">{selectedAppData.app_id}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Name</label><p className="text-sm text-gray-800">{selectedAppData.name}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighbourhood</label><p className="text-sm font-mono text-gray-800">{selectedAppData.nh || 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Security Zone</label><p className="text-sm font-mono text-gray-800">{selectedAppData.sz || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Distributed Id</label><p className="text-sm font-mono text-gray-800">{selectedAppData.app_distributed_id || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">App Name</label><p className="text-sm text-gray-800">{selectedAppData.name}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label><p className="text-sm text-gray-800">{selectedAppData.owner || 'N/A'}</p></div>
                     </div>
                     <div className="grid grid-cols-4 gap-4">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label><p className="text-sm text-gray-800">{selectedAppData.owner || 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Criticality</label><p className="text-sm text-gray-800">{selectedAppData.criticality ?? 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">PCI Scope</label><p className="text-sm text-gray-800">{selectedAppData.pci_scope ? 'Yes' : 'No'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Dist ID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.app_distributed_id ?? 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods</label><p className="text-sm font-mono text-gray-800">{selectedAppData.neighborhoods || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SZs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.szs || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.dcs || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.snow_sysid || 'N/A'}</p></div>
                     </div>
                   </>
                 )}
@@ -1564,171 +1590,6 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
-          </div>
-        )}
-
-        {/* ── App NGDC Mappings Tab ── */}
-        {activeTab === 'app_ngdc_mappings' && (
-          <div className="space-y-6">
-            <div className="p-6 bg-white border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold">App NGDC Mappings (DC / NH / SZ)</h2>
-                  <p className="text-xs text-gray-500 mt-1">Map imported apps to NGDC Data Centers, Neighbourhoods, and Security Zones. Add components (WEB, APP, DB, etc.) per app.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <select className="px-2 py-1.5 text-xs border rounded-md" value={ngdcAppFilter} onChange={e => setNgdcAppFilter(e.target.value as 'all'|'unmapped'|'mapped')}>
-                    <option value="all">All Apps</option>
-                    <option value="unmapped">Unmapped Only</option>
-                    <option value="mapped">Mapped Only</option>
-                  </select>
-                  <button onClick={loadNgdcApps} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-                    {ngdcLoaded ? 'Refresh' : 'Load Apps'}
-                  </button>
-                </div>
-              </div>
-
-              {ngdcLoaded && ngdcImportedApps.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex gap-4 text-xs text-gray-500 mb-2">
-                    <span>Total: <strong className="text-gray-700">{ngdcImportedApps.length}</strong></span>
-                    <span>Mapped: <strong className="text-green-700">{ngdcImportedApps.filter(a => a.has_mapping).length}</strong></span>
-                    <span>Unmapped: <strong className="text-amber-700">{ngdcImportedApps.filter(a => !a.has_mapping).length}</strong></span>
-                  </div>
-                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dist ID</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Rules</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Components</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {ngdcImportedApps
-                          .filter(a => ngdcAppFilter === 'all' || (ngdcAppFilter === 'unmapped' ? !a.has_mapping : a.has_mapping))
-                          .map(app => (
-                          <React.Fragment key={app.app_id}>
-                            <tr className={`hover:bg-gray-50 ${ngdcExpandedAppId === app.app_id ? 'bg-blue-50' : ''}`}>
-                              <td className="px-3 py-2 font-mono text-xs font-medium">{app.app_id}</td>
-                              <td className="px-3 py-2 text-xs">{app.app_name}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-500">{app.app_distributed_id}</td>
-                              <td className="px-3 py-2 text-xs">{app.rule_count}</td>
-                              <td className="px-3 py-2">
-                                {app.has_mapping ? (
-                                  <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">Mapped ({app.components.length})</span>
-                                ) : (
-                                  <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">Unmapped</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-gray-500">
-                                {app.components.length > 0
-                                  ? app.components.map(c => String(c.component || '')).join(', ')
-                                  : <span className="text-gray-400 italic">None</span>}
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-1">
-                                  <button onClick={() => setNgdcExpandedAppId(ngdcExpandedAppId === app.app_id ? null : app.app_id)}
-                                    className="px-2 py-0.5 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">
-                                    {ngdcExpandedAppId === app.app_id ? 'Collapse' : 'Edit'}
-                                  </button>
-                                  <button onClick={() => { setNgdcAddingForApp(app.app_id); setNgdcExpandedAppId(app.app_id); }}
-                                    className="px-2 py-0.5 text-xs text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">
-                                    + Component
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                            {ngdcExpandedAppId === app.app_id && (
-                              <tr>
-                                <td colSpan={7} className="px-4 py-3 bg-blue-50/50">
-                                  {app.components.length > 0 && (
-                                    <div className="mb-3">
-                                      <h4 className="text-xs font-semibold text-gray-600 mb-2">Existing Component Mappings</h4>
-                                      <table className="w-full text-xs">
-                                        <thead><tr className="text-gray-500">
-                                          <th className="px-2 py-1 text-left">Component</th>
-                                          <th className="px-2 py-1 text-left">DC</th>
-                                          <th className="px-2 py-1 text-left">NH</th>
-                                          <th className="px-2 py-1 text-left">SZ</th>
-                                          <th className="px-2 py-1 text-left">CIDR</th>
-                                          <th className="px-2 py-1 text-left">Status</th>
-                                          <th className="px-2 py-1 text-left">Actions</th>
-                                        </tr></thead>
-                                        <tbody>
-                                          {app.components.map((c, idx) => (
-                                            <tr key={idx} className="border-t border-gray-200">
-                                              <td className="px-2 py-1"><span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">{String(c.component || '')}</span></td>
-                                              <td className="px-2 py-1 font-mono">{String(c.dc || '')}</td>
-                                              <td className="px-2 py-1 font-mono">{String(c.nh || '')}</td>
-                                              <td className="px-2 py-1 font-mono">{String(c.sz || '')}</td>
-                                              <td className="px-2 py-1 font-mono">{String(c.cidr || '')}</td>
-                                              <td className="px-2 py-1"><span className={`px-1.5 py-0.5 rounded-full ${c.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{String(c.status || 'Active')}</span></td>
-                                              <td className="px-2 py-1">
-                                                <button onClick={() => handleNgdcDeleteComponent(String(c.id || ''))} className="text-red-500 hover:text-red-700">Delete</button>
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
-                                  {ngdcAddingForApp === app.app_id && (
-                                    <div className="p-3 bg-white border border-blue-200 rounded-lg">
-                                      <h4 className="text-xs font-semibold text-blue-700 mb-2">Add Component for {app.app_id} - {app.app_name}</h4>
-                                      <div className="grid grid-cols-7 gap-2">
-                                        <select className="px-2 py-1.5 text-xs border rounded" value={ngdcComponentForm.component} onChange={e => setNgdcComponentForm(p => ({ ...p, component: e.target.value }))}>
-                                          {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                        <select className="px-2 py-1.5 text-xs border rounded" value={ngdcComponentForm.dc} onChange={e => setNgdcComponentForm(p => ({ ...p, dc: e.target.value }))}>
-                                          <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                                          <option value="BETA_NGDC">BETA_NGDC</option>
-                                          <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                                        </select>
-                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="NH (e.g. NH02,NH14)" value={ngdcComponentForm.nh} onChange={e => setNgdcComponentForm(p => ({ ...p, nh: e.target.value }))} />
-                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="SZ (e.g. CCS,PAA)" value={ngdcComponentForm.sz} onChange={e => setNgdcComponentForm(p => ({ ...p, sz: e.target.value }))} />
-                                        <input className="px-2 py-1.5 text-xs border rounded font-mono" placeholder="CIDR" value={ngdcComponentForm.cidr} onChange={e => setNgdcComponentForm(p => ({ ...p, cidr: e.target.value }))} />
-                                        <input className="px-2 py-1.5 text-xs border rounded" placeholder="Notes" value={ngdcComponentForm.notes} onChange={e => setNgdcComponentForm(p => ({ ...p, notes: e.target.value }))} />
-                                        <div className="flex gap-1">
-                                          <button onClick={() => setNgdcAddingForApp(null)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
-                                          <button onClick={() => handleNgdcAddComponent(app.app_id)} disabled={ngdcSaving || !ngdcComponentForm.nh || !ngdcComponentForm.sz}
-                                            className="px-2 py-1 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50">
-                                            {ngdcSaving ? '...' : 'Add'}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                  {!ngdcAddingForApp && app.components.length === 0 && (
-                                    <p className="text-xs text-gray-400 italic">No component mappings yet. Click &quot;+ Component&quot; to add DC/NH/SZ mapping for this app.</p>
-                                  )}
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {ngdcLoaded && ngdcImportedApps.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-gray-500">No imported apps found. Import legacy rules first via Firewall Management &rarr; Import.</p>
-                </div>
-              )}
-
-              {!ngdcLoaded && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-gray-500">Click &quot;Load Apps&quot; to view imported apps and manage their NGDC component mappings.</p>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -2041,7 +1902,7 @@ export default function SettingsPage() {
                     <option value="">All Vendors</option>
                     <option value="palo_alto">Palo Alto</option>
                     <option value="checkpoint">Check Point</option>
-                    <option value="cisco_asa">Cisco ASA</option>
+                    <option value="fortigate">FortiGate</option>
                   </select>
                   <span className="text-xs text-gray-500 ml-auto">{filteredDevices.length} devices</span>
                 </div>
@@ -2057,8 +1918,8 @@ export default function SettingsPage() {
                         <input type="text" className={inp} value={newDeviceForm.name as string} onChange={e => setNewDeviceForm(f => ({ ...f, name: e.target.value }))} placeholder="Palo Alto NH01 CPA" /></div>
                       <div><label className="block text-xs font-medium text-gray-700 mb-1">Vendor</label>
                         <select className={inp} value={newDeviceForm.vendor as string} onChange={e => setNewDeviceForm(f => ({ ...f, vendor: e.target.value }))}>
-                          <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="cisco_asa">Cisco ASA</option>
-                        </select></div>
+                                                  <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="fortigate">FortiGate</option>
+                                                </select></div>
                       <div><label className="block text-xs font-medium text-gray-700 mb-1">DC</label>
                         <select className={inp} value={newDeviceForm.dc as string} onChange={e => setNewDeviceForm(f => ({ ...f, dc: e.target.value }))}>
                           <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
@@ -2115,13 +1976,13 @@ export default function SettingsPage() {
                                 : (dev.name as string)}</td>
                               <td className="px-3 py-2">{isEditing
                                 ? <select className="px-2 py-1 text-xs border rounded" value={(editDeviceForm.vendor as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, vendor: e.target.value }))}>
-                                    <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="cisco_asa">Cisco ASA</option>
-                                  </select>
+                                                  <option value="palo_alto">Palo Alto</option><option value="checkpoint">Check Point</option><option value="fortigate">FortiGate</option>
+                                                </select>
                                 : <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                                     dev.vendor === 'palo_alto' ? 'bg-blue-100 text-blue-700' :
                                     dev.vendor === 'checkpoint' ? 'bg-purple-100 text-purple-700' :
                                     'bg-amber-100 text-amber-700'
-                                  }`}>{dev.vendor === 'palo_alto' ? 'Palo Alto' : dev.vendor === 'checkpoint' ? 'Check Point' : 'Cisco ASA'}</span>}</td>
+                                  }`}>{dev.vendor === 'palo_alto' ? 'Palo Alto' : dev.vendor === 'checkpoint' ? 'Check Point' : dev.vendor === 'fortigate' ? 'FortiGate' : String(dev.vendor)}</span>}</td>
                               <td className="px-3 py-2">{dev.dc as string}</td>
                               <td className="px-3 py-2">{isEditing
                                 ? <input type="text" className="px-2 py-1 text-xs border rounded w-16" value={(editDeviceForm.nh as string) || ''} onChange={e => setEditDeviceForm(f => ({ ...f, nh: e.target.value }))} />

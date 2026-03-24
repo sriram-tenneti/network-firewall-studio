@@ -1,9 +1,12 @@
 """Naming Standards Engine for Network Firewall Studio.
 
 Enforces strict naming conventions for groups, servers, and subnets:
-- Groups:  grp-{AppID}-{NH}-{SZ}-{Subtype}
-- Servers: svr-{AppID}-{NH}-{SZ}-{ServerName}
-- Subnets: rng-{AppID}-{NH}-{SZ}-{Descriptor}
+- Groups:  grp-{AppDistributedId}-{NH}-{SZ}-{Subtype}
+- Servers: svr-{AppDistributedId}-{NH}-{SZ}-{ServerName}
+- Subnets: rng-{AppDistributedId}-{NH}-{SZ}-{Descriptor}
+
+The {APP} placeholder uses the App Distributed Id (e.g. AD-1001) as the
+primary identifier. Falls back to App Id if Distributed Id is not available.
 
 Rules must be group-to-group unless an exception is approved.
 """
@@ -14,11 +17,15 @@ from typing import Literal
 # Valid Neighbourhood IDs
 VALID_NH_IDS = [f"NH{i:02d}" for i in range(1, 18)]
 
-# Valid Security Zone codes
+# Valid Security Zone codes (Production + Non-Production fabrics)
 VALID_SZ_CODES = [
-    "CDE", "GEN", "DMZ", "RST", "MGT", "PNA", "EPAA", "UCPA",
-    "BCCI", "GGEN", "EPIN", "LPAA", "USPP", "EXEN", "SPN", "CPN",
-    "EXT",
+    # Production fabric
+    "STD", "GEN", "PAA", "3PY", "CCS", "CDE", "CPA", "PSE", "Swift", "UC",
+    # Non-Production fabric
+    "UGen", "USTD", "UPAA", "UCPA", "UCDE", "UCCS", "U3PY",
+    # Legacy / special
+    "DMZ", "RST", "MGT", "PNA", "EPAA", "BCCI", "GGEN", "EPIN",
+    "LPAA", "USPP", "EXEN", "SPN", "CPN", "EXT",
 ]
 
 # Valid Subtypes for groups
@@ -389,18 +396,18 @@ def get_naming_standards_info() -> dict:
         "prefixes": {
             "grp": {
                 "description": "Group (collection of servers)",
-                "pattern": "grp-{AppID}-{NH}-{SZ}-{Subtype}",
-                "example": "grp-CRM-NH02-GEN-APP",
+                "pattern": "grp-{AppDistributedId}-{NH}-{SZ}-{Subtype}",
+                "example": "grp-AD-1001-NH02-CCS-APP",
             },
             "svr": {
                 "description": "Individual server/IP",
-                "pattern": "svr-{AppID}-{NH}-{SZ}-{ServerName}",
-                "example": "svr-CRM-NH02-GEN-CRMPROD01",
+                "pattern": "svr-{AppDistributedId}-{NH}-{SZ}-{ServerName}",
+                "example": "svr-AD-1001-NH02-CCS-CRMPROD01",
             },
             "rng": {
                 "description": "Subnet/IP range",
-                "pattern": "rng-{AppID}-{NH}-{SZ}-{Descriptor}",
-                "example": "rng-CRM-NH02-GEN-WEBNET",
+                "pattern": "rng-{AppDistributedId}-{NH}-{SZ}-{Descriptor}",
+                "example": "rng-AD-1001-NH02-CCS-WEBNET",
             },
         },
         "valid_nh_ids": VALID_NH_IDS,

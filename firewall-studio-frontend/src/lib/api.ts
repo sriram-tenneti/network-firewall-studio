@@ -553,6 +553,26 @@ export const setDataMode = (mode: string) =>
 export const resetSeedData = () =>
   fetchJSON<{ message: string; current_mode: string }>('/api/reference/data-mode/reset-seed', { method: 'POST' });
 
+// Auto-populate NH/SZ/DC filtered by environment + app
+export const getFilteredNhSzDc = (environment: string, appId?: string) => {
+  const params = new URLSearchParams({ environment });
+  if (appId) params.append('app_id', appId);
+  return fetchJSON<{
+    neighbourhoods: NeighbourhoodRegistry[];
+    security_zones: SecurityZone[];
+    datacenters: NGDCDataCenter[];
+  }>(`/api/reference/filtered-nh-sz-dc?${params}`);
+};
+
+// App Management delta-based import
+export const importAppManagement = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/api/reference/applications/import`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json() as Promise<{ added: number; updated: number; skipped: number; total: number; overrides: { app_distributed_id: string; app_id: string }[] }>;
+};
+
 // Imported Apps from Legacy Rules (with mapping status)
 export const getImportedApps = () =>
   fetchJSON<{ app_id: string; app_name: string; app_distributed_id: string; rule_count: number; has_mapping: boolean; components: Record<string, unknown>[] }[]>(

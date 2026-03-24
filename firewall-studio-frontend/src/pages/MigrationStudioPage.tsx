@@ -12,9 +12,10 @@ import {
   validateBirthright, getGroups,
   createMigrationGroup, getApplications, lookupIPMapping,
   getIPMappings, importIPMappings, compileEgressIngress,
+  getFilteredNhSzDc,
 } from '@/lib/api';
 import { LDFFlowVisualization, type EgressIngressResult } from '@/components/design-studio/LDFFlowVisualization';
-import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application, ComponentGroup } from '@/types';
+import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -149,6 +150,11 @@ export function MigrationStudioPage() {
   const [isModifyMode, setIsModifyMode] = useState(false);
   const [originalRuleSnapshot, setOriginalRuleSnapshot] = useState<Record<string, unknown> | null>(null);
 
+  // Auto-populated NH/SZ/DC from environment + app selection
+  const [filteredNHs, setFilteredNHs] = useState<NeighbourhoodRegistry[]>([]);
+  const [filteredSZs, setFilteredSZs] = useState<SecurityZone[]>([]);
+  const [filteredDCs, setFilteredDCs] = useState<NGDCDataCenter[]>([]);
+
   // New group creation during migration
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -181,6 +187,18 @@ export function MigrationStudioPage() {
   }, []);
 
   useEffect(() => { if (viewMode === 'group-mappings') loadIPMappings(groupMappingsFilter); }, [viewMode, groupMappingsFilter, loadIPMappings]);
+
+  // Auto-populate NH/SZ/DC when environment or app changes
+  useEffect(() => {
+    if (!selectedEnv) { setFilteredNHs([]); setFilteredSZs([]); setFilteredDCs([]); return; }
+    getFilteredNhSzDc(selectedEnv, selectedApp || undefined)
+      .then(data => {
+        setFilteredNHs(data.neighbourhoods || []);
+        setFilteredSZs(data.security_zones || []);
+        setFilteredDCs(data.datacenters || []);
+      })
+      .catch(() => { setFilteredNHs([]); setFilteredSZs([]); setFilteredDCs([]); });
+  }, [selectedEnv, selectedApp]);
 
   // Auto-validate birthright when migration popup opens with a rule
   useEffect(() => {
@@ -832,6 +850,18 @@ export function MigrationStudioPage() {
                             </div>
                           </div>
 
+                          {/* Filtered NH/SZ/DC from environment + app selection */}
+                          {(filteredNHs.length > 0 || filteredSZs.length > 0 || filteredDCs.length > 0) && (
+                            <div className="border border-blue-200 rounded p-2 bg-blue-50/50">
+                              <label className="text-[10px] text-blue-600 font-semibold">Available (Env + App Filtered)</label>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {filteredNHs.map(nh => <span key={nh.nh_id} className="px-1 py-0.5 text-[9px] bg-blue-100 text-blue-700 rounded">{nh.nh_id}</span>)}
+                                {filteredSZs.map(sz => <span key={sz.code} className="px-1 py-0.5 text-[9px] bg-indigo-100 text-indigo-700 rounded">{sz.code}</span>)}
+                                {filteredDCs.map(dc => <span key={dc.dc_id} className="px-1 py-0.5 text-[9px] bg-purple-100 text-purple-700 rounded">{dc.dc_id}</span>)}
+                              </div>
+                            </div>
+                          )}
+
                           <div>
                             <h4 className="font-semibold text-green-700 mb-1">Source (NGDC Mapped)</h4>
                             <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
@@ -1145,7 +1175,7 @@ export function MigrationStudioPage() {
                           <option value="generic">Generic</option>
                           <option value="palo_alto">Palo Alto</option>
                           <option value="checkpoint">Check Point</option>
-                          <option value="cisco_asa">Cisco ASA</option>
+                          <option value="fortigate">FortiGate</option>
                         </select>
                         <button onClick={handleCompileMigration} disabled={compiling}
                           className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">

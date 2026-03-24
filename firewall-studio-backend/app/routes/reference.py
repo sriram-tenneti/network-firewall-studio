@@ -331,7 +331,8 @@ async def validate_naming(data: dict):
 @router.post("/naming-standards/generate")
 async def generate_name(data: dict):
     name_type = data.get("type", "group")
-    app_id = data.get("app_id", "")
+    # Prefer app_distributed_id for {APP} placeholder; fall back to app_id
+    app_id = data.get("app_distributed_id", "") or data.get("app_id", "")
     nh = data.get("nh", "NH01")
     sz = data.get("sz", "GEN")
     if name_type == "group":
@@ -349,7 +350,8 @@ async def generate_name(data: dict):
 @router.post("/naming-standards/suggest")
 async def suggest_name(data: dict):
     legacy_name = data.get("legacy_name", "")
-    app_id = data.get("app_id", "APP")
+    # Prefer app_distributed_id for {APP} placeholder; fall back to app_id
+    app_id = data.get("app_distributed_id", "") or data.get("app_id", "APP")
     nh = data.get("nh", "NH01")
     sz = data.get("sz", "GEN")
     return suggest_standard_name(legacy_name, app_id, nh, sz)
@@ -1548,6 +1550,65 @@ async def get_data_summary_by_env_endpoint():
     """Return per-environment record counts for Data Management overview."""
     from app.database import get_data_summary_by_env
     return await get_data_summary_by_env()
+
+
+# ---- Auto-populate NH/SZ/DC by Environment + App ----
+
+@router.get("/filtered-nh-sz-dc")
+async def get_filtered_nh_sz_dc_endpoint(environment: str, app_id: str | None = None):
+    """Return NHs/SZs/DCs filtered by environment and optionally by app.
+    Non-prod/preprod NHs are common for all apps; prod NHs are app-specific."""
+    from app.database import get_filtered_nh_sz_dc
+    return await get_filtered_nh_sz_dc(environment, app_id)
+
+
+# ---- App Management Delta Import ----
+
+@router.post("/applications/import")
+async def import_app_management_endpoint(file: UploadFile = File(...)):
+    """Delta-based import of app management data from Excel/CSV.
+    Uses app_distributed_id as the dedup key."""
+    from app.database import import_app_management
+    contents = await file.read()
+    rows = _parse_excel_bytes(contents, file.filename or "")
+    if len(rows) < 2:
+        raise HTTPException(status_code=400, detail="File has no data rows")
+
+    headers = [str(h).strip().lower().replace(" ", "_") for h in rows[0]]
+    # Map common column name variations
+    col_map = {
+        "app_id": "app_id", "appid": "app_id", "app id": "app_id",
+        "app_distributed_id": "app_distributed_id", "distributed_id": "app_distributed_id",
+        "app distributed id": "app_distributed_id", "@work_id": "app_distributed_id",
+        "@work id": "app_distributed_id", "work_id": "app_distributed_id",
+        "app_name": "name", "name": "name", "application_name": "name", "app name": "name",
+        "neighborhoods": "neighborhoods", "neighbourhood": "neighborhoods", "nhs": "neighborhoods", "nh": "neighborhoods",
+        "szs": "szs", "sz": "szs", "security_zones": "szs", "security zones": "szs",
+        "dcs": "dcs", "dc": "dcs", "data_centers": "dcs", "data centers": "dcs", "datacenters": "dcs",
+        "snow_sysid": "snow_sysid", "sysid": "snow_sysid", "snow sysid": "snow_sysid",
+        "servicenow_sysid": "snow_sysid",
+        "owner": "owner", "criticality": "criticality", "pci_scope": "pci_scope",
+    }
+
+    mapped_headers = []
+    for h in headers:
+        mapped = col_map.get(h, h)
+        mapped_headers.append(mapped)
+
+    records = []
+    for row in rows[1:]:
+        rec: dict = {}
+        for i, val in enumerate(row):
+            if i < len(mapped_headers):
+                rec[mapped_headers[i]] = str(val).strip() if val is not None else ""
+        if rec.get("app_distributed_id"):
+            records.append(rec)
+
+    if not records:
+        raise HTTPException(status_code=400, detail="No valid records found (app_distributed_id column required)")
+
+    result = await import_app_management(records)
+    return result
 
 
 # ---- Standalone JSON Seed Export ----

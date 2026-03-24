@@ -140,11 +140,16 @@ export interface Application {
   id?: string;
   name: string;
   app_id: string;
-  app_distributed_id?: string;
+  app_distributed_id: string;
   owner: string;
   nh: string;
   sz: string;
-  criticality?: number;
+  dc?: string;
+  neighborhoods?: string;
+  szs?: string;
+  dcs?: string;
+  snow_sysid?: string;
+  criticality?: number | string;
   pci_scope?: boolean;
 }
 
@@ -234,7 +239,7 @@ export interface FirewallGroup {
 
 export interface CompiledRule {
   rule_id: string;
-  vendor_format: 'generic' | 'palo_alto' | 'checkpoint' | 'cisco_asa';
+  vendor_format: 'generic' | 'palo_alto' | 'checkpoint' | 'fortigate';
   compiled_text: string;
   source_objects: string[];
   destination_objects: string[];
