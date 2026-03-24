@@ -1481,7 +1481,8 @@ async def get_filtered_nh_sz_dc(environment: str, app_id: str | None = None) -> 
         app_szs = [s.strip() for s in (app_record.get("szs") or app_record.get("sz") or "").split(",") if s.strip()]
         app_dcs = [d.strip() for d in (app_record.get("dcs") or "").split(",") if d.strip()]
 
-        filtered_nhs = [nh for nh in all_nhs if nh.get("nh_id") in app_nhs]
+        # Match NHs by nh_id OR by name (app data may use names instead of IDs)
+        filtered_nhs = [nh for nh in all_nhs if nh.get("nh_id") in app_nhs or nh.get("name") in app_nhs]
         filtered_szs = [sz for sz in all_szs if sz.get("code") in app_szs]
         filtered_dcs = [dc for dc in all_dcs if dc.get("dc_id") in app_dcs] if app_dcs else all_dcs
     else:
@@ -1811,6 +1812,72 @@ async def remove_group_member(group_name: str, member_value: str) -> dict[str, A
 # e.g. NH08 + CPA → NH08-sz06, NH13 + UCCS → NH13-sz04
 # ============================================================
 
+# NH Name → NH ID mapping (from Confluence reference)
+_NH_NAME_TO_ID: dict[str, str] = {
+    "Technology Enablement Services": "NH01",
+    "Core Banking": "NH02",
+    "Digital Channels": "NH03",
+    "Wealth Management": "NH04",
+    "Enterprise Services": "NH05",
+    "Wholesale Banking": "NH06",
+    "Global Payments and Liquidity": "NH07",
+    "Data and Analytics": "NH08",
+    "Assisted Channels": "NH09",
+    "Consumer Lending": "NH10",
+    "Production Mainframe": "NH11",
+    "Non-Production Mainframe": "NH12",
+    "Non-Production Shared": "NH13",
+    "DMZ": "NH14",
+    "Non-Production DMZ": "NH15",
+    "Pre-Production (Non-Prod Shared)": "NH16",
+    "Pre-Production DMZ": "NH17",
+}
+
+# NH names that are non-prod (pre-prod is also treated as non-prod)
+_NONPROD_NH_NAMES = {
+    "Non-Production Mainframe", "Non-Production Shared",
+    "Non-Production DMZ", "Pre-Production (Non-Prod Shared)",
+    "Pre-Production DMZ",
+}
+
+
+def _resolve_nh_id(nh: str) -> str:
+    """Resolve an NH name or ID to its NH ID (e.g. 'Core Banking' → 'NH02').
+    If already an NH ID (starts with NH), returns as-is."""
+    val = nh.strip() if nh else ""
+    if not val:
+        return ""
+    # Already an NH ID?
+    if val.upper().startswith("NH") and len(val) <= 5:
+        return val.upper()
+    # Look up by name
+    nh_id = _NH_NAME_TO_ID.get(val)
+    if nh_id:
+        return nh_id
+    # Fallback: try case-insensitive match
+    val_lower = val.lower()
+    for name, nid in _NH_NAME_TO_ID.items():
+        if name.lower() == val_lower:
+            return nid
+    # Fallback: try reference data from disk
+    nhs = _load_ref("neighbourhoods") or []
+    for n in nhs:
+        if n.get("name", "").lower() == val_lower:
+            return n.get("nh_id", val)
+    return val
+
+
+def _is_nonprod_nh(nh: str) -> bool:
+    """Check if an NH (name or ID) is a non-prod/pre-prod NH."""
+    val = nh.strip() if nh else ""
+    # Check by name
+    if val in _NONPROD_NH_NAMES:
+        return True
+    # Check by ID
+    nh_id = _resolve_nh_id(val)
+    return nh_id in {"NH11", "NH12", "NH13", "NH15", "NH16", "NH17"}
+
+
 # SZ code → vrf_prefix template (from seed data)
 # The template uses "nh##" as a placeholder for the actual NH number.
 _SZ_VRF_PREFIX: dict[str, str] = {
@@ -1839,19 +1906,21 @@ _PROD_TO_NONPROD_SZ: dict[str, str] = {
     "3PY": "U3PY", "CCS": "UCCS", "CDE": "UCDE", "CPA": "UCPA",
 }
 
-# Non-prod/preprod NHs (common for all apps)
+# Non-prod/preprod NHs by ID (common for all apps)
 _NONPROD_NHS = {"NH11", "NH12", "NH13", "NH15", "NH16", "NH17"}
 
 
 def _resolve_vrf(nh: str, sz: str, environment: str = "") -> str:
     """Resolve the NH-SZ VRF convention string using NH##-sz## format.
-    Returns e.g. 'NH08-sz06' for CPA in NH08, 'NH13-sz04' for UCCS in NH13."""
-    nh_upper = nh.upper().strip() if nh else ""
+    Accepts NH name or NH ID. Returns e.g. 'NH08-sz06' for CPA in NH08."""
+    # Resolve NH name to NH ID if needed
+    nh_id = _resolve_nh_id(nh)
     sz_val = sz.strip() if sz else ""
     env_lower = environment.lower().strip() if environment else ""
 
     is_nonprod = (
-        nh_upper in _NONPROD_NHS
+        nh_id in _NONPROD_NHS
+        or _is_nonprod_nh(nh)
         or "non" in env_lower
         or "pre" in env_lower
     )
@@ -1872,11 +1941,11 @@ def _resolve_vrf(nh: str, sz: str, environment: str = "") -> str:
 
     if not template:
         # Last resort: return NH-SZCode as fallback
-        return f"{nh_upper}-{sz_val}" if nh_upper else sz_val
+        return f"{nh_id}-{sz_val}" if nh_id else sz_val
 
     # Replace nh## placeholder with actual NH number
-    vrf = template.replace("nh##", nh_upper.lower() if nh_upper else "nh00")
-    return f"{nh_upper}-{vrf}" if nh_upper and not vrf.lower().startswith(nh_upper.lower()) else vrf
+    vrf = template.replace("nh##", nh_id.lower() if nh_id else "nh00")
+    return f"{nh_id}-{vrf}" if nh_id and not vrf.lower().startswith(nh_id.lower()) else vrf
 
 
 # ============================================================
