@@ -80,6 +80,7 @@ export default function ReviewPage(props: { context?: string }) {
     All: envFilteredReviews.length,
     Pending: envFilteredReviews.filter(r => r.status === 'Pending').length,
     Approved: envFilteredReviews.filter(r => r.status === 'Approved').length,
+    'Submitted for Change': envFilteredReviews.filter(r => r.status === 'Submitted for Change').length,
     Rejected: envFilteredReviews.filter(r => r.status === 'Rejected').length,
   };
 
@@ -214,6 +215,7 @@ export default function ReviewPage(props: { context?: string }) {
     { id: 'All', label: 'All', count: counts.All },
     { id: 'Pending', label: 'Pending', count: counts.Pending },
     { id: 'Approved', label: 'Approved', count: counts.Approved },
+    { id: 'Submitted for Change', label: 'Submitted for Change', count: counts['Submitted for Change'] },
     { id: 'Rejected', label: 'Rejected', count: counts.Rejected },
   ];
 
@@ -238,11 +240,12 @@ export default function ReviewPage(props: { context?: string }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-5 gap-4 mb-6">
         {[
           { label: 'Total Reviews', value: counts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
           { label: 'Pending', value: counts.Pending, color: 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800' },
           { label: 'Approved', value: counts.Approved, color: 'bg-gradient-to-br from-green-100 to-green-200 text-green-800' },
+          { label: 'CHG Submitted', value: counts['Submitted for Change'], color: 'bg-gradient-to-br from-orange-100 to-orange-200 text-orange-800' },
           { label: 'Rejected', value: counts.Rejected, color: 'bg-gradient-to-br from-red-100 to-red-200 text-red-800' },
         ].map(card => (
           <div key={card.label} className={`p-4 rounded-lg ${card.color}`}>

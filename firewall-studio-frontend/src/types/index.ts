@@ -1,4 +1,4 @@
-export type RuleStatus = 'Draft' | 'Pending Review' | 'Approved' | 'Rejected' | 'Deployed' | 'Certified' | 'Expired' | 'Deleted';
+export type RuleStatus = 'Draft' | 'Pending Review' | 'Approved' | 'Submitted for Change' | 'Rejected' | 'Deployed' | 'Certified' | 'Expired' | 'Deleted';
 export type PolicyResult = 'Permitted' | 'Blocked' | 'Exception Required' | 'Needs Review';
 export type MigrationStatus = 'Auto-Mapped' | 'Needs Review' | 'New Group' | 'Conflict' | 'Blocked' | 'Draft' | 'Policy Review';
 export type MappingStatus = 'Automapped' | 'Needs Review' | 'Blocked';
@@ -549,6 +549,20 @@ export interface GitOpsLogEntry {
   pr_url: string;
   status: string;
   created_at: string;
+}
+
+// GitOps Rule Entry (rule + gitops status for dashboard)
+export interface GitOpsRuleEntry {
+  rule_id: string;
+  application: string;
+  status: string;
+  chg_number?: string;
+  environment: string;
+  gitops_status: string;
+  gitops_commit?: string;
+  gitops_branch?: string;
+  gitops_last_push?: string;
+  last_push_entry?: GitOpsLogEntry | null;
 }
 
 // Exception request for individual IPs/subnets

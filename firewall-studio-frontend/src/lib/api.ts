@@ -852,15 +852,21 @@ export const snapshotRuleVersion = (ruleId: string, changeSummary?: string) =>
   fetchJSON<import('../types').RuleVersion>(`/api/integrations/rule-versions/${ruleId}`, { method: 'POST', body: JSON.stringify({ change_summary: changeSummary || '' }) });
 
 // ---- ServiceNow CHG ----
+export const getChgRequests = () =>
+  fetchJSON<import('../types').CHGRequest[]>('/api/integrations/servicenow/chg');
+
 export const submitServiceNowCHG = (data: { rule_ids: string[]; description?: string; requested_by?: string }) =>
   fetchJSON<{ chg_id: string; chg_number: string; status: string; servicenow_url: string; message: string }>(
     '/api/integrations/servicenow/chg', { method: 'POST', body: JSON.stringify(data) }
   );
 
 export const closeServiceNowCHG = (chgId: string) =>
-  fetchJSON<{ chg_id: string; status: string; message: string }>(
+  fetchJSON<{ chg_id: string; status: string; deployed_rules: string[]; message: string }>(
     `/api/integrations/servicenow/chg/${chgId}/close`, { method: 'POST' }
   );
+
+export const getChgForRule = (ruleId: string) =>
+  fetchJSON<import('../types').CHGRequest & { error?: string }>(`/api/integrations/servicenow/chg/rule/${ruleId}`);
 
 // ---- Work Request Portal ----
 export const getWorkRequests = () =>
@@ -874,6 +880,9 @@ export const submitWorkRequest = (data: { app_id: string; app_name?: string; env
 // ---- GitOps ----
 export const getGitOpsLog = () =>
   fetchJSON<import('../types').GitOpsLogEntry[]>('/api/integrations/gitops/log');
+
+export const getGitOpsRules = () =>
+  fetchJSON<import('../types').GitOpsRuleEntry[]>('/api/integrations/gitops/rules');
 
 export const pushToGitOps = (data: { rule_id: string; vendor?: string }) =>
   fetchJSON<import('../types').GitOpsLogEntry & { message: string }>(

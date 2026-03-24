@@ -1,4 +1,4 @@
-"""Integration placeholder routes: ServiceNow CHG, Work Request, GitOps, Audit, Versioning."""
+"""Integration routes: ServiceNow CHG, Work Request, GitOps, Audit, Versioning."""
 
 from fastapi import APIRouter, Query
 from typing import Optional
@@ -6,8 +6,9 @@ from app.database import (
     get_audit_logs, create_audit_log,
     get_rule_versions, create_rule_version, get_rule,
     submit_servicenow_chg, close_servicenow_chg,
+    get_chg_requests, get_chg_for_rule,
     submit_work_request, get_work_requests,
-    gitops_push_rule, get_gitops_log,
+    gitops_push_rule, get_gitops_log, get_all_rules_for_gitops,
 )
 
 router = APIRouter(prefix="/api/integrations", tags=["Integrations"])
@@ -33,18 +34,23 @@ async def list_rule_versions(rule_id: str):
 
 
 @router.post("/rule-versions/{rule_id}")
-async def snapshot_rule_version(rule_id: str, data: dict = {}):
+async def snapshot_rule_version(rule_id: str, data: dict | None = None):
     rule = await get_rule(rule_id)
     if not rule:
         return {"error": "Rule not found"}
     return await create_rule_version(
         rule_id=rule_id,
         rule_snapshot=rule,
-        change_summary=data.get("change_summary", ""),
+        change_summary=(data or {}).get("change_summary", ""),
     )
 
 
 # ---- ServiceNow CHG ----
+
+@router.get("/servicenow/chg")
+async def list_chg_requests():
+    return await get_chg_requests()
+
 
 @router.post("/servicenow/chg")
 async def create_servicenow_chg(data: dict):
@@ -54,6 +60,14 @@ async def create_servicenow_chg(data: dict):
 @router.post("/servicenow/chg/{chg_id}/close")
 async def close_chg(chg_id: str):
     return await close_servicenow_chg(chg_id)
+
+
+@router.get("/servicenow/chg/rule/{rule_id}")
+async def get_chg_by_rule(rule_id: str):
+    chg = await get_chg_for_rule(rule_id)
+    if not chg:
+        return {"error": "No CHG found for this rule"}
+    return chg
 
 
 # ---- Work Request Portal ----
@@ -73,6 +87,11 @@ async def create_work_request(data: dict):
 @router.get("/gitops/log")
 async def list_gitops_log():
     return await get_gitops_log()
+
+
+@router.get("/gitops/rules")
+async def list_gitops_rules():
+    return await get_all_rules_for_gitops()
 
 
 @router.post("/gitops/push")

@@ -4721,16 +4721,31 @@ async def create_rule_version(rule_id: str, rule_snapshot: dict[str, Any], chang
 async def submit_servicenow_chg(data: dict[str, Any]) -> dict[str, Any]:
     """Placeholder: Create a ServiceNow CHG ticket.
     In production, this would call the ServiceNow REST API.
-    For now, generates a placeholder CHG number and stores it locally."""
+    For now, generates a placeholder CHG number and stores it locally.
+    Also transitions each linked rule to 'Submitted for Change' and stores chg_number on the rule."""
     chg = await create_chg_request(data)
-    # Log the audit trail
+    chg_num = chg["chg_id"]
+    # Transition rules to 'Submitted for Change' and store CHG# on rule record
     for rid in data.get("rule_ids", []):
+        rule = await get_rule(rid)
+        prev_status = rule["status"] if rule else "Unknown"
+        await update_rule_status(rid, "Submitted for Change")
+        # Store chg_number directly on the rule record
+        rules = _load("firewall_rules") or []
+        for r in rules:
+            if r.get("rule_id") == rid:
+                r["chg_number"] = chg_num
+                r["chg_id"] = chg_num
+                break
+        _save("firewall_rules", rules)
         await create_audit_log({
             "rule_id": rid,
             "action": "CHG_SUBMITTED",
             "actor": data.get("requested_by", "system"),
-            "details": f"ServiceNow CHG {chg['chg_id']} submitted",
-            "chg_number": chg["chg_id"],
+            "details": f"ServiceNow CHG {chg_num} submitted — rule awaiting implementation",
+            "chg_number": chg_num,
+            "previous_state": prev_status,
+            "new_state": "Submitted for Change",
         })
     return {
         "chg_id": chg["chg_id"],
@@ -4756,18 +4771,22 @@ async def close_servicenow_chg(chg_id: str) -> dict[str, Any]:
         return {"error": "CHG not found"}
     _save("chg_requests", chg_list)
     # Transition linked rules to Deployed
+    deployed_rules: list[str] = []
     for rid in chg.get("rule_ids", []):
         await update_rule_status(rid, "Deployed")
+        deployed_rules.append(rid)
         await create_audit_log({
             "rule_id": rid,
             "action": "CHG_CLOSED",
             "actor": "system",
             "details": f"CHG {chg_id} implemented — rule deployed",
             "chg_number": chg_id,
-            "previous_state": "Pending CHG",
+            "previous_state": "Submitted for Change",
             "new_state": "Deployed",
         })
-    return {"chg_id": chg_id, "status": "Implemented", "message": "CHG closed — rules deployed"}
+        # Auto-commit to GitOps on deployment
+        await gitops_push_rule({"rule_id": rid, "vendor": "auto", "trigger": "chg_closure"})
+    return {"chg_id": chg_id, "status": "Implemented", "deployed_rules": deployed_rules, "message": "CHG closed — rules deployed and committed to GitOps"}
 
 
 # ============================================================
@@ -4817,28 +4836,80 @@ async def gitops_push_rule(data: dict[str, Any]) -> dict[str, Any]:
     In production, this would create a branch, commit the rule config, and open a PR.
     For now, returns a placeholder response."""
     push_log = _load_separate("gitops_log") or []
+    rid = data.get("rule_id", "")
+    trigger = data.get("trigger", "manual")
+    short_id = _id()[:8]
     entry = {
         "id": _id(),
-        "rule_id": data.get("rule_id", ""),
+        "rule_id": rid,
         "vendor": data.get("vendor", "generic"),
-        "branch": f"firewall-rules/{data.get('rule_id', 'unknown')}-{_id()}",
-        "commit_sha": f"placeholder-{_id()}",
+        "branch": f"firewall-rules/{rid}-{short_id}",
+        "commit_sha": f"abc{short_id}",
         "pr_url": f"https://placeholder.github.com/org/firewall-configs/pull/{len(push_log) + 1}",
-        "status": "Pushed",
+        "status": "Committed",
+        "trigger": trigger,
         "created_at": _now(),
     }
     push_log.append(entry)
     _save_separate("gitops_log", push_log)
+    # Update the rule record with latest gitops info
+    rules = _load("firewall_rules") or []
+    for r in rules:
+        if r.get("rule_id") == rid:
+            r["gitops_commit"] = entry["commit_sha"]
+            r["gitops_branch"] = entry["branch"]
+            r["gitops_status"] = "Committed"
+            r["gitops_last_push"] = entry["created_at"]
+            break
+    _save("firewall_rules", rules)
     await create_audit_log({
-        "rule_id": data.get("rule_id", ""),
+        "rule_id": rid,
         "action": "GITOPS_PUSH",
         "actor": "system",
-        "details": f"Rule pushed to GitOps branch {entry['branch']}",
+        "details": f"Rule committed to GitOps branch {entry['branch']} (trigger: {trigger})",
     })
     return {
         **entry,
         "message": "Placeholder — GitOps integration pending",
     }
+
+
+async def get_all_rules_for_gitops() -> list[dict[str, Any]]:
+    """Return all Studio rules with their GitOps status for the GitOps dashboard."""
+    rules = _load("firewall_rules") or []
+    push_log = _load_separate("gitops_log") or []
+    # Build a map of latest push per rule
+    latest_push: dict[str, dict[str, Any]] = {}
+    for entry in push_log:
+        rid = entry.get("rule_id", "")
+        if rid not in latest_push or entry.get("created_at", "") > latest_push[rid].get("created_at", ""):
+            latest_push[rid] = entry
+    result = []
+    for r in rules:
+        rid = r.get("rule_id", "")
+        push_info = latest_push.get(rid)
+        result.append({
+            "rule_id": rid,
+            "application": r.get("application", ""),
+            "status": r.get("status", ""),
+            "chg_number": r.get("chg_number"),
+            "environment": r.get("environment", ""),
+            "gitops_status": r.get("gitops_status", "Not Pushed"),
+            "gitops_commit": r.get("gitops_commit"),
+            "gitops_branch": r.get("gitops_branch"),
+            "gitops_last_push": r.get("gitops_last_push"),
+            "last_push_entry": push_info,
+        })
+    return result
+
+
+async def get_chg_for_rule(rule_id: str) -> dict[str, Any] | None:
+    """Lookup the CHG request associated with a given rule_id."""
+    chg_list = _load("chg_requests") or []
+    for c in reversed(chg_list):  # most recent first
+        if rule_id in c.get("rule_ids", []):
+            return c
+    return None
 
 
 async def get_gitops_log() -> list[dict[str, Any]]:

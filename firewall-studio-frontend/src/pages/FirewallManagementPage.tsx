@@ -5,7 +5,8 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled, getAuditLogs } from '@/lib/api';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled, getAuditLogs, getChgRequests, closeServiceNowCHG } from '@/lib/api';
+import type { CHGRequest } from '@/types';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application, AuditLogEntry } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
@@ -545,6 +546,9 @@ export default function FirewallManagementPage() {
   // Audit trail
   const [auditRuleId, setAuditRuleId] = useState<string | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  // CHG tracking
+  const [chgRequests, setChgRequests] = useState<CHGRequest[]>([]);
+  const chgModal = useModal();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -562,6 +566,21 @@ export default function FirewallManagementPage() {
   }, [selectedApp, showNotification]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Load CHG requests for tracking
+  useEffect(() => {
+    getChgRequests().then(setChgRequests).catch(() => setChgRequests([]));
+  }, []);
+
+  const handleCloseCHG = async (chgId: string) => {
+    try {
+      const result = await closeServiceNowCHG(chgId);
+      showNotification(`${chgId} closed — ${result.deployed_rules?.length || 0} rule(s) deployed`, 'success');
+      getChgRequests().then(setChgRequests).catch(() => {});
+    } catch {
+      showNotification('Failed to close CHG', 'error');
+    }
+  };
 
   const envFilteredRules = rules.filter(r => {
     if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
@@ -828,6 +847,9 @@ export default function FirewallManagementPage() {
           </select>
           <button onClick={() => { setSelectedExportApps(selectedApp ? new Set([selectedApp]) : new Set()); setShowExportModal(true); }} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
             Export Rules
+          </button>
+          <button onClick={() => chgModal.open()} className="px-4 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100">
+            CHG Tracker ({chgRequests.length})
           </button>
         </div>
       </div>
@@ -1185,6 +1207,51 @@ export default function FirewallManagementPage() {
           </div>
           );
         })()}
+      </Modal>
+
+      {/* CHG Tracker Modal */}
+      <Modal isOpen={chgModal.isOpen} onClose={chgModal.close} title="ServiceNow CHG Tracker" size="xl">
+        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+          {chgRequests.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No CHG requests found. Submit rules for change in Firewall Studio.</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="text-left p-2 font-semibold text-gray-700">CHG ID</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Description</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Status</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Rule IDs</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Created</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chgRequests.map(chg => (
+                  <tr key={chg.chg_id} className="border-t hover:bg-gray-50">
+                    <td className="p-2 font-mono font-semibold text-blue-700">{chg.chg_id}</td>
+                    <td className="p-2 text-gray-600">{chg.description || '—'}</td>
+                    <td className="p-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${chg.status === 'Implemented' ? 'bg-green-100 text-green-700' : chg.status === 'Submitted' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>{chg.status}</span>
+                    </td>
+                    <td className="p-2 font-mono text-gray-500">{chg.rule_ids?.join(', ') || '—'}</td>
+                    <td className="p-2 text-gray-500">{chg.created_at ? new Date(chg.created_at).toLocaleString() : '—'}</td>
+                    <td className="p-2">
+                      {chg.status !== 'Implemented' && (
+                        <button onClick={() => handleCloseCHG(chg.chg_id)} className="px-2 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-50 rounded border border-emerald-200 hover:bg-emerald-100">
+                          Close CHG
+                        </button>
+                      )}
+                      {chg.status === 'Implemented' && (
+                        <span className="text-[10px] text-green-600 font-medium">Deployed</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </Modal>
 
       {/* Audit Trail Modal */}
