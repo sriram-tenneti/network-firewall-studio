@@ -1523,7 +1523,6 @@ async def import_app_management(records: list[dict[str, Any]]) -> dict[str, Any]
     """Delta-based import of app management records using app_distributed_id as dedup key.
 
     Returns counts of added, updated, and skipped records.
-    Auto-generates app_id from app_distributed_id if not provided.
     """
     items = _load("applications") or []
     existing_map: dict[str, int] = {}
@@ -1542,14 +1541,6 @@ async def import_app_management(records: list[dict[str, Any]]) -> dict[str, Any]
         if not adid:
             skipped += 1
             continue
-
-        # Auto-generate app_id from app_distributed_id if not provided
-        if not rec.get("app_id") or not str(rec["app_id"]).strip():
-            rec["app_id"] = adid
-
-        # Auto-generate name from app_id if not provided
-        if not rec.get("name") or not str(rec["name"]).strip():
-            rec["name"] = rec["app_id"]
 
         if adid in existing_map:
             idx = existing_map[adid]
