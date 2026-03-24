@@ -1371,6 +1371,14 @@ export default function SettingsPage() {
                         e.target.value = '';
                       }} />
                     </label>
+                    <button onClick={async () => {
+                      if (!confirm('Clear ALL imported app data? Seed apps will remain.')) return;
+                      try {
+                        await api.clearAppManagement();
+                        showNotification('All imported apps cleared', 'success');
+                        loadRefData();
+                      } catch { showNotification('Clear failed', 'error'); }
+                    }} className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100">Clear Apps</button>
                     <button onClick={() => setShowAddApp(true)}
                       className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Application</button>
                   </div>
@@ -1556,25 +1564,29 @@ export default function SettingsPage() {
                   <h3 className="text-sm font-semibold text-gray-800">All Applications ({applications.length})</h3>
                 </div>
                 {loadingRef ? (<div className="p-8 text-center text-gray-400">Loading...</div>) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50"><tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Name</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">NH</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">SZ</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Owner</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                      <thead className="bg-gray-50 sticky top-0"><tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Distributed Id</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Neighborhoods</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZs</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DCs</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SNow SysID</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                       </tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {applications.map(app => (
                           <tr key={app.app_id} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 font-mono font-semibold text-blue-700 cursor-pointer" onClick={() => setSelectedApp(app.app_id)}>{app.app_id}</td>
-                            <td className="px-4 py-2 text-gray-800">{app.name}</td>
-                            <td className="px-4 py-2 font-mono text-gray-600">{app.nh || '-'}</td>
-                            <td className="px-4 py-2 font-mono text-gray-600">{app.sz || '-'}</td>
-                            <td className="px-4 py-2 text-gray-600">{app.owner || '-'}</td>
-                            <td className="px-4 py-2">
+                            <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700 cursor-pointer" onClick={() => setSelectedApp(app.app_id)}>{app.app_id}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-700">{app.app_distributed_id || '-'}</td>
+                            <td className="px-3 py-2 text-xs text-gray-800">{app.name}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{app.dcs || '-'}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-500">{app.snow_sysid || '-'}</td>
+                            <td className="px-3 py-2">
                               <div className="flex gap-1">
                                 <button onClick={() => { setSelectedApp(app.app_id); setEditingAppId(app.app_id); setEditAppForm(app); }}
                                   className="px-2 py-1 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>

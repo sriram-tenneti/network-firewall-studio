@@ -1562,7 +1562,14 @@ async def get_filtered_nh_sz_dc_endpoint(environment: str, app_id: str | None = 
     return await get_filtered_nh_sz_dc(environment, app_id)
 
 
-# ---- App Management Delta Import ----
+# ---- App Management Clear / Delta Import ----
+
+@router.post("/applications/clear")
+async def clear_app_management_endpoint():
+    """Clear all imported (non-seed) application data."""
+    from app.database import clear_app_management
+    return await clear_app_management()
+
 
 @router.post("/applications/import")
 async def import_app_management_endpoint(file: UploadFile = File(...)):

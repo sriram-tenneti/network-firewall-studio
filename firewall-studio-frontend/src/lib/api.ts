@@ -564,6 +564,10 @@ export const getFilteredNhSzDc = (environment: string, appId?: string) => {
   }>(`/api/reference/filtered-nh-sz-dc?${params}`);
 };
 
+// Clear all imported app data
+export const clearAppManagement = () =>
+  fetchJSON<{ message: string }>('/api/reference/applications/clear', { method: 'POST' });
+
 // App Management delta-based import
 export const importAppManagement = async (file: File) => {
   const formData = new FormData();
