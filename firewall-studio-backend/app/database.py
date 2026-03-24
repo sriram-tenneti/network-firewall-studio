@@ -1889,7 +1889,9 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
             f"set rulebase security rules \"{rule_id}\" service [{proto.lower()}-{port}]\n"
             f"set rulebase security rules \"{rule_id}\" action {'allow' if action == 'Allow' else 'deny'}\n"
             f"set rulebase security rules \"{rule_id}\" log-start yes\n"
-            f"set rulebase security rules \"{rule_id}\" description \"{desc}\""
+            f"set rulebase security rules \"{rule_id}\" description \"{desc}\"\n"
+            f"# Source VRF: {src_vrf}\n"
+            f"# Destination VRF: {dst_vrf}"
         )
     elif vendor == "checkpoint":
         compiled = (
@@ -1900,7 +1902,9 @@ async def compile_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] 
             f"  service \"{proto}_{port}\" \\\n"
             f"  action \"{'Accept' if action == 'Allow' else 'Drop'}\" \\\n"
             f"  track \"Log\" \\\n"
-            f"  comments \"{desc}\""
+            f"  comments \"{desc}\"\n"
+            f"# Source VRF: {src_vrf}\n"
+            f"# Destination VRF: {dst_vrf}"
         )
     elif vendor == "fortigate":
         compiled = (
@@ -2279,6 +2283,7 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
     if vendor == "palo_alto":
         compiled = (
             f"# Palo Alto - {app_name} - {rule_id}\n"
+            f"# Source VRF: {src_vrf} | Destination VRF: {dst_vrf}\n"
             + "\n".join(
                 f"set rulebase security rules \"{rule_id}\" from {src_zone}\n"
                 f"set rulebase security rules \"{rule_id}\" to {dst_zone}\n"
@@ -2293,6 +2298,7 @@ async def compile_legacy_rule(rule_id: str, vendor: str = "generic") -> dict[str
     elif vendor == "checkpoint":
         compiled = (
             f"# Check Point - {app_name} - {rule_id}\n"
+            f"# Source VRF: {src_vrf} | Destination VRF: {dst_vrf}\n"
             + "\n".join(
                 f"mgmt_cli add access-rule layer \"Network\" position top \\\n"
                 f"  name \"{rule_id}\" \\\n"
@@ -4002,6 +4008,10 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
 
         if vendor == "palo_alto":
             lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
+            env = rule.get("environment", "")
+            dev_src_vrf_pa = _resolve_vrf(src_nh, src_zone, env)
+            dev_dst_vrf_pa = _resolve_vrf(dst_nh, dst_zone, env)
+            lines.append(f"# Source VRF: {dev_src_vrf_pa} | Destination VRF: {dev_dst_vrf_pa}")
             objs = src_objs if direction == "egress" else dst_objs
             far_side = "any" if direction == "egress" else "any"
             for obj in objs:
@@ -4019,7 +4029,11 @@ async def compile_egress_ingress(rule_id: str, vendor: str = "generic") -> dict[
         elif vendor == "checkpoint":
             s_val = src if direction == "egress" else "any"
             d_val = "any" if direction == "egress" else dst
+            env = rule.get("environment", "")
+            dev_src_vrf_cp = _resolve_vrf(src_nh, src_zone, env)
+            dev_dst_vrf_cp = _resolve_vrf(dst_nh, dst_zone, env)
             lines.append(f"# {suffix} Rule — Device: {dev_name} ({dev_id})")
+            lines.append(f"# Source VRF: {dev_src_vrf_cp} | Destination VRF: {dev_dst_vrf_cp}")
             lines.append(
                 f'mgmt_cli add access-rule layer "Network" position top \\\n'
                 f'  name "{rid}-{suffix}" \\\n'
