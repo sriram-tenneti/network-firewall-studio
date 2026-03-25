@@ -36,7 +36,7 @@ export function SourcePanel({ source, onChange, neighbourhoods, applications, na
     if (source.group_name && source.group_name.startsWith('grp-')) {
       const parts = source.group_name.split('-');
       setNameValid(parts.length >= 5);
-    } else if (source.group_name && (source.group_name.startsWith('svr-') || source.group_name.startsWith('rng-'))) {
+    } else if (source.group_name && (source.group_name.startsWith('svr-') || source.group_name.startsWith('rng-') || source.group_name.startsWith('net-'))) {
       const parts = source.group_name.split('-');
       setNameValid(parts.length >= 5);
     } else if (source.group_name) {
@@ -73,7 +73,7 @@ export function SourcePanel({ source, onChange, neighbourhoods, applications, na
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-slate-500 uppercase tracking-wide">Source Type:</label>
           <div className="space-y-2">
-            {(['Single IP', 'Subnet', 'Group'] as SourceType[]).map((type) => (
+            {(['Single IP', 'Subnet', 'Range', 'Group'] as SourceType[]).map((type) => (
               <label key={type} className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -104,8 +104,20 @@ export function SourcePanel({ source, onChange, neighbourhoods, applications, na
                   type="text"
                   value={source.cidr || ''}
                   onChange={(e) => updateField('cidr', e.target.value)}
-                  placeholder="CIDR..."
-                  className="w-32 rounded border border-slate-300 px-2 py-1 text-xs"
+                  placeholder="net-10.0.1.0/24"
+                  className="w-40 rounded border border-slate-300 px-2 py-1 text-xs"
+                />
+              </div>
+            )}
+            {source.source_type === 'Range' && (
+              <div className="ml-6 flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={source.cidr || ''}
+                  onChange={(e) => updateField('cidr', e.target.value)}
+                  placeholder="rng-10.0.1.1-10.0.1.50"
+                  className="w-48 rounded border border-slate-300 px-2 py-1 text-xs"
                 />
               </div>
             )}
@@ -168,9 +180,10 @@ export function SourcePanel({ source, onChange, neighbourhoods, applications, na
 
               <div className="mt-1 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-500">
                 <div className="font-semibold text-slate-600 mb-0.5">Format:</div>
-                <div>grp-{'{'}<span>AppID</span>{'}'}-{'{'}<span>NH</span>{'}'}-{'{'}<span>SZ</span>{'}'}-{'{'}<span>Subtype</span>{'}'}</div>
-                <div>svr-{'{'}<span>AppID</span>{'}'}-{'{'}<span>NH</span>{'}'}-{'{'}<span>SZ</span>{'}'}-{'{'}<span>ServerName</span>{'}'}</div>
-                <div>rng-{'{'}<span>AppID</span>{'}'}-{'{'}<span>NH</span>{'}'}-{'{'}<span>SZ</span>{'}'}-{'{'}<span>Descriptor</span>{'}'}</div>
+                <div><span className="font-mono text-blue-600">svr-</span>{'{'}<span>AppID</span>{'}'}-{'{'}<span>NH</span>{'}'}-{'{'}<span>SZ</span>{'}'}-{'{'}<span>ServerName</span>{'}'} <span className="text-gray-400">(IPs)</span></div>
+                <div><span className="font-mono text-purple-600">net-</span>{'{'}<span>AppID</span>{'}'}-{'{'}<span>NH</span>{'}'}-{'{'}<span>SZ</span>{'}'}-{'{'}<span>Descriptor</span>{'}'} <span className="text-gray-400">(Subnets)</span></div>
+                <div><span className="font-mono text-orange-600">rng-</span>{'{'}<span>AppID</span>{'}'}-{'{'}<span>NH</span>{'}'}-{'{'}<span>SZ</span>{'}'}-{'{'}<span>Descriptor</span>{'}'} <span className="text-gray-400">(Ranges)</span></div>
+                <div><span className="font-mono text-emerald-600">grp-</span>{'{'}<span>AppID</span>{'}'}-{'{'}<span>NH</span>{'}'}-{'{'}<span>SZ</span>{'}'}-{'{'}<span>Subtype</span>{'}'} <span className="text-gray-400">(Groups)</span></div>
               </div>
             </div>
           )}
@@ -201,7 +214,7 @@ export function SourcePanel({ source, onChange, neighbourhoods, applications, na
           </div>
           {nameValid === false && source.group_name && (
             <p className="mt-0.5 text-xs text-red-500">
-              Name must use grp-/svr-/rng- prefix with AppID-NH-SZ-Subtype
+              Name must use svr-/net-/rng-/grp- prefix with AppID-NH-SZ-Subtype
             </p>
           )}
         </div>

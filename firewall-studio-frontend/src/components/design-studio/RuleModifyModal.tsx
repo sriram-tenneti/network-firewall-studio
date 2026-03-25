@@ -6,7 +6,7 @@ import { autoPrefix } from '@/lib/utils';
 
 interface EntryItem {
   id: string;
-  type: 'ip' | 'subnet' | 'group';
+  type: 'ip' | 'subnet' | 'range' | 'group';
   value: string;
   isNew?: boolean;
   isModified?: boolean;
@@ -34,8 +34,14 @@ function getVal(obj: unknown, key: string): string {
   return '';
 }
 
-function detectType(value: string): 'ip' | 'subnet' | 'group' {
-  if (value.startsWith('grp-') || value.startsWith('svr-') || value.startsWith('rng-')) return 'group';
+function detectType(value: string): 'ip' | 'subnet' | 'range' | 'group' {
+  const vl = value.toLowerCase();
+  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
+  if (vl.startsWith('rng-')) return 'range';
+  if (vl.startsWith('net-') || vl.startsWith('sub-')) return 'subnet';
+  if (vl.startsWith('svr-')) return 'ip';
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d/.test(value)) return 'subnet';
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(value)) return 'range';
   if (value.includes('/')) return 'subnet';
   return 'ip';
 }
@@ -70,7 +76,7 @@ function EntryEditor({ label, entries, onChange }: {
   entries: EntryItem[];
   onChange: (entries: EntryItem[]) => void;
 }) {
-  const [addType, setAddType] = useState<'ip' | 'subnet' | 'group'>('ip');
+  const [addType, setAddType] = useState<'ip' | 'subnet' | 'range' | 'group'>('ip');
   const [addValue, setAddValue] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -100,7 +106,7 @@ function EntryEditor({ label, entries, onChange }: {
   const handleSaveEdit = (id: string) => {
     if (!editValue.trim()) return;
     const detectedType = detectType(editValue.trim());
-    const prefixed = autoPrefix(editValue.trim(), detectedType === 'group' ? 'group' : detectedType === 'subnet' ? 'subnet' : 'ip');
+    const prefixed = autoPrefix(editValue.trim(), detectedType === 'group' ? 'group' : detectedType === 'subnet' ? 'subnet' : detectedType === 'range' ? 'range' : 'ip');
     onChange(entries.map(e =>
       e.id === id ? { ...e, value: prefixed, type: detectedType, isModified: true } : e
     ));
@@ -111,7 +117,11 @@ function EntryEditor({ label, entries, onChange }: {
   const typeColors: Record<string, string> = {
     ip: 'bg-blue-50 text-blue-700 border-blue-200',
     subnet: 'bg-purple-50 text-purple-700 border-purple-200',
+    range: 'bg-orange-50 text-orange-700 border-orange-200',
     group: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  };
+  const typeLabels: Record<string, string> = {
+    ip: 'IP', subnet: 'NET', range: 'RNG', group: 'GRP',
   };
 
   return (
@@ -127,7 +137,7 @@ function EntryEditor({ label, entries, onChange }: {
         )}
         {entries.map(entry => (
           <div key={entry.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${entry.isNew ? 'bg-green-50 border-green-200' : entry.isModified ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
-            <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border ${typeColors[entry.type]}`}>{entry.type}</span>
+            <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border ${typeColors[entry.type]}`}>{typeLabels[entry.type] || entry.type}</span>
             {editingId === entry.id ? (
               <div className="flex-1 flex gap-1.5">
                 <input
@@ -157,16 +167,17 @@ function EntryEditor({ label, entries, onChange }: {
       <div className="flex gap-2 pt-1 border-t border-gray-100">
         <select
           value={addType}
-          onChange={e => setAddType(e.target.value as 'ip' | 'subnet' | 'group')}
+          onChange={e => setAddType(e.target.value as 'ip' | 'subnet' | 'range' | 'group')}
           className="px-2 py-1.5 text-xs font-medium border border-gray-300 rounded-md bg-white"
         >
-          <option value="ip">IP Address</option>
-          <option value="subnet">Subnet (CIDR)</option>
-          <option value="group">Group</option>
+          <option value="ip">IP (svr-)</option>
+          <option value="subnet">Subnet (net-)</option>
+          <option value="range">Range (rng-)</option>
+          <option value="group">Group (grp-)</option>
         </select>
         <input
           type="text"
-          placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : 'e.g. grp-APP01-NH01-STD-web'}
+          placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : addType === 'range' ? 'e.g. 10.0.1.1-10.0.1.50' : 'e.g. grp-APP01-NH01-STD-web'}
           value={addValue}
           onChange={e => setAddValue(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
@@ -335,7 +346,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
                     <div className="px-3 py-1.5 bg-gray-900 max-h-32 overflow-y-auto">
                       {expandedGroups[e.value].members.map((m, i) => (
                         <div key={i} className="flex items-center gap-2 py-0.5">
-                          <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>{m.type}</span>
+                          <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : m.type === 'subnet' || m.type === 'cidr' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.type === 'ip' ? 'IP' : m.type === 'subnet' || m.type === 'cidr' ? 'NET' : m.type === 'range' ? 'RNG' : 'GRP'}</span>
                           <span className="text-xs font-mono text-green-400">{m.value}</span>
                         </div>
                       ))}
@@ -362,7 +373,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
                     <div className="px-3 py-1.5 bg-gray-900 max-h-32 overflow-y-auto">
                       {expandedGroups[e.value].members.map((m, i) => (
                         <div key={i} className="flex items-center gap-2 py-0.5">
-                          <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>{m.type}</span>
+                          <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : m.type === 'subnet' || m.type === 'cidr' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.type === 'ip' ? 'IP' : m.type === 'subnet' || m.type === 'cidr' ? 'NET' : m.type === 'range' ? 'RNG' : 'GRP'}</span>
                           <span className="text-xs font-mono text-green-400">{m.value}</span>
                         </div>
                       ))}

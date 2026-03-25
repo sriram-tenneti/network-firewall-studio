@@ -98,7 +98,7 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
 
 interface ResourceEntry {
   id: string;
-  type: 'ip' | 'subnet' | 'group';
+  type: 'ip' | 'subnet' | 'range' | 'group';
   value: string;
   groupMembers?: { type: string; value: string }[];
   isNew?: boolean;
@@ -129,20 +129,27 @@ function isLegacyGroupName(name: string): boolean {
   return LEGACY_GROUP_PREFIXES.some(pfx => lower.startsWith(pfx));
 }
 
-function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'group' {
+function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'range' | 'group' {
   const v = value.trim();
+  const vl = v.toLowerCase();
   // Check known group prefixes as hint
   if (isLegacyGroupName(v)) return 'group';
   // Check if it matches a known group name from the backend
   if (allGroupNames && allGroupNames.has(v)) return 'group';
-  // rng- prefix = SUBNET (range of IPs/subnets)
-  if (v.toLowerCase().startsWith('rng-')) return 'subnet';
-  // sub- prefix = SUBNET
-  if (v.toLowerCase().startsWith('sub-')) return 'subnet';
+  // grp- prefix = GROUP
+  if (vl.startsWith('grp-')) return 'group';
+  // rng- prefix = RANGE (IP ranges xx.xx.xx.xx-xy)
+  if (vl.startsWith('rng-')) return 'range';
+  // net- prefix = SUBNET (NGDC standard for subnets)
+  if (vl.startsWith('net-')) return 'subnet';
+  // sub- prefix = SUBNET (legacy subnet prefix)
+  if (vl.startsWith('sub-')) return 'subnet';
   // svr- prefix = IP (server)
-  if (v.toLowerCase().startsWith('svr-')) return 'ip';
+  if (vl.startsWith('svr-')) return 'ip';
   // Check CIDR notation (subnet)
   if (CIDR_REGEX.test(v)) return 'subnet';
+  // Check IP range pattern (xx.xx.xx.xx-xx.xx.xx.xx or xx.xx.xx.xx-xy)
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(v)) return 'range';
   // Check plain IP
   if (IP_REGEX.test(v)) return 'ip';
   // If it contains '/' it's likely a subnet
@@ -259,7 +266,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
       // Indented — belongs to the current group
       const memberType = detectEntryType(value, groupNameSet);
-      const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'range' : 'ip';
+      const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'subnet' : memberType === 'range' ? 'range' : 'ip';
 
       if (indent >= memberIndent && hasChildren(i)) {
         // This member has deeper children → nested sub-group
@@ -303,10 +310,10 @@ function entriesToRaw(entries: ResourceEntry[]): string {
 
 /** Display-friendly member type label */
 function memberTypeLabel(t: string): string {
-  if (t === 'cidr' || t === 'subnet') return 'Subnet';
-  if (t === 'range') return 'Range';
+  if (t === 'cidr' || t === 'subnet') return 'NET';
+  if (t === 'range') return 'RNG';
   if (t === 'ip') return 'IP';
-  if (t === 'group') return 'SubGroup';
+  if (t === 'group') return 'GRP';
   return t.toUpperCase();
 }
 
@@ -326,7 +333,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
   appGroups: FirewallGroup[];
   colorScheme: { bg: string; border: string; text: string; headerBg: string };
 }) {
-  const [addType, setAddType] = useState<'ip' | 'subnet' | 'group'>('ip');
+  const [addType, setAddType] = useState<'ip' | 'subnet' | 'range' | 'group'>('ip');
   const [addValue, setAddValue] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -450,13 +457,15 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const typeColors: Record<string, string> = {
     ip: 'bg-blue-50 text-blue-700 border-blue-200',
-    subnet: 'bg-orange-50 text-orange-700 border-orange-200',
+    subnet: 'bg-purple-50 text-purple-700 border-purple-200',
+    range: 'bg-orange-50 text-orange-700 border-orange-200',
     group: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   };
   const typeLabels: Record<string, string> = {
     ip: 'IP',
-    subnet: 'RANGE',
-    group: 'GROUP',
+    subnet: 'NET',
+    range: 'RNG',
+    group: 'GRP',
   };
 
   const totalIPs = entries.reduce((sum, e) => {
@@ -518,11 +527,11 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                   {addingMemberToGroup === entry.id ? (
                     <div className="flex gap-1.5 items-center mt-1 bg-white border border-gray-200 rounded p-2">
                       <select value={newMemberType} onChange={e => setNewMemberType(e.target.value)} className="px-1.5 py-1 text-xs border border-gray-300 rounded">
-                        <option value="ip">IP Address</option>
-                        <option value="cidr">Subnet (CIDR)</option>
-                        <option value="range">IP Range</option>
+                        <option value="ip">IP (svr-)</option>
+                        <option value="subnet">Subnet (net-)</option>
+                        <option value="range">Range (rng-)</option>
                       </select>
-                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'cidr' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
+                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
                       <button onClick={() => handleAddGroupMember(entry.id)} disabled={!newMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
                       <button onClick={() => setAddingMemberToGroup(null)} className="text-xs text-gray-500 hover:text-gray-700">Done</button>
                     </div>
@@ -540,12 +549,13 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
         {/* Add new entry */}
         <div className="border-t border-gray-100 pt-3 space-y-2">
           <div className="flex gap-2">
-            <select value={addType} onChange={e => setAddType(e.target.value as 'ip' | 'subnet' | 'group')} className="px-2 py-1.5 text-xs font-medium border border-gray-300 rounded-md bg-white">
-              <option value="ip">IP Address</option>
-              <option value="subnet">Subnet (CIDR)</option>
-              <option value="group">Group</option>
+            <select value={addType} onChange={e => setAddType(e.target.value as 'ip' | 'subnet' | 'range' | 'group')} className="px-2 py-1.5 text-xs font-medium border border-gray-300 rounded-md bg-white">
+              <option value="ip">IP Address (svr-)</option>
+              <option value="subnet">Subnet (net-)</option>
+              <option value="range">Range (rng-)</option>
+              <option value="group">Group (grp-)</option>
             </select>
-            <input type="text" placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : 'e.g. grp-APP01-NH01-STD-web'} value={addValue} onChange={e => setAddValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500" />
+            <input type="text" placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : addType === 'range' ? 'e.g. 10.0.1.1-10.0.1.50' : 'e.g. grp-APP01-NH01-STD-web'} value={addValue} onChange={e => setAddValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500" />
             <button onClick={handleAdd} disabled={!addValue.trim()} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">+ Add</button>
           </div>
           {addType === 'group' && appGroups.length > 0 && (
@@ -582,11 +592,11 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
               ))}
               <div className="flex gap-1.5 items-center mt-2">
                 <select value={wizMemberType} onChange={e => setWizMemberType(e.target.value)} className="px-1.5 py-1 text-xs border border-gray-300 rounded">
-                  <option value="ip">IP Address</option>
-                  <option value="cidr">Subnet (CIDR)</option>
-                  <option value="range">IP Range</option>
+                  <option value="ip">IP (svr-)</option>
+                  <option value="subnet">Subnet (net-)</option>
+                  <option value="range">Range (rng-)</option>
                 </select>
-                <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)} placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'cidr' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
+                <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)} placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
                 <button onClick={handleWizAddMember} disabled={!wizMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
               </div>
             </div>

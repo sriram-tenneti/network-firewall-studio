@@ -163,11 +163,25 @@ export function MigrationStudioPage() {
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupMembers, setNewGroupMembers] = useState<{ type: string; value: string }[]>([{ type: 'ip', value: '' }]);
 
+  // Load applications list on mount (always), but only load rules when an app is explicitly selected
+  const loadApps = useCallback(async () => {
+    try {
+      const appsData = await getApplications();
+      setApplications(appsData);
+    } catch { /* ignore */ }
+  }, []);
+
   const loadData = useCallback(async () => {
+    if (!selectedApp) {
+      // No app selected — don't auto-load all rules
+      setLegacyRules([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [rulesData, appsData] = await Promise.all([
-        getLegacyRules(selectedApp || undefined, true, undefined, true),
+        getLegacyRules(selectedApp, true, undefined, true),
         getApplications(),
       ]);
       setLegacyRules(rulesData);
@@ -178,6 +192,7 @@ export function MigrationStudioPage() {
     setLoading(false);
   }, [selectedApp, showNotification]);
 
+  useEffect(() => { loadApps(); }, [loadApps]);
   useEffect(() => { loadData(); }, [loadData]);
 
   const loadIPMappings = useCallback(async (appFilter?: string) => {
@@ -240,10 +255,11 @@ export function MigrationStudioPage() {
     'In Progress': envFilteredRules.filter(r => r.migration_status === 'In Progress').length,
   };
 
-  const appOptions = Array.from(new Set(legacyRules.map(r => `${r.app_distributed_id || r.app_id}|${r.app_id}|${r.app_name}`))).map(key => {
-    const [distId, appId, appName] = key.split('|');
-    return { value: distId, label: `${distId} - ${appName || appId}` };
-  });
+  // Build app options from applications list (not from loaded rules, since rules need app selection first)
+  const appOptions = applications.map(a => ({
+    value: a.app_distributed_id || String(a.app_id),
+    label: `${a.app_distributed_id || a.app_id} - ${a.name}`,
+  }));
 
   const toggleSelection = (ruleId: string) => {
     setSelectedRuleIds(prev => {
@@ -514,9 +530,9 @@ export function MigrationStudioPage() {
           <p className="text-sm text-gray-500 mt-1">Analyze legacy rules, map to NGDC standards, validate birthright, and submit for review</p>
         </div>
         <div className="flex items-center gap-3">
-          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+          <select className={`px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white ${!selectedApp ? 'border-amber-400 ring-1 ring-amber-300' : 'border-gray-300'}`}
             value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
-            <option value="">All Applications</option>
+            <option value="">-- Select Application (Distributed ID) --</option>
             {appOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
@@ -651,7 +667,22 @@ export function MigrationStudioPage() {
           </div>
           <div className="px-4 py-2 border-t bg-gray-50 text-xs text-gray-500">
             {allIPMappings.length} mapping{allIPMappings.length !== 1 ? 's' : ''} loaded.
-            Naming: svr-xx.xx.xx.xx (IPs), rng-xx.xx.xx.xx-xy (ranges), grp-APP-NH-SZ-TIER (groups)
+            Naming: svr-xx.xx.xx.xx (IPs), net-xx.xx.xx.xx/xx (subnets), rng-xx.xx.xx.xx-xy (ranges), grp-APP-NH-SZ-TIER (groups)
+          </div>
+        </div>
+      ) : !selectedApp ? (
+        <div className="bg-white border border-amber-200 rounded-lg shadow-sm p-12 text-center">
+          <div className="text-4xl mb-3">&#128269;</div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">Select an Application to Begin Migration</h3>
+          <p className="text-sm text-gray-500 max-w-md mx-auto">Choose an application by its Distributed ID from the dropdown above. Rules imported via Firewall Management will appear here for the selected application.</p>
+          <div className="mt-4">
+            <select className="px-4 py-2 border border-amber-400 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white min-w-[300px]"
+              value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
+              <option value="">-- Select Application (Distributed ID) --</option>
+              {appOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       ) : (
@@ -715,8 +746,8 @@ export function MigrationStudioPage() {
                   const indent = line.length - line.trimStart().length;
                   const v = line.trim();
                   const vl = v.toLowerCase();
-                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GROUP' : vl.startsWith('rng-') ? 'RANGE' : vl.startsWith('sub-') ? 'SUBNET' : 'IP';
-                  const badgeColor = eType === 'GROUP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RANGE' ? 'bg-orange-100 text-orange-700' : eType === 'SUBNET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GRP' : vl.startsWith('rng-') ? 'RNG' : vl.startsWith('net-') || vl.startsWith('sub-') ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d/.test(v) ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(v) ? 'RNG' : 'IP';
+                  const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
                   const isChild = indent >= 2;
                   return (
                     <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
@@ -737,8 +768,8 @@ export function MigrationStudioPage() {
                   const indent = line.length - line.trimStart().length;
                   const v = line.trim();
                   const vl = v.toLowerCase();
-                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GROUP' : vl.startsWith('rng-') ? 'RANGE' : vl.startsWith('sub-') ? 'SUBNET' : 'IP';
-                  const badgeColor = eType === 'GROUP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RANGE' ? 'bg-orange-100 text-orange-700' : eType === 'SUBNET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GRP' : vl.startsWith('rng-') ? 'RNG' : vl.startsWith('net-') || vl.startsWith('sub-') ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d/.test(v) ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(v) ? 'RNG' : 'IP';
+                  const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
                   const isChild = indent >= 2;
                   return (
                     <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
