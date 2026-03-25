@@ -646,8 +646,11 @@ async def remove_member_from_group(name: str, member_value: str):
 async def list_legacy_rules(app_id: str | None = None, exclude_migrated: bool = False, migration_only: bool = False):
     rules = await get_legacy_rules()
     if migration_only:
-        # Only return rules explicitly imported into the Migration module (ngdc_imported flag)
-        rules = [r for r in rules if r.get("ngdc_imported") is True]
+        # Show ALL imported legacy rules in the Migration module.
+        # Previously this filtered for ngdc_imported==True, but rules imported
+        # via Excel don't carry that flag — the user expects to see every
+        # imported rule available for migration.
+        pass
     if app_id:
         rules = [r for r in rules if str(r.get("app_id")) == str(app_id) or r.get("app_distributed_id") == app_id]
     if exclude_migrated:

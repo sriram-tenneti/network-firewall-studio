@@ -2703,6 +2703,127 @@ async def delete_birthright_entry(matrix_type: str, index: int) -> bool:
 
 
 # ============================================================
+# Legacy Group Detection from Expansion Columns
+# ============================================================
+
+def _is_legacy_group_name(name: str) -> bool:
+    """Check if a name looks like a legacy firewall group.
+    Groups can start with g-, grp-, ggrp-, gapigr-, or any similar prefix.
+    We detect by checking known prefixes AND by looking at the expansion
+    column structure (top-level = group, indented = members)."""
+    lower = name.strip().lower()
+    group_prefixes = (
+        "g-", "grp-", "ggrp-", "gapigr-", "grp_", "g_",
+        "group-", "group_", "netgrp-", "netgrp_", "addrgrp-",
+    )
+    return any(lower.startswith(pfx) for pfx in group_prefixes)
+
+
+def parse_expansion_groups(expansion_text: str) -> list[dict[str, Any]]:
+    """Parse the expansion/detail column to extract group hierarchies.
+
+    The expansion column uses indentation to show group membership:
+      grp-MYAPP-SRC                    ← top-level group
+        10.1.1.1 (Web Server 1)        ← member IP
+        10.1.1.2 (Web Server 2)        ← member IP
+        g-NESTED-GRP                   ← nested sub-group
+          10.2.2.1 (DB Server)         ← member of nested group
+      svr-10.3.3.3                     ← standalone (not a group)
+
+    Returns a list of group dicts:
+    [
+      {
+        "name": "grp-MYAPP-SRC",
+        "members": [
+          {"type": "ip", "value": "10.1.1.1", "description": "Web Server 1"},
+          {"type": "ip", "value": "10.1.1.2", "description": "Web Server 2"},
+          {"type": "group", "value": "g-NESTED-GRP", "members": [
+            {"type": "ip", "value": "10.2.2.1", "description": "DB Server"}
+          ]}
+        ]
+      }
+    ]
+    """
+    if not expansion_text or not isinstance(expansion_text, str):
+        return []
+
+    lines = expansion_text.split("\n")
+    groups: list[dict[str, Any]] = []
+    current_group: dict[str, Any] | None = None
+    current_subgroup: dict[str, Any] | None = None
+    # Track indentation levels to determine hierarchy
+    base_indent = 0
+
+    for raw_line in lines:
+        if not raw_line.strip():
+            continue
+
+        # Measure leading whitespace (indent level)
+        stripped = raw_line.lstrip()
+        indent = len(raw_line) - len(stripped)
+        text = stripped.strip()
+
+        if not text:
+            continue
+
+        # Parse IP and description from patterns like "10.1.1.1 (Web Server 1)"
+        # or just "10.1.1.1" or "svr-10.1.1.1"
+        def _parse_member(entry: str) -> dict[str, Any]:
+            entry = entry.strip()
+            desc = ""
+            value = entry
+            # Extract description from parentheses
+            if "(" in entry and ")" in entry:
+                paren_start = entry.index("(")
+                paren_end = entry.rindex(")")
+                desc = entry[paren_start + 1:paren_end].strip()
+                value = entry[:paren_start].strip()
+            # Determine member type
+            if _is_legacy_group_name(value):
+                return {"type": "group", "value": value, "description": desc, "members": []}
+            elif "/" in value and not value.startswith("tcp") and not value.startswith("udp"):
+                return {"type": "range", "value": value, "description": desc}
+            elif value.startswith("rng-"):
+                return {"type": "range", "value": value, "description": desc}
+            else:
+                return {"type": "ip", "value": value, "description": desc}
+
+        # Decide if this is a top-level group, a member, or a sub-group member
+        if indent <= base_indent and _is_legacy_group_name(text):
+            # New top-level group
+            if current_group:
+                groups.append(current_group)
+            current_group = {"name": text.split("(")[0].strip(), "members": []}
+            current_subgroup = None
+            base_indent = indent
+        elif current_group is not None and indent > base_indent:
+            member = _parse_member(text)
+            if member["type"] == "group":
+                # This is a nested sub-group within the current group
+                current_subgroup = member
+                current_group["members"].append(member)
+            elif current_subgroup is not None and indent > base_indent + 2:
+                # Member of the nested sub-group (deeper indentation)
+                current_subgroup["members"].append(member)
+            else:
+                # Direct member of the current group
+                current_subgroup = None
+                current_group["members"].append(member)
+        else:
+            # Not inside a group — standalone entry, skip for group detection
+            if current_group:
+                groups.append(current_group)
+                current_group = None
+                current_subgroup = None
+
+    # Don't forget the last group
+    if current_group:
+        groups.append(current_group)
+
+    return groups
+
+
+# ============================================================
 # NGDC Migration Recommendations
 # ============================================================
 
@@ -3083,6 +3204,62 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     for comp, ips in dst_component_map.items():
         component_groups.append(_build_component_group(comp, ips, "destination"))
 
+    # --- Step 5: Parse legacy groups from expansion columns ---
+    src_expanded = rule.get("rule_source_expanded", "") or ""
+    dst_expanded = rule.get("rule_destination_expanded", "") or ""
+    legacy_source_groups = parse_expansion_groups(src_expanded)
+    legacy_dest_groups = parse_expansion_groups(dst_expanded)
+
+    # Build NGDC group mapping suggestions for each legacy group
+    def _map_legacy_group(lg: dict[str, Any], direction: str) -> dict[str, Any]:
+        """Map a legacy group to a suggested NGDC group with 1-1 member mappings."""
+        dir_nh = dst_nh if direction == "destination" else src_nh
+        dir_sz = dst_sz if direction == "destination" else src_sz
+        legacy_name = lg["name"]
+
+        # Try to find existing NGDC mapping for this group
+        table_match = _lookup_ngdc_mapping(legacy_name)
+        ngdc_name = table_match["ngdc_name"] if table_match else f"grp-{short_app}-{direction[:3].upper()}-{dir_nh}-{dir_sz}"
+
+        # Map each member to NGDC equivalent
+        mapped_members: list[dict[str, Any]] = []
+        for mem in lg.get("members", []):
+            if mem["type"] == "group":
+                # Nested sub-group — recurse
+                sub_mapped = _map_legacy_group(mem, direction)
+                mapped_members.append({
+                    "legacy": mem["value"],
+                    "type": "group",
+                    "ngdc": sub_mapped["ngdc_name"],
+                    "members": sub_mapped.get("mapped_members", []),
+                })
+            else:
+                legacy_ip = mem["value"]
+                ngdc_ip = _lookup_ip_mapping(legacy_ip)
+                mapped_members.append({
+                    "legacy": legacy_ip,
+                    "type": mem["type"],
+                    "description": mem.get("description", ""),
+                    "ngdc": ngdc_ip or f"svr-{legacy_ip.replace('svr-', '')}",
+                })
+
+        return {
+            "legacy_name": legacy_name,
+            "ngdc_name": ngdc_name,
+            "direction": direction,
+            "member_count": len(lg.get("members", [])),
+            "mapped_members": mapped_members,
+            "mapping_source": "ngdc_mapping_table" if table_match else "auto_generated",
+            "nh": dir_nh,
+            "sz": dir_sz,
+            "has_nested_groups": any(m["type"] == "group" for m in lg.get("members", [])),
+        }
+
+    legacy_group_mappings = (
+        [_map_legacy_group(g, "source") for g in legacy_source_groups] +
+        [_map_legacy_group(g, "destination") for g in legacy_dest_groups]
+    )
+
     return {
         "rule_id": rule_id,
         "rule": rule,
@@ -3117,6 +3294,9 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         "destination_sz_name": dst_sz_info.get("name", "") if dst_sz_info else "",
         "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
         "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
+        "legacy_group_mappings": legacy_group_mappings,
+        "legacy_source_groups": legacy_source_groups,
+        "legacy_dest_groups": legacy_dest_groups,
     }
 
 
@@ -3662,9 +3842,8 @@ async def expand_groups_in_rule(rule: dict[str, Any]) -> dict[str, Any]:
         group_lookup[g.get("name", "")] = g.get("members", [])
 
     def _is_group_entry(name: str) -> bool:
-        """Check if entry is a group (grp-, g-, gapigr- prefix) vs individual IP/subnet/range."""
-        lower = name.lower()
-        return lower.startswith("grp-") or lower.startswith("g-") or lower.startswith("gapigr-")
+        """Check if entry is a group (grp-, g-, ggrp-, gapigr- prefix) vs individual IP/subnet/range."""
+        return _is_legacy_group_name(name)
 
     def expand_field(field_value: str) -> str:
         if not field_value:
