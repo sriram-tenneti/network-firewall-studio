@@ -239,9 +239,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
       setFwDeviceInfo(null);
       setExpandedGroups({});
       // Detect destination app from rule data
-      const dstZone = getVal(rule.destination, 'security_zone');
       setDestApp(rule.application || '');
-      void dstZone; // used in birthright validation below
       // Auto-fetch group members for source/dest groups
       const groupNames: string[] = [];
       const srcParsed = parseEntries(rule.source);
