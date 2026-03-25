@@ -37,10 +37,11 @@ function modToReview(m: RuleModification): ReviewRequest {
 }
 
 export default function ReviewPage(props: { context?: string }) {
-  void props;
+  const moduleContext = props.context || '';
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEnv, setSelectedEnv] = useState<string>('');
+  const [selectedModule, setSelectedModule] = useState<string>(moduleContext);
   const [activeTab, setActiveTab] = useState('Pending');
   const approvalModal = useModal<ReviewRequest>();
   const { notification, showNotification } = useNotification();
@@ -68,6 +69,13 @@ export default function ReviewPage(props: { context?: string }) {
 
   const envFilteredReviews = reviews.filter(r => {
     if (selectedEnv && r.rule_summary?.environment !== selectedEnv) return false;
+    // Module-level filtering: each module sees only its own reviews
+    if (selectedModule) {
+      const mod = (r as unknown as Record<string, string>).module || '';
+      if (selectedModule === 'firewall-management' && mod && mod !== 'firewall-management') return false;
+      if (selectedModule === 'design-studio' && mod && mod !== 'design-studio') return false;
+      if (selectedModule === 'migration-studio' && mod && mod !== 'migration-studio') return false;
+    }
     return true;
   });
 
@@ -227,6 +235,13 @@ export default function ReviewPage(props: { context?: string }) {
           <p className="text-sm text-gray-500 mt-1">Review migration and firewall rule requests. Export new/modify/remove requests from the table below.</p>
         </div>
         <div className="flex items-center gap-3">
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedModule} onChange={e => setSelectedModule(e.target.value)}>
+            <option value="">All Modules</option>
+            <option value="firewall-management">Firewall Management</option>
+            <option value="design-studio">Design Studio</option>
+            <option value="migration-studio">Migration Studio</option>
+          </select>
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
             <option value="">All Environments</option>

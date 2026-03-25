@@ -78,19 +78,18 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
   const delta: RuleDelta = { added: {}, removed: {}, changed: {} };
   const fields = Object.keys(original) as (keyof ModifyState)[];
   for (const field of fields) {
-    const origVal = original[field] || '';
-    const modVal = modified[field] || '';
-    if (origVal !== modVal) {
-      if (origVal.includes('\n') || modVal.includes('\n')) {
-        const origLines = new Set(origVal.split('\n').filter(Boolean));
-        const modLines = new Set(modVal.split('\n').filter(Boolean));
-        const added = [...modLines].filter(l => !origLines.has(l));
-        const removed = [...origLines].filter(l => !modLines.has(l));
-        if (added.length) delta.added[field] = added;
-        if (removed.length) delta.removed[field] = removed;
-      } else {
-        delta.changed[field] = { from: origVal, to: modVal };
-      }
+    const origVal = (original[field] || '').trim();
+    const modVal = (modified[field] || '').trim();
+    if (origVal === modVal) continue;
+    if (origVal.includes('\n') || modVal.includes('\n')) {
+      const origLines = new Set(origVal.split('\n').map(l => l.trim()).filter(Boolean));
+      const modLines = new Set(modVal.split('\n').map(l => l.trim()).filter(Boolean));
+      const added = [...modLines].filter(l => !origLines.has(l));
+      const removed = [...origLines].filter(l => !modLines.has(l));
+      if (added.length) delta.added[field] = added;
+      if (removed.length) delta.removed[field] = removed;
+    } else {
+      delta.changed[field] = { from: origVal, to: modVal };
     }
   }
   return delta;
@@ -146,6 +145,8 @@ function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'su
   if (vl.startsWith('sub-')) return 'subnet';
   // svr- prefix = IP (server)
   if (vl.startsWith('svr-')) return 'ip';
+  // gsvr- prefix = IP (legacy variant of svr-)
+  if (vl.startsWith('gsvr-')) return 'ip';
   // Check CIDR notation (subnet)
   if (CIDR_REGEX.test(v)) return 'subnet';
   // Check IP range pattern (xx.xx.xx.xx-xx.xx.xx.xx or xx.xx.xx.xx-xy)
@@ -195,7 +196,9 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
     if (parsedLines.length === 0) return [];
 
     // Structure-based group detection: entry has children if next line is more indented
+    // Also detect known group names even when flat (same indentation as members)
     const hasChildren = (idx: number) => idx + 1 < parsedLines.length && parsedLines[idx + 1].indent > parsedLines[idx].indent;
+    const isKnownGroup = (val: string) => groupNameSet.has(val) || groups.some(g => g.name === val);
 
     const entries: ResourceEntry[] = [];
     let currentGroup: ResourceEntry | null = null;
@@ -208,7 +211,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
       // Not inside a group — check if this entry starts one
       if (currentGroup === null) {
-        if (hasChildren(i)) {
+        if (hasChildren(i) || isKnownGroup(value)) {
           const matchedGroup = groups.find(g => g.name === value);
           currentGroup = {
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -220,7 +223,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
           };
           currentSubGroup = null;
           groupIndent = indent;
-          memberIndent = parsedLines[i + 1].indent;
+          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent + 4;
         } else {
           // Standalone entry
           const type = detectEntryType(value, groupNameSet);
@@ -240,7 +243,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
         currentGroup = null;
         currentSubGroup = null;
         // Re-evaluate: does this line start a new group?
-        if (hasChildren(i)) {
+        if (hasChildren(i) || isKnownGroup(value)) {
           const matchedGroup = groups.find(g => g.name === value);
           currentGroup = {
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -252,7 +255,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
           };
           currentSubGroup = null;
           groupIndent = indent;
-          memberIndent = parsedLines[i + 1].indent;
+          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent + 4;
         } else {
           const type = detectEntryType(value, groupNameSet);
           entries.push({
@@ -400,7 +403,14 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
     }]);
   };
 
-  const handleDelete = (id: string) => onChange(entries.filter(e => e.id !== id));
+  const handleDelete = (id: string) => {
+    const entry = entries.find(e => e.id === id);
+    if (entry?.type === 'group' && entry.groupMembers && entry.groupMembers.length > 0) {
+      // Group removal cascades — removing group also removes its members from the entries list
+      // (members are stored inline, so just removing the group entry is sufficient)
+    }
+    onChange(entries.filter(e => e.id !== id));
+  };
 
   const handleSaveEdit = (id: string) => {
     if (!editValue.trim()) return;

@@ -22,7 +22,7 @@ export function autoPrefix(value: string, type: 'ip' | 'subnet' | 'cidr' | 'grou
   // Normalize legacy sub- prefix to NGDC net-
   if (vl.startsWith('sub-')) return `net-${v.slice(4)}`;
   // Already has a recognized prefix — return as-is
-  if (vl.startsWith('svr-') || vl.startsWith('grp-') || vl.startsWith('rng-') || vl.startsWith('net-') || vl.startsWith('g-')) {
+  if (vl.startsWith('svr-') || vl.startsWith('gsvr-') || vl.startsWith('grp-') || vl.startsWith('rng-') || vl.startsWith('net-') || vl.startsWith('g-')) {
     return v;
   }
   // Detect raw IP patterns

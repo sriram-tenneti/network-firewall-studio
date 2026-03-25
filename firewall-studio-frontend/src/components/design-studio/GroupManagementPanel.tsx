@@ -187,10 +187,11 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
                 <option value="API">API</option>
               </select>
             </div>
-          <div>
-            <label className="text-xs text-slate-500">Description</label>
-            <input value={newGroupDesc} onChange={(e) => setNewGroupDesc(e.target.value)}
-              className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="Group description" />
+            <div>
+              <label className="text-xs text-slate-500">Description</label>
+              <input value={newGroupDesc} onChange={(e) => setNewGroupDesc(e.target.value)}
+                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="Group description" />
+            </div>
           </div>
           <div className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600 font-mono">
             grp-{newGroupAppId}-{newGroupNh}-{newGroupSz}-{newGroupSubtype}
