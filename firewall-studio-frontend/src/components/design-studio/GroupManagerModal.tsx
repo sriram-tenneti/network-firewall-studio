@@ -8,7 +8,7 @@ interface GroupManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   appId?: string;
-  applications?: { app_id: string; name: string }[];
+  applications?: { app_id: string; app_distributed_id?: string; name: string }[];
   environment?: string;
 }
 
@@ -49,7 +49,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
 
   const updateAppOptions = (selectedAppId: string, mappings?: Record<string, unknown>[]) => {
     const source = mappings || allAppDCMappings;
-    const appMappings = source.filter(m => String(m.app_id || '') === selectedAppId);
+    const appMappings = source.filter(m => String(m.app_distributed_id || m.app_id || '') === selectedAppId || String(m.app_id || '') === selectedAppId);
     const nhs = [...new Set(appMappings.map(m => String(m.nh || '')).filter(Boolean))];
     const szs = [...new Set(appMappings.map(m => String(m.sz || '')).filter(Boolean))];
     const dcs = [...new Set(appMappings.map(m => String(m.dc || '')).filter(Boolean))];
@@ -150,7 +150,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
               <option value="Pre-Production">Pre-Production</option>
             </select>
           </div>
-          {/* App ID filter */}
+          {/* App Distributed Id filter */}
           <div className="mb-3">
             <select
               value={filterAppId}
@@ -159,7 +159,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
             >
               <option value="">All Applications</option>
               {applications.map(app => (
-                <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
               ))}
             </select>
           </div>
@@ -185,11 +185,11 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
               <input className={inputClass} placeholder="Group name (auto-generated if blank)" value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} />
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-gray-500">App ID</label>
+                  <label className="text-xs text-gray-500">App Distributed Id</label>
                   <select className={inputClass} value={newGroup.app_id} onChange={e => { setNewGroup({ ...newGroup, app_id: e.target.value }); updateAppOptions(e.target.value); }}>
                     <option value="">-- Select App --</option>
                     {applications.map(app => (
-                      <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                      <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
                     ))}
                   </select>
                 </div>
