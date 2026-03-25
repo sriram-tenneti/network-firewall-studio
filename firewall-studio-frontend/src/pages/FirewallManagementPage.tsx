@@ -179,6 +179,15 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
   if (!raw && !expanded) return [];
   const groupNameSet = new Set(groups.map(g => g.name));
 
+  // Build a set of source-column values for source-vs-expansion comparison.
+  // If a value appears in the source column AND the expansion column contains
+  // additional values not in the source column, then it's a group (the expansion
+  // column shows the expanded members).  This handles cases where indentation
+  // is inconsistent or completely flat.
+  const rawValues = new Set(
+    (raw || '').split('\n').map(l => l.trim()).filter(Boolean)
+  );
+
   // If we have expanded text, parse the hierarchical structure using look-ahead
   if (expanded && expanded.trim()) {
     // First pass: collect all non-empty lines with indent + value
@@ -195,10 +204,29 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
     if (parsedLines.length === 0) return [];
 
+    // Collect all unique values in the expansion column
+    const expandedValues = new Set(parsedLines.map(p => p.value));
+
+    // Source-vs-expansion group detection:
+    // A value is a group if it appears in the source column AND
+    // the expansion column contains values NOT in the source column
+    // (those extra values are the expanded members of the group).
+    const expansionHasExtraValues = (() => {
+      for (const ev of expandedValues) {
+        if (!rawValues.has(ev)) return true;
+      }
+      return false;
+    })();
+    const isSourceGroupByComparison = (val: string) =>
+      rawValues.has(val) && expansionHasExtraValues && rawValues.size < expandedValues.size;
+
     // Structure-based group detection: entry has children if next line is more indented
     // Also detect known group names even when flat (same indentation as members)
     const hasChildren = (idx: number) => idx + 1 < parsedLines.length && parsedLines[idx + 1].indent > parsedLines[idx].indent;
     const isKnownGroup = (val: string) => groupNameSet.has(val) || groups.some(g => g.name === val);
+    // Combined group check: structural (indentation), known group name, OR source-vs-expansion comparison
+    const isGroupEntry = (idx: number, val: string) =>
+      hasChildren(idx) || isKnownGroup(val) || isSourceGroupByComparison(val);
 
     const entries: ResourceEntry[] = [];
     let currentGroup: ResourceEntry | null = null;
@@ -211,7 +239,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
       // Not inside a group — check if this entry starts one
       if (currentGroup === null) {
-        if (hasChildren(i) || isKnownGroup(value)) {
+        if (isGroupEntry(i, value)) {
           const matchedGroup = groups.find(g => g.name === value);
           currentGroup = {
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -223,7 +251,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
           };
           currentSubGroup = null;
           groupIndent = indent;
-          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent + 4;
+          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent;
         } else {
           // Standalone entry
           const type = detectEntryType(value, groupNameSet);
@@ -236,14 +264,20 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
         continue;
       }
 
-      // Inside a group
-      if (indent <= groupIndent) {
+      // Inside a group — check if this line still belongs to it
+      // For flat expansion (no indentation), members are values NOT in the source column
+      const isFlatExpansion = memberIndent === groupIndent;
+      const isStillMember = isFlatExpansion
+        ? !rawValues.has(value)  // flat: members are values not in source column
+        : indent > groupIndent;  // hierarchical: members are indented deeper
+
+      if (!isStillMember) {
         // Group ended — flush it
         entries.push(currentGroup);
         currentGroup = null;
         currentSubGroup = null;
         // Re-evaluate: does this line start a new group?
-        if (hasChildren(i) || isKnownGroup(value)) {
+        if (isGroupEntry(i, value)) {
           const matchedGroup = groups.find(g => g.name === value);
           currentGroup = {
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -255,7 +289,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
           };
           currentSubGroup = null;
           groupIndent = indent;
-          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent + 4;
+          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent;
         } else {
           const type = detectEntryType(value, groupNameSet);
           entries.push({
@@ -267,16 +301,16 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
         continue;
       }
 
-      // Indented — belongs to the current group
+      // Member of the current group
       const memberType = detectEntryType(value, groupNameSet);
       const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'subnet' : memberType === 'range' ? 'range' : 'ip';
 
-      if (indent >= memberIndent && hasChildren(i)) {
+      if (!isFlatExpansion && indent >= memberIndent && hasChildren(i)) {
         // This member has deeper children → nested sub-group
         currentSubGroup = [];
         if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
         currentGroup.groupMembers.push({ type: 'group', value });
-      } else if (currentSubGroup !== null && indent > memberIndent) {
+      } else if (!isFlatExpansion && currentSubGroup !== null && indent > memberIndent) {
         // Deeper than first-level members → belongs to sub-group
         if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
         currentGroup.groupMembers.push({ type: mType, value });

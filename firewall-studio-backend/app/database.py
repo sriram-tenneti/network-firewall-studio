@@ -127,8 +127,10 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
     """Auto-prefix a value based on entry type for NGDC naming standards.
     - ip -> svr-
     - group -> grp- (normalizes legacy g- to grp-)
-    - cidr/range/subnet -> rng-
-    If already prefixed, returns as-is (except g- which is normalized to grp-).
+    - cidr/range -> rng-
+    - subnet -> net- (NGDC standard for subnets)
+    If already prefixed, returns as-is (except g- which is normalized to grp-,
+    and legacy sub- which is normalized to net-).
     """
     v = value.strip()
     if not v:
@@ -138,13 +140,19 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
     if vl.startswith("g-") and not vl.startswith("grp-"):
         v = "grp-" + v[2:]
         return v
+    # Normalize legacy sub- prefix to NGDC net-
+    if vl.startswith("sub-"):
+        v = "net-" + v[4:]
+        return v
     # Already has a recognized prefix
-    if vl.startswith(("svr-", "grp-", "rng-", "sub-")):
+    if vl.startswith(("svr-", "grp-", "rng-", "net-")):
         return v
     # Add prefix based on type
     if entry_type in ("group",):
         return f"grp-{v}"
-    if entry_type in ("cidr", "subnet", "range"):
+    if entry_type in ("subnet",):
+        return f"net-{v}"
+    if entry_type in ("cidr", "range"):
         return f"rng-{v}"
     return f"svr-{v}"
 
@@ -2777,10 +2785,13 @@ def parse_expansion_groups(expansion_text: str) -> list[dict[str, Any]]:
         return entry, ""
 
     def _member_type(value: str) -> str:
-        """Classify a member value (ip, range, or generic)."""
-        if "/" in value and not value.startswith("tcp") and not value.startswith("udp"):
-            return "range"
-        if value.lower().startswith("rng-"):
+        """Classify a member value (ip, subnet, range, or generic)."""
+        vl = value.lower()
+        if vl.startswith("net-") or vl.startswith("sub-"):
+            return "subnet"
+        if "/" in value and not vl.startswith("tcp") and not vl.startswith("udp"):
+            return "subnet"  # CIDR notation = subnet
+        if vl.startswith("rng-"):
             return "range"
         return "ip"
 
@@ -2933,26 +2944,40 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     _ip_mappings_early = _load("ip_mappings") or []
 
     def _lookup_ip_mapping(legacy_ip_raw: str) -> str | None:
-        """Look up NGDC equivalent IP from the 1-to-1 ip_mappings table."""
+        """Look up NGDC equivalent from the 1-to-1 ip_mappings table.
+        Returns with appropriate prefix: svr- for IPs, net- for subnets, rng- for ranges."""
         clean = legacy_ip_raw.strip()
-        for pfx in ("svr-", "rng-", "grp-"):
-            if clean.startswith(pfx):
+        original_prefix = ""
+        for pfx in ("svr-", "rng-", "net-", "sub-", "grp-"):
+            if clean.lower().startswith(pfx):
+                original_prefix = pfx.lower()
                 clean = clean[len(pfx):]
                 break
         for m in _ip_mappings_early:
             legacy_val = str(m.get("legacy_ip", ""))
             if legacy_val == clean or legacy_val == legacy_ip_raw:
                 ngdc_ip = str(m.get("ngdc_ip", ""))
-                return f"svr-{ngdc_ip}" if ngdc_ip else None
+                if not ngdc_ip:
+                    return None
+                # Determine correct NGDC prefix based on type
+                if original_prefix in ("net-", "sub-") or "/" in ngdc_ip:
+                    return f"net-{ngdc_ip}"
+                if original_prefix == "rng-":
+                    return f"rng-{ngdc_ip}"
+                return f"svr-{ngdc_ip}"
         return None
 
     def _suggest_ngdc_name(legacy_name: str, entry_type: str, direction: str = "source") -> str:
-        prefix = "grp" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
-                 "svr" if legacy_name.startswith("svr") else \
-                 "rng" if legacy_name.startswith("rng") else "grp"
+        ln = legacy_name.lower()
+        prefix = "grp" if ln.startswith("grp") or ln.startswith("gapigr") else \
+                 "svr" if ln.startswith("svr") else \
+                 "rng" if ln.startswith("rng") else \
+                 "net" if ln.startswith("net-") or ln.startswith("sub-") else \
+                 "net" if "/" in legacy_name and not ln.startswith("tcp") and not ln.startswith("udp") else \
+                 "grp"
         short_app = app_id.upper()
-        # For individual IPs (svr-*), try 1-to-1 IP mapping first
-        if prefix == "svr":
+        # For individual IPs/subnets/ranges, try 1-to-1 mapping first
+        if prefix in ("svr", "net", "rng"):
             mapped = _lookup_ip_mapping(legacy_name)
             if mapped:
                 return mapped
@@ -2964,9 +2989,13 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         return f"{prefix}-{short_app}-{entry_type}-{nh}-{sz}"
 
     def _build_mapping(legacy_name: str, entry_type: str, idx: int, direction: str = "source") -> dict[str, Any]:
-        obj_type = "group" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
-                   "server" if legacy_name.startswith("svr") else \
-                   "range" if legacy_name.startswith("rng") else "other"
+        ln = legacy_name.lower()
+        obj_type = "group" if ln.startswith("grp") or ln.startswith("gapigr") else \
+                   "server" if ln.startswith("svr") else \
+                   "range" if ln.startswith("rng") else \
+                   "subnet" if ln.startswith("net-") or ln.startswith("sub-") else \
+                   "subnet" if "/" in legacy_name and not ln.startswith("tcp") and not ln.startswith("udp") else \
+                   "other"
         dir_nh = dst_nh if direction == "destination" else src_nh
         dir_sz = dst_sz if direction == "destination" else src_sz
 
@@ -3073,10 +3102,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         import ipaddress
         ip_clean = ip_str.strip().split("\n")[0].strip()
 
-        # Strip svr-/rng-/grp- prefix for raw IP matching
+        # Strip svr-/rng-/grp-/net-/sub- prefix for raw IP matching
         ip_raw = ip_clean
-        for pfx in ("svr-", "rng-", "grp-"):
-            if ip_raw.startswith(pfx):
+        for pfx in ("svr-", "rng-", "grp-", "net-", "sub-"):
+            if ip_raw.lower().startswith(pfx):
                 ip_raw = ip_raw[len(pfx):]
                 break
 
@@ -3158,10 +3187,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     def _lookup_ngdc_ip(legacy_ip_raw: str) -> str | None:
         """Look up the NGDC equivalent IP for a legacy IP from the ip_mappings table."""
-        # Strip svr- / rng- / grp- prefixes for matching
+        # Strip svr- / rng- / grp- / net- / sub- prefixes for matching
         clean = legacy_ip_raw.strip()
-        for pfx in ("svr-", "rng-", "grp-"):
-            if clean.startswith(pfx):
+        for pfx in ("svr-", "rng-", "grp-", "net-", "sub-"):
+            if clean.lower().startswith(pfx):
                 clean = clean[len(pfx):]
                 break
         for m in ip_mappings_table:
@@ -3191,20 +3220,28 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 legacy_group = g["name"]
                 break
 
-        # Build NGDC IPs by looking up 1-to-1 IP mapping table
+        # Build NGDC entries by looking up 1-to-1 IP mapping table
         ngdc_ips: list[str] = []
         for ip in ips:
             mapped = _lookup_ngdc_ip(ip)
             if mapped:
                 ngdc_ips.append(mapped)
             else:
-                # Fallback: use svr- prefix with the legacy IP (stripped of old prefix)
+                # Fallback: use appropriate prefix based on entry type
                 clean_ip = ip.strip()
-                for pfx in ("svr-", "rng-", "grp-"):
-                    if clean_ip.startswith(pfx):
+                original_pfx = ""
+                for pfx in ("svr-", "rng-", "grp-", "net-", "sub-"):
+                    if clean_ip.lower().startswith(pfx):
+                        original_pfx = pfx.lower()
                         clean_ip = clean_ip[len(pfx):]
                         break
-                ngdc_ips.append(f"svr-{clean_ip}")
+                # Determine NGDC prefix: net- for subnets/CIDRs, rng- for ranges, svr- for IPs
+                if original_pfx in ("net-", "sub-") or ("/" in clean_ip and not clean_ip.startswith("tcp")):
+                    ngdc_ips.append(f"net-{clean_ip}")
+                elif original_pfx == "rng-":
+                    ngdc_ips.append(f"rng-{clean_ip}")
+                else:
+                    ngdc_ips.append(f"svr-{clean_ip}")
 
         ngdc_group_name = f"grp-{short_app}-{comp}-{comp_nh}-{comp_sz}"
         return {
@@ -3259,13 +3296,27 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                     "members": sub_mapped.get("mapped_members", []),
                 })
             else:
-                legacy_ip = mem["value"]
-                ngdc_ip = _lookup_ip_mapping(legacy_ip)
+                legacy_val = mem["value"]
+                mem_type = mem["type"]
+                ngdc_val = _lookup_ip_mapping(legacy_val)
+                if not ngdc_val:
+                    # Generate NGDC name with correct prefix based on member type
+                    clean_val = legacy_val
+                    for pfx in ("svr-", "rng-", "net-", "sub-"):
+                        if clean_val.lower().startswith(pfx):
+                            clean_val = clean_val[len(pfx):]
+                            break
+                    if mem_type == "subnet":
+                        ngdc_val = f"net-{clean_val}"
+                    elif mem_type == "range":
+                        ngdc_val = f"rng-{clean_val}"
+                    else:
+                        ngdc_val = f"svr-{clean_val}"
                 mapped_members.append({
-                    "legacy": legacy_ip,
-                    "type": mem["type"],
+                    "legacy": legacy_val,
+                    "type": mem_type,
                     "description": mem.get("description", ""),
-                    "ngdc": ngdc_ip or f"svr-{legacy_ip.replace('svr-', '')}",
+                    "ngdc": ngdc_val,
                 })
 
         return {

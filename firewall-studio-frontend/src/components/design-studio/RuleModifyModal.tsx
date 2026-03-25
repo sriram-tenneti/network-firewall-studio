@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import type { FirewallRule, RuleDelta, BirthrightValidation, FirewallGroup } from '@/types';
-import { validateBirthright, getGroup } from '@/lib/api';
+import type { FirewallRule, RuleDelta, BirthrightValidation, FirewallGroup, Application } from '@/types';
+import { validateBirthright, getGroup, getApplications, getFilteredNhSzDc } from '@/lib/api';
 import { autoPrefix } from '@/lib/utils';
 
 interface EntryItem {
@@ -202,6 +202,31 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
   const [fwDeviceInfo, setFwDeviceInfo] = useState<BirthrightValidation | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, FirewallGroup>>({});
   const [loadingGroups, setLoadingGroups] = useState(false);
+  // Fix #10: destination app display + app-filtered SZ
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [destApp, setDestApp] = useState<string>('');
+  const [appFilteredSZs, setAppFilteredSZs] = useState<string[]>([]);
+
+  // Load applications for destination app display
+  useEffect(() => {
+    if (isOpen) {
+      getApplications().then(apps => setApplications(apps)).catch(() => {});
+    }
+  }, [isOpen]);
+
+  // When destApp changes, filter SZs by app management data
+  useEffect(() => {
+    if (destApp && rule) {
+      const env = rule.environment || 'Production';
+      getFilteredNhSzDc(env, destApp)
+        .then(data => {
+          setAppFilteredSZs(data.security_zones.map(sz => sz.code || sz.name));
+        })
+        .catch(() => setAppFilteredSZs([]));
+    } else {
+      setAppFilteredSZs([]);
+    }
+  }, [destApp, rule]);
 
   useEffect(() => {
     if (rule && isOpen) {
@@ -213,6 +238,10 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
       setActiveSection('source');
       setFwDeviceInfo(null);
       setExpandedGroups({});
+      // Detect destination app from rule data
+      const dstZone = getVal(rule.destination, 'security_zone');
+      setDestApp(rule.application || '');
+      void dstZone; // used in birthright validation below
       // Auto-fetch group members for source/dest groups
       const groupNames: string[] = [];
       const srcParsed = parseEntries(rule.source);
@@ -300,7 +329,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Modify Rule: ${rule.rule_id}`} subtitle={`${rule.application} | ${rule.environment}`} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Modify Rule: ${rule.rule_id}`} subtitle={`${rule.application} | ${rule.environment}${destApp && destApp !== rule.application ? ` | Dest: ${destApp}` : ''}`} size="lg">
       <div className="space-y-4">
         {/* Edit / Preview toggle */}
         <div className="flex items-center justify-between">
@@ -359,6 +388,38 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
 
             {activeSection === 'destination' && (
               <>
+                {/* Destination App selector + app-filtered SZs */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-purple-700 mb-1">Destination Application</label>
+                      <select
+                        className="w-full px-2 py-1.5 text-sm border border-purple-300 rounded-md bg-white focus:ring-1 focus:ring-purple-500"
+                        value={destApp}
+                        onChange={e => setDestApp(e.target.value)}
+                      >
+                        <option value="">Same as Source ({rule.application})</option>
+                        {applications.map(app => (
+                          <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>
+                            {app.app_distributed_id || app.app_id} - {app.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-purple-700 mb-1">App-Filtered Security Zones</label>
+                      {appFilteredSZs.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {appFilteredSZs.map(sz => (
+                            <span key={sz} className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">{sz}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-gray-400 italic mt-1">Select a destination app to filter SZs by App Management data</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <EntryEditor label="Destination Entries" entries={destEntries} onChange={setDestEntries} />
                 {/* Expanded group members for destination */}
                 {destEntries.filter(e => expandedGroups[e.value]).map(e => (
