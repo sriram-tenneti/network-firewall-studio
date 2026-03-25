@@ -110,23 +110,32 @@ const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
 /**
  * Naming conventions from Excel:
  *   svr-  = IP address (server)
- *   g- or grp- = Group (contains members)
+ *   g-, grp-, ggrp-, gapigr-, netgrp-, addrgrp-, group- = Group (contains members)
  *   rng-  = Range of IPs/subnets
  *   sub-  = Subnet
  */
+const LEGACY_GROUP_PREFIXES = [
+  'g-', 'grp-', 'ggrp-', 'gapigr-', 'grp_', 'g_',
+  'group-', 'group_', 'netgrp-', 'netgrp_', 'addrgrp-',
+];
+
+function isLegacyGroupName(name: string): boolean {
+  const lower = name.trim().toLowerCase();
+  return LEGACY_GROUP_PREFIXES.some(pfx => lower.startsWith(pfx));
+}
+
 function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'group' {
   const v = value.trim();
-  const vl = v.toLowerCase();
-  // grp- or g- prefix = GROUP
-  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
+  // Check all legacy group prefixes (g-, grp-, ggrp-, gapigr-, netgrp-, addrgrp-, etc.)
+  if (isLegacyGroupName(v)) return 'group';
   // Check if it matches a known group name from the backend
   if (allGroupNames && allGroupNames.has(v)) return 'group';
   // rng- prefix = SUBNET (range of IPs/subnets)
-  if (vl.startsWith('rng-')) return 'subnet';
+  if (v.toLowerCase().startsWith('rng-')) return 'subnet';
   // sub- prefix = SUBNET
-  if (vl.startsWith('sub-')) return 'subnet';
+  if (v.toLowerCase().startsWith('sub-')) return 'subnet';
   // svr- prefix = IP (server)
-  if (vl.startsWith('svr-')) return 'ip';
+  if (v.toLowerCase().startsWith('svr-')) return 'ip';
   // Check CIDR notation (subnet)
   if (CIDR_REGEX.test(v)) return 'subnet';
   // Check plain IP
@@ -139,9 +148,11 @@ function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'su
 
 /**
  * Parse expanded text (hierarchical) into ResourceEntry[]. The expanded format is:
- *   grp-xxx           <- group header (no indent)
+ *   grp-xxx           <- group header (no indent) — supports all legacy prefixes
  *     svr-10.1.2.3    <- member (indented 2+ spaces or tab)
  *     rng-10.1.2.3-10 <- member
+ *     ggrp-nested     <- nested sub-group (indented, with group prefix)
+ *       10.2.2.1      <- member of nested sub-group
  *   svr-10.5.6.7      <- standalone IP (no indent)
  */
 function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?: string): ResourceEntry[] {
@@ -153,41 +164,73 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
     const lines = expanded.split('\n');
     const entries: ResourceEntry[] = [];
     let currentGroup: ResourceEntry | null = null;
+    let currentSubGroup: { type: string; value: string; members?: { type: string; value: string }[] } | null = null;
+    let baseIndent = 0;
 
     for (const line of lines) {
       if (!line.trim()) continue;
-      const indent = line.length - line.trimStart().length;
+      const indent = line.startsWith('\t') ? (line.length - line.replace(/^\t+/, '').length) * 4 : line.length - line.trimStart().length;
       const v = line.trim();
 
-      if (indent >= 2 || line.startsWith('\t')) {
-        // This is an indented member belonging to the current group
-        if (currentGroup) {
-          const memberType = detectEntryType(v, groupNameSet);
-          const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'range' : 'ip';
+      // Extract value without description in parentheses for type detection
+      const valueForDetection = v.includes('(') ? v.substring(0, v.indexOf('(')).trim() : v;
+
+      if (indent <= baseIndent && isLegacyGroupName(valueForDetection)) {
+        // New top-level group
+        if (currentGroup) entries.push(currentGroup);
+        const groupName = valueForDetection;
+        const matchedGroup = groups.find(g => g.name === groupName);
+        currentGroup = {
+          id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'group',
+          value: groupName,
+          groupMembers: matchedGroup
+            ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
+            : [],
+        };
+        currentSubGroup = null;
+        baseIndent = indent;
+      } else if (currentGroup && indent > baseIndent) {
+        const memberType = detectEntryType(valueForDetection, groupNameSet);
+        const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'range' : 'ip';
+
+        if (memberType === 'group') {
+          // Nested sub-group within current group
+          currentSubGroup = { type: 'group', value: valueForDetection, members: [] };
           if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-          currentGroup.groupMembers.push({ type: mType, value: v });
+          currentGroup.groupMembers.push(currentSubGroup as { type: string; value: string });
+        } else if (currentSubGroup && indent > baseIndent + 2) {
+          // Member of the nested sub-group (deeper indentation)
+          // Note: sub-group members are stored but displayed as part of the parent group's members
+          if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+          currentGroup.groupMembers.push({ type: mType, value: valueForDetection });
+        } else {
+          // Direct member of the current group
+          currentSubGroup = null;
+          if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+          currentGroup.groupMembers.push({ type: mType, value: valueForDetection });
         }
       } else {
-        // Top-level entry — finalize previous group if any
-        if (currentGroup) entries.push(currentGroup);
-        const type = detectEntryType(v, groupNameSet);
+        // Not inside a group — standalone entry
+        if (currentGroup) { entries.push(currentGroup); currentGroup = null; currentSubGroup = null; }
+        const type = detectEntryType(valueForDetection, groupNameSet);
         if (type === 'group') {
-          // Start a new group; members will come from indented lines below
-          const matchedGroup = groups.find(g => g.name === v);
+          const matchedGroup = groups.find(g => g.name === valueForDetection);
           currentGroup = {
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             type: 'group',
-            value: v,
+            value: valueForDetection,
             groupMembers: matchedGroup
               ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
               : [],
           };
+          currentSubGroup = null;
+          baseIndent = indent;
         } else {
-          currentGroup = null;
           entries.push({
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             type,
-            value: v,
+            value: valueForDetection,
           });
         }
       }
@@ -739,14 +782,26 @@ export default function FirewallManagementPage() {
     { key: 'rule_source', header: 'Source', sortable: false, width: '150px',
       render: (_, row) => {
         const entries = (row.rule_source || '').split('\n').filter(Boolean);
-        return <span className="font-mono text-xs">{entries.slice(0, 2).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}</span>;
+        const groupCount = entries.filter(e => isLegacyGroupName(e.trim())).length;
+        return (
+          <span className="font-mono text-xs">
+            {groupCount > 0 && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded mr-1">{groupCount} grp</span>}
+            {entries.slice(0, 2).map(e => e.trim()).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}
+          </span>
+        );
       },
     },
     { key: 'rule_source_zone', header: 'Src Zone', sortable: true, width: '100px' },
     { key: 'rule_destination', header: 'Destination', sortable: false, width: '150px',
       render: (_, row) => {
         const entries = (row.rule_destination || '').split('\n').filter(Boolean);
-        return <span className="font-mono text-xs">{entries.slice(0, 2).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}</span>;
+        const groupCount = entries.filter(e => isLegacyGroupName(e.trim())).length;
+        return (
+          <span className="font-mono text-xs">
+            {groupCount > 0 && <span className="text-[9px] bg-fuchsia-100 text-fuchsia-700 px-1 py-0.5 rounded mr-1">{groupCount} grp</span>}
+            {entries.slice(0, 2).map(e => e.trim()).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}
+          </span>
+        );
       },
     },
     { key: 'rule_destination_zone', header: 'Dst Zone', sortable: true, width: '90px' },
@@ -912,6 +967,7 @@ export default function FirewallManagementPage() {
                 </div>
               ))}
             </div>
+            {/* Source Expanded — with legacy group detection */}
             <div className="border rounded-lg overflow-hidden">
               <div className="px-3 py-2 bg-blue-50 border-b">
                 <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
@@ -919,14 +975,18 @@ export default function FirewallManagementPage() {
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
                 {parseExpandedTree(detailModal.data.rule_source_expanded).map((line, i) => {
                   const indent = line.length - line.trimStart().length;
+                  const trimmed = line.trim();
+                  const isGroup = isLegacyGroupName(trimmed.includes('(') ? trimmed.substring(0, trimmed.indexOf('(')).trim() : trimmed);
                   return (
-                    <div key={i} className="font-mono text-xs text-green-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
+                    <div key={i} className={`font-mono text-xs ${isGroup ? 'text-emerald-400 font-semibold' : indent > 0 ? 'text-green-400' : 'text-green-400'}`} style={{ paddingLeft: `${indent * 8}px` }}>
+                      {isGroup && <span className="text-[9px] bg-emerald-900 text-emerald-300 px-1 py-0.5 rounded mr-1">GRP</span>}
+                      {trimmed}
                     </div>
                   );
                 })}
               </div>
             </div>
+            {/* Destination Expanded — with legacy group detection */}
             <div className="border rounded-lg overflow-hidden">
               <div className="px-3 py-2 bg-purple-50 border-b">
                 <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
@@ -934,9 +994,12 @@ export default function FirewallManagementPage() {
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
                 {parseExpandedTree(detailModal.data.rule_destination_expanded).map((line, i) => {
                   const indent = line.length - line.trimStart().length;
+                  const trimmed = line.trim();
+                  const isGroup = isLegacyGroupName(trimmed.includes('(') ? trimmed.substring(0, trimmed.indexOf('(')).trim() : trimmed);
                   return (
-                    <div key={i} className="font-mono text-xs text-purple-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
+                    <div key={i} className={`font-mono text-xs ${isGroup ? 'text-fuchsia-400 font-semibold' : indent > 0 ? 'text-purple-400' : 'text-purple-400'}`} style={{ paddingLeft: `${indent * 8}px` }}>
+                      {isGroup && <span className="text-[9px] bg-fuchsia-900 text-fuchsia-300 px-1 py-0.5 rounded mr-1">GRP</span>}
+                      {trimmed}
                     </div>
                   );
                 })}
