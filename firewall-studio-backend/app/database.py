@@ -2707,10 +2707,11 @@ async def delete_birthright_entry(matrix_type: str, index: int) -> bool:
 # ============================================================
 
 def _is_legacy_group_name(name: str) -> bool:
-    """Check if a name looks like a legacy firewall group.
-    Groups can start with g-, grp-, ggrp-, gapigr-, or any similar prefix.
-    We detect by checking known prefixes AND by looking at the expansion
-    column structure (top-level = group, indented = members)."""
+    """Check if a name looks like a legacy firewall group by known prefixes.
+    This is a *hint* only — the authoritative test is whether the entry has
+    indented children in the expansion column (see parse_expansion_groups).
+    Kept for backward compatibility with expand_groups_in_rule() which
+    operates on flat rule_source/rule_destination fields without expansion."""
     lower = name.strip().lower()
     group_prefixes = (
         "g-", "grp-", "ggrp-", "gapigr-", "grp_", "g_",
@@ -2722,22 +2723,27 @@ def _is_legacy_group_name(name: str) -> bool:
 def parse_expansion_groups(expansion_text: str) -> list[dict[str, Any]]:
     """Parse the expansion/detail column to extract group hierarchies.
 
-    The expansion column uses indentation to show group membership:
-      grp-MYAPP-SRC                    ← top-level group
+    Group detection is **structure-based**: any top-level entry that has
+    indented children below it is treated as a group, regardless of its
+    prefix.  The prefix can be anything (g-, grp-, ggrp-, gapigr-, myapp-,
+    fw-, etc.) — the indentation hierarchy is the sole authority.
+
+    Example expansion text:
+      MY-CUSTOM-GROUP                  ← group (has indented children)
         10.1.1.1 (Web Server 1)        ← member IP
         10.1.1.2 (Web Server 2)        ← member IP
-        g-NESTED-GRP                   ← nested sub-group
+        NESTED-SUB-GRP                 ← nested sub-group (has deeper children)
           10.2.2.1 (DB Server)         ← member of nested group
-      svr-10.3.3.3                     ← standalone (not a group)
+      svr-10.3.3.3                     ← standalone (no children → not a group)
 
     Returns a list of group dicts:
     [
       {
-        "name": "grp-MYAPP-SRC",
+        "name": "MY-CUSTOM-GROUP",
         "members": [
           {"type": "ip", "value": "10.1.1.1", "description": "Web Server 1"},
           {"type": "ip", "value": "10.1.1.2", "description": "Web Server 2"},
-          {"type": "group", "value": "g-NESTED-GRP", "members": [
+          {"type": "group", "value": "NESTED-SUB-GRP", "members": [
             {"type": "ip", "value": "10.2.2.1", "description": "DB Server"}
           ]}
         ]
@@ -2747,76 +2753,95 @@ def parse_expansion_groups(expansion_text: str) -> list[dict[str, Any]]:
     if not expansion_text or not isinstance(expansion_text, str):
         return []
 
-    lines = expansion_text.split("\n")
-    groups: list[dict[str, Any]] = []
-    current_group: dict[str, Any] | None = None
-    current_subgroup: dict[str, Any] | None = None
-    # Track indentation levels to determine hierarchy
-    base_indent = 0
-
-    for raw_line in lines:
+    # --- First pass: collect all lines with their indent levels ---
+    parsed_lines: list[tuple[int, str]] = []  # (indent, text)
+    for raw_line in expansion_text.split("\n"):
         if not raw_line.strip():
             continue
-
-        # Measure leading whitespace (indent level)
         stripped = raw_line.lstrip()
         indent = len(raw_line) - len(stripped)
         text = stripped.strip()
+        if text:
+            parsed_lines.append((indent, text))
 
-        if not text:
+    if not parsed_lines:
+        return []
+
+    def _parse_value(entry: str) -> tuple[str, str]:
+        """Split 'value (description)' → (value, description)."""
+        entry = entry.strip()
+        if "(" in entry and ")" in entry:
+            paren_start = entry.index("(")
+            paren_end = entry.rindex(")")
+            return entry[:paren_start].strip(), entry[paren_start + 1:paren_end].strip()
+        return entry, ""
+
+    def _member_type(value: str) -> str:
+        """Classify a member value (ip, range, or generic)."""
+        if "/" in value and not value.startswith("tcp") and not value.startswith("udp"):
+            return "range"
+        if value.lower().startswith("rng-"):
+            return "range"
+        return "ip"
+
+    # --- Second pass: look-ahead to detect groups structurally ---
+    # An entry at index i is a group if the next entry (i+1) has deeper indentation.
+    def _has_children(idx: int) -> bool:
+        if idx + 1 >= len(parsed_lines):
+            return False
+        return parsed_lines[idx + 1][0] > parsed_lines[idx][0]
+
+    groups: list[dict[str, Any]] = []
+    current_group: dict[str, Any] | None = None
+    current_subgroup: dict[str, Any] | None = None
+    group_indent = 0
+    member_indent = 0
+
+    for i, (indent, text) in enumerate(parsed_lines):
+        value, desc = _parse_value(text)
+
+        # If we are NOT inside a group, check if this entry starts one
+        if current_group is None:
+            if _has_children(i):
+                # This entry has children → it's a group
+                current_group = {"name": value, "members": []}
+                current_subgroup = None
+                group_indent = indent
+                member_indent = parsed_lines[i + 1][0]  # expected child indent
+            # else: standalone entry, skip for group detection
             continue
 
-        # Parse IP and description from patterns like "10.1.1.1 (Web Server 1)"
-        # or just "10.1.1.1" or "svr-10.1.1.1"
-        def _parse_member(entry: str) -> dict[str, Any]:
-            entry = entry.strip()
-            desc = ""
-            value = entry
-            # Extract description from parentheses
-            if "(" in entry and ")" in entry:
-                paren_start = entry.index("(")
-                paren_end = entry.rindex(")")
-                desc = entry[paren_start + 1:paren_end].strip()
-                value = entry[:paren_start].strip()
-            # Determine member type
-            if _is_legacy_group_name(value):
-                return {"type": "group", "value": value, "description": desc, "members": []}
-            elif "/" in value and not value.startswith("tcp") and not value.startswith("udp"):
-                return {"type": "range", "value": value, "description": desc}
-            elif value.startswith("rng-"):
-                return {"type": "range", "value": value, "description": desc}
-            else:
-                return {"type": "ip", "value": value, "description": desc}
-
-        # Decide if this is a top-level group, a member, or a sub-group member
-        if indent <= base_indent and _is_legacy_group_name(text):
-            # New top-level group
-            if current_group:
-                groups.append(current_group)
-            current_group = {"name": text.split("(")[0].strip(), "members": []}
+        # We are inside a group
+        if indent <= group_indent:
+            # Same or lower indent as the group header → group ended
+            groups.append(current_group)
+            current_group = None
             current_subgroup = None
-            base_indent = indent
-        elif current_group is not None and indent > base_indent:
-            member = _parse_member(text)
-            if member["type"] == "group":
-                # This is a nested sub-group within the current group
-                current_subgroup = member
-                current_group["members"].append(member)
-            elif current_subgroup is not None and indent > base_indent + 2:
-                # Member of the nested sub-group (deeper indentation)
-                current_subgroup["members"].append(member)
-            else:
-                # Direct member of the current group
+            # Re-evaluate this line: could it start a new group?
+            if _has_children(i):
+                current_group = {"name": value, "members": []}
                 current_subgroup = None
-                current_group["members"].append(member)
-        else:
-            # Not inside a group — standalone entry, skip for group detection
-            if current_group:
-                groups.append(current_group)
-                current_group = None
-                current_subgroup = None
+                group_indent = indent
+                member_indent = parsed_lines[i + 1][0]
+            continue
 
-    # Don't forget the last group
+        # Indented line — belongs to the current group
+        if indent >= member_indent and _has_children(i):
+            # This member itself has deeper children → nested sub-group
+            sub = {"type": "group", "value": value, "description": desc, "members": []}
+            current_subgroup = sub
+            current_group["members"].append(sub)
+        elif current_subgroup is not None and indent > member_indent:
+            # Deeper than first-level members → belongs to the sub-group
+            mtype = _member_type(value)
+            current_subgroup["members"].append({"type": mtype, "value": value, "description": desc})
+        else:
+            # Direct member of the current group
+            current_subgroup = None
+            mtype = _member_type(value)
+            current_group["members"].append({"type": mtype, "value": value, "description": desc})
+
+    # Flush last group
     if current_group:
         groups.append(current_group)
 
