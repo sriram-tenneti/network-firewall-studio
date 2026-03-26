@@ -397,6 +397,13 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
   const [addingMemberToGroup, setAddingMemberToGroup] = useState<string | null>(null);
   const [newMemberType, setNewMemberType] = useState<string>('ip');
   const [newMemberValue, setNewMemberValue] = useState('');
+  // Nested sub-group member editing
+  const [addingMemberToSubGroup, setAddingMemberToSubGroup] = useState<string | null>(null); // "entryId:memberIdx"
+  const [subMemberType, setSubMemberType] = useState<string>('ip');
+  const [subMemberValue, setSubMemberValue] = useState('');
+  // Add child group to parent group
+  const [addingChildGroupTo, setAddingChildGroupTo] = useState<string | null>(null);
+  const [childGroupName, setChildGroupName] = useState('');
   // New group wizard
   const [showNewGroupWizard, setShowNewGroupWizard] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -492,6 +499,48 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
       const members = (e.groupMembers || []).filter((_, i) => i !== memberIdx);
       return { ...e, groupMembers: members, isModified: true };
     }));
+  };
+
+  // Add a member to a nested sub-group
+  const handleAddSubGroupMember = (entryId: string, memberIdx: number) => {
+    if (!subMemberValue.trim()) return;
+    const memberPrefixed = autoPrefix(subMemberValue.trim(), subMemberType as 'ip' | 'subnet' | 'cidr' | 'group' | 'range');
+    onChange(entries.map(e => {
+      if (e.id !== entryId) return e;
+      const members = (e.groupMembers || []).map((m, i) => {
+        if (i !== memberIdx) return m;
+        const children = [...(m.children || []), { type: subMemberType, value: memberPrefixed }];
+        return { ...m, children };
+      });
+      return { ...e, groupMembers: members, isModified: true };
+    }));
+    setSubMemberValue('');
+  };
+
+  // Remove a member from a nested sub-group
+  const handleRemoveSubGroupMember = (entryId: string, memberIdx: number, childIdx: number) => {
+    onChange(entries.map(e => {
+      if (e.id !== entryId) return e;
+      const members = (e.groupMembers || []).map((m, i) => {
+        if (i !== memberIdx) return m;
+        const children = (m.children || []).filter((_, ci) => ci !== childIdx);
+        return { ...m, children };
+      });
+      return { ...e, groupMembers: members, isModified: true };
+    }));
+  };
+
+  // Add a child group (sub-group) as a member of a parent group
+  const handleAddChildGroup = (entryId: string) => {
+    if (!childGroupName.trim()) return;
+    const grpName = autoPrefix(childGroupName.trim(), 'group');
+    onChange(entries.map(e => {
+      if (e.id !== entryId) return e;
+      const members = [...(e.groupMembers || []), { type: 'group', value: grpName, children: [] }];
+      return { ...e, groupMembers: members, isModified: true };
+    }));
+    setChildGroupName('');
+    setAddingChildGroupTo(null);
   };
 
   const handleCreateNewGroup = () => {
@@ -593,14 +642,33 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                         <button onClick={() => handleRemoveGroupMember(entry.id, mi)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
                       </div>
                       {/* Render nested sub-group children */}
-                      {m.type === 'group' && m.children && m.children.length > 0 && (
+                      {m.type === 'group' && (
                         <div className="ml-5 mt-0.5 mb-1 border-l-2 border-teal-200 pl-3 space-y-0.5">
-                          {m.children.map((cm, ci) => (
+                          {(m.children || []).length === 0 && <p className="text-[10px] text-amber-600 italic py-0.5">No members in this sub-group. Add members below.</p>}
+                          {(m.children || []).map((cm, ci) => (
                             <div key={ci} className="flex items-center gap-2 px-2 py-1 bg-gray-100 rounded text-xs">
                               <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(cm.type)}`}>{memberTypeLabel(cm.type)}</span>
                               <span className="font-mono flex-1 text-gray-700">{cm.value}</span>
+                              <button onClick={() => handleRemoveSubGroupMember(entry.id, mi, ci)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
                             </div>
                           ))}
+                          {/* Add member to sub-group */}
+                          {addingMemberToSubGroup === `${entry.id}:${mi}` ? (
+                            <div className="flex gap-1.5 items-center mt-1 bg-white border border-gray-200 rounded p-1.5">
+                              <select value={subMemberType} onChange={e => setSubMemberType(e.target.value)} className="px-1 py-0.5 text-[10px] border border-gray-300 rounded">
+                                <option value="ip">IP</option>
+                                <option value="subnet">Subnet</option>
+                                <option value="range">Range</option>
+                              </select>
+                              <input type="text" value={subMemberValue} onChange={e => setSubMemberValue(e.target.value)} placeholder="10.0.1.5" className="flex-1 px-1.5 py-0.5 text-[10px] font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddSubGroupMember(entry.id, mi); }} />
+                              <button onClick={() => handleAddSubGroupMember(entry.id, mi)} disabled={!subMemberValue.trim()} className="px-1.5 py-0.5 text-[10px] font-medium text-white bg-teal-600 rounded hover:bg-teal-700 disabled:bg-gray-300">Add</button>
+                              <button onClick={() => setAddingMemberToSubGroup(null)} className="text-[10px] text-gray-500 hover:text-gray-700">Done</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setAddingMemberToSubGroup(`${entry.id}:${mi}`); setSubMemberType('ip'); setSubMemberValue(''); }} className="text-[10px] text-teal-600 hover:text-teal-800 font-medium mt-0.5 flex items-center gap-1">
+                              <span>+</span> Add member to {m.value}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -618,9 +686,22 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                       <button onClick={() => setAddingMemberToGroup(null)} className="text-xs text-gray-500 hover:text-gray-700">Done</button>
                     </div>
                   ) : (
-                    <button onClick={() => { setAddingMemberToGroup(entry.id); setNewMemberType('ip'); setNewMemberValue(''); }} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium mt-1 flex items-center gap-1">
-                      <span>+</span> Add IP / Subnet / Range to this group
-                    </button>
+                    <div className="flex items-center gap-3 mt-1">
+                      <button onClick={() => { setAddingMemberToGroup(entry.id); setNewMemberType('ip'); setNewMemberValue(''); }} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1">
+                        <span>+</span> Add IP / Subnet / Range
+                      </button>
+                      {addingChildGroupTo === entry.id ? (
+                        <div className="flex gap-1.5 items-center bg-white border border-emerald-200 rounded p-1.5">
+                          <input type="text" value={childGroupName} onChange={e => setChildGroupName(e.target.value)} placeholder="Sub-group name" className="px-2 py-1 text-xs font-mono border border-gray-300 rounded w-40" onKeyDown={e => { if (e.key === 'Enter') handleAddChildGroup(entry.id); }} />
+                          <button onClick={() => handleAddChildGroup(entry.id)} disabled={!childGroupName.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
+                          <button onClick={() => setAddingChildGroupTo(null)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setAddingChildGroupTo(entry.id); setChildGroupName(''); }} className="text-xs text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1">
+                          <span>+</span> Add Child Group
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
