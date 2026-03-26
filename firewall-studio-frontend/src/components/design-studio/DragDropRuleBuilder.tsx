@@ -152,7 +152,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
     const seen = new Set<string>();
     const unique: { code: string; name: string }[] = [];
     for (const dc of all) {
-      const key = dc.dc_id || dc.code;
+      const key = dc.code;
       if (!seen.has(key)) { seen.add(key); unique.push({ code: key, name: dc.name }); }
     }
     return unique.length > 0 ? unique : FALLBACK_DATACENTERS;

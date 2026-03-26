@@ -757,7 +757,7 @@ export default function FirewallManagementPage() {
 
   /** Parse expanded text into structured lines with type detection for rendering.
    * Returns objects with { text, indent, type } for proper GRP/IP/RNG badge rendering. */
-  const parseExpandedTree = (text: string): { text: string; indent: number; type: 'group' | 'ip' | 'subnet' }[] => {
+  const parseExpandedTree = (text: string): { text: string; indent: number; type: 'group' | 'ip' | 'subnet' | 'range' }[] => {
     if (!text) return [];
     return text.split('\n').filter(l => l.trim()).map(line => {
       const cleaned = line.replace(/\t/g, '  ');
@@ -982,9 +982,9 @@ export default function FirewallManagementPage() {
     { key: '_actions', header: 'Actions', width: '160px', sortable: false,
       render: (_, row) => {
         const migStatus = row.rule_migration_status || 'Yet to Migrate';
-        const isMigrationDeployed = migStatus === 'Migration Deployed';
+        const isMigrationDeployed = migStatus === 'Migrated';
         // In FM: Modify allowed only if NOT yet migrated (still in legacy)
-        // Once Migration Deployed, rule is managed in Studio
+        // Once migrated, rule is managed in Studio
         const canModify = !isMigrationDeployed && row.migration_status !== 'Completed';
         return (
           <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>
