@@ -463,7 +463,7 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
 
-  const handleNgdcAddComponent = async (appId: string) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+  const _handleNgdcAddComponent = async (appId: string) => {
     setNgdcSaving(true);
     try {
       await api.createAppDCMapping({ app_id: appId, ...ngdcComponentForm, status: 'Active' });
@@ -475,13 +475,17 @@ export default function SettingsPage() {
     setNgdcSaving(false);
   };
 
-  const handleNgdcDeleteComponent = async (mappingId: string) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+  void _handleNgdcAddComponent;
+
+  const _handleNgdcDeleteComponent = async (mappingId: string) => {
     try {
       await api.deleteAppDCMapping(mappingId);
       loadNgdcApps();
       showNotification('Component deleted', 'success');
     } catch { showNotification('Failed to delete', 'error'); }
   };
+
+  void _handleNgdcDeleteComponent;
 
   const loadUserDataSummary = useCallback(async () => {
     try {

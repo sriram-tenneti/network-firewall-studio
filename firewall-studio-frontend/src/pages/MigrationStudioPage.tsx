@@ -490,7 +490,7 @@ export function MigrationStudioPage() {
       key: '_actions', header: 'Actions', sortable: false, width: '160px',
       render: (_, row) => {
         const migStatus = row.rule_migration_status || 'Yet to Migrate';
-        const isMigrationDeployed = migStatus === 'Migration Deployed';
+        const isMigrationDeployed = migStatus === 'Migrated';
         // In Migration: Migrate allowed if not yet migrated; Modify allowed if migrated
         const canMigrate = !isMigrationDeployed && (row.migration_status === 'Not Started' || row.migration_status === 'In Progress');
         const canModify = isMigrationDeployed || row.migration_status === 'Completed' || row.migration_status === 'Mapped';
@@ -947,7 +947,7 @@ export function MigrationStudioPage() {
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {filteredNHs.map(nh => <span key={nh.nh_id} className="px-1 py-0.5 text-[9px] bg-blue-100 text-blue-700 rounded">{nh.nh_id}</span>)}
                                 {filteredSZs.map(sz => <span key={sz.code} className="px-1 py-0.5 text-[9px] bg-indigo-100 text-indigo-700 rounded">{sz.code}</span>)}
-                                {filteredDCs.map(dc => <span key={dc.dc_id} className="px-1 py-0.5 text-[9px] bg-purple-100 text-purple-700 rounded">{dc.dc_id}</span>)}
+                                {filteredDCs.map(dc => <span key={dc.code} className="px-1 py-0.5 text-[9px] bg-purple-100 text-purple-700 rounded">{dc.code}</span>)}
                               </div>
                             </div>
                           )}

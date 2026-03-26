@@ -131,7 +131,7 @@ export function DesignStudioPage() {
     }
   };
 
-  const handleSubmitChange = async (ruleId: string) => {
+  const _handleSubmitChange = async (ruleId: string) => {
     try {
       // Placeholder: In production this calls ServiceNow API to create CHG
       const placeholderCHG = `CHG${String(Date.now()).slice(-7)}`;
@@ -141,6 +141,7 @@ export function DesignStudioPage() {
       showNotification('Failed to submit change request', 'error');
     }
   };
+  void _handleSubmitChange;
 
 
 
@@ -188,7 +189,7 @@ export function DesignStudioPage() {
         const st = row.status;
         const canEdit = st === 'Draft';
         const canSubmit = st === 'Draft';
-        const canModify = (st === 'Deployed' || st === 'Certified') && st !== 'Deleted';
+        const canModify = st === 'Deployed' || st === 'Certified';
         const canCompile = st === 'Deployed' || st === 'Certified' || st === 'Approved';
         const canCertify = st === 'Deployed';
         return (
