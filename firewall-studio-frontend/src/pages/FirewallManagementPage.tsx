@@ -331,9 +331,19 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
         // Deeper than first-level members → belongs to sub-group
         if (!currentSubGroup.children) currentSubGroup.children = [];
         currentSubGroup.children.push({ type: mType, value });
+      } else if (mType === 'group') {
+        // Flat or same-indent: this is a sub-group entry (detected by name pattern).
+        // Collect subsequent non-group entries as its children.
+        const subGroupEntry: GroupMemberEntry = { type: 'group', value, children: [] };
+        currentSubGroup = subGroupEntry;
+        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+        currentGroup.groupMembers.push(subGroupEntry);
+      } else if (currentSubGroup !== null) {
+        // Non-group entry following a sub-group at same indent → child of that sub-group
+        if (!currentSubGroup.children) currentSubGroup.children = [];
+        currentSubGroup.children.push({ type: mType, value });
       } else {
-        // Direct member of the current group
-        currentSubGroup = null;
+        // Direct member of the current group (no active sub-group)
         if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
         currentGroup.groupMembers.push({ type: mType, value });
       }
@@ -656,9 +666,9 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                           {addingMemberToSubGroup === `${entry.id}:${mi}` ? (
                             <div className="flex gap-1.5 items-center mt-1 bg-white border border-gray-200 rounded p-1.5">
                               <select value={subMemberType} onChange={e => setSubMemberType(e.target.value)} className="px-1 py-0.5 text-[10px] border border-gray-300 rounded">
-                                <option value="ip">IP</option>
-                                <option value="subnet">Subnet</option>
-                                <option value="range">Range</option>
+                                <option value="ip">IP (svr-)</option>
+                                <option value="subnet">Subnet (net-)</option>
+                                <option value="range">Range (rng-)</option>
                               </select>
                               <input type="text" value={subMemberValue} onChange={e => setSubMemberValue(e.target.value)} placeholder="10.0.1.5" className="flex-1 px-1.5 py-0.5 text-[10px] font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddSubGroupMember(entry.id, mi); }} />
                               <button onClick={() => handleAddSubGroupMember(entry.id, mi)} disabled={!subMemberValue.trim()} className="px-1.5 py-0.5 text-[10px] font-medium text-white bg-teal-600 rounded hover:bg-teal-700 disabled:bg-gray-300">Add</button>
