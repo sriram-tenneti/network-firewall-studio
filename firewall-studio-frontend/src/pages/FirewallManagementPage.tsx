@@ -6,6 +6,7 @@ import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled } from '@/lib/api';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
@@ -759,6 +760,12 @@ export default function FirewallManagementPage() {
           {row.is_standard ? 'Y' : 'N'}
         </span>
       ),
+    },
+    { key: 'rule_status' as keyof LegacyRule, header: 'Rule Status', sortable: true, width: '100px',
+      render: (_, row) => <StatusBadge status={row.rule_status || 'Deployed'} />,
+    },
+    { key: 'rule_migration_status' as keyof LegacyRule, header: 'Migration', sortable: true, width: '110px',
+      render: (_, row) => <StatusBadge status={row.rule_migration_status || 'Not Migrated'} />,
     },
     { key: '_actions', header: 'Actions', width: '140px', sortable: false,
       render: (_, row) => {

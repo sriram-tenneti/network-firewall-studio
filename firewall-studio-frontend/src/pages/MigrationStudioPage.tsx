@@ -441,8 +441,16 @@ export function MigrationStudioPage() {
       render: (_, row) => <span className="text-xs">{row.rule_service || 'N/A'}</span>,
     },
     {
-      key: 'migration_status', header: 'Status', sortable: true, width: '100px',
+      key: 'migration_status', header: 'Mig Status', sortable: true, width: '100px',
       render: (_, row) => <StatusBadge status={row.migration_status} />,
+    },
+    {
+      key: 'rule_status' as keyof LegacyRule, header: 'Rule Status', sortable: true, width: '100px',
+      render: (_, row) => <StatusBadge status={row.rule_status || 'Deployed'} />,
+    },
+    {
+      key: 'rule_migration_status' as keyof LegacyRule, header: 'Migration', sortable: true, width: '100px',
+      render: (_, row) => <StatusBadge status={row.rule_migration_status || 'Not Migrated'} />,
     },
     {
       key: '_actions', header: 'Actions', sortable: false, width: '130px',

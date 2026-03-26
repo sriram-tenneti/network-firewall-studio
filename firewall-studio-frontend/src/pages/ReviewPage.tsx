@@ -6,7 +6,7 @@ import { Notification } from '@/components/shared/Notification';
 import { ApprovalModal } from '@/components/review/ApprovalModal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification } from '@/lib/api';
+import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification, transitionRuleStatus } from '@/lib/api';
 import type { ReviewRequest, RuleModification } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -41,6 +41,7 @@ export default function ReviewPage(props: { context?: string }) {
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEnv, setSelectedEnv] = useState<string>('');
+  const [selectedModule, setSelectedModule] = useState<string>('');
   const [activeTab, setActiveTab] = useState('Pending');
   const approvalModal = useModal<ReviewRequest>();
   const { notification, showNotification } = useNotification();
@@ -68,6 +69,10 @@ export default function ReviewPage(props: { context?: string }) {
 
   const envFilteredReviews = reviews.filter(r => {
     if (selectedEnv && r.rule_summary?.environment !== selectedEnv) return false;
+    if (selectedModule) {
+      const mod = r.module || (r as unknown as Record<string, string>).module || '';
+      if (mod && mod !== selectedModule) return false;
+    }
     return true;
   });
 
@@ -92,6 +97,14 @@ export default function ReviewPage(props: { context?: string }) {
         showNotification('Rule modification approved successfully', 'success');
       } else {
         await approveReview(reviewId, notes);
+        // Also transition rule lifecycle status when approved
+        const review = reviews.find(r => r.id === reviewId);
+        if (review?.rule_id) {
+          try {
+            const mod = review.module || 'studio';
+            await transitionRuleStatus(review.rule_id, 'Approved', mod, 'reviewer');
+          } catch { /* lifecycle transition may fail for legacy rules - that's OK */ }
+        }
         showNotification('Review approved successfully', 'success');
       }
       loadReviews();
@@ -227,6 +240,13 @@ export default function ReviewPage(props: { context?: string }) {
           <p className="text-sm text-gray-500 mt-1">Review migration and firewall rule requests. Export new/modify/remove requests from the table below.</p>
         </div>
         <div className="flex items-center gap-3">
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedModule} onChange={e => setSelectedModule(e.target.value)}>
+            <option value="">All Modules</option>
+            <option value="fm">Firewall Management</option>
+            <option value="studio">Firewall Studio</option>
+            <option value="migration">Migration Studio</option>
+          </select>
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
             <option value="">All Environments</option>

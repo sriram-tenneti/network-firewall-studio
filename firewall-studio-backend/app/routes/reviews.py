@@ -6,8 +6,14 @@ router = APIRouter(prefix="/api/reviews", tags=["Reviews"])
 
 
 @router.get("")
-async def list_reviews(status: Optional[str] = Query(None)):
-    return await get_reviews(status)
+async def list_reviews(
+    status: Optional[str] = Query(None),
+    module: Optional[str] = Query(None),
+):
+    reviews = await get_reviews(status)
+    if module:
+        reviews = [r for r in reviews if r.get("module", "studio") == module]
+    return reviews
 
 
 @router.post("")
