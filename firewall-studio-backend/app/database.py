@@ -597,6 +597,7 @@ async def seed_database() -> None:
     _save("app_dc_mappings", deepcopy(_SD_APP_DC_MAPPINGS))
     _save("reviews", deepcopy(SEED_REVIEWS))
     _save("rule_modifications", [])
+    _save("lifecycle_events", [])
 
 
 # ============================================================
