@@ -159,7 +159,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         ? await importNGDCMappingsExcel(file)
         : isJSON
         ? await importLegacyRulesJSON(file)
-        : await importLegacyRulesExcel(file);
+        : await importLegacyRulesExcel(file, selectedEnv || undefined);
       setResult(res);
       if (isNGDCMappings) loadMappings();
       // After legacy import, load imported apps for mapping and load rules

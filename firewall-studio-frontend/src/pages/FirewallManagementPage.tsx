@@ -118,22 +118,32 @@ const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
 function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'group' {
   const v = value.trim();
   const vl = v.toLowerCase();
-  // grp- or g- prefix = GROUP
-  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
+  // grp- or g- or ggrp- prefix = GROUP
+  if (vl.startsWith('grp-') || vl.startsWith('g-') || vl.startsWith('ggrp-')) return 'group';
   // Check if it matches a known group name from the backend
   if (allGroupNames && allGroupNames.has(v)) return 'group';
+  // Common enterprise group naming patterns (contain group-like keywords)
+  // e.g. dCMA-Protected-Networks_global, protected-al-oxdc-fcs-*, gapingr-*, dcms*
+  if (vl.includes('-networks') || vl.includes('_networks') || vl.includes('-global')
+      || vl.includes('_global') || vl.endsWith('-svrs') || vl.endsWith('-servers')
+      || vl.startsWith('gapingr-') || vl.startsWith('dcms') || vl.startsWith('dcma-')
+      || vl.startsWith('protected-')) return 'group';
   // rng- prefix = SUBNET (range of IPs/subnets)
   if (vl.startsWith('rng-')) return 'subnet';
   // sub- prefix = SUBNET
   if (vl.startsWith('sub-')) return 'subnet';
-  // svr- prefix = IP (server)
-  if (vl.startsWith('svr-')) return 'ip';
+  // svr- or gsvr- prefix = IP (server)
+  if (vl.startsWith('svr-') || vl.startsWith('gsvr-')) return 'ip';
   // Check CIDR notation (subnet)
   if (CIDR_REGEX.test(v)) return 'subnet';
   // Check plain IP
   if (IP_REGEX.test(v)) return 'ip';
   // If it contains '/' it's likely a subnet
   if (v.includes('/')) return 'subnet';
+  // net- prefix = subnet/network
+  if (vl.startsWith('net-')) return 'subnet';
+  // rmg- or rng- = range
+  if (vl.startsWith('rmg-')) return 'subnet';
   // Default: treat as IP
   return 'ip';
 }
@@ -580,9 +590,16 @@ export default function FirewallManagementPage() {
     return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
   });
 
-  const parseExpandedTree = (text: string): string[] => {
+  /** Parse expanded text into structured lines with type detection for rendering.
+   * Returns objects with { text, indent, type } for proper GRP/IP/RNG badge rendering. */
+  const parseExpandedTree = (text: string): { text: string; indent: number; type: 'group' | 'ip' | 'subnet' }[] => {
     if (!text) return [];
-    return text.split('\n').map(line => line.replace(/\t/g, '  '));
+    return text.split('\n').filter(l => l.trim()).map(line => {
+      const cleaned = line.replace(/\t/g, '  ');
+      const indent = cleaned.length - cleaned.trimStart().length;
+      const v = cleaned.trim();
+      return { text: v, indent, type: detectEntryType(v) };
+    });
   };
 
   const openModifyModal = async (rule: LegacyRule) => {
@@ -933,14 +950,12 @@ export default function FirewallManagementPage() {
                 <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_source_expanded).map((line, i) => {
-                  const indent = line.length - line.trimStart().length;
-                  return (
-                    <div key={i} className="font-mono text-xs text-green-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
-                    </div>
-                  );
-                })}
+                {parseExpandedTree(detailModal.data.rule_source_expanded).map((item, i) => (
+                  <div key={i} className="font-mono text-xs text-green-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 8}px` }}>
+                    {item.type === 'group' && <span className="text-[9px] bg-green-700 text-white px-1 rounded">GRP</span>}
+                    {item.text}
+                  </div>
+                ))}
               </div>
             </div>
             <div className="border rounded-lg overflow-hidden">
@@ -948,14 +963,12 @@ export default function FirewallManagementPage() {
                 <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_destination_expanded).map((line, i) => {
-                  const indent = line.length - line.trimStart().length;
-                  return (
-                    <div key={i} className="font-mono text-xs text-purple-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
-                    </div>
-                  );
-                })}
+                {parseExpandedTree(detailModal.data.rule_destination_expanded).map((item, i) => (
+                  <div key={i} className="font-mono text-xs text-purple-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 8}px` }}>
+                    {item.type === 'group' && <span className="text-[9px] bg-purple-700 text-white px-1 rounded">GRP</span>}
+                    {item.text}
+                  </div>
+                ))}
               </div>
             </div>
             <div className="border rounded-lg overflow-hidden">

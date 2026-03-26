@@ -71,7 +71,9 @@ export default function ReviewPage(props: { context?: string }) {
     if (selectedEnv && r.rule_summary?.environment !== selectedEnv) return false;
     if (selectedModule) {
       const mod = r.module || (r as unknown as Record<string, string>).module || '';
-      if (mod && mod !== selectedModule) return false;
+      // If module filter is set, only show reviews that match that module.
+      // Reviews without a module field are shown under 'All Modules' only.
+      if (mod !== selectedModule) return false;
     }
     return true;
   });

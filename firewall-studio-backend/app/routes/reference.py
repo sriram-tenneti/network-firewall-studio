@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.database import (
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
@@ -653,8 +653,9 @@ async def delete_legacy_rule_endpoint(rule_id: str):
 
 
 @router.post("/legacy-rules/import")
-async def import_legacy_rules_excel(file: UploadFile = File(...)):
-    """Import legacy rules from Excel (.xlsx/.xls) or CSV file with deduplication."""
+async def import_legacy_rules_excel(file: UploadFile = File(...), environment: str = Form(default="")):
+    """Import legacy rules from Excel (.xlsx/.xls) or CSV file with deduplication.
+    Accepts optional 'environment' form field from the dropdown selection."""
     fname = file.filename or ""
     if not fname.endswith((".xlsx", ".xls", ".csv")):
         raise HTTPException(status_code=400, detail="Supported formats: .xlsx, .xls, .csv")
@@ -689,6 +690,9 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
                 rule[col_map[h]] = str(val) if val is not None else ""
         rule["is_standard"] = False
         rule["migration_status"] = "Not Started"
+        # Set environment from dropdown selection (passed as form field)
+        if environment:
+            rule["environment"] = environment
         parsed_rules.append(rule)
     result = await import_legacy_rules(parsed_rules)
     return result

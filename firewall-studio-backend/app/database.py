@@ -123,12 +123,36 @@ def _now() -> str:
     return datetime.utcnow().isoformat()
 
 
+def _shorten_ip_range(range_str: str) -> str:
+    """Shorten an IP range to compact form.
+    e.g. '10.124.132.4-10.124.132.9' -> '10.124.132.4-9'
+    If IPs share the first N octets, only the differing octets of the end IP are kept.
+    """
+    import re as _re
+    m = _re.match(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s*-\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$', range_str)
+    if not m:
+        return range_str
+    start_parts = m.group(1).split('.')
+    end_parts = m.group(2).split('.')
+    common_count = 0
+    for i in range(4):
+        if start_parts[i] == end_parts[i]:
+            common_count += 1
+        else:
+            break
+    if common_count == 0:
+        return range_str
+    suffix = '.'.join(end_parts[common_count:])
+    return f"{m.group(1)}-{suffix}"
+
+
 def _auto_prefix(value: str, entry_type: str = "ip") -> str:
     """Auto-prefix a value based on entry type for NGDC naming standards.
     - ip -> svr-
     - group -> grp- (normalizes legacy g- to grp-)
     - cidr/range/subnet -> rng-
     If already prefixed, returns as-is (except g- which is normalized to grp-).
+    Range values use short format: rng-10.124.132.4-9 instead of rng-10.124.132.4-10.124.132.9
     """
     v = value.strip()
     if not v:
@@ -145,6 +169,10 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
     if entry_type in ("group",):
         return f"grp-{v}"
     if entry_type in ("cidr", "subnet", "range"):
+        # Use short range format for IP ranges
+        import re as _re
+        if _re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', v):
+            v = _shorten_ip_range(v)
         return f"rng-{v}"
     return f"svr-{v}"
 
