@@ -6,6 +6,7 @@ import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled } from '@/lib/api';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
@@ -95,11 +96,17 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
   return delta;
 }
 
+interface GroupMemberEntry {
+  type: string;
+  value: string;
+  children?: GroupMemberEntry[];  // nested sub-group members
+}
+
 interface ResourceEntry {
   id: string;
   type: 'ip' | 'subnet' | 'range' | 'group';
   value: string;
-  groupMembers?: { type: string; value: string }[];
+  groupMembers?: GroupMemberEntry[];
   isNew?: boolean;
   isModified?: boolean;
 }
@@ -135,6 +142,11 @@ function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'su
   if (isLegacyGroupName(v)) return 'group';
   // Check if it matches a known group name from the backend
   if (allGroupNames && allGroupNames.has(v)) return 'group';
+  // Common enterprise group naming patterns (contain group-like keywords)
+  if (vl.includes('-networks') || vl.includes('_networks') || vl.includes('-global')
+      || vl.includes('_global') || vl.endsWith('-svrs') || vl.endsWith('-servers')
+      || vl.startsWith('gapingr-') || vl.startsWith('dcms') || vl.startsWith('dcma-')
+      || vl.startsWith('protected-')) return 'group';
   // grp- prefix = GROUP
   if (vl.startsWith('grp-')) return 'group';
   // rng- prefix = RANGE (IP ranges xx.xx.xx.xx-xy)
@@ -155,6 +167,10 @@ function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'su
   if (IP_REGEX.test(v)) return 'ip';
   // If it contains '/' it's likely a subnet
   if (v.includes('/')) return 'subnet';
+  // net- prefix = subnet/network
+  if (vl.startsWith('net-')) return 'subnet';
+  // rmg- or rng- = range
+  if (vl.startsWith('rmg-')) return 'subnet';
   // Default: treat as IP
   return 'ip';
 }
@@ -230,7 +246,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
     const entries: ResourceEntry[] = [];
     let currentGroup: ResourceEntry | null = null;
-    let currentSubGroup: { type: string; value: string }[] | null = null;
+    let currentSubGroup: GroupMemberEntry | null = null;
     let groupIndent = 0;
     let memberIndent = 0;
 
@@ -307,13 +323,14 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
       if (!isFlatExpansion && indent >= memberIndent && hasChildren(i)) {
         // This member has deeper children → nested sub-group
-        currentSubGroup = [];
+        const subGroupEntry: GroupMemberEntry = { type: 'group', value, children: [] };
+        currentSubGroup = subGroupEntry;
         if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-        currentGroup.groupMembers.push({ type: 'group', value });
+        currentGroup.groupMembers.push(subGroupEntry);
       } else if (!isFlatExpansion && currentSubGroup !== null && indent > memberIndent) {
         // Deeper than first-level members → belongs to sub-group
-        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-        currentGroup.groupMembers.push({ type: mType, value });
+        if (!currentSubGroup.children) currentSubGroup.children = [];
+        currentSubGroup.children.push({ type: mType, value });
       } else {
         // Direct member of the current group
         currentSubGroup = null;
@@ -513,7 +530,14 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
   };
 
   const totalIPs = entries.reduce((sum, e) => {
-    if (e.type === 'group') return sum + (e.groupMembers?.length || 0);
+    if (e.type === 'group') {
+      let count = 0;
+      for (const m of (e.groupMembers || [])) {
+        if (m.type === 'group' && m.children) count += m.children.length;
+        else count += 1;
+      }
+      return sum + count;
+    }
     return sum + 1;
   }, 0);
 
@@ -561,10 +585,24 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                 <div className="ml-6 mt-1 mb-2 border-l-2 border-emerald-200 pl-3 space-y-1">
                   {(entry.groupMembers || []).length === 0 && <p className="text-[10px] text-amber-600 italic py-1">No IPs/subnets configured for this group. Add members below.</p>}
                   {(entry.groupMembers || []).map((m, mi) => (
-                    <div key={mi} className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded text-xs">
-                      <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(m.type)}`}>{memberTypeLabel(m.type)}</span>
-                      <span className="font-mono flex-1 text-gray-800">{m.value}</span>
-                      <button onClick={() => handleRemoveGroupMember(entry.id, mi)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
+                    <div key={mi}>
+                      <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded text-xs">
+                        <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(m.type)}`}>{memberTypeLabel(m.type)}</span>
+                        <span className="font-mono flex-1 text-gray-800">{m.value}</span>
+                        {m.type === 'group' && m.children && <span className="text-[10px] text-gray-400">{m.children.length} member{m.children.length !== 1 ? 's' : ''}</span>}
+                        <button onClick={() => handleRemoveGroupMember(entry.id, mi)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
+                      </div>
+                      {/* Render nested sub-group children */}
+                      {m.type === 'group' && m.children && m.children.length > 0 && (
+                        <div className="ml-5 mt-0.5 mb-1 border-l-2 border-teal-200 pl-3 space-y-0.5">
+                          {m.children.map((cm, ci) => (
+                            <div key={ci} className="flex items-center gap-2 px-2 py-1 bg-gray-100 rounded text-xs">
+                              <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(cm.type)}`}>{memberTypeLabel(cm.type)}</span>
+                              <span className="font-mono flex-1 text-gray-700">{cm.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                   {/* Always show add-member form for groups */}
@@ -715,11 +753,18 @@ export default function FirewallManagementPage() {
   const appOptions = Array.from(new Set(rules.map(r => `${r.app_distributed_id || r.app_id}|${r.app_id}|${r.app_name}`))).map(key => {
     const [distId, appId, appName] = key.split('|');
     return { value: distId, label: `${distId} - ${appName || appId}` };
-  });
+  }).sort((a, b) => a.label.localeCompare(b.label));
 
-  const parseExpandedTree = (text: string): string[] => {
+  /** Parse expanded text into structured lines with type detection for rendering.
+   * Returns objects with { text, indent, type } for proper GRP/IP/RNG badge rendering. */
+  const parseExpandedTree = (text: string): { text: string; indent: number; type: 'group' | 'ip' | 'subnet' }[] => {
     if (!text) return [];
-    return text.split('\n').map(line => line.replace(/\t/g, '  '));
+    return text.split('\n').filter(l => l.trim()).map(line => {
+      const cleaned = line.replace(/\t/g, '  ');
+      const indent = cleaned.length - cleaned.trimStart().length;
+      const v = cleaned.trim();
+      return { text: v, indent, type: detectEntryType(v) };
+    });
   };
 
   const openModifyModal = async (rule: LegacyRule) => {
@@ -768,14 +813,22 @@ export default function FirewallManagementPage() {
     setModifyState({ ...modifyState, [field]: value });
   };
 
-  /** Build expanded text from resource entries (group → list IPs/subnets) */
+  /** Build expanded text from resource entries using plain indentation format.
+   * This must match the original expanded text format so delta comparisons are consistent
+   * between the Modify modal preview and the Review page. */
   const buildExpandedText = (entries: ResourceEntry[]): string => {
     const lines: string[] = [];
     for (const e of entries) {
       if (e.type === 'group') {
-        lines.push(`[Group] ${e.value}`);
+        lines.push(e.value);
         for (const m of (e.groupMembers || [])) {
-          lines.push(`  ${memberTypeLabel(m.type)}: ${m.value}`);
+          lines.push(`  ${m.value}`);
+          // Emit nested sub-group children at deeper indent
+          if (m.type === 'group' && m.children) {
+            for (const cm of m.children) {
+              lines.push(`    ${cm.value}`);
+            }
+          }
         }
       } else {
         lines.push(e.value);
@@ -834,8 +887,13 @@ export default function FirewallManagementPage() {
   // Multi-app export with selection
   const handleMultiAppExport = () => {
     if (selectedExportApps.size === 0) { showNotification('Select at least one app to export', 'error'); return; }
-    const exportRules = rules.filter(r => selectedExportApps.has(String(r.app_id)));
-    exportRulesToCSV(exportRules, Array.from(selectedExportApps).join('-'));
+    const exportRules = envFilteredRules.filter(r => selectedExportApps.has(String(r.app_id)) || selectedExportApps.has(r.app_distributed_id || ''));
+    if (exportRules.length === 0) {
+      // Fallback: if no match by app_id/dist_id, export all env-filtered rules for selected apps
+      exportRulesToCSV(envFilteredRules, Array.from(selectedExportApps).join('-'));
+    } else {
+      exportRulesToCSV(exportRules, Array.from(selectedExportApps).join('-'));
+    }
     setShowExportModal(false);
   };
 
@@ -915,17 +973,27 @@ export default function FirewallManagementPage() {
         </span>
       ),
     },
-    { key: '_actions', header: 'Actions', width: '140px', sortable: false,
+    { key: 'rule_status' as keyof LegacyRule, header: 'Rule Status', sortable: true, width: '100px',
+      render: (_, row) => <StatusBadge status={row.rule_status || 'Deployed'} />,
+    },
+    { key: 'rule_migration_status' as keyof LegacyRule, header: 'Migration', sortable: true, width: '110px',
+      render: (_, row) => <StatusBadge status={row.rule_migration_status || 'Yet to Migrate'} />,
+    },
+    { key: '_actions', header: 'Actions', width: '160px', sortable: false,
       render: (_, row) => {
-        const isNGDC = row.migration_status === 'Completed' || (row as unknown as Record<string, unknown>).studio_imported === true;
+        const migStatus = row.rule_migration_status || 'Yet to Migrate';
+        const isMigrationDeployed = migStatus === 'Migration Deployed';
+        // In FM: Modify allowed only if NOT yet migrated (still in legacy)
+        // Once Migration Deployed, rule is managed in Studio
+        const canModify = !isMigrationDeployed && row.migration_status !== 'Completed';
         return (
           <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>
             <button onClick={() => detailModal.open(row)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
-            {isNGDC ? (
+            {isMigrationDeployed ? (
               <span className="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded" title="This rule is managed in Firewall Studio">Studio</span>
-            ) : (
-              <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">modify</button>
-            )}
+            ) : canModify ? (
+              <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">Modify</button>
+            ) : null}
           </div>
         );
       },
@@ -1073,22 +1141,12 @@ export default function FirewallManagementPage() {
                 <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {(() => {
-                  const allLines = parseExpandedTree(detailModal.data!.rule_source_expanded);
-                  // Build indent array for look-ahead group detection
-                  const lineData = allLines.map(l => ({ indent: l.length - l.trimStart().length, text: l.trim() }));
-                  return lineData.map((ld, i) => {
-                    const hasChild = i + 1 < lineData.length && lineData[i + 1].indent > ld.indent;
-                    const isGroup = hasChild && ld.indent === 0;
-                    const isMember = ld.indent > 0;
-                    return (
-                      <div key={i} className={`font-mono text-xs ${isGroup ? 'text-emerald-400 font-semibold' : isMember ? 'text-green-300' : 'text-green-400'}`} style={{ paddingLeft: `${ld.indent * 8}px` }}>
-                        {isGroup && <span className="text-[9px] bg-emerald-900 text-emerald-300 px-1 py-0.5 rounded mr-1">GRP</span>}
-                        {ld.text}
-                      </div>
-                    );
-                  });
-                })()}
+                {parseExpandedTree(detailModal.data.rule_source_expanded).map((item, i) => (
+                  <div key={i} className="font-mono text-xs text-green-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 8}px` }}>
+                    {item.type === 'group' && <span className="text-[9px] bg-green-700 text-white px-1 rounded">GRP</span>}
+                    {item.text}
+                  </div>
+                ))}
               </div>
             </div>
             {/* Destination Expanded — structure-based group detection */}
@@ -1097,21 +1155,12 @@ export default function FirewallManagementPage() {
                 <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {(() => {
-                  const allLines = parseExpandedTree(detailModal.data!.rule_destination_expanded);
-                  const lineData = allLines.map(l => ({ indent: l.length - l.trimStart().length, text: l.trim() }));
-                  return lineData.map((ld, i) => {
-                    const hasChild = i + 1 < lineData.length && lineData[i + 1].indent > ld.indent;
-                    const isGroup = hasChild && ld.indent === 0;
-                    const isMember = ld.indent > 0;
-                    return (
-                      <div key={i} className={`font-mono text-xs ${isGroup ? 'text-fuchsia-400 font-semibold' : isMember ? 'text-purple-300' : 'text-purple-400'}`} style={{ paddingLeft: `${ld.indent * 8}px` }}>
-                        {isGroup && <span className="text-[9px] bg-fuchsia-900 text-fuchsia-300 px-1 py-0.5 rounded mr-1">GRP</span>}
-                        {ld.text}
-                      </div>
-                    );
-                  });
-                })()}
+                {parseExpandedTree(detailModal.data.rule_destination_expanded).map((item, i) => (
+                  <div key={i} className="font-mono text-xs text-purple-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 8}px` }}>
+                    {item.type === 'group' && <span className="text-[9px] bg-purple-700 text-white px-1 rounded">GRP</span>}
+                    {item.text}
+                  </div>
+                ))}
               </div>
             </div>
             <div className="border rounded-lg overflow-hidden">

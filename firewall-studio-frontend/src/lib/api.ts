@@ -512,6 +512,16 @@ export const approveReview = (reviewId: string, notes: string = '') =>
 export const rejectReview = (reviewId: string, notes: string) =>
   fetchJSON<ReviewRequest>(`/api/reviews/${reviewId}/reject`, { method: 'POST', body: JSON.stringify({ notes }) });
 
+// Rule Lifecycle
+export const transitionRuleStatus = (ruleId: string, newStatus: string, module: string = 'studio', reviewer: string = 'system') =>
+  fetchJSON<FirewallRule>(`/api/rules/${ruleId}/lifecycle-transition`, {
+    method: 'POST', body: JSON.stringify({ new_status: newStatus, module, reviewer })
+  });
+export const getValidTransitions = (ruleId: string) =>
+  fetchJSON<{ rule_id: string; current_status: string; valid_transitions: string[] }>(`/api/rules/${ruleId}/valid-transitions`);
+export const getLifecycleSummary = () =>
+  fetchJSON<Record<string, unknown>>('/api/rules/lifecycle/summary');
+
 // NGDC Organization Mappings
 export const getNGDCMappings = () => fetchJSON<Record<string, unknown>[]>('/api/reference/ngdc-mappings');
 export const createNGDCMapping = (data: Record<string, unknown>) =>

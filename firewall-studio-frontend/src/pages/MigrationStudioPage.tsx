@@ -15,7 +15,7 @@ import {
   getFilteredNhSzDc,
 } from '@/lib/api';
 import { LDFFlowVisualization, type EgressIngressResult } from '@/components/design-studio/LDFFlowVisualization';
-import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
+import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -120,7 +120,7 @@ export function MigrationStudioPage() {
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder' | 'group-mappings'>('table');
   const [allIPMappings, setAllIPMappings] = useState<Record<string, unknown>[]>([]);
-  const [groupMappingsFilter, setGroupMappingsFilter] = useState('');
+  const [groupMappingsFilter] = useState('');
   const [loadingMappings, setLoadingMappings] = useState(false);
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
@@ -185,7 +185,7 @@ export function MigrationStudioPage() {
         getApplications(),
       ]);
       setLegacyRules(rulesData);
-      setApplications(appsData);
+      void appsData;  // apps used for appOptions via legacyRules
     } catch {
       showNotification('Failed to load migration data', 'error');
     }
@@ -259,7 +259,7 @@ export function MigrationStudioPage() {
   const appOptions = applications.map(a => ({
     value: a.app_distributed_id || String(a.app_id),
     label: `${a.app_distributed_id || a.app_id} - ${a.name}`,
-  }));
+  })).sort((a, b) => a.label.localeCompare(b.label));
 
   const toggleSelection = (ruleId: string) => {
     setSelectedRuleIds(prev => {
@@ -457,21 +457,36 @@ export function MigrationStudioPage() {
       render: (_, row) => <span className="text-xs">{row.rule_service || 'N/A'}</span>,
     },
     {
-      key: 'migration_status', header: 'Status', sortable: true, width: '100px',
+      key: 'migration_status', header: 'Mig Status', sortable: true, width: '100px',
       render: (_, row) => <StatusBadge status={row.migration_status} />,
     },
     {
-      key: '_actions', header: 'Actions', sortable: false, width: '130px',
-      render: (_, row) => (
-        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-          <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
-          {row.migration_status === 'Not Started' || row.migration_status === 'In Progress' ? (
-            <button onClick={() => openMigratePopup(row)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Migrate</button>
-          ) : (
-            <button onClick={() => { setIsModifyMode(true); setOriginalRuleSnapshot({ source: row.rule_source, destination: row.rule_destination, source_zone: row.rule_source_zone, destination_zone: row.rule_destination_zone, service: row.rule_service, action: row.rule_action }); openMigratePopup(row); }} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">modify</button>
-          )}
-        </div>
-      ),
+      key: 'rule_status' as keyof LegacyRule, header: 'Rule Status', sortable: true, width: '100px',
+      render: (_, row) => <StatusBadge status={row.rule_status || 'Deployed'} />,
+    },
+    {
+      key: 'rule_migration_status' as keyof LegacyRule, header: 'Migration', sortable: true, width: '100px',
+      render: (_, row) => <StatusBadge status={row.rule_migration_status || 'Yet to Migrate'} />,
+    },
+    {
+      key: '_actions', header: 'Actions', sortable: false, width: '160px',
+      render: (_, row) => {
+        const migStatus = row.rule_migration_status || 'Yet to Migrate';
+        const isMigrationDeployed = migStatus === 'Migration Deployed';
+        // In Migration: Migrate allowed if not yet migrated; Modify allowed if migrated
+        const canMigrate = !isMigrationDeployed && (row.migration_status === 'Not Started' || row.migration_status === 'In Progress');
+        const canModify = isMigrationDeployed || row.migration_status === 'Completed' || row.migration_status === 'Mapped';
+        return (
+          <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+            <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
+            {canMigrate ? (
+              <button onClick={() => openMigratePopup(row)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Migrate</button>
+            ) : canModify ? (
+              <button onClick={() => { setIsModifyMode(true); setOriginalRuleSnapshot({ source: row.rule_source, destination: row.rule_destination, source_zone: row.rule_source_zone, destination_zone: row.rule_destination_zone, service: row.rule_service, action: row.rule_action }); openMigratePopup(row); }} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Modify</button>
+            ) : null}
+          </div>
+        );
+      },
     },
   ];
 
@@ -585,11 +600,6 @@ export function MigrationStudioPage() {
               <p className="text-xs text-gray-500 mt-0.5">Browse all group-level mappings. IPs are auto-recommended into groups. Filter by app to find relevant groups for migration.</p>
             </div>
             <div className="flex items-center gap-2">
-              <select value={groupMappingsFilter} onChange={e => setGroupMappingsFilter(e.target.value)}
-                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white">
-                <option value="">All Applications</option>
-                {applications.map(a => <option key={a.app_distributed_id || a.app_id} value={a.app_distributed_id || a.app_id}>{a.app_distributed_id || a.app_id} - {a.name}</option>)}
-              </select>
               <button onClick={() => loadIPMappings(groupMappingsFilter)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">Refresh</button>
               <label className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 cursor-pointer">
                 Import CSV

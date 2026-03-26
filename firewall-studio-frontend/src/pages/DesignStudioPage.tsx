@@ -183,33 +183,40 @@ export function DesignStudioPage() {
       render: (_, row) => <StatusBadge status={row.status} />,
     },
     {
-      key: '_actions', header: 'Actions', sortable: false, width: '220px',
-      render: (_, row) => (
-        <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
-          <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
-          {row.status === 'Draft' && (
-            <>
-              <button onClick={() => editModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
+      key: '_actions', header: 'Actions', sortable: false, width: '280px',
+      render: (_, row) => {
+        const st = row.status;
+        const canEdit = st === 'Draft';
+        const canSubmit = st === 'Draft';
+        const canModify = (st === 'Deployed' || st === 'Certified') && st !== 'Deleted';
+        const canCompile = st === 'Deployed' || st === 'Certified' || st === 'Approved';
+        const canCertify = st === 'Deployed';
+        return (
+          <div className="flex gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
+            <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
+            {canEdit && (
+              <>
+                <button onClick={() => editModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
+              </>
+            )}
+            {canSubmit && (
               <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
-            </>
-          )}
-          {(row.status !== 'Deleted') && (
-            <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100">modify</button>
-          )}
-          {row.status === 'Approved' && (
-            <button onClick={() => handleSubmitChange(row.rule_id)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Submit CHG</button>
-          )}
-          {(row.status === 'Approved' || row.status === 'Deployed') && (
-            <button onClick={() => handleCertify(row.rule_id)} className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded hover:bg-purple-100">Certify</button>
-          )}
-          {(row.status === 'Pending Review' || row.status === 'Approved' || row.status === 'Deployed' || row.status === 'Certified') && (
-            <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
-          )}
-          {row.status === 'Draft' && (
-            <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
-          )}
-        </div>
-      ),
+            )}
+            {canModify && (
+              <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100">Modify</button>
+            )}
+            {canCertify && (
+              <button onClick={() => handleCertify(row.rule_id)} className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded hover:bg-purple-100">Certify</button>
+            )}
+            {canCompile && (
+              <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
+            )}
+            {canEdit && (
+              <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 

@@ -1,6 +1,10 @@
 export type RuleStatus = 'Draft' | 'Pending Review' | 'Approved' | 'Rejected' | 'Deployed' | 'Certified' | 'Expired' | 'Deleted';
 export type PolicyResult = 'Permitted' | 'Blocked' | 'Exception Required' | 'Needs Review';
 export type MigrationStatus = 'Auto-Mapped' | 'Needs Review' | 'New Group' | 'Conflict' | 'Blocked' | 'Draft' | 'Policy Review';
+
+// Rule Lifecycle statuses (dual-status system)
+export type RuleLifecycleStatus = 'Submitted' | 'In Progress' | 'Approved' | 'Rejected' | 'Deployed';
+export type RuleMigrationStatus = 'Not Migrated' | 'Migrated';
 export type MappingStatus = 'Automapped' | 'Needs Review' | 'Blocked';
 export type SourceType = 'Single IP' | 'Subnet' | 'Range' | 'Group';
 
@@ -43,6 +47,8 @@ export interface FirewallRule {
   destination: DestinationConfig;
   policy_result: PolicyResult;
   status: RuleStatus;
+  rule_status?: RuleLifecycleStatus;
+  rule_migration_status?: RuleMigrationStatus;
   compliance?: RuleCompliance;
   expiry: string | null;
   owner: string;
@@ -263,6 +269,7 @@ export interface ReviewRequest {
   review_notes: string | null;
   modification_id?: string;
   delta?: RuleDelta;
+  module?: 'studio' | 'fm' | 'migration';
   rule_summary: {
     application: string;
     source: string;
@@ -407,6 +414,8 @@ export interface LegacyRule {
   rc: number;
   is_standard: boolean;
   migration_status: 'Not Started' | 'In Progress' | 'Mapped' | 'Needs Review' | 'Completed';
+  rule_status?: RuleLifecycleStatus;
+  rule_migration_status?: RuleMigrationStatus;
   migrated_at?: string;
 }
 

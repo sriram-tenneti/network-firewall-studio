@@ -15,6 +15,29 @@ export function cn(...inputs: ClassValue[]) {
  * If the value already has a recognized prefix (svr-, grp-, rng-, net-, sub-, g-),
  * it is returned as-is (sub- normalized to net-).
  */
+/**
+ * Shorten an IP range to compact form.
+ * e.g. "10.124.132.4-10.124.132.9" → "10.124.132.4-9"
+ * If IPs share the first 3 octets, only the last octet of the end IP is kept.
+ * If they share fewer octets, the differing octets of the end IP are kept.
+ */
+export function shortenIPRange(rangeStr: string): string {
+  const m = rangeStr.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s*-\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (!m) return rangeStr;
+  const startParts = m[1].split('.');
+  const endParts = m[2].split('.');
+  // Find how many leading octets match
+  let commonCount = 0;
+  for (let i = 0; i < 4; i++) {
+    if (startParts[i] === endParts[i]) commonCount++;
+    else break;
+  }
+  if (commonCount === 0) return rangeStr; // completely different — keep full
+  // Keep only the differing octets of the end IP
+  const suffix = endParts.slice(commonCount).join('.');
+  return `${m[1]}-${suffix}`;
+}
+
 export function autoPrefix(value: string, type: 'ip' | 'subnet' | 'cidr' | 'group' | 'range'): string {
   const v = value.trim();
   if (!v) return v;
@@ -35,9 +58,10 @@ export function autoPrefix(value: string, type: 'ip' | 'subnet' | 'cidr' | 'grou
     return `net-${v}`;
   }
   if (isIPRange) {
-    // IP range = range (rng- prefix)
+    // IP range = range (rng- prefix), use short format
     if (type === 'group') return `grp-${v}`;
-    return `rng-${v}`;
+    const shortened = shortenIPRange(v);
+    return `rng-${shortened}`;
   }
   if (isPlainIP) {
     // Plain IP = server (svr- prefix)

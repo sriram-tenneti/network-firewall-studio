@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.database import (
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
@@ -838,11 +838,12 @@ def _header_to_field(header: str) -> str:
 
 
 @router.post("/legacy-rules/import")
-async def import_legacy_rules_excel(file: UploadFile = File(...)):
+async def import_legacy_rules_excel(file: UploadFile = File(...), environment: str = Form(default="")):
     """Import legacy rules from Excel (.xlsx/.xls) or CSV file with deduplication.
     ALL columns from the spreadsheet are preserved as-is.  Known columns
     (App ID, Rule Source, etc.) are mapped to canonical internal names;
-    unknown columns are imported using a slugified version of the header."""
+    unknown columns are imported using a slugified version of the header.
+    Accepts optional 'environment' form field from the dropdown selection."""
     import logging
     logger = logging.getLogger("excel_import")
     fname = file.filename or ""
@@ -882,6 +883,9 @@ async def import_legacy_rules_excel(file: UploadFile = File(...)):
                 rule[fn] = str(val).strip() if val is not None else ""
         rule["is_standard"] = False
         rule.setdefault("migration_status", "Not Started")
+        # Set environment from dropdown selection (passed as form field)
+        if environment:
+            rule["environment"] = environment
         parsed_rules.append(rule)
     logger.info(f"Parsed {len(parsed_rules)} rules (skipped {skipped_empty} empty rows)")
     result = await import_legacy_rules(parsed_rules)
