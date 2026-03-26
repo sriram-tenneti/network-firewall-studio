@@ -37,9 +37,28 @@ from app.seed_data import (
     SEED_DC_VENDOR_MAP as _SD_DC_VENDOR,
     SEED_APP_DC_MAPPINGS as _SD_APP_DC_MAPPINGS,
     SEED_REVIEWS as _SD_REVIEWS,
+    SEED_LIFECYCLE_EVENTS as _SD_LIFECYCLE_EVENTS,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
 )
+
+# Lifecycle event recording — integrated into all workflow functions.
+# Uses lazy import to avoid circular dependency (lifecycle.py imports _load/_save from here).
+async def _record_lifecycle(rule_id: str, event_type: str, from_status: str | None = None,
+                            to_status: str | None = None, actor: str = "system",
+                            module: str = "studio", details: str = "",
+                            metadata: dict[str, Any] | None = None) -> None:
+    """Record a lifecycle event directly into lifecycle_events store.
+    Integrated into all workflow functions so every state change is tracked."""
+    from app.services.lifecycle import record_lifecycle_event
+    try:
+        await record_lifecycle_event(
+            rule_id=rule_id, event_type=event_type,
+            from_status=from_status, to_status=to_status,
+            actor=actor, module=module, details=details, metadata=metadata,
+        )
+    except Exception:
+        pass  # Never block a workflow action due to lifecycle recording failure
 
 SEED_DATA_DIR = Path(__file__).parent.parent / "data"
 LIVE_DATA_DIR = Path(__file__).parent.parent / "live-data"
@@ -278,6 +297,7 @@ SEED_MIGRATIONS = _sd_build_migrations()
 SEED_MIGRATION_MAPPINGS: list[dict[str, Any]] = []
 SEED_CHG_REQUESTS = _sd_build_chg_requests()
 SEED_REVIEWS = _SD_REVIEWS
+SEED_LIFECYCLE_EVENTS = _SD_LIFECYCLE_EVENTS
 
 
 def _build_seed_rules() -> list[dict[str, Any]]:
@@ -548,6 +568,7 @@ def _build_seed_rules() -> list[dict[str, Any]]:
             "action": "Allow", "description": desc, "application": app, "status": st,
             # rule_status mirrors status — "Submitted" only for new Studio-created rules
             "rule_status": st,
+            "lifecycle_status": st,
             "rule_migration_status": "Migrated",
             "is_group_to_group": g2g, "environment": env, "datacenter": "ALPHA_NGDC",
             "ldf_scenario": ldf,
@@ -597,7 +618,7 @@ async def seed_database() -> None:
     _save("app_dc_mappings", deepcopy(_SD_APP_DC_MAPPINGS))
     _save("reviews", deepcopy(SEED_REVIEWS))
     _save("rule_modifications", [])
-    _save("lifecycle_events", [])
+    _save("lifecycle_events", deepcopy(SEED_LIFECYCLE_EVENTS))
 
 
 # ============================================================
@@ -847,6 +868,10 @@ async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
             _save("legacy_rules", rules)
             await log_migration(rule_id, "migrate_to_ngdc", old_status, "Completed",
                                 f"Rule {rule_id} migrated to NGDC standards")
+            # Record lifecycle event: rule migrated
+            await _record_lifecycle(rule_id, "migrated", from_status="Deployed",
+                                    to_status="Migrated", module="migration-studio",
+                                    details=f"Rule {rule_id} migrated to NGDC standards")
             # Also save to separate migration_data.json for safe cleanup
             await save_migration_data_entry("migrated_rules", {
                 "rule_id": rule_id,
@@ -970,6 +995,11 @@ async def create_migration_review(rule_ids: list[str], comments: str = "") -> li
                 break
     _save("reviews", reviews)
     _save("legacy_rules", legacy_rules)
+    # Record lifecycle events for each migration review submission
+    for rev in created:
+        await _record_lifecycle(rev["rule_id"], "submitted", to_status="Pending Review",
+                                module="migration-studio",
+                                details=f"Migration review submitted for {rev['rule_id']}")
     return created
 
 
@@ -1035,6 +1065,9 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "details": f"Rule created: {rule['description']}", "user": "system",
     })
     _save("rule_history", history)
+    # Record lifecycle event: rule created
+    await _record_lifecycle(rule_id, "created", to_status="Draft",
+                            module="design-studio", details=f"Rule created: {rule['description']}")
     # Also save to separate studio_rules.json for safe cleanup
     await add_studio_rule(rule)
     return rule
@@ -1066,12 +1099,15 @@ async def _sync_studio_rule(rule: dict[str, Any]) -> None:
     _save_separate("studio_rules", data)
 
 
-async def update_rule_status(rule_id: str, new_status: str) -> dict[str, Any] | None:
+async def update_rule_status(rule_id: str, new_status: str, module: str = "studio") -> dict[str, Any] | None:
     rules = _load("firewall_rules") or []
     now = _now()
     for r in rules:
         if r.get("rule_id") == rule_id:
+            old_status = r.get("status", "Draft")
             r["status"] = new_status
+            r["rule_status"] = new_status
+            r["lifecycle_status"] = new_status
             r["updated_at"] = now
             if new_status == "Certified":
                 r["certified_date"] = now
@@ -1085,6 +1121,14 @@ async def update_rule_status(rule_id: str, new_status: str) -> dict[str, Any] | 
                 "timestamp": now, "details": f"Status updated to {new_status}", "user": "system",
             })
             _save("rule_history", history)
+            # Record lifecycle event for every status change
+            event_map = {"Pending Review": "submitted", "Approved": "approved",
+                         "Rejected": "rejected", "Deployed": "deployed",
+                         "Certified": "certified", "Expired": "expired"}
+            evt = event_map.get(new_status, "modified")
+            await _record_lifecycle(rule_id, evt, from_status=old_status,
+                                    to_status=new_status, module=module,
+                                    details=f"Status changed from {old_status} to {new_status}")
             return r
     return None
 
@@ -2295,7 +2339,10 @@ async def create_review(rule_id: str, comments: str = "", module: str = "design-
     reviews.append(review)
     _save("reviews", reviews)
     if rule:
-        await update_rule_status(rule_id, "Pending Review")
+        await update_rule_status(rule_id, "Pending Review", module=module)
+    # Record lifecycle event: rule submitted for review
+    await _record_lifecycle(rule_id, "submitted", to_status="Pending Review",
+                            module=module, details=comments or f"Rule {rule_id} submitted for review")
     return review
 
 
@@ -2309,6 +2356,7 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             r["review_notes"] = notes
             r["reviewer"] = "sns_user"
             _save("reviews", reviews)
+            review_module = r.get("module", "studio")
             # If this review is linked to a rule modification, approve it too
             mod_id = r.get("modification_id")
             if mod_id:
@@ -2321,11 +2369,16 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             else:
                 rule_id = r.get("rule_id")
                 if rule_id:
-                    await update_rule_status(rule_id, "Approved")
+                    await update_rule_status(rule_id, "Approved", module=review_module)
                     # Also update in separate studio_rules.json
                     rule = await get_rule(rule_id)
                     if rule:
                         await add_studio_rule(rule)
+            # Record lifecycle event: review approved
+            await _record_lifecycle(r.get("rule_id", ""), "approved",
+                                    from_status="Pending Review", to_status="Approved",
+                                    actor="sns_user", module=review_module,
+                                    details=notes or f"Review {review_id} approved")
             return r
     return None
 
@@ -2340,6 +2393,7 @@ async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
             r["review_notes"] = notes
             r["reviewer"] = "sns_user"
             _save("reviews", reviews)
+            review_module = r.get("module", "studio")
             # If this review is linked to a rule modification, reject it too
             mod_id = r.get("modification_id")
             if mod_id:
@@ -2347,7 +2401,12 @@ async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
             else:
                 rule_id = r.get("rule_id")
                 if rule_id:
-                    await update_rule_status(rule_id, "Rejected")
+                    await update_rule_status(rule_id, "Rejected", module=review_module)
+            # Record lifecycle event: review rejected
+            await _record_lifecycle(r.get("rule_id", ""), "rejected",
+                                    from_status="Pending Review", to_status="Rejected",
+                                    actor="sns_user", module=review_module,
+                                    details=notes or f"Review {review_id} rejected")
             return r
     return None
 
@@ -2423,6 +2482,7 @@ async def create_rule_modification(rule_id: str, modifications: dict[str, Any], 
         "rule_id": rule_id,
         "rule_name": f"{rule.get('app_name', '')} - {rule.get('inventory_item', rule_id)}",
         "request_type": "modify_rule",
+        "module": "firewall-management",
         "requestor": "system",
         "reviewer": None,
         "status": "Pending",
@@ -2442,6 +2502,10 @@ async def create_rule_modification(rule_id: str, modifications: dict[str, Any], 
     }
     reviews.append(review)
     _save("reviews", reviews)
+    # Record lifecycle event: modification submitted for review
+    await _record_lifecycle(rule_id, "submitted", to_status="Pending Review",
+                            module="firewall-management",
+                            details=comments or f"Rule modification submitted for {rule_id}")
 
     return modification
 
@@ -2479,6 +2543,15 @@ async def approve_rule_modification(mod_id: str, notes: str = "") -> dict[str, A
                 await update_legacy_rule(rule_id, modified)
             # Also persist the completed modification record in studio_rules.json
             await _record_completed_modification(m)
+            # Record lifecycle event: modification approved
+            rule_id_val = m.get("rule_id", "")
+            await _record_lifecycle(rule_id_val, "approved",
+                                    from_status="Pending Review", to_status="Approved",
+                                    actor="sns_user", module="firewall-management",
+                                    details=f"Rule modification {mod_id} approved")
+            await _record_lifecycle(rule_id_val, "modified",
+                                    actor="sns_user", module="firewall-management",
+                                    details=f"Rule modification applied: {mod_id}")
             return m
     return None
 
@@ -2514,6 +2587,11 @@ async def reject_rule_modification(mod_id: str, notes: str) -> dict[str, Any] | 
             m["reviewer"] = "sns_user"
             m["review_notes"] = notes
             _save("rule_modifications", mods)
+            # Record lifecycle event: modification rejected
+            await _record_lifecycle(m.get("rule_id", ""), "rejected",
+                                    from_status="Pending Review", to_status="Rejected",
+                                    actor="sns_user", module="firewall-management",
+                                    details=f"Rule modification {mod_id} rejected: {notes}")
             return m
     return None
 
