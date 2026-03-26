@@ -55,24 +55,6 @@ const modules = [
     path: '/firewall-management',
     stats: { label: 'Open Requests', icon: 'list' },
   },
-  {
-    id: 'lifecycle',
-    title: 'Lifecycle Management',
-    subtitle: 'Rule State & Certification',
-    description: 'Manage the full lifecycle of firewall rules — from draft to decommission. Track certification expiry, bulk operations, audit trail, and decommission workflows.',
-    icon: (
-      <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.015 4.356v4.992" />
-      </svg>
-    ),
-    color: 'from-violet-600 to-purple-700',
-    hoverColor: 'hover:from-violet-500 hover:to-purple-600',
-    bgAccent: 'bg-violet-500/10',
-    borderColor: 'border-violet-500/20',
-    features: ['State Machine Transitions', 'Certification & Auto-Expiry', 'Soft Delete & Recovery', 'Audit Trail Timeline', 'Bulk Certify / Decommission'],
-    path: '/lifecycle',
-    stats: { label: 'Lifecycle States', icon: 'cycle' },
-  },
 ];
 
 export default function HomePage() {
@@ -104,7 +86,7 @@ export default function HomePage() {
 
       {/* Module Cards */}
       <div className="max-w-7xl mx-auto px-6 pb-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
           {modules.map((mod) => (
             <button
               key={mod.id}
