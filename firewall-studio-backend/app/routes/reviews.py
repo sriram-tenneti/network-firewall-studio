@@ -22,7 +22,8 @@ async def submit_review(data: dict):
     if not rule_id:
         raise HTTPException(status_code=400, detail="rule_id is required")
     comments = data.get("comments", "")
-    return await create_review(rule_id, comments)
+    module = data.get("module", "design-studio")
+    return await create_review(rule_id, comments, module)
 
 
 @router.post("/{review_id}/approve")

@@ -36,8 +36,17 @@ function modToReview(m: RuleModification): ReviewRequest {
   };
 }
 
+// Map route context to backend module values
+const CONTEXT_TO_MODULE: Record<string, string> = {
+  'firewall-studio': 'design-studio',
+  'ngdc-standardization': 'migration-studio',
+  'firewall-management': 'firewall-management',
+  'design-studio': 'design-studio',
+  'migration-studio': 'migration-studio',
+};
+
 export default function ReviewPage(props: { context?: string }) {
-  const moduleContext = props.context || '';
+  const moduleContext = props.context ? (CONTEXT_TO_MODULE[props.context] || props.context) : '';
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEnv, setSelectedEnv] = useState<string>('');
@@ -72,9 +81,8 @@ export default function ReviewPage(props: { context?: string }) {
     // Module-level filtering: each module sees only its own reviews
     if (selectedModule) {
       const mod = r.module || (r as unknown as Record<string, string>).module || '';
-      if (selectedModule === 'firewall-management' && mod && mod !== 'firewall-management') return false;
-      if (selectedModule === 'design-studio' && mod && mod !== 'design-studio') return false;
-      if (selectedModule === 'migration-studio' && mod && mod !== 'migration-studio') return false;
+      // Strict: if module is set on the review, it must match; if not set, exclude from filtered views
+      if (mod !== selectedModule) return false;
     }
     return true;
   });
@@ -243,13 +251,15 @@ export default function ReviewPage(props: { context?: string }) {
           <p className="text-sm text-gray-500 mt-1">Review migration and firewall rule requests. Export new/modify/remove requests from the table below.</p>
         </div>
         <div className="flex items-center gap-3">
-          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-            value={selectedModule} onChange={e => setSelectedModule(e.target.value)}>
-            <option value="">All Modules</option>
-            <option value="firewall-management">Firewall Management</option>
-            <option value="design-studio">Design Studio</option>
-            <option value="migration-studio">Migration Studio</option>
-          </select>
+          {!moduleContext && (
+            <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+              value={selectedModule} onChange={e => setSelectedModule(e.target.value)}>
+              <option value="">All Modules</option>
+              <option value="firewall-management">Firewall Management</option>
+              <option value="design-studio">Design Studio</option>
+              <option value="migration-studio">Migration Studio</option>
+            </select>
+          )}
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
             <option value="">All Environments</option>

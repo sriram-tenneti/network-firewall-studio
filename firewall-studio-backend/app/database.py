@@ -548,7 +548,7 @@ def _build_seed_rules() -> list[dict[str, Any]]:
             "action": "Allow", "description": desc, "application": app, "status": st,
             # rule_status mirrors status — "Submitted" only for new Studio-created rules
             "rule_status": st,
-            "rule_migration_status": "Migration Deployed",
+            "rule_migration_status": "Migrated",
             "is_group_to_group": g2g, "environment": env, "datacenter": "ALPHA_NGDC",
             "ldf_scenario": ldf,
             "created_at": ct, "updated_at": ct,
@@ -841,7 +841,7 @@ async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
             old_status = r.get("migration_status", "Not Started")
             r["migration_status"] = "Completed"
             # Update lifecycle statuses on migration
-            r["rule_migration_status"] = "Migration Deployed"
+            r["rule_migration_status"] = "Migrated"
             r["migrated_at"] = _now()
             _save("legacy_rules", rules)
             await log_migration(rule_id, "migrate_to_ngdc", old_status, "Completed",
@@ -944,6 +944,7 @@ async def create_migration_review(rule_ids: list[str], comments: str = "") -> li
             "rule_id": rid,
             "rule_name": f"{rule.get('app_name', '')} - {rule.get('inventory_item', rid)}",
             "request_type": "migration",
+            "module": "migration-studio",
             "requestor": "system",
             "reviewer": None,
             "status": "Pending",
@@ -1014,9 +1015,9 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "status": "Draft",
         # Lifecycle statuses for Studio-created rules:
         # rule_status = Submitted (new rule, needs review/approval)
-        # rule_migration_status = Migration Deployed (created in NGDC / migrated)
+        # rule_migration_status = Migrated (created in NGDC / migrated)
         "rule_status": rule_data.get("rule_status", "Submitted"),
-        "rule_migration_status": rule_data.get("rule_migration_status", "Migration Deployed"),
+        "rule_migration_status": rule_data.get("rule_migration_status", "Migrated"),
         "is_group_to_group": rule_data.get("is_group_to_group", True),
         "environment": rule_data.get("environment", "Production"),
         "datacenter": rule_data.get("datacenter", "ALPHA_NGDC"),
@@ -1108,7 +1109,7 @@ async def get_rule_history(rule_id: str) -> list[dict[str, Any]]:
 # Valid transitions per module:
 # Studio (new rules):    Submitted -> In Progress -> Approved -> Deployed
 # FM (imported rules):   Deployed (no transition needed — already deployed)
-# Migration (legacy):    Once migrated, rule_migration_status -> Migration Deployed
+# Migration (legacy):    Once migrated, rule_migration_status -> Migrated
 
 STUDIO_RULE_STATUS_TRANSITIONS: dict[str, list[str]] = {
     "Submitted": ["In Progress"],
@@ -1205,7 +1206,7 @@ async def get_rule_lifecycle_summary() -> dict[str, Any]:
         summary["legacy"]["by_migration_status"][ms] = summary["legacy"]["by_migration_status"].get(ms, 0) + 1
     for r in studio:
         rs = r.get("rule_status", "Submitted")
-        ms = r.get("rule_migration_status", "Migration Deployed")
+        ms = r.get("rule_migration_status", "Migrated")
         summary["studio"]["by_rule_status"][rs] = summary["studio"]["by_rule_status"].get(rs, 0) + 1
         summary["studio"]["by_migration_status"][ms] = summary["studio"]["by_migration_status"].get(ms, 0) + 1
     return summary
@@ -2247,7 +2248,7 @@ async def get_reviews(status: str | None = None) -> list[dict[str, Any]]:
     return reviews
 
 
-async def create_review(rule_id: str, comments: str = "") -> dict[str, Any]:
+async def create_review(rule_id: str, comments: str = "", module: str = "design-studio") -> dict[str, Any]:
     reviews = _load("reviews") or []
     rule = await get_rule(rule_id)
     now = _now()
@@ -2280,6 +2281,7 @@ async def create_review(rule_id: str, comments: str = "") -> dict[str, Any]:
         "rule_id": rule_id,
         "rule_name": rule.get("description", rule_id) if rule else rule_id,
         "request_type": "new_rule",
+        "module": module,
         "requestor": "system",
         "reviewer": None,
         "status": "Pending",
@@ -2310,6 +2312,11 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             mod_id = r.get("modification_id")
             if mod_id:
                 await approve_rule_modification(mod_id, notes)
+            elif r.get("request_type") == "migration":
+                # Migration review: update the legacy rule's statuses
+                rule_id = r.get("rule_id")
+                if rule_id:
+                    await migrate_rule_to_ngdc(rule_id)
             else:
                 rule_id = r.get("rule_id")
                 if rule_id:

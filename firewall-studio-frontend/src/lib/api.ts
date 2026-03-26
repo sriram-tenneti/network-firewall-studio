@@ -505,8 +505,8 @@ export const getReviewRequests = (status?: string) => {
   const qs = params.toString();
   return fetchJSON<ReviewRequest[]>(`/api/reviews${qs ? `?${qs}` : ''}`);
 };
-export const submitForReview = (ruleId: string, comments: string = '') =>
-  fetchJSON<ReviewRequest>('/api/reviews', { method: 'POST', body: JSON.stringify({ rule_id: ruleId, comments }) });
+export const submitForReview = (ruleId: string, comments: string = '', module: string = 'design-studio') =>
+  fetchJSON<ReviewRequest>('/api/reviews', { method: 'POST', body: JSON.stringify({ rule_id: ruleId, comments, module }) });
 export const approveReview = (reviewId: string, notes: string = '') =>
   fetchJSON<ReviewRequest>(`/api/reviews/${reviewId}/approve`, { method: 'POST', body: JSON.stringify({ notes }) });
 export const rejectReview = (reviewId: string, notes: string) =>
