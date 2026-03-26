@@ -1,5 +1,6 @@
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
+import { parseExpandedToDisplayLines } from '@/lib/nestingParser';
 import type { LegacyRule } from '@/types';
 
 interface LegacyRuleDetailModalProps {
@@ -11,11 +12,6 @@ interface LegacyRuleDetailModalProps {
 
 export function LegacyRuleDetailModal({ isOpen, onClose, rule, onStartMigration }: LegacyRuleDetailModalProps) {
   if (!rule) return null;
-
-  const parseExpandedTree = (text: string): string[] => {
-    if (!text) return [];
-    return text.split('\n').map(line => line.replace(/\t/g, '  '));
-  };
 
   const isNonStandard = !rule.is_standard;
 
@@ -69,14 +65,12 @@ export function LegacyRuleDetailModal({ isOpen, onClose, rule, onStartMigration 
             <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
           </div>
           <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-            {parseExpandedTree(rule.rule_source_expanded).map((line, i) => {
-              const indent = line.length - line.trimStart().length;
-              return (
-                <div key={i} className="font-mono text-xs text-green-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                  {line.trim()}
-                </div>
-              );
-            })}
+            {parseExpandedToDisplayLines(rule.rule_source || '', rule.rule_source_expanded || '').map((item, i) => (
+              <div key={i} className="font-mono text-xs text-green-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 16}px` }}>
+                {item.type === 'group' && <span className="text-[9px] bg-green-700 text-white px-1 rounded">GRP</span>}
+                {item.text}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -85,14 +79,12 @@ export function LegacyRuleDetailModal({ isOpen, onClose, rule, onStartMigration 
             <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
           </div>
           <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-            {parseExpandedTree(rule.rule_destination_expanded).map((line, i) => {
-              const indent = line.length - line.trimStart().length;
-              return (
-                <div key={i} className="font-mono text-xs text-purple-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                  {line.trim()}
-                </div>
-              );
-            })}
+            {parseExpandedToDisplayLines(rule.rule_destination || '', rule.rule_destination_expanded || '').map((item, i) => (
+              <div key={i} className="font-mono text-xs text-purple-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 16}px` }}>
+                {item.type === 'group' && <span className="text-[9px] bg-purple-700 text-white px-1 rounded">GRP</span>}
+                {item.text}
+              </div>
+            ))}
           </div>
         </div>
 
