@@ -150,8 +150,10 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
     """Auto-prefix a value based on entry type for NGDC naming standards.
     - ip -> svr-
     - group -> grp- (normalizes legacy g- to grp-)
-    - cidr/range/subnet -> rng-
-    If already prefixed, returns as-is (except g- which is normalized to grp-).
+    - cidr/range -> rng-
+    - subnet -> net- (NGDC standard for subnets)
+    If already prefixed, returns as-is (except g- which is normalized to grp-,
+    and legacy sub- which is normalized to net-).
     Range values use short format: rng-10.124.132.4-9 instead of rng-10.124.132.4-10.124.132.9
     """
     v = value.strip()
@@ -162,13 +164,19 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
     if vl.startswith("g-") and not vl.startswith("grp-"):
         v = "grp-" + v[2:]
         return v
+    # Normalize legacy sub- prefix to NGDC net-
+    if vl.startswith("sub-"):
+        v = "net-" + v[4:]
+        return v
     # Already has a recognized prefix
-    if vl.startswith(("svr-", "grp-", "rng-", "sub-")):
+    if vl.startswith(("svr-", "grp-", "rng-", "net-")):
         return v
     # Add prefix based on type
     if entry_type in ("group",):
         return f"grp-{v}"
-    if entry_type in ("cidr", "subnet", "range"):
+    if entry_type in ("subnet",):
+        return f"net-{v}"
+    if entry_type in ("cidr", "range"):
         # Use short range format for IP ranges
         import re as _re
         if _re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', v):
@@ -192,8 +200,10 @@ def _load(name: str) -> Any:
 def _save(name: str, data: Any) -> None:
     _ensure_dir()
     path = _get_data_dir() / f"{name}.json"
+    # Skip pretty-printing for large datasets (>5000 items) to improve write performance
+    indent = None if isinstance(data, list) and len(data) > 5000 else 2
     with open(path, "w") as f:
-        json.dump(data, f, indent=2, default=str)
+        json.dump(data, f, indent=indent, default=str)
 
 
 # --- Org-level reference data helpers (always use SEED_DATA_DIR) ---
@@ -2853,6 +2863,155 @@ async def delete_birthright_entry(matrix_type: str, index: int) -> bool:
 
 
 # ============================================================
+# Legacy Group Detection from Expansion Columns
+# ============================================================
+
+def _is_legacy_group_name(name: str) -> bool:
+    """Check if a name looks like a legacy firewall group by known prefixes.
+    This is a *hint* only — the authoritative test is whether the entry has
+    indented children in the expansion column (see parse_expansion_groups).
+    Kept for backward compatibility with expand_groups_in_rule() which
+    operates on flat rule_source/rule_destination fields without expansion."""
+    lower = name.strip().lower()
+    group_prefixes = (
+        "g-", "grp-", "ggrp-", "gapigr-", "grp_", "g_",
+        "group-", "group_", "netgrp-", "netgrp_", "addrgrp-",
+    )
+    return any(lower.startswith(pfx) for pfx in group_prefixes)
+
+
+def parse_expansion_groups(expansion_text: str) -> list[dict[str, Any]]:
+    """Parse the expansion/detail column to extract group hierarchies.
+
+    Group detection is **structure-based**: any top-level entry that has
+    indented children below it is treated as a group, regardless of its
+    prefix.  The prefix can be anything (g-, grp-, ggrp-, gapigr-, myapp-,
+    fw-, etc.) — the indentation hierarchy is the sole authority.
+
+    Example expansion text:
+      MY-CUSTOM-GROUP                  ← group (has indented children)
+        10.1.1.1 (Web Server 1)        ← member IP
+        10.1.1.2 (Web Server 2)        ← member IP
+        NESTED-SUB-GRP                 ← nested sub-group (has deeper children)
+          10.2.2.1 (DB Server)         ← member of nested group
+      svr-10.3.3.3                     ← standalone (no children → not a group)
+
+    Returns a list of group dicts:
+    [
+      {
+        "name": "MY-CUSTOM-GROUP",
+        "members": [
+          {"type": "ip", "value": "10.1.1.1", "description": "Web Server 1"},
+          {"type": "ip", "value": "10.1.1.2", "description": "Web Server 2"},
+          {"type": "group", "value": "NESTED-SUB-GRP", "members": [
+            {"type": "ip", "value": "10.2.2.1", "description": "DB Server"}
+          ]}
+        ]
+      }
+    ]
+    """
+    if not expansion_text or not isinstance(expansion_text, str):
+        return []
+
+    # --- First pass: collect all lines with their indent levels ---
+    parsed_lines: list[tuple[int, str]] = []  # (indent, text)
+    for raw_line in expansion_text.split("\n"):
+        if not raw_line.strip():
+            continue
+        stripped = raw_line.lstrip()
+        indent = len(raw_line) - len(stripped)
+        text = stripped.strip()
+        if text:
+            parsed_lines.append((indent, text))
+
+    if not parsed_lines:
+        return []
+
+    def _parse_value(entry: str) -> tuple[str, str]:
+        """Split 'value (description)' → (value, description)."""
+        entry = entry.strip()
+        if "(" in entry and ")" in entry:
+            paren_start = entry.index("(")
+            paren_end = entry.rindex(")")
+            return entry[:paren_start].strip(), entry[paren_start + 1:paren_end].strip()
+        return entry, ""
+
+    def _member_type(value: str) -> str:
+        """Classify a member value (ip, subnet, range, or generic)."""
+        vl = value.lower()
+        if vl.startswith("net-") or vl.startswith("sub-"):
+            return "subnet"
+        if "/" in value and not vl.startswith("tcp") and not vl.startswith("udp"):
+            return "subnet"  # CIDR notation = subnet
+        if vl.startswith("rng-"):
+            return "range"
+        return "ip"
+
+    # --- Second pass: look-ahead to detect groups structurally ---
+    # An entry at index i is a group if the next entry (i+1) has deeper indentation.
+    def _has_children(idx: int) -> bool:
+        if idx + 1 >= len(parsed_lines):
+            return False
+        return parsed_lines[idx + 1][0] > parsed_lines[idx][0]
+
+    groups: list[dict[str, Any]] = []
+    current_group: dict[str, Any] | None = None
+    current_subgroup: dict[str, Any] | None = None
+    group_indent = 0
+    member_indent = 0
+
+    for i, (indent, text) in enumerate(parsed_lines):
+        value, desc = _parse_value(text)
+
+        # If we are NOT inside a group, check if this entry starts one
+        if current_group is None:
+            if _has_children(i):
+                # This entry has children → it's a group
+                current_group = {"name": value, "members": []}
+                current_subgroup = None
+                group_indent = indent
+                member_indent = parsed_lines[i + 1][0]  # expected child indent
+            # else: standalone entry, skip for group detection
+            continue
+
+        # We are inside a group
+        if indent <= group_indent:
+            # Same or lower indent as the group header → group ended
+            groups.append(current_group)
+            current_group = None
+            current_subgroup = None
+            # Re-evaluate this line: could it start a new group?
+            if _has_children(i):
+                current_group = {"name": value, "members": []}
+                current_subgroup = None
+                group_indent = indent
+                member_indent = parsed_lines[i + 1][0]
+            continue
+
+        # Indented line — belongs to the current group
+        if indent >= member_indent and _has_children(i):
+            # This member itself has deeper children → nested sub-group
+            sub = {"type": "group", "value": value, "description": desc, "members": []}
+            current_subgroup = sub
+            current_group["members"].append(sub)
+        elif current_subgroup is not None and indent > member_indent:
+            # Deeper than first-level members → belongs to the sub-group
+            mtype = _member_type(value)
+            current_subgroup["members"].append({"type": mtype, "value": value, "description": desc})
+        else:
+            # Direct member of the current group
+            current_subgroup = None
+            mtype = _member_type(value)
+            current_group["members"].append({"type": mtype, "value": value, "description": desc})
+
+    # Flush last group
+    if current_group:
+        groups.append(current_group)
+
+    return groups
+
+
+# ============================================================
 # NGDC Migration Recommendations
 # ============================================================
 
@@ -2937,26 +3096,40 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     _ip_mappings_early = _load("ip_mappings") or []
 
     def _lookup_ip_mapping(legacy_ip_raw: str) -> str | None:
-        """Look up NGDC equivalent IP from the 1-to-1 ip_mappings table."""
+        """Look up NGDC equivalent from the 1-to-1 ip_mappings table.
+        Returns with appropriate prefix: svr- for IPs, net- for subnets, rng- for ranges."""
         clean = legacy_ip_raw.strip()
-        for pfx in ("svr-", "rng-", "grp-"):
-            if clean.startswith(pfx):
+        original_prefix = ""
+        for pfx in ("svr-", "rng-", "net-", "sub-", "grp-"):
+            if clean.lower().startswith(pfx):
+                original_prefix = pfx.lower()
                 clean = clean[len(pfx):]
                 break
         for m in _ip_mappings_early:
             legacy_val = str(m.get("legacy_ip", ""))
             if legacy_val == clean or legacy_val == legacy_ip_raw:
                 ngdc_ip = str(m.get("ngdc_ip", ""))
-                return f"svr-{ngdc_ip}" if ngdc_ip else None
+                if not ngdc_ip:
+                    return None
+                # Determine correct NGDC prefix based on type
+                if original_prefix in ("net-", "sub-") or "/" in ngdc_ip:
+                    return f"net-{ngdc_ip}"
+                if original_prefix == "rng-":
+                    return f"rng-{ngdc_ip}"
+                return f"svr-{ngdc_ip}"
         return None
 
     def _suggest_ngdc_name(legacy_name: str, entry_type: str, direction: str = "source") -> str:
-        prefix = "grp" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
-                 "svr" if legacy_name.startswith("svr") else \
-                 "rng" if legacy_name.startswith("rng") else "grp"
+        ln = legacy_name.lower()
+        prefix = "grp" if ln.startswith("grp") or ln.startswith("gapigr") else \
+                 "svr" if ln.startswith("svr") else \
+                 "rng" if ln.startswith("rng") else \
+                 "net" if ln.startswith("net-") or ln.startswith("sub-") else \
+                 "net" if "/" in legacy_name and not ln.startswith("tcp") and not ln.startswith("udp") else \
+                 "grp"
         short_app = app_id.upper()
-        # For individual IPs (svr-*), try 1-to-1 IP mapping first
-        if prefix == "svr":
+        # For individual IPs/subnets/ranges, try 1-to-1 mapping first
+        if prefix in ("svr", "net", "rng"):
             mapped = _lookup_ip_mapping(legacy_name)
             if mapped:
                 return mapped
@@ -2968,9 +3141,13 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         return f"{prefix}-{short_app}-{entry_type}-{nh}-{sz}"
 
     def _build_mapping(legacy_name: str, entry_type: str, idx: int, direction: str = "source") -> dict[str, Any]:
-        obj_type = "group" if legacy_name.startswith("grp") or legacy_name.startswith("gapigr") else \
-                   "server" if legacy_name.startswith("svr") else \
-                   "range" if legacy_name.startswith("rng") else "other"
+        ln = legacy_name.lower()
+        obj_type = "group" if ln.startswith("grp") or ln.startswith("gapigr") else \
+                   "server" if ln.startswith("svr") else \
+                   "range" if ln.startswith("rng") else \
+                   "subnet" if ln.startswith("net-") or ln.startswith("sub-") else \
+                   "subnet" if "/" in legacy_name and not ln.startswith("tcp") and not ln.startswith("udp") else \
+                   "other"
         dir_nh = dst_nh if direction == "destination" else src_nh
         dir_sz = dst_sz if direction == "destination" else src_sz
 
@@ -3077,10 +3254,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         import ipaddress
         ip_clean = ip_str.strip().split("\n")[0].strip()
 
-        # Strip svr-/rng-/grp- prefix for raw IP matching
+        # Strip svr-/rng-/grp-/net-/sub- prefix for raw IP matching
         ip_raw = ip_clean
-        for pfx in ("svr-", "rng-", "grp-"):
-            if ip_raw.startswith(pfx):
+        for pfx in ("svr-", "rng-", "grp-", "net-", "sub-"):
+            if ip_raw.lower().startswith(pfx):
                 ip_raw = ip_raw[len(pfx):]
                 break
 
@@ -3162,10 +3339,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     def _lookup_ngdc_ip(legacy_ip_raw: str) -> str | None:
         """Look up the NGDC equivalent IP for a legacy IP from the ip_mappings table."""
-        # Strip svr- / rng- / grp- prefixes for matching
+        # Strip svr- / rng- / grp- / net- / sub- prefixes for matching
         clean = legacy_ip_raw.strip()
-        for pfx in ("svr-", "rng-", "grp-"):
-            if clean.startswith(pfx):
+        for pfx in ("svr-", "rng-", "grp-", "net-", "sub-"):
+            if clean.lower().startswith(pfx):
                 clean = clean[len(pfx):]
                 break
         for m in ip_mappings_table:
@@ -3195,20 +3372,28 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 legacy_group = g["name"]
                 break
 
-        # Build NGDC IPs by looking up 1-to-1 IP mapping table
+        # Build NGDC entries by looking up 1-to-1 IP mapping table
         ngdc_ips: list[str] = []
         for ip in ips:
             mapped = _lookup_ngdc_ip(ip)
             if mapped:
                 ngdc_ips.append(mapped)
             else:
-                # Fallback: use svr- prefix with the legacy IP (stripped of old prefix)
+                # Fallback: use appropriate prefix based on entry type
                 clean_ip = ip.strip()
-                for pfx in ("svr-", "rng-", "grp-"):
-                    if clean_ip.startswith(pfx):
+                original_pfx = ""
+                for pfx in ("svr-", "rng-", "grp-", "net-", "sub-"):
+                    if clean_ip.lower().startswith(pfx):
+                        original_pfx = pfx.lower()
                         clean_ip = clean_ip[len(pfx):]
                         break
-                ngdc_ips.append(f"svr-{clean_ip}")
+                # Determine NGDC prefix: net- for subnets/CIDRs, rng- for ranges, svr- for IPs
+                if original_pfx in ("net-", "sub-") or ("/" in clean_ip and not clean_ip.startswith("tcp")):
+                    ngdc_ips.append(f"net-{clean_ip}")
+                elif original_pfx == "rng-":
+                    ngdc_ips.append(f"rng-{clean_ip}")
+                else:
+                    ngdc_ips.append(f"svr-{clean_ip}")
 
         ngdc_group_name = f"grp-{short_app}-{comp}-{comp_nh}-{comp_sz}"
         return {
@@ -3232,6 +3417,76 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         component_groups.append(_build_component_group(comp, ips, "source"))
     for comp, ips in dst_component_map.items():
         component_groups.append(_build_component_group(comp, ips, "destination"))
+
+    # --- Step 5: Parse legacy groups from expansion columns ---
+    src_expanded = rule.get("rule_source_expanded", "") or ""
+    dst_expanded = rule.get("rule_destination_expanded", "") or ""
+    legacy_source_groups = parse_expansion_groups(src_expanded)
+    legacy_dest_groups = parse_expansion_groups(dst_expanded)
+
+    # Build NGDC group mapping suggestions for each legacy group
+    def _map_legacy_group(lg: dict[str, Any], direction: str) -> dict[str, Any]:
+        """Map a legacy group to a suggested NGDC group with 1-1 member mappings."""
+        dir_nh = dst_nh if direction == "destination" else src_nh
+        dir_sz = dst_sz if direction == "destination" else src_sz
+        legacy_name = lg["name"]
+
+        # Try to find existing NGDC mapping for this group
+        table_match = _lookup_ngdc_mapping(legacy_name)
+        ngdc_name = table_match["ngdc_name"] if table_match else f"grp-{short_app}-{direction[:3].upper()}-{dir_nh}-{dir_sz}"
+
+        # Map each member to NGDC equivalent
+        mapped_members: list[dict[str, Any]] = []
+        for mem in lg.get("members", []):
+            if mem["type"] == "group":
+                # Nested sub-group — recurse
+                sub_mapped = _map_legacy_group(mem, direction)
+                mapped_members.append({
+                    "legacy": mem["value"],
+                    "type": "group",
+                    "ngdc": sub_mapped["ngdc_name"],
+                    "members": sub_mapped.get("mapped_members", []),
+                })
+            else:
+                legacy_val = mem["value"]
+                mem_type = mem["type"]
+                ngdc_val = _lookup_ip_mapping(legacy_val)
+                if not ngdc_val:
+                    # Generate NGDC name with correct prefix based on member type
+                    clean_val = legacy_val
+                    for pfx in ("svr-", "rng-", "net-", "sub-"):
+                        if clean_val.lower().startswith(pfx):
+                            clean_val = clean_val[len(pfx):]
+                            break
+                    if mem_type == "subnet":
+                        ngdc_val = f"net-{clean_val}"
+                    elif mem_type == "range":
+                        ngdc_val = f"rng-{clean_val}"
+                    else:
+                        ngdc_val = f"svr-{clean_val}"
+                mapped_members.append({
+                    "legacy": legacy_val,
+                    "type": mem_type,
+                    "description": mem.get("description", ""),
+                    "ngdc": ngdc_val,
+                })
+
+        return {
+            "legacy_name": legacy_name,
+            "ngdc_name": ngdc_name,
+            "direction": direction,
+            "member_count": len(lg.get("members", [])),
+            "mapped_members": mapped_members,
+            "mapping_source": "ngdc_mapping_table" if table_match else "auto_generated",
+            "nh": dir_nh,
+            "sz": dir_sz,
+            "has_nested_groups": any(m["type"] == "group" for m in lg.get("members", [])),
+        }
+
+    legacy_group_mappings = (
+        [_map_legacy_group(g, "source") for g in legacy_source_groups] +
+        [_map_legacy_group(g, "destination") for g in legacy_dest_groups]
+    )
 
     return {
         "rule_id": rule_id,
@@ -3267,6 +3522,9 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         "destination_sz_name": dst_sz_info.get("name", "") if dst_sz_info else "",
         "available_nhs": [{"nh_id": n.get("nh_id"), "name": n.get("name")} for n in nhs],
         "available_szs": [{"code": s.get("code"), "name": s.get("name")} for s in szs],
+        "legacy_group_mappings": legacy_group_mappings,
+        "legacy_source_groups": legacy_source_groups,
+        "legacy_dest_groups": legacy_dest_groups,
     }
 
 
@@ -3812,9 +4070,8 @@ async def expand_groups_in_rule(rule: dict[str, Any]) -> dict[str, Any]:
         group_lookup[g.get("name", "")] = g.get("members", [])
 
     def _is_group_entry(name: str) -> bool:
-        """Check if entry is a group (grp-, g-, gapigr- prefix) vs individual IP/subnet/range."""
-        lower = name.lower()
-        return lower.startswith("grp-") or lower.startswith("g-") or lower.startswith("gapigr-")
+        """Check if entry is a group (grp-, g-, ggrp-, gapigr- prefix) vs individual IP/subnet/range."""
+        return _is_legacy_group_name(name)
 
     def expand_field(field_value: str) -> str:
         if not field_value:

@@ -37,11 +37,11 @@ function modToReview(m: RuleModification): ReviewRequest {
 }
 
 export default function ReviewPage(props: { context?: string }) {
-  void props;
+  const moduleContext = props.context || '';
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEnv, setSelectedEnv] = useState<string>('');
-  const [selectedModule, setSelectedModule] = useState<string>('');
+  const [selectedModule, setSelectedModule] = useState<string>(moduleContext);
   const [activeTab, setActiveTab] = useState('Pending');
   const approvalModal = useModal<ReviewRequest>();
   const { notification, showNotification } = useNotification();
@@ -69,11 +69,12 @@ export default function ReviewPage(props: { context?: string }) {
 
   const envFilteredReviews = reviews.filter(r => {
     if (selectedEnv && r.rule_summary?.environment !== selectedEnv) return false;
+    // Module-level filtering: each module sees only its own reviews
     if (selectedModule) {
       const mod = r.module || (r as unknown as Record<string, string>).module || '';
-      // If module filter is set, only show reviews that match that module.
-      // Reviews without a module field are shown under 'All Modules' only.
-      if (mod !== selectedModule) return false;
+      if (selectedModule === 'firewall-management' && mod && mod !== 'firewall-management') return false;
+      if (selectedModule === 'design-studio' && mod && mod !== 'design-studio') return false;
+      if (selectedModule === 'migration-studio' && mod && mod !== 'migration-studio') return false;
     }
     return true;
   });
@@ -245,9 +246,9 @@ export default function ReviewPage(props: { context?: string }) {
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedModule} onChange={e => setSelectedModule(e.target.value)}>
             <option value="">All Modules</option>
-            <option value="fm">Firewall Management</option>
-            <option value="studio">Firewall Studio</option>
-            <option value="migration">Migration Studio</option>
+            <option value="firewall-management">Firewall Management</option>
+            <option value="design-studio">Design Studio</option>
+            <option value="migration-studio">Migration Studio</option>
           </select>
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>

@@ -264,7 +264,7 @@ export function DesignStudioPage() {
           >
             <option value="">All Applications</option>
             {applications.map(app => (
-              <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+              <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
             ))}
           </select>
           <select
@@ -348,7 +348,7 @@ export function DesignStudioPage() {
 
       <RuleModifyModal isOpen={modifyModal.isOpen} onClose={modifyModal.close} rule={modifyModal.data} onSave={handleModify} />
       <RuleCompilerView isOpen={compilerModal.isOpen} onClose={compilerModal.close} ruleId={compilerModal.data} />
-      <GroupManagerModal isOpen={groupModal.isOpen} onClose={groupModal.close} appId={selectedApp || undefined} applications={applications.map(a => ({ app_id: a.app_id, name: a.name }))} environment={selectedEnv || undefined} />
+      <GroupManagerModal isOpen={groupModal.isOpen} onClose={groupModal.close} appId={selectedApp || undefined} applications={applications.map(a => ({ app_id: a.app_id, app_distributed_id: a.app_distributed_id, name: a.name }))} environment={selectedEnv || undefined} />
 
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}

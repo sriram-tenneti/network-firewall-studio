@@ -6,7 +6,7 @@ export type MigrationStatus = 'Auto-Mapped' | 'Needs Review' | 'New Group' | 'Co
 export type RuleLifecycleStatus = 'Submitted' | 'In Progress' | 'Approved' | 'Rejected' | 'Deployed';
 export type RuleMigrationStatus = 'Not Migrated' | 'Migrated';
 export type MappingStatus = 'Automapped' | 'Needs Review' | 'Blocked';
-export type SourceType = 'Single IP' | 'Subnet' | 'Group';
+export type SourceType = 'Single IP' | 'Subnet' | 'Range' | 'Group';
 
 export interface SourceConfig {
   source_type: SourceType;
@@ -226,7 +226,7 @@ export interface RuleHistoryEntry {
 }
 
 export interface GroupMember {
-  type: 'ip' | 'cidr' | 'group' | 'range';
+  type: 'ip' | 'subnet' | 'cidr' | 'group' | 'range';
   value: string;
   description: string;
 }
@@ -363,7 +363,7 @@ export interface NGDCRecommendation {
 export interface IPMapping {
   legacy: string;
   ngdc_recommended: string;
-  type: 'group' | 'server' | 'range' | 'other';
+  type: 'group' | 'server' | 'subnet' | 'range' | 'other';
   existing_group: string | null;
   customizable: boolean;
   mapping_source?: 'ngdc_mapping_table' | 'existing_group' | 'auto_generated';

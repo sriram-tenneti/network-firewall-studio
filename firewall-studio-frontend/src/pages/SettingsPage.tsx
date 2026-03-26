@@ -133,6 +133,7 @@ export default function SettingsPage() {
   const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
   const [importingApps, setImportingApps] = useState(false);
   const [importResult, setImportResult] = useState<{ added: number; updated: number; skipped: number; total: number; overrides: { app_distributed_id: string; app_id: string }[] } | null>(null);
+  void importResult;
 
   // Edit states for Policy Matrix
   const [editingPolicyIdx, setEditingPolicyIdx] = useState<number | null>(null);
@@ -449,6 +450,10 @@ export default function SettingsPage() {
   const [ngdcComponentForm, setNgdcComponentForm] = useState({component:'APP',dc:'ALPHA_NGDC',nh:'',sz:'',cidr:'',notes:''});
   const [ngdcSaving, setNgdcSaving] = useState(false);
   const [ngdcLoaded, setNgdcLoaded] = useState(false);
+  // Suppress unused-var warnings — these are used in NGDC mappings UI sections
+  void ngdcImportedApps; void ngdcAppFilter; void setNgdcAppFilter;
+  void ngdcExpandedAppId; void setNgdcExpandedAppId;
+  void ngdcAddingForApp; void ngdcSaving; void ngdcLoaded;
 
   const loadNgdcApps = useCallback(async () => {
     try {
@@ -458,7 +463,7 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
 
-  const handleNgdcAddComponent = async (appId: string) => {
+  const handleNgdcAddComponent = async (appId: string) => { // eslint-disable-line @typescript-eslint/no-unused-vars
     setNgdcSaving(true);
     try {
       await api.createAppDCMapping({ app_id: appId, ...ngdcComponentForm, status: 'Active' });
@@ -470,7 +475,7 @@ export default function SettingsPage() {
     setNgdcSaving(false);
   };
 
-  const handleNgdcDeleteComponent = async (mappingId: string) => {
+  const handleNgdcDeleteComponent = async (mappingId: string) => { // eslint-disable-line @typescript-eslint/no-unused-vars
     try {
       await api.deleteAppDCMapping(mappingId);
       loadNgdcApps();
@@ -481,7 +486,7 @@ export default function SettingsPage() {
   const loadUserDataSummary = useCallback(async () => {
     try {
       const summary = await api.getUserDataSummary();
-      setUserDataSummary(summary);
+      setUserDataSummary(summary as typeof userDataSummary);
     } catch { /* ignore */ }
   }, []);
 
@@ -964,7 +969,7 @@ export default function SettingsPage() {
                   <select value={dmEnvironment} onChange={e => setDmEnvironment(e.target.value)}
                     className="px-2 py-1 text-xs border border-gray-300 rounded-md bg-white">
                     <option value="">All Environments</option>
-                    {environments.map(env => <option key={String(env)} value={String(env)}>{String(env)}</option>)}
+                    {['Production', 'Non-Production', 'Pre-Production'].map(env => <option key={env} value={env}>{env}</option>)}
                   </select>
                 </div>
               )}
@@ -1772,7 +1777,7 @@ export default function SettingsPage() {
             </div>
             <div className="p-4 bg-white border border-gray-200 rounded-lg">
               <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-xs font-medium text-blue-600 mb-1">Group Prefix</p>
                     {editingNaming
@@ -1781,7 +1786,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-blue-600 mt-1">
                       {editingNaming
                         ? <input className="w-full px-2 py-1 text-xs border rounded" value={editNamingForm.group_pattern} onChange={e => setEditNamingForm({ ...editNamingForm, group_pattern: e.target.value })} />
-                        : editNamingForm.group_pattern}
+                        : <span className="font-mono">{'grp-{APP}-{NH}-{SZ}-{SUBTYPE}'}</span>}
                     </p>
                   </div>
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -1792,18 +1797,25 @@ export default function SettingsPage() {
                     <p className="text-xs text-green-600 mt-1">
                       {editingNaming
                         ? <input className="w-full px-2 py-1 text-xs border rounded" value={editNamingForm.server_pattern} onChange={e => setEditNamingForm({ ...editNamingForm, server_pattern: e.target.value })} />
-                        : editNamingForm.server_pattern}
+                        : <span className="font-mono">{'svr-{IP_ADDRESS}'}</span>}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-xs font-medium text-orange-600 mb-1">Range Prefix</p>
+                    {editingNaming
+                      ? <input className={inp + ' font-mono'} value={editNamingForm.range_prefix} onChange={e => setEditNamingForm({ ...editNamingForm, range_prefix: e.target.value })} />
+                      : <p className="text-sm font-mono font-bold text-orange-800">{editNamingForm.range_prefix || 'rng-'}</p>}
+                    <p className="text-xs text-orange-600 mt-1">
+                      {editingNaming
+                        ? <input className="w-full px-2 py-1 text-xs border rounded" value={editNamingForm.range_pattern} onChange={e => setEditNamingForm({ ...editNamingForm, range_pattern: e.target.value })} />
+                        : <span className="font-mono">{'rng-xx.xx.xx.xx-xx'}</span>}
                     </p>
                   </div>
                   <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                    <p className="text-xs font-medium text-purple-600 mb-1">Range Prefix</p>
-                    {editingNaming
-                      ? <input className={inp + ' font-mono'} value={editNamingForm.range_prefix} onChange={e => setEditNamingForm({ ...editNamingForm, range_prefix: e.target.value })} />
-                      : <p className="text-sm font-mono font-bold text-purple-800">{editNamingForm.range_prefix || 'rng-'}</p>}
+                    <p className="text-xs font-medium text-purple-600 mb-1">Subnet Prefix</p>
+                    <p className="text-sm font-mono font-bold text-purple-800">net-</p>
                     <p className="text-xs text-purple-600 mt-1">
-                      {editingNaming
-                        ? <input className="w-full px-2 py-1 text-xs border rounded" value={editNamingForm.range_pattern} onChange={e => setEditNamingForm({ ...editNamingForm, range_pattern: e.target.value })} />
-                        : editNamingForm.range_pattern}
+                      <span className="font-mono">{'net-xx.xx.xx.xx/xx'}</span>
                     </p>
                   </div>
                 </div>

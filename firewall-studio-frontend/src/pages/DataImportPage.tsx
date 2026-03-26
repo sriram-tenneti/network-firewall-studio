@@ -90,9 +90,9 @@ export default function DataImportPage({ context }: DataImportPageProps) {
         environment: 'Production',
       })) as unknown as FirewallRule[];
       setNfrRules(mapped);
-      const apps = Array.from(new Set(legacyRules.map((r: LegacyRule) => `${r.app_id}|${r.app_name || r.app_id}`))).map(key => {
-        const [appId, appName] = (key as string).split('|');
-        return { value: appId, label: `${appId} - ${appName}` };
+      const apps = Array.from(new Set(legacyRules.map((r: LegacyRule) => `${r.app_distributed_id || r.app_id}|${r.app_name || r.app_id}`))).map(key => {
+        const [distId, appName] = (key as string).split('|');
+        return { value: distId, label: `${distId} - ${appName}` };
       });
       setNfrApps(apps);
     } catch { setNfrApps([]); }
@@ -214,16 +214,29 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     } catch { /* ignore */ }
   }, []);
 
+  // Dynamically compute all column keys from imported rules (preserves all Excel columns)
+  const importedRuleColumns = (() => {
+    const skip = new Set(['id', 'is_standard', 'imported_at', 'environment']);
+    const allKeys = new Set<string>();
+    for (const r of importedRules) {
+      for (const k of Object.keys(r)) {
+        if (!skip.has(k)) allKeys.add(k);
+      }
+    }
+    // Put known columns first in preferred order, then any extras
+    const preferred = ['app_id', 'app_distributed_id', 'app_name', 'inventory_item', 'policy_name', 'rule_global', 'rule_action', 'rule_source', 'rule_source_expanded', 'rule_source_zone', 'rule_destination', 'rule_destination_expanded', 'rule_destination_zone', 'rule_service', 'rule_service_expanded', 'rn', 'rc', 'migration_status'];
+    const ordered: string[] = [];
+    for (const k of preferred) { if (allKeys.has(k)) { ordered.push(k); allKeys.delete(k); } }
+    for (const k of Array.from(allKeys).sort()) { ordered.push(k); }
+    return ordered;
+  })();
+
   const exportImportedRulesToCSV = () => {
     const filtered = getFilteredImportedRules();
     if (filtered.length === 0) return;
-    const headers = ['App ID', 'App Distributed ID', 'App Name', 'Inventory Item', 'Policy Name', 'Rule Global', 'Rule Action', 'Rule Source', 'Rule Source Expanded', 'Rule Source Zone', 'Rule Destination', 'Rule Destination Expanded', 'Rule Destination Zone', 'Rule Service', 'Rule Service Expanded', 'RN', 'RC', 'Migration Status'];
-    const rows = filtered.map(r => [
-      r.app_id, r.app_distributed_id, r.app_name, r.inventory_item, r.policy_name,
-      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action, r.rule_source, r.rule_source_expanded,
-      r.rule_source_zone, r.rule_destination, r.rule_destination_expanded,
-      r.rule_destination_zone, r.rule_service, r.rule_service_expanded, r.rn, r.rc, r.migration_status
-    ]);
+    // Use dynamic columns from the actual data
+    const headers = importedRuleColumns.map(k => k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+    const rows = filtered.map(r => importedRuleColumns.map(k => String((r as Record<string, unknown>)[k] ?? '')));
     const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -236,20 +249,14 @@ export default function DataImportPage({ context }: DataImportPageProps) {
 
   const getFilteredImportedRules = () => {
     let filtered = importedRules;
-    if (rulesAppFilter) filtered = filtered.filter(r => String(r.app_id) === rulesAppFilter);
+    if (rulesAppFilter) filtered = filtered.filter(r => (r.app_distributed_id || String(r.app_id)) === rulesAppFilter);
     if (rulesSearchQuery.trim()) {
       const q = rulesSearchQuery.toLowerCase();
-      filtered = filtered.filter(r =>
-        String(r.app_id).toLowerCase().includes(q) ||
-        (r.app_name || '').toLowerCase().includes(q) ||
-        (r.rule_source || '').toLowerCase().includes(q) ||
-        (r.rule_source_expanded || '').toLowerCase().includes(q) ||
-        (r.rule_destination || '').toLowerCase().includes(q) ||
-        (r.rule_destination_expanded || '').toLowerCase().includes(q) ||
-        (r.rule_service || '').toLowerCase().includes(q) ||
-        (r.rule_source_zone || '').toLowerCase().includes(q) ||
-        (r.rule_destination_zone || '').toLowerCase().includes(q)
-      );
+      filtered = filtered.filter(r => {
+        // Search across ALL columns dynamically
+        const rec = r as Record<string, unknown>;
+        return Object.values(rec).some(v => v != null && String(v).toLowerCase().includes(q));
+      });
     }
     return filtered;
   };
@@ -434,15 +441,39 @@ export default function DataImportPage({ context }: DataImportPageProps) {
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
         )}
         {result && (
-          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-            <h3 className="text-sm font-semibold text-green-800 mb-2">Import Successful</h3>
-            <div className="grid grid-cols-3 gap-3 text-xs">
-              {result.imported !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Rules Imported:</span> <span className="font-bold text-green-700">{String(result.imported)}</span></div>}
-              {result.total_rules !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Total Rules:</span> <span className="font-bold">{String(result.total_rules)}</span></div>}
-              {result.groups_expanded !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Groups Expanded:</span> <span className="font-bold text-blue-700">{String(result.groups_expanded)}</span></div>}
-              {result.duplicates_skipped !== undefined && <div className="bg-white rounded p-2"><span className="text-gray-500">Duplicates Skipped:</span> <span className="font-bold text-amber-700">{String(result.duplicates_skipped)}</span></div>}
+          <div className={`mt-4 p-4 rounded-lg border ${Number(result.added || result.imported || 0) > 0 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+            <h3 className={`text-sm font-semibold mb-2 ${Number(result.added || result.imported || 0) > 0 ? 'text-green-800' : 'text-amber-800'}`}>
+              {Number(result.added || result.imported || 0) > 0 ? 'Import Successful' : 'No New Rules Imported'}
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="bg-white rounded p-2"><span className="text-gray-500">New Rules Added:</span> <span className="font-bold text-green-700">{String(result.added ?? result.imported ?? 0)}</span></div>
+              <div className="bg-white rounded p-2"><span className="text-gray-500">Duplicates Skipped:</span> <span className="font-bold text-amber-700">{String(result.duplicates ?? result.duplicates_skipped ?? 0)}</span></div>
+              <div className="bg-white rounded p-2"><span className="text-gray-500">Total in DB:</span> <span className="font-bold">{String(result.total ?? result.total_rules ?? '—')}</span></div>
+              <div className="bg-white rounded p-2"><span className="text-gray-500">Rows in File:</span> <span className="font-bold text-blue-700">{String(result.parsed_rows ?? result.total_file_rows ?? '—')}</span></div>
             </div>
-            <p className="text-xs text-green-600 mt-2">Source/destination groups have been expanded to show associated IPs, ranges, and subnets.</p>
+            {/* Header diagnostics */}
+            {result.headers_found && (
+              <details className="mt-3 text-xs">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Column diagnostics ({String((result.headers_found as string[])?.length || 0)} columns found)</summary>
+                <div className="mt-2 space-y-1">
+                  {(result.mapped_headers as string[])?.length > 0 && (
+                    <div><span className="text-green-600 font-medium">Mapped:</span> {(result.mapped_headers as string[]).join(', ')}</div>
+                  )}
+                  {(result.unmapped_headers as string[])?.length > 0 && (
+                    <div><span className="text-blue-600 font-medium">Extra columns (preserved):</span> {(result.unmapped_headers as string[]).join(', ')}</div>
+                  )}
+                </div>
+              </details>
+            )}
+            {Number(result.added || result.imported || 0) === 0 && Number(result.parsed_rows || 0) === 0 && (
+              <p className="text-xs text-red-600 mt-2 font-medium">The file could not be read. If it has IRM/DRM protection, open it in Excel and Save As CSV (.csv), then re-import.</p>
+            )}
+            {Number(result.added || result.imported || 0) === 0 && Number(result.parsed_rows || 0) > 0 && (
+              <p className="text-xs text-amber-600 mt-2">All {String(result.parsed_rows)} rows were duplicates of existing rules. Use "Clear All &amp; Re-import" to start fresh.</p>
+            )}
+            {Number(result.added || result.imported || 0) > 0 && (
+              <p className="text-xs text-green-600 mt-2">Source/destination groups have been expanded to show associated IPs, ranges, and subnets.</p>
+            )}
           </div>
         )}
       </div>}
@@ -458,8 +489,8 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             <div className="flex items-center gap-3">
               <select className="px-2 py-1.5 text-xs border rounded-md" value={rulesAppFilter} onChange={e => setRulesAppFilter(e.target.value)}>
                 <option value="">All Apps</option>
-                {Array.from(new Set(importedRules.map(r => String(r.app_id)))).sort().map(appId => (
-                  <option key={appId} value={appId}>{appId}</option>
+                {Array.from(new Set(importedRules.map(r => r.app_distributed_id || String(r.app_id)))).sort().map(distId => (
+                  <option key={distId} value={distId}>{distId}</option>
                 ))}
               </select>
               <input
@@ -490,72 +521,27 @@ export default function DataImportPage({ context }: DataImportPageProps) {
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
                   <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule ID</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">App ID</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">App Name</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Policy</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Action</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule Source</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap min-w-[180px]">Source Details</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Src Zone</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Rule Destination</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap min-w-[180px]">Destination Details</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Dst Zone</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Service</th>
-                  <th className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap">Status</th>
+                  {importedRuleColumns.map(col => (
+                    <th key={col} className="px-2 py-2 text-left font-medium text-gray-500 whitespace-nowrap max-w-[200px]">
+                      {col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {getFilteredImportedRules().slice(0, 200).map(rule => (
                   <tr key={rule.id} className="hover:bg-gray-50">
                     <td className="px-2 py-1.5 font-mono text-gray-600">{rule.id}</td>
-                    <td className="px-2 py-1.5 font-mono font-medium">{String(rule.app_id)}</td>
-                    <td className="px-2 py-1.5 text-gray-700 max-w-[120px] truncate" title={rule.app_name}>{rule.app_name}</td>
-                    <td className="px-2 py-1.5 text-gray-500 max-w-[100px] truncate" title={rule.policy_name}>{rule.policy_name}</td>
-                    <td className="px-2 py-1.5">
-                      <span className={`px-1.5 py-0.5 rounded font-medium ${rule.rule_action === 'Accept' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {rule.rule_action}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5 max-w-[150px]">
-                      <div className="font-mono text-blue-800" title={rule.rule_source}>
-                        {(rule.rule_source || '').split('\n').filter(Boolean).slice(0, 2).join(', ')}
-                        {(rule.rule_source || '').split('\n').filter(Boolean).length > 2 && <span className="text-gray-400"> +{(rule.rule_source || '').split('\n').filter(Boolean).length - 2}</span>}
-                      </div>
-                    </td>
-                    <td className="px-2 py-1.5 max-w-[250px]">
-                      {rule.rule_source_expanded ? (
-                        <div className="text-gray-700 truncate" title={rule.rule_source_expanded}>
-                          {rule.rule_source_expanded.substring(0, 100)}{rule.rule_source_expanded.length > 100 ? '...' : ''}
-                        </div>
-                      ) : (
-                        <span className="text-gray-300 italic">—</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-500">{rule.rule_source_zone}</td>
-                    <td className="px-2 py-1.5 max-w-[150px]">
-                      <div className="font-mono text-purple-800" title={rule.rule_destination}>
-                        {(rule.rule_destination || '').split('\n').filter(Boolean).slice(0, 2).join(', ')}
-                        {(rule.rule_destination || '').split('\n').filter(Boolean).length > 2 && <span className="text-gray-400"> +{(rule.rule_destination || '').split('\n').filter(Boolean).length - 2}</span>}
-                      </div>
-                    </td>
-                    <td className="px-2 py-1.5 max-w-[250px]">
-                      {rule.rule_destination_expanded ? (
-                        <div className="text-gray-700 truncate" title={rule.rule_destination_expanded}>
-                          {rule.rule_destination_expanded.substring(0, 100)}{rule.rule_destination_expanded.length > 100 ? '...' : ''}
-                        </div>
-                      ) : (
-                        <span className="text-gray-300 italic">—</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-500">{rule.rule_destination_zone}</td>
-                    <td className="px-2 py-1.5 font-mono text-gray-600 max-w-[100px] truncate" title={rule.rule_service}>{rule.rule_service}</td>
-                    <td className="px-2 py-1.5">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        rule.migration_status === 'Completed' ? 'bg-green-100 text-green-700' :
-                        rule.migration_status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>{rule.migration_status}</span>
-                    </td>
+                    {importedRuleColumns.map(col => {
+                      const val = String((rule as Record<string, unknown>)[col] ?? '');
+                      if (col === 'rule_action') {
+                        return <td key={col} className="px-2 py-1.5"><span className={`px-1.5 py-0.5 rounded font-medium ${val === 'Accept' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{val}</span></td>;
+                      }
+                      if (col === 'migration_status') {
+                        return <td key={col} className="px-2 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${val === 'Completed' ? 'bg-green-100 text-green-700' : val === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{val}</span></td>;
+                      }
+                      return <td key={col} className="px-2 py-1.5 max-w-[200px] truncate" title={val}>{val || <span className="text-gray-300 italic">—</span>}</td>;
+                    })}
                   </tr>
                 ))}
               </tbody>
