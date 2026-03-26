@@ -474,7 +474,6 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to add component', 'error'); }
     setNgdcSaving(false);
   };
-
   void _handleNgdcAddComponent;
 
   const _handleNgdcDeleteComponent = async (mappingId: string) => {
@@ -484,7 +483,6 @@ export default function SettingsPage() {
       showNotification('Component deleted', 'success');
     } catch { showNotification('Failed to delete', 'error'); }
   };
-
   void _handleNgdcDeleteComponent;
 
   const loadUserDataSummary = useCallback(async () => {

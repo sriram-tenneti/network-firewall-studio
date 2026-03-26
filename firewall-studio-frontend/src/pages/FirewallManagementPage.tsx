@@ -984,7 +984,7 @@ export default function FirewallManagementPage() {
         const migStatus = row.rule_migration_status || 'Yet to Migrate';
         const isMigrationDeployed = migStatus === 'Migrated';
         // In FM: Modify allowed only if NOT yet migrated (still in legacy)
-        // Once Migration Deployed, rule is managed in Studio
+        // Once migrated, rule is managed in Studio
         const canModify = !isMigrationDeployed && row.migration_status !== 'Completed';
         return (
           <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>

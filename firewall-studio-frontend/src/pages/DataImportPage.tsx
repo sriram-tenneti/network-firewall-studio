@@ -198,7 +198,6 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       setSavingComponent(false);
     }
   };
-
   void _handleAddComponent;
 
   const _handleDeleteComponent = async (mappingId: string) => {
@@ -209,7 +208,6 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       setError('Failed to delete component mapping');
     }
   };
-
   void _handleDeleteComponent;
 
   const loadImportedRules = useCallback(async () => {
@@ -457,6 +455,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
               <div className="bg-white rounded p-2"><span className="text-gray-500">Total in DB:</span> <span className="font-bold">{String(result.total ?? result.total_rules ?? '—')}</span></div>
               <div className="bg-white rounded p-2"><span className="text-gray-500">Rows in File:</span> <span className="font-bold text-blue-700">{String(result.parsed_rows ?? result.total_file_rows ?? '—')}</span></div>
             </div>
+            {/* Header diagnostics */}
             {!!result.headers_found && (
               <details className="mt-3 text-xs">
                 <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Column diagnostics ({String((result.headers_found as string[])?.length || 0)} columns found)</summary>
