@@ -170,7 +170,7 @@ function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'su
   // net- prefix = subnet/network
   if (vl.startsWith('net-')) return 'subnet';
   // rmg- or rng- = range
-  if (vl.startsWith('rmg-')) return 'subnet';
+  if (vl.startsWith('rmg-')) return 'range';
   // Default: treat as IP
   return 'ip';
 }
@@ -281,10 +281,20 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
       }
 
       // Inside a group — check if this line still belongs to it
-      // For flat expansion (no indentation), members are values NOT in the source column
+      // For flat expansion, treat raw non-group values as direct members of the current parent
+      // group, and only break into a new top-level group when we encounter another group-valued
+      // source entry after the current parent already has members. This lets Modify match the
+      // Excel dump when Source/Destination contains a parent group plus direct leaf members while
+      // the Expanded column also contains one or more nested child groups.
       const isFlatExpansion = memberIndent === groupIndent;
+      const currentMemberType = detectEntryType(value, groupNameSet);
+      const currentGroupHasMembers = (currentGroup.groupMembers || []).length > 0;
+      const startsNextFlatTopLevelGroup = isFlatExpansion
+        && rawValues.has(value)
+        && currentMemberType === 'group'
+        && currentGroupHasMembers;
       const isStillMember = isFlatExpansion
-        ? !rawValues.has(value)  // flat: members are values not in source column
+        ? !startsNextFlatTopLevelGroup
         : indent > groupIndent;  // hierarchical: members are indented deeper
 
       if (!isStillMember) {
@@ -318,8 +328,14 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
       }
 
       // Member of the current group
-      const memberType = detectEntryType(value, groupNameSet);
+      const memberType = currentMemberType;
       const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'subnet' : memberType === 'range' ? 'range' : 'ip';
+
+      if (!isFlatExpansion && indent <= memberIndent) {
+        // Returned to first-level member indentation, so subsequent leaf entries belong to the
+        // parent group again rather than the most recent sub-group.
+        currentSubGroup = null;
+      }
 
       if (!isFlatExpansion && indent >= memberIndent && hasChildren(i)) {
         // This member has deeper children → nested sub-group
@@ -338,10 +354,17 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
         currentSubGroup = subGroupEntry;
         if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
         currentGroup.groupMembers.push(subGroupEntry);
-      } else if (currentSubGroup !== null) {
-        // Non-group entry following a sub-group at same indent → child of that sub-group
-        if (!currentSubGroup.children) currentSubGroup.children = [];
-        currentSubGroup.children.push({ type: mType, value });
+      } else if (isFlatExpansion && currentSubGroup !== null) {
+        // In flat expansions, raw non-group values belong to the parent group itself, while
+        // non-raw values continue as children of the most recent sub-group.
+        if (rawValues.has(value)) {
+          currentSubGroup = null;
+          if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+          currentGroup.groupMembers.push({ type: mType, value });
+        } else {
+          if (!currentSubGroup.children) currentSubGroup.children = [];
+          currentSubGroup.children.push({ type: mType, value });
+        }
       } else {
         // Direct member of the current group (no active sub-group)
         if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
