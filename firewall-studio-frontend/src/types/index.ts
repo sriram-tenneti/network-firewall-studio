@@ -269,7 +269,7 @@ export interface ReviewRequest {
   review_notes: string | null;
   modification_id?: string;
   delta?: RuleDelta;
-  module?: 'studio' | 'fm' | 'migration';
+  module?: 'design-studio' | 'firewall-management' | 'migration-studio';
   rule_summary: {
     application: string;
     source: string;

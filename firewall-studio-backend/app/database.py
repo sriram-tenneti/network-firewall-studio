@@ -944,6 +944,7 @@ async def create_migration_review(rule_ids: list[str], comments: str = "") -> li
             "rule_id": rid,
             "rule_name": f"{rule.get('app_name', '')} - {rule.get('inventory_item', rid)}",
             "request_type": "migration",
+            "module": "migration-studio",
             "requestor": "system",
             "reviewer": None,
             "status": "Pending",
@@ -2247,7 +2248,7 @@ async def get_reviews(status: str | None = None) -> list[dict[str, Any]]:
     return reviews
 
 
-async def create_review(rule_id: str, comments: str = "") -> dict[str, Any]:
+async def create_review(rule_id: str, comments: str = "", module: str = "design-studio") -> dict[str, Any]:
     reviews = _load("reviews") or []
     rule = await get_rule(rule_id)
     now = _now()
@@ -2280,6 +2281,7 @@ async def create_review(rule_id: str, comments: str = "") -> dict[str, Any]:
         "rule_id": rule_id,
         "rule_name": rule.get("description", rule_id) if rule else rule_id,
         "request_type": "new_rule",
+        "module": module,
         "requestor": "system",
         "reviewer": None,
         "status": "Pending",
@@ -2310,6 +2312,11 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             mod_id = r.get("modification_id")
             if mod_id:
                 await approve_rule_modification(mod_id, notes)
+            elif r.get("request_type") == "migration":
+                # Migration review: update the legacy rule's statuses
+                rule_id = r.get("rule_id")
+                if rule_id:
+                    await migrate_rule_to_ngdc(rule_id)
             else:
                 rule_id = r.get("rule_id")
                 if rule_id:
