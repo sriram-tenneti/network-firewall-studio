@@ -16,6 +16,7 @@ import {
 } from '@/lib/api';
 import { LDFFlowVisualization, type EgressIngressResult } from '@/components/design-studio/LDFFlowVisualization';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, Application } from '@/types';
+import { parseExpandedToDisplayLines } from '@/lib/nestingParser';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -403,10 +404,7 @@ export function MigrationStudioPage() {
   };
   void _updateDestMapping;
 
-  const parseExpandedTree = (text: string): string[] => {
-    if (!text) return [];
-    return text.split('\n').map(line => line.replace(/\t/g, '  '));
-  };
+  // parseExpandedTree removed — use shared parseExpandedToDisplayLines from nestingParser
 
   // Create new group during migration
   const handleCreateMigrationGroup = async () => {
@@ -770,17 +768,14 @@ export function MigrationStudioPage() {
                 <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_source_expanded).map((line, i) => {
-                  const indent = line.length - line.trimStart().length;
-                  const v = line.trim();
-                  const vl = v.toLowerCase();
-                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GRP' : vl.startsWith('rng-') ? 'RNG' : vl.startsWith('net-') || vl.startsWith('sub-') ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d/.test(v) ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(v) ? 'RNG' : 'IP';
+                {parseExpandedToDisplayLines(detailModal.data.rule_source || '', detailModal.data.rule_source_expanded || '').map((item, i) => {
+                  const eType = item.type === 'group' ? 'GRP' : item.type === 'range' ? 'RNG' : item.type === 'subnet' ? 'NET' : 'IP';
                   const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
-                  const isChild = indent >= 2;
+                  const isChild = item.indent >= 1;
                   return (
                     <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
                       <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
-                      <span className="font-mono text-xs text-green-400">{v}</span>
+                      <span className="font-mono text-xs text-green-400">{item.text}</span>
                     </div>
                   );
                 })}
@@ -792,17 +787,14 @@ export function MigrationStudioPage() {
                 <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_destination_expanded).map((line, i) => {
-                  const indent = line.length - line.trimStart().length;
-                  const v = line.trim();
-                  const vl = v.toLowerCase();
-                  const eType = vl.startsWith('grp-') || vl.startsWith('g-') ? 'GRP' : vl.startsWith('rng-') ? 'RNG' : vl.startsWith('net-') || vl.startsWith('sub-') ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d/.test(v) ? 'NET' : /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(v) ? 'RNG' : 'IP';
+                {parseExpandedToDisplayLines(detailModal.data.rule_destination || '', detailModal.data.rule_destination_expanded || '').map((item, i) => {
+                  const eType = item.type === 'group' ? 'GRP' : item.type === 'range' ? 'RNG' : item.type === 'subnet' ? 'NET' : 'IP';
                   const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
-                  const isChild = indent >= 2;
+                  const isChild = item.indent >= 1;
                   return (
                     <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
                       <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
-                      <span className="font-mono text-xs text-purple-400">{v}</span>
+                      <span className="font-mono text-xs text-purple-400">{item.text}</span>
                     </div>
                   );
                 })}

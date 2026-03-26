@@ -9,6 +9,8 @@ import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, g
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
 import { autoPrefix } from '@/lib/utils';
+import { detectEntryType, parseToResourceEntries, entriesToDisplayLines } from '@/lib/nestingParser';
+import type { ResourceEntry } from '@/lib/nestingParser';
 import type { Column } from '@/components/shared/DataTable';
 
 interface ModifyState {
@@ -96,300 +98,10 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
   return delta;
 }
 
-interface GroupMemberEntry {
-  type: string;
-  value: string;
-  children?: GroupMemberEntry[];  // nested sub-group members
-}
+// Types and parser functions imported from shared nestingParser module.
+// Local interfaces removed — use the shared GroupMemberEntry / ResourceEntry.
 
-interface ResourceEntry {
-  id: string;
-  type: 'ip' | 'subnet' | 'range' | 'group';
-  value: string;
-  groupMembers?: GroupMemberEntry[];
-  isNew?: boolean;
-  isModified?: boolean;
-}
-
-const IP_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
-/**
- * Naming conventions from Excel:
- *   svr-  = IP address (server)
- *   Groups: ANY prefix — detected structurally by indented children in expansion column
- *   rng-  = Range of IPs/subnets
- *   sub-  = Subnet
- *
- * Legacy group prefix hints (used when expansion column is unavailable):
- *   g-, grp-, ggrp-, gapigr-, netgrp-, addrgrp-, group-, etc.
- * But in NGDC, groups follow strict naming standards.
- */
-const LEGACY_GROUP_PREFIXES = [
-  'g-', 'grp-', 'ggrp-', 'gapigr-', 'grp_', 'g_',
-  'group-', 'group_', 'netgrp-', 'netgrp_', 'addrgrp-',
-];
-
-/** Prefix-based hint for group detection (fallback when no expansion column). */
-function isLegacyGroupName(name: string): boolean {
-  const lower = name.trim().toLowerCase();
-  return LEGACY_GROUP_PREFIXES.some(pfx => lower.startsWith(pfx));
-}
-
-function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'range' | 'group' {
-  const v = value.trim();
-  const vl = v.toLowerCase();
-  // Check known group prefixes as hint
-  if (isLegacyGroupName(v)) return 'group';
-  // Check if it matches a known group name from the backend
-  if (allGroupNames && allGroupNames.has(v)) return 'group';
-  // Common enterprise group naming patterns (contain group-like keywords)
-  if (vl.includes('-networks') || vl.includes('_networks') || vl.includes('-global')
-      || vl.includes('_global') || vl.endsWith('-svrs') || vl.endsWith('-servers')
-      || vl.startsWith('gapingr-') || vl.startsWith('dcms') || vl.startsWith('dcma-')
-      || vl.startsWith('protected-')) return 'group';
-  // grp- prefix = GROUP
-  if (vl.startsWith('grp-')) return 'group';
-  // rng- prefix = RANGE (IP ranges xx.xx.xx.xx-xy)
-  if (vl.startsWith('rng-')) return 'range';
-  // net- prefix = SUBNET (NGDC standard for subnets)
-  if (vl.startsWith('net-')) return 'subnet';
-  // sub- prefix = SUBNET (legacy subnet prefix)
-  if (vl.startsWith('sub-')) return 'subnet';
-  // svr- prefix = IP (server)
-  if (vl.startsWith('svr-')) return 'ip';
-  // gsvr- prefix = IP (legacy variant of svr-)
-  if (vl.startsWith('gsvr-')) return 'ip';
-  // Check CIDR notation (subnet)
-  if (CIDR_REGEX.test(v)) return 'subnet';
-  // Check IP range pattern (xx.xx.xx.xx-xx.xx.xx.xx or xx.xx.xx.xx-xy)
-  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(v)) return 'range';
-  // Check plain IP
-  if (IP_REGEX.test(v)) return 'ip';
-  // If it contains '/' it's likely a subnet
-  if (v.includes('/')) return 'subnet';
-  // net- prefix = subnet/network
-  if (vl.startsWith('net-')) return 'subnet';
-  // rmg- or rng- = range
-  if (vl.startsWith('rmg-')) return 'range';
-  // Default: treat as IP
-  return 'ip';
-}
-
-/**
- * Parse expanded text (hierarchical) into ResourceEntry[].
- *
- * Group detection is **structure-based**: any entry that has indented
- * children below it is treated as a group, regardless of its prefix.
- * The prefix can be anything — the indentation hierarchy is the sole
- * authority for legacy groups.  (NGDC groups follow strict naming.)
- *
- * Example expansion text:
- *   MY-CUSTOM-GROUP     <- group (has indented children below)
- *     svr-10.1.2.3      <- member
- *     rng-10.1.2.3-10   <- member
- *     NESTED-SUB-GRP    <- nested sub-group (has deeper children)
- *       10.2.2.1        <- member of nested sub-group
- *   svr-10.5.6.7        <- standalone (no children → not a group)
- */
-function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?: string): ResourceEntry[] {
-  if (!raw && !expanded) return [];
-  const groupNameSet = new Set(groups.map(g => g.name));
-
-  // Build a set of source-column values for source-vs-expansion comparison.
-  // If a value appears in the source column AND the expansion column contains
-  // additional values not in the source column, then it's a group (the expansion
-  // column shows the expanded members).  This handles cases where indentation
-  // is inconsistent or completely flat.
-  const rawValues = new Set(
-    (raw || '').split('\n').map(l => l.trim()).filter(Boolean)
-  );
-
-  // If we have expanded text, parse the hierarchical structure using look-ahead
-  if (expanded && expanded.trim()) {
-    // First pass: collect all non-empty lines with indent + value
-    const parsedLines: { indent: number; value: string }[] = [];
-    for (const line of expanded.split('\n')) {
-      if (!line.trim()) continue;
-      const indent = line.startsWith('\t')
-        ? (line.length - line.replace(/^\t+/, '').length) * 4
-        : line.length - line.trimStart().length;
-      const v = line.trim();
-      const valueClean = v.includes('(') ? v.substring(0, v.indexOf('(')).trim() : v;
-      if (valueClean) parsedLines.push({ indent, value: valueClean });
-    }
-
-    if (parsedLines.length === 0) return [];
-
-    // Collect all unique values in the expansion column
-    const expandedValues = new Set(parsedLines.map(p => p.value));
-
-    // Source-vs-expansion group detection:
-    // A value is a group if it appears in the source column AND
-    // the expansion column contains values NOT in the source column
-    // (those extra values are the expanded members of the group).
-    const expansionHasExtraValues = (() => {
-      for (const ev of expandedValues) {
-        if (!rawValues.has(ev)) return true;
-      }
-      return false;
-    })();
-    const isSourceGroupByComparison = (val: string) =>
-      rawValues.has(val) && expansionHasExtraValues && rawValues.size < expandedValues.size;
-
-    // Structure-based group detection: entry has children if next line is more indented
-    // Also detect known group names even when flat (same indentation as members)
-    const hasChildren = (idx: number) => idx + 1 < parsedLines.length && parsedLines[idx + 1].indent > parsedLines[idx].indent;
-    const isKnownGroup = (val: string) => groupNameSet.has(val) || groups.some(g => g.name === val);
-    // Combined group check: structural (indentation), known group name, OR source-vs-expansion comparison
-    const isGroupEntry = (idx: number, val: string) =>
-      hasChildren(idx) || isKnownGroup(val) || isSourceGroupByComparison(val);
-
-    const entries: ResourceEntry[] = [];
-    let currentGroup: ResourceEntry | null = null;
-    let currentSubGroup: GroupMemberEntry | null = null;
-    let groupIndent = 0;
-    let memberIndent = 0;
-
-    for (let i = 0; i < parsedLines.length; i++) {
-      const { indent, value } = parsedLines[i];
-
-      // Not inside a group — check if this entry starts one
-      if (currentGroup === null) {
-        if (isGroupEntry(i, value)) {
-          const matchedGroup = groups.find(g => g.name === value);
-          currentGroup = {
-            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            type: 'group',
-            value,
-            groupMembers: matchedGroup
-              ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
-              : [],
-          };
-          currentSubGroup = null;
-          groupIndent = indent;
-          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent;
-        } else {
-          // Standalone entry
-          const type = detectEntryType(value, groupNameSet);
-          entries.push({
-            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            type,
-            value,
-          });
-        }
-        continue;
-      }
-
-      // Inside a group — check if this line still belongs to it
-      // For flat expansion, treat raw non-group values as direct members of the current parent
-      // group, and only break into a new top-level group when we encounter another group-valued
-      // source entry after the current parent already has members. This lets Modify match the
-      // Excel dump when Source/Destination contains a parent group plus direct leaf members while
-      // the Expanded column also contains one or more nested child groups.
-      const isFlatExpansion = memberIndent === groupIndent;
-      const currentMemberType = detectEntryType(value, groupNameSet);
-      const currentGroupHasMembers = (currentGroup.groupMembers || []).length > 0;
-      const startsNextFlatTopLevelGroup = isFlatExpansion
-        && rawValues.has(value)
-        && currentMemberType === 'group'
-        && currentGroupHasMembers;
-      const isStillMember = isFlatExpansion
-        ? !startsNextFlatTopLevelGroup
-        : indent > groupIndent;  // hierarchical: members are indented deeper
-
-      if (!isStillMember) {
-        // Group ended — flush it
-        entries.push(currentGroup);
-        currentGroup = null;
-        currentSubGroup = null;
-        // Re-evaluate: does this line start a new group?
-        if (isGroupEntry(i, value)) {
-          const matchedGroup = groups.find(g => g.name === value);
-          currentGroup = {
-            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            type: 'group',
-            value,
-            groupMembers: matchedGroup
-              ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
-              : [],
-          };
-          currentSubGroup = null;
-          groupIndent = indent;
-          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent;
-        } else {
-          const type = detectEntryType(value, groupNameSet);
-          entries.push({
-            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            type,
-            value,
-          });
-        }
-        continue;
-      }
-
-      // Member of the current group
-      const memberType = currentMemberType;
-      const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'subnet' : memberType === 'range' ? 'range' : 'ip';
-
-      if (!isFlatExpansion && indent <= memberIndent) {
-        // Returned to first-level member indentation, so subsequent leaf entries belong to the
-        // parent group again rather than the most recent sub-group.
-        currentSubGroup = null;
-      }
-
-      if (!isFlatExpansion && indent >= memberIndent && hasChildren(i)) {
-        // This member has deeper children → nested sub-group
-        const subGroupEntry: GroupMemberEntry = { type: 'group', value, children: [] };
-        currentSubGroup = subGroupEntry;
-        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-        currentGroup.groupMembers.push(subGroupEntry);
-      } else if (!isFlatExpansion && currentSubGroup !== null && indent > memberIndent) {
-        // Deeper than first-level members → belongs to sub-group
-        if (!currentSubGroup.children) currentSubGroup.children = [];
-        currentSubGroup.children.push({ type: mType, value });
-      } else if (mType === 'group') {
-        // Flat or same-indent: this is a sub-group entry (detected by name pattern).
-        // Collect subsequent non-group entries as its children.
-        const subGroupEntry: GroupMemberEntry = { type: 'group', value, children: [] };
-        currentSubGroup = subGroupEntry;
-        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-        currentGroup.groupMembers.push(subGroupEntry);
-      } else if (isFlatExpansion && currentSubGroup !== null) {
-        // In flat expansions, raw non-group values belong to the parent group itself, while
-        // non-raw values continue as children of the most recent sub-group.
-        if (rawValues.has(value)) {
-          currentSubGroup = null;
-          if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-          currentGroup.groupMembers.push({ type: mType, value });
-        } else {
-          if (!currentSubGroup.children) currentSubGroup.children = [];
-          currentSubGroup.children.push({ type: mType, value });
-        }
-      } else {
-        // Direct member of the current group (no active sub-group)
-        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-        currentGroup.groupMembers.push({ type: mType, value });
-      }
-    }
-    if (currentGroup) entries.push(currentGroup);
-    return entries;
-  }
-
-  // Fallback: parse flat raw text (no expansion column available)
-  return raw.split('\n').filter(Boolean).map((line, i) => {
-    const v = line.trim();
-    const type = detectEntryType(v, groupNameSet);
-    const matchedGroup = type === 'group' ? groups.find(g => g.name === v) : undefined;
-    return {
-      id: `entry-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      type,
-      value: v,
-      groupMembers: matchedGroup
-        ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
-        : type === 'group' ? [] : undefined,
-    };
-  });
-}
+// parseToResourceEntries is now imported from @/lib/nestingParser
 
 function entriesToRaw(entries: ResourceEntry[]): string {
   return entries.map(e => e.value).join('\n');
@@ -869,16 +581,10 @@ export default function FirewallManagementPage() {
     return { value: distId, label: `${distId} - ${appName || appId}` };
   }).sort((a, b) => a.label.localeCompare(b.label));
 
-  /** Parse expanded text into structured lines with type detection for rendering.
-   * Returns objects with { text, indent, type } for proper GRP/IP/RNG badge rendering. */
-  const parseExpandedTree = (text: string): { text: string; indent: number; type: 'group' | 'ip' | 'subnet' | 'range' }[] => {
-    if (!text) return [];
-    return text.split('\n').filter(l => l.trim()).map(line => {
-      const cleaned = line.replace(/\t/g, '  ');
-      const indent = cleaned.length - cleaned.trimStart().length;
-      const v = cleaned.trim();
-      return { text: v, indent, type: detectEntryType(v) };
-    });
+  /** Use the same nesting parser for View and Modify so Source/Destination hierarchy is consistent everywhere. */
+  const parseExpandedTree = (raw: string, expanded: string): { text: string; indent: number; type: 'group' | 'ip' | 'subnet' | 'range' }[] => {
+    if (!expanded) return [];
+    return entriesToDisplayLines(parseToResourceEntries(raw || '', [], expanded || ''));
   };
 
   const openModifyModal = async (rule: LegacyRule) => {
@@ -1255,7 +961,7 @@ export default function FirewallManagementPage() {
                 <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_source_expanded).map((item, i) => (
+                {parseExpandedTree(detailModal.data.rule_source || '', detailModal.data.rule_source_expanded || '').map((item, i) => (
                   <div key={i} className="font-mono text-xs text-green-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 8}px` }}>
                     {item.type === 'group' && <span className="text-[9px] bg-green-700 text-white px-1 rounded">GRP</span>}
                     {item.text}
@@ -1269,7 +975,7 @@ export default function FirewallManagementPage() {
                 <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_destination_expanded).map((item, i) => (
+                {parseExpandedTree(detailModal.data.rule_destination || '', detailModal.data.rule_destination_expanded || '').map((item, i) => (
                   <div key={i} className="font-mono text-xs text-purple-400 flex items-center gap-1" style={{ paddingLeft: `${item.indent * 8}px` }}>
                     {item.type === 'group' && <span className="text-[9px] bg-purple-700 text-white px-1 rounded">GRP</span>}
                     {item.text}
