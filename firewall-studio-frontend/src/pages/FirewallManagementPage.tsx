@@ -697,8 +697,13 @@ export default function FirewallManagementPage() {
   // Multi-app export with selection
   const handleMultiAppExport = () => {
     if (selectedExportApps.size === 0) { showNotification('Select at least one app to export', 'error'); return; }
-    const exportRules = rules.filter(r => selectedExportApps.has(String(r.app_id)));
-    exportRulesToCSV(exportRules, Array.from(selectedExportApps).join('-'));
+    const exportRules = envFilteredRules.filter(r => selectedExportApps.has(String(r.app_id)) || selectedExportApps.has(r.app_distributed_id || ''));
+    if (exportRules.length === 0) {
+      // Fallback: if no match by app_id/dist_id, export all env-filtered rules for selected apps
+      exportRulesToCSV(envFilteredRules, Array.from(selectedExportApps).join('-'));
+    } else {
+      exportRulesToCSV(exportRules, Array.from(selectedExportApps).join('-'));
+    }
     setShowExportModal(false);
   };
 
@@ -765,19 +770,23 @@ export default function FirewallManagementPage() {
       render: (_, row) => <StatusBadge status={row.rule_status || 'Deployed'} />,
     },
     { key: 'rule_migration_status' as keyof LegacyRule, header: 'Migration', sortable: true, width: '110px',
-      render: (_, row) => <StatusBadge status={row.rule_migration_status || 'Not Migrated'} />,
+      render: (_, row) => <StatusBadge status={row.rule_migration_status || 'Yet to Migrate'} />,
     },
-    { key: '_actions', header: 'Actions', width: '140px', sortable: false,
+    { key: '_actions', header: 'Actions', width: '160px', sortable: false,
       render: (_, row) => {
-        const isNGDC = row.migration_status === 'Completed' || (row as unknown as Record<string, unknown>).studio_imported === true;
+        const migStatus = row.rule_migration_status || 'Yet to Migrate';
+        const isMigrationDeployed = migStatus === 'Migration Deployed';
+        // In FM: Modify allowed only if NOT yet migrated (still in legacy)
+        // Once Migration Deployed, rule is managed in Studio
+        const canModify = !isMigrationDeployed && row.migration_status !== 'Completed';
         return (
           <div className="flex gap-1 items-center" onClick={e => e.stopPropagation()}>
             <button onClick={() => detailModal.open(row)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View</button>
-            {isNGDC ? (
+            {isMigrationDeployed ? (
               <span className="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded" title="This rule is managed in Firewall Studio">Studio</span>
-            ) : (
-              <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">modify</button>
-            )}
+            ) : canModify ? (
+              <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">Modify</button>
+            ) : null}
           </div>
         );
       },

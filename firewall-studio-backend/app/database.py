@@ -755,11 +755,13 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         rule["id"] = f"LR-{max_num:05d}"
         rule.setdefault("is_standard", False)
         rule.setdefault("migration_status", "Not Started")
+        # Default environment to Production if not set
+        rule.setdefault("environment", "Production")
         # Lifecycle statuses for imported rules:
         # rule_status = Deployed (imported rules are already deployed in legacy)
-        # rule_migration_status = Not Migrated (not yet migrated to NGDC)
+        # rule_migration_status = Yet to Migrate (not yet migrated to NGDC)
         rule.setdefault("rule_status", "Deployed")
-        rule.setdefault("rule_migration_status", "Not Migrated")
+        rule.setdefault("rule_migration_status", "Yet to Migrate")
         existing.append(rule)
         existing_keys.add(fp)
         added += 1
@@ -798,7 +800,7 @@ async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
             old_status = r.get("migration_status", "Not Started")
             r["migration_status"] = "Completed"
             # Update lifecycle statuses on migration
-            r["rule_migration_status"] = "Migrated"
+            r["rule_migration_status"] = "Migration Deployed"
             r["migrated_at"] = _now()
             _save("legacy_rules", rules)
             await log_migration(rule_id, "migrate_to_ngdc", old_status, "Completed",
@@ -971,9 +973,9 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "status": "Draft",
         # Lifecycle statuses for Studio-created rules:
         # rule_status = Submitted (new rule, needs review/approval)
-        # rule_migration_status = Migrated (created in NGDC, already "migrated")
+        # rule_migration_status = Migration Deployed (created in NGDC / migrated)
         "rule_status": rule_data.get("rule_status", "Submitted"),
-        "rule_migration_status": rule_data.get("rule_migration_status", "Migrated"),
+        "rule_migration_status": rule_data.get("rule_migration_status", "Migration Deployed"),
         "is_group_to_group": rule_data.get("is_group_to_group", True),
         "environment": rule_data.get("environment", "Production"),
         "datacenter": rule_data.get("datacenter", "ALPHA_NGDC"),
@@ -1065,7 +1067,7 @@ async def get_rule_history(rule_id: str) -> list[dict[str, Any]]:
 # Valid transitions per module:
 # Studio (new rules):    Submitted -> In Progress -> Approved -> Deployed
 # FM (imported rules):   Deployed (no transition needed — already deployed)
-# Migration (legacy):    Once migrated, rule_migration_status -> Migrated
+# Migration (legacy):    Once migrated, rule_migration_status -> Migration Deployed
 
 STUDIO_RULE_STATUS_TRANSITIONS: dict[str, list[str]] = {
     "Submitted": ["In Progress"],
@@ -1157,12 +1159,12 @@ async def get_rule_lifecycle_summary() -> dict[str, Any]:
     }
     for r in legacy:
         rs = r.get("rule_status", "Deployed")
-        ms = r.get("rule_migration_status", "Not Migrated")
+        ms = r.get("rule_migration_status", "Yet to Migrate")
         summary["legacy"]["by_rule_status"][rs] = summary["legacy"]["by_rule_status"].get(rs, 0) + 1
         summary["legacy"]["by_migration_status"][ms] = summary["legacy"]["by_migration_status"].get(ms, 0) + 1
     for r in studio:
         rs = r.get("rule_status", "Submitted")
-        ms = r.get("rule_migration_status", "Migrated")
+        ms = r.get("rule_migration_status", "Migration Deployed")
         summary["studio"]["by_rule_status"][rs] = summary["studio"]["by_rule_status"].get(rs, 0) + 1
         summary["studio"]["by_migration_status"][ms] = summary["studio"]["by_migration_status"].get(ms, 0) + 1
     return summary
