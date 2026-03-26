@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, getRules, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules, isHideSeedEnabled } from '@/lib/api';
+import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules, isHideSeedEnabled } from '@/lib/api';
 import type { FirewallRule, LegacyRule } from '@/types';
 
 interface ImportedApp {
@@ -35,15 +35,17 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [newMapping, setNewMapping] = useState({ legacy_name: '', legacy_dc: '', ngdc_name: '', ngdc_dc: '', ngdc_nh: '', ngdc_sz: '', type: 'group' });
 
   // Imported apps mapping state
-  const [importedApps, setImportedApps] = useState<ImportedApp[]>([]);
-  const [showAppMappings, setShowAppMappings] = useState(false);
-  const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
-  const [addingComponentForApp, setAddingComponentForApp] = useState<string | null>(null);
+  const [, setImportedApps] = useState<ImportedApp[]>([]);
+  const [, setShowAppMappings] = useState(false);
+  const [, _setExpandedAppId] = useState<string | null>(null);
+  void _setExpandedAppId;
+  const [, setAddingComponentForApp] = useState<string | null>(null);
   const [newComponentForm, setNewComponentForm] = useState<NewComponentForm>({
     component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', notes: ''
   });
-  const [savingComponent, setSavingComponent] = useState(false);
-  const [appFilter, setAppFilter] = useState<'all' | 'unmapped' | 'mapped'>('all');
+  const [, setSavingComponent] = useState(false);
+  const [, _setAppFilter] = useState<'all' | 'unmapped' | 'mapped'>('all');
+  void _setAppFilter;
 
   // Imported legacy rules display state
   const [importedRules, setImportedRules] = useState<LegacyRule[]>([]);
@@ -174,7 +176,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     }
   };
 
-  const handleAddComponent = async (appId: string) => {
+  const _handleAddComponent = async (appId: string) => {
     setSavingComponent(true);
     try {
       await createAppDCMapping({
@@ -196,8 +198,9 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       setSavingComponent(false);
     }
   };
+  void _handleAddComponent;
 
-  const handleDeleteComponent = async (mappingId: string) => {
+  const _handleDeleteComponent = async (mappingId: string) => {
     try {
       await deleteAppDCMapping(mappingId);
       await loadImportedApps();
@@ -205,6 +208,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       setError('Failed to delete component mapping');
     }
   };
+  void _handleDeleteComponent;
 
   const loadImportedRules = useCallback(async () => {
     try {
@@ -236,7 +240,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
     if (filtered.length === 0) return;
     // Use dynamic columns from the actual data
     const headers = importedRuleColumns.map(k => k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
-    const rows = filtered.map(r => importedRuleColumns.map(k => String((r as Record<string, unknown>)[k] ?? '')));
+    const rows = filtered.map(r => importedRuleColumns.map(k => String((r as unknown as Record<string, unknown>)[k] ?? '')));
     const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -254,7 +258,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       const q = rulesSearchQuery.toLowerCase();
       filtered = filtered.filter(r => {
         // Search across ALL columns dynamically
-        const rec = r as Record<string, unknown>;
+        const rec = r as unknown as Record<string, unknown>;
         return Object.values(rec).some(v => v != null && String(v).toLowerCase().includes(q));
       });
     }
@@ -452,7 +456,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
               <div className="bg-white rounded p-2"><span className="text-gray-500">Rows in File:</span> <span className="font-bold text-blue-700">{String(result.parsed_rows ?? result.total_file_rows ?? '—')}</span></div>
             </div>
             {/* Header diagnostics */}
-            {result.headers_found && (
+            {!!result.headers_found && (
               <details className="mt-3 text-xs">
                 <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Column diagnostics ({String((result.headers_found as string[])?.length || 0)} columns found)</summary>
                 <div className="mt-2 space-y-1">
@@ -533,7 +537,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
                   <tr key={rule.id} className="hover:bg-gray-50">
                     <td className="px-2 py-1.5 font-mono text-gray-600">{rule.id}</td>
                     {importedRuleColumns.map(col => {
-                      const val = String((rule as Record<string, unknown>)[col] ?? '');
+                      const val = String((rule as unknown as Record<string, unknown>)[col] ?? '');
                       if (col === 'rule_action') {
                         return <td key={col} className="px-2 py-1.5"><span className={`px-1.5 py-0.5 rounded font-medium ${val === 'Accept' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{val}</span></td>;
                       }
