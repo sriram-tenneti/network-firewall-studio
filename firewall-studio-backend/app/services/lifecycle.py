@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.database import (
-    _load, _save, _load_ref, _now, _id,
+    _load, _save, _now, _id,
     get_org_config, SEED_ORG_CONFIG,
 )
 
@@ -252,20 +252,22 @@ async def soft_delete_rule(
 
     for r in rules:
         if r.get(id_field) == rule_id:
+            # Capture pre-delete status BEFORE overwriting
+            prev_status = r.get("lifecycle_status") or r.get("rule_status") or ("Deployed" if is_legacy else "Draft")
+            r["_pre_delete_status"] = prev_status
             r["lifecycle_status"] = "Deleted"
             r["rule_status"] = "Deleted"
             r["status"] = "Deleted"
             r["deleted_at"] = now
             r["deleted_by"] = actor
             r["delete_reason"] = reason
-            r["_pre_delete_status"] = r.get("lifecycle_status", r.get("rule_status", ""))
             r["updated_at"] = now
             _save(store_name, rules)
 
             await record_lifecycle_event(
                 rule_id=rule_id,
                 event_type="soft_deleted",
-                from_status=r.get("_pre_delete_status"),
+                from_status=prev_status,
                 to_status="Deleted",
                 actor=actor,
                 details=reason or "Rule soft-deleted",
