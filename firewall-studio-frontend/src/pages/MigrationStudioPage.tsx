@@ -10,7 +10,7 @@ import {
   getLegacyRules, submitLegacyRulesForReview,
   migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups,
-  createMigrationGroup, getApplications, lookupIPMapping,
+  createMigrationGroup, getApplications, getImportedApps, lookupIPMapping,
   getIPMappings, importIPMappings, compileEgressIngress,
   getFilteredNhSzDc,
 } from '@/lib/api';
@@ -164,10 +164,28 @@ export function MigrationStudioPage() {
   const [newGroupMembers, setNewGroupMembers] = useState<{ type: string; value: string }[]>([{ type: 'ip', value: '' }]);
 
   // Load applications list on mount (always), but only load rules when an app is explicitly selected
+  // Merges reference-data apps AND imported-rules apps so real data always appears in the dropdown
   const loadApps = useCallback(async () => {
     try {
-      const appsData = await getApplications();
-      setApplications(appsData);
+      const [refApps, importedApps] = await Promise.all([
+        getApplications().catch(() => [] as Application[]),
+        getImportedApps().catch(() => [] as { app_id: string; app_name: string; app_distributed_id: string; rule_count: number; has_mapping: boolean; components: Record<string, unknown>[] }[]),
+      ]);
+      // Build a merged list: start with reference apps, then add any imported apps not already present
+      const seen = new Set(refApps.map(a => a.app_distributed_id || String(a.app_id)));
+      const merged: Application[] = [...refApps];
+      for (const imp of importedApps) {
+        const key = imp.app_distributed_id || imp.app_id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          merged.push({
+            app_id: imp.app_id,
+            app_distributed_id: imp.app_distributed_id || '',
+            name: imp.app_name || imp.app_id,
+          } as Application);
+        }
+      }
+      setApplications(merged);
     } catch { /* ignore */ }
   }, []);
 
