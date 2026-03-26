@@ -96,11 +96,17 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
   return delta;
 }
 
+interface GroupMemberEntry {
+  type: string;
+  value: string;
+  children?: GroupMemberEntry[];  // nested sub-group members
+}
+
 interface ResourceEntry {
   id: string;
   type: 'ip' | 'subnet' | 'range' | 'group';
   value: string;
-  groupMembers?: { type: string; value: string }[];
+  groupMembers?: GroupMemberEntry[];
   isNew?: boolean;
   isModified?: boolean;
 }
@@ -240,7 +246,7 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
     const entries: ResourceEntry[] = [];
     let currentGroup: ResourceEntry | null = null;
-    let currentSubGroup: { type: string; value: string }[] | null = null;
+    let currentSubGroup: GroupMemberEntry | null = null;
     let groupIndent = 0;
     let memberIndent = 0;
 
@@ -317,13 +323,14 @@ function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?:
 
       if (!isFlatExpansion && indent >= memberIndent && hasChildren(i)) {
         // This member has deeper children → nested sub-group
-        currentSubGroup = [];
+        const subGroupEntry: GroupMemberEntry = { type: 'group', value, children: [] };
+        currentSubGroup = subGroupEntry;
         if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-        currentGroup.groupMembers.push({ type: 'group', value });
+        currentGroup.groupMembers.push(subGroupEntry);
       } else if (!isFlatExpansion && currentSubGroup !== null && indent > memberIndent) {
         // Deeper than first-level members → belongs to sub-group
-        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-        currentGroup.groupMembers.push({ type: mType, value });
+        if (!currentSubGroup.children) currentSubGroup.children = [];
+        currentSubGroup.children.push({ type: mType, value });
       } else {
         // Direct member of the current group
         currentSubGroup = null;
@@ -523,7 +530,14 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
   };
 
   const totalIPs = entries.reduce((sum, e) => {
-    if (e.type === 'group') return sum + (e.groupMembers?.length || 0);
+    if (e.type === 'group') {
+      let count = 0;
+      for (const m of (e.groupMembers || [])) {
+        if (m.type === 'group' && m.children) count += m.children.length;
+        else count += 1;
+      }
+      return sum + count;
+    }
     return sum + 1;
   }, 0);
 
@@ -571,10 +585,24 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                 <div className="ml-6 mt-1 mb-2 border-l-2 border-emerald-200 pl-3 space-y-1">
                   {(entry.groupMembers || []).length === 0 && <p className="text-[10px] text-amber-600 italic py-1">No IPs/subnets configured for this group. Add members below.</p>}
                   {(entry.groupMembers || []).map((m, mi) => (
-                    <div key={mi} className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded text-xs">
-                      <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(m.type)}`}>{memberTypeLabel(m.type)}</span>
-                      <span className="font-mono flex-1 text-gray-800">{m.value}</span>
-                      <button onClick={() => handleRemoveGroupMember(entry.id, mi)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
+                    <div key={mi}>
+                      <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded text-xs">
+                        <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(m.type)}`}>{memberTypeLabel(m.type)}</span>
+                        <span className="font-mono flex-1 text-gray-800">{m.value}</span>
+                        {m.type === 'group' && m.children && <span className="text-[10px] text-gray-400">{m.children.length} member{m.children.length !== 1 ? 's' : ''}</span>}
+                        <button onClick={() => handleRemoveGroupMember(entry.id, mi)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
+                      </div>
+                      {/* Render nested sub-group children */}
+                      {m.type === 'group' && m.children && m.children.length > 0 && (
+                        <div className="ml-5 mt-0.5 mb-1 border-l-2 border-teal-200 pl-3 space-y-0.5">
+                          {m.children.map((cm, ci) => (
+                            <div key={ci} className="flex items-center gap-2 px-2 py-1 bg-gray-100 rounded text-xs">
+                              <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(cm.type)}`}>{memberTypeLabel(cm.type)}</span>
+                              <span className="font-mono flex-1 text-gray-700">{cm.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                   {/* Always show add-member form for groups */}
@@ -795,6 +823,12 @@ export default function FirewallManagementPage() {
         lines.push(e.value);
         for (const m of (e.groupMembers || [])) {
           lines.push(`  ${m.value}`);
+          // Emit nested sub-group children at deeper indent
+          if (m.type === 'group' && m.children) {
+            for (const cm of m.children) {
+              lines.push(`    ${cm.value}`);
+            }
+          }
         }
       } else {
         lines.push(e.value);
