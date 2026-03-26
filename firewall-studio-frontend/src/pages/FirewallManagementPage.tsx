@@ -588,7 +588,7 @@ export default function FirewallManagementPage() {
   const appOptions = Array.from(new Set(rules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
     const [appId, distId, appName] = key.split('|');
     return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
-  });
+  }).sort((a, b) => a.label.localeCompare(b.label));
 
   /** Parse expanded text into structured lines with type detection for rendering.
    * Returns objects with { text, indent, type } for proper GRP/IP/RNG badge rendering. */
@@ -648,14 +648,16 @@ export default function FirewallManagementPage() {
     setModifyState({ ...modifyState, [field]: value });
   };
 
-  /** Build expanded text from resource entries (group → list IPs/subnets) */
+  /** Build expanded text from resource entries using plain indentation format.
+   * This must match the original expanded text format so delta comparisons are consistent
+   * between the Modify modal preview and the Review page. */
   const buildExpandedText = (entries: ResourceEntry[]): string => {
     const lines: string[] = [];
     for (const e of entries) {
       if (e.type === 'group') {
-        lines.push(`[Group] ${e.value}`);
+        lines.push(e.value);
         for (const m of (e.groupMembers || [])) {
-          lines.push(`  ${memberTypeLabel(m.type)}: ${m.value}`);
+          lines.push(`  ${m.value}`);
         }
       } else {
         lines.push(e.value);

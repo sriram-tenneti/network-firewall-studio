@@ -1001,269 +1001,266 @@ SEED_ORG_CONFIG = {
 # ============================================================
 
 SEED_GROUPS = [
-    # --- CRM: WEB in NH14/PAA, APP/BAT/API in NH02/CCS, DB in NH02/CDE ---
-    {"name": "grp-CRM-WEB-NH14-PAA", "app_id": "CRM", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
-     "description": "CRM Web Servers (PAA zone)", "members": [
-        {"type": "ip", "value": "svr-10.70.1.10", "description": "CRM Web 1"},
-        {"type": "ip", "value": "svr-10.70.1.11", "description": "CRM Web 2"},
+    # --- CRM — Customer Relationship (NH02/CDE) ---
+    {"name": "grp-CRM-NH02-CDE-WEB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "WEB",
+     "description": "CRM Web Servers", "members": [
+        {"type": "ip", "value": "svr-10.1.1.10", "description": "CRM Web 1"},
+        {"type": "ip", "value": "svr-10.1.1.11", "description": "CRM Web 2"},
      ]},
-    {"name": "grp-CRM-APP-NH02-CCS", "app_id": "CRM", "nh": "NH02", "sz": "CCS", "subtype": "APP",
+    {"name": "grp-CRM-NH02-CDE-APP", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "APP",
      "description": "CRM Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.1.1.1", "description": "CRM App 1"},
-        {"type": "ip", "value": "svr-10.1.1.2", "description": "CRM App 2"},
-        {"type": "ip", "value": "svr-10.1.1.3", "description": "CRM App 3"},
+        {"type": "ip", "value": "svr-10.1.1.20", "description": "CRM App 1"},
+        {"type": "ip", "value": "svr-10.1.1.21", "description": "CRM App 2"},
+        {"type": "ip", "value": "svr-10.1.1.22", "description": "CRM App 3"},
      ]},
-    {"name": "grp-CRM-DB-NH02-CDE", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "DB",
-     "description": "CRM Database Servers (PCI CDE)", "members": [
-        {"type": "ip", "value": "svr-10.1.1.129", "description": "CRM DB Primary"},
-        {"type": "ip", "value": "svr-10.1.1.130", "description": "CRM DB Standby"},
+    {"name": "grp-CRM-NH02-CDE-DB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+     "description": "CRM Database Cluster", "members": [
+        {"type": "ip", "value": "svr-10.1.1.30", "description": "CRM DB Primary"},
+        {"type": "ip", "value": "svr-10.1.1.31", "description": "CRM DB Standby"},
      ]},
-    {"name": "grp-CRM-BAT-NH02-CCS", "app_id": "CRM", "nh": "NH02", "sz": "CCS", "subtype": "BAT",
-     "description": "CRM Batch Servers", "members": [
-        {"type": "ip", "value": "svr-10.1.1.30", "description": "CRM Batch 1"},
+    {"name": "grp-CRM-NH02-CDE-BAT", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "BAT",
+     "description": "CRM Batch Processing", "members": [
+        {"type": "ip", "value": "svr-10.1.1.40", "description": "CRM Batch 1"},
      ]},
-    {"name": "grp-CRM-API-NH02-CCS", "app_id": "CRM", "nh": "NH02", "sz": "CCS", "subtype": "API",
+    {"name": "grp-CRM-NH02-CDE-API", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "API",
      "description": "CRM API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.1.1.40", "description": "CRM API 1"},
-        {"type": "ip", "value": "svr-10.1.1.41", "description": "CRM API 2"},
+        {"type": "ip", "value": "svr-10.1.1.50", "description": "CRM API 1"},
+        {"type": "ip", "value": "svr-10.1.1.51", "description": "CRM API 2"},
      ]},
 
-    # --- HRM: all components in NH01/GEN ---
-    {"name": "grp-HRM-WEB-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
+    # --- HRM — HR Management (NH01/GEN) ---
+    {"name": "grp-HRM-NH01-GEN-WEB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
      "description": "HRM Web Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.130", "description": "HRM Web 1"},
         {"type": "ip", "value": "svr-10.0.2.131", "description": "HRM Web 2"},
      ]},
-    {"name": "grp-HRM-APP-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-HRM-NH01-GEN-APP", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "APP",
      "description": "HRM Application Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.140", "description": "HRM App 1"},
         {"type": "ip", "value": "svr-10.0.2.141", "description": "HRM App 2"},
      ]},
-    {"name": "grp-HRM-DB-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "DB",
+    {"name": "grp-HRM-NH01-GEN-DB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "DB",
      "description": "HRM Database", "members": [
         {"type": "ip", "value": "svr-10.0.2.150", "description": "HRM DB Primary"},
         {"type": "ip", "value": "svr-10.0.2.151", "description": "HRM DB Replica"},
      ]},
-    {"name": "grp-HRM-BAT-NH01-GEN", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
+    {"name": "grp-HRM-NH01-GEN-BAT", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
      "description": "HRM Batch Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.160", "description": "HRM Batch 1"},
      ]},
 
-    # --- TRD: WEB in NH14/PAA, APP/DB/MQ/BAT in NH06/CDE, API in NH06/CCS ---
-    {"name": "grp-TRD-WEB-NH14-PAA", "app_id": "TRD", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
-     "description": "TRD Web Frontend (PAA zone)", "members": [
-        {"type": "ip", "value": "svr-10.70.1.65", "description": "TRD Web 1"},
-        {"type": "ip", "value": "svr-10.70.1.66", "description": "TRD Web 2"},
+    # --- TRD — Trading Platform (NH06/CDE) ---
+    {"name": "grp-TRD-NH06-CDE-WEB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
+     "description": "TRD Web Frontend", "members": [
+        {"type": "ip", "value": "svr-10.5.1.70", "description": "TRD Web 1"},
+        {"type": "ip", "value": "svr-10.5.1.71", "description": "TRD Web 2"},
      ]},
-    {"name": "grp-TRD-APP-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-TRD-NH06-CDE-APP", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
      "description": "TRD Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.5.1.70", "description": "TRD App 1"},
-        {"type": "ip", "value": "svr-10.5.1.71", "description": "TRD App 2"},
-        {"type": "ip", "value": "svr-10.5.1.72", "description": "TRD App 3"},
+        {"type": "ip", "value": "svr-10.5.1.80", "description": "TRD App 1"},
+        {"type": "ip", "value": "svr-10.5.1.81", "description": "TRD App 2"},
+        {"type": "ip", "value": "svr-10.5.1.82", "description": "TRD App 3"},
      ]},
-    {"name": "grp-TRD-DB-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-TRD-NH06-CDE-DB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "DB",
      "description": "TRD Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.5.1.80", "description": "TRD DB Primary"},
-        {"type": "ip", "value": "svr-10.5.1.81", "description": "TRD DB Standby"},
+        {"type": "ip", "value": "svr-10.5.1.90", "description": "TRD DB Primary"},
+        {"type": "ip", "value": "svr-10.5.1.91", "description": "TRD DB Standby"},
      ]},
-    {"name": "grp-TRD-MQ-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-TRD-NH06-CDE-MQ", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "MQ",
      "description": "TRD Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.5.1.85", "description": "TRD MQ Broker 1"},
-        {"type": "ip", "value": "svr-10.5.1.86", "description": "TRD MQ Broker 2"},
+        {"type": "ip", "value": "svr-10.5.1.100", "description": "TRD MQ Broker 1"},
+        {"type": "ip", "value": "svr-10.5.1.101", "description": "TRD MQ Broker 2"},
      ]},
-    {"name": "grp-TRD-API-NH06-CCS", "app_id": "TRD", "nh": "NH06", "sz": "CCS", "subtype": "API",
-     "description": "TRD API Layer (CCS zone)", "members": [
-        {"type": "ip", "value": "svr-10.5.1.1", "description": "TRD API 1"},
-     ]},
-    {"name": "grp-TRD-BAT-NH06-CDE", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "BAT",
-     "description": "TRD Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.5.1.95", "description": "TRD Batch 1"},
+    {"name": "grp-TRD-NH06-CDE-API", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "API",
+     "description": "TRD API Layer", "members": [
+        {"type": "ip", "value": "svr-10.5.1.110", "description": "TRD API 1"},
      ]},
 
-    # --- PAY: APP/MQ/API in NH07/CPA, DB in NH07/CDE ---
-    {"name": "grp-PAY-APP-NH07-CPA", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "APP",
+    # --- PAY — Payment Processing (NH07/CPA) ---
+    {"name": "grp-PAY-NH07-CPA-APP", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "APP",
      "description": "PAY Transaction Processors", "members": [
         {"type": "ip", "value": "svr-10.6.1.130", "description": "PAY App 1"},
         {"type": "ip", "value": "svr-10.6.1.131", "description": "PAY App 2"},
         {"type": "range", "value": "rng-10.6.1.132-140", "description": "PAY App Pool"},
      ]},
-    {"name": "grp-PAY-DB-NH07-CDE", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "DB",
-     "description": "PAY Database (PCI CDE)", "members": [
-        {"type": "ip", "value": "svr-10.6.1.1", "description": "PAY DB Primary"},
-        {"type": "ip", "value": "svr-10.6.1.2", "description": "PAY DB Standby"},
+    {"name": "grp-PAY-NH07-CPA-DB", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "DB",
+     "description": "PAY Database (PCI)", "members": [
+        {"type": "ip", "value": "svr-10.6.1.10", "description": "PAY DB Primary"},
+        {"type": "ip", "value": "svr-10.6.1.11", "description": "PAY DB Standby"},
      ]},
-    {"name": "grp-PAY-MQ-NH07-CPA", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
+    {"name": "grp-PAY-NH07-CPA-MQ", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
      "description": "PAY Message Queue", "members": [
         {"type": "ip", "value": "svr-10.6.1.160", "description": "PAY MQ 1"},
      ]},
-    {"name": "grp-PAY-API-NH07-CPA", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "API",
+    {"name": "grp-PAY-NH07-CPA-API", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "API",
      "description": "PAY API Endpoint", "members": [
-        {"type": "ip", "value": "svr-10.6.1.164", "description": "PAY API 1"},
-        {"type": "ip", "value": "svr-10.6.1.165", "description": "PAY API 2"},
+        {"type": "ip", "value": "svr-10.6.1.170", "description": "PAY API 1"},
+        {"type": "ip", "value": "svr-10.6.1.171", "description": "PAY API 2"},
      ]},
 
-    # --- INS: WEB/APP/BAT in NH04/GEN, DB in NH04/CCS ---
-    {"name": "grp-INS-WEB-NH04-GEN", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "WEB",
+    # --- INS — Insurance Platform (NH04/GEN) ---
+    {"name": "grp-INS-NH04-GEN-WEB", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "WEB",
      "description": "INS Web Portal", "members": [
         {"type": "ip", "value": "svr-10.3.1.130", "description": "INS Web 1"},
         {"type": "ip", "value": "svr-10.3.1.131", "description": "INS Web 2"},
      ]},
-    {"name": "grp-INS-APP-NH04-GEN", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-INS-NH04-GEN-APP", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "APP",
      "description": "INS Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.3.1.144", "description": "INS App 1"},
-        {"type": "ip", "value": "svr-10.3.1.145", "description": "INS App 2"},
+        {"type": "ip", "value": "svr-10.3.1.140", "description": "INS App 1"},
+        {"type": "ip", "value": "svr-10.3.1.141", "description": "INS App 2"},
      ]},
-    {"name": "grp-INS-DB-NH04-CCS", "app_id": "INS", "nh": "NH04", "sz": "CCS", "subtype": "DB",
-     "description": "INS Database (CCS zone)", "members": [
-        {"type": "ip", "value": "svr-10.3.1.1", "description": "INS DB Primary"},
+    {"name": "grp-INS-NH04-GEN-DB", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "DB",
+     "description": "INS Database", "members": [
+        {"type": "ip", "value": "svr-10.3.1.10", "description": "INS DB Primary"},
      ]},
-    {"name": "grp-INS-BAT-NH04-GEN", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "BAT",
-     "description": "INS Batch Jobs", "members": [
-        {"type": "ip", "value": "svr-10.3.1.160", "description": "INS Batch 1"},
+    {"name": "grp-INS-NH04-GEN-API", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "API",
+     "description": "INS API Gateway", "members": [
+        {"type": "ip", "value": "svr-10.3.1.150", "description": "INS API 1"},
      ]},
 
-    # --- KYC: WEB/APP/API in NH05/GEN, DB in NH05/CCS ---
-    {"name": "grp-KYC-WEB-NH05-GEN", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "WEB",
+    # --- KYC — KYC Compliance (NH05/GEN) ---
+    {"name": "grp-KYC-NH05-GEN-WEB", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "WEB",
      "description": "KYC Web Interface", "members": [
         {"type": "ip", "value": "svr-10.4.1.130", "description": "KYC Web 1"},
      ]},
-    {"name": "grp-KYC-APP-NH05-GEN", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-KYC-NH05-GEN-APP", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "APP",
      "description": "KYC Application", "members": [
-        {"type": "ip", "value": "svr-10.4.1.144", "description": "KYC App 1"},
-        {"type": "ip", "value": "svr-10.4.1.145", "description": "KYC App 2"},
+        {"type": "ip", "value": "svr-10.4.1.140", "description": "KYC App 1"},
+        {"type": "ip", "value": "svr-10.4.1.141", "description": "KYC App 2"},
      ]},
-    {"name": "grp-KYC-DB-NH05-CCS", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "DB",
-     "description": "KYC Database (CCS zone)", "members": [
-        {"type": "ip", "value": "svr-10.4.1.1", "description": "KYC DB Primary"},
-        {"type": "ip", "value": "svr-10.4.1.2", "description": "KYC DB Replica"},
+    {"name": "grp-KYC-NH05-GEN-DB", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "DB",
+     "description": "KYC Database", "members": [
+        {"type": "ip", "value": "svr-10.4.1.10", "description": "KYC DB Primary"},
+        {"type": "ip", "value": "svr-10.4.1.11", "description": "KYC DB Replica"},
      ]},
-    {"name": "grp-KYC-API-NH05-GEN", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "API",
-     "description": "KYC API", "members": [
+    {"name": "grp-KYC-NH05-GEN-API", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "API",
+     "description": "KYC API Layer", "members": [
         {"type": "ip", "value": "svr-10.4.1.160", "description": "KYC API 1"},
      ]},
 
-    # --- FRD: APP/DB/MQ in NH02/CDE, API in NH02/CCS ---
-    {"name": "grp-FRD-APP-NH02-CDE", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+    # --- FRD — Fraud Detection (NH02/CDE) ---
+    {"name": "grp-FRD-NH02-CDE-APP", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
      "description": "FRD Detection Engine", "members": [
-        {"type": "ip", "value": "svr-10.1.1.161", "description": "FRD Engine 1"},
-        {"type": "ip", "value": "svr-10.1.1.162", "description": "FRD Engine 2"},
+        {"type": "ip", "value": "svr-10.1.2.10", "description": "FRD Engine 1"},
+        {"type": "ip", "value": "svr-10.1.2.11", "description": "FRD Engine 2"},
      ]},
-    {"name": "grp-FRD-DB-NH02-CDE", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-FRD-NH02-CDE-DB", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "DB",
      "description": "FRD Database (PCI CDE)", "members": [
-        {"type": "ip", "value": "svr-10.1.2.1", "description": "FRD DB Primary"},
-        {"type": "ip", "value": "svr-10.1.2.2", "description": "FRD DB Standby"},
+        {"type": "ip", "value": "svr-10.1.2.20", "description": "FRD DB Primary"},
+        {"type": "ip", "value": "svr-10.1.2.21", "description": "FRD DB Standby"},
      ]},
-    {"name": "grp-FRD-MQ-NH02-CDE", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-FRD-NH02-CDE-MQ", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "MQ",
      "description": "FRD Event Stream", "members": [
-        {"type": "ip", "value": "svr-10.1.1.176", "description": "FRD Kafka 1"},
-        {"type": "ip", "value": "svr-10.1.1.177", "description": "FRD Kafka 2"},
+        {"type": "ip", "value": "svr-10.1.2.30", "description": "FRD Kafka 1"},
+        {"type": "ip", "value": "svr-10.1.2.31", "description": "FRD Kafka 2"},
      ]},
-    {"name": "grp-FRD-API-NH02-CCS", "app_id": "FRD", "nh": "NH02", "sz": "CCS", "subtype": "API",
-     "description": "FRD API (CCS zone)", "members": [
-        {"type": "ip", "value": "svr-10.1.1.1", "description": "FRD API 1"},
+    {"name": "grp-FRD-NH02-CDE-API", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "API",
+     "description": "FRD API (CDE zone)", "members": [
+        {"type": "ip", "value": "svr-10.1.2.40", "description": "FRD API 1"},
      ]},
 
-    # --- LND: WEB/APP/BAT in NH09/GEN, DB in NH09/CCS ---
-    {"name": "grp-LND-WEB-NH09-GEN", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "WEB",
+    # --- LND — Lending Platform (NH09/CCS) ---
+    {"name": "grp-LND-NH09-CCS-WEB", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "WEB",
      "description": "LND Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.8.1.130", "description": "LND Web 1"},
+        {"type": "ip", "value": "svr-10.8.1.10", "description": "LND Web 1"},
      ]},
-    {"name": "grp-LND-APP-NH09-GEN", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-LND-NH09-CCS-APP", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "APP",
      "description": "LND Loan Engine", "members": [
-        {"type": "ip", "value": "svr-10.8.1.144", "description": "LND App 1"},
-        {"type": "ip", "value": "svr-10.8.1.145", "description": "LND App 2"},
+        {"type": "ip", "value": "svr-10.8.1.20", "description": "LND App 1"},
+        {"type": "ip", "value": "svr-10.8.1.21", "description": "LND App 2"},
      ]},
-    {"name": "grp-LND-DB-NH09-CCS", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "DB",
-     "description": "LND Database (CCS zone)", "members": [
-        {"type": "ip", "value": "svr-10.8.1.1", "description": "LND DB Primary"},
+    {"name": "grp-LND-NH09-CCS-DB", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "DB",
+     "description": "LND Database", "members": [
+        {"type": "ip", "value": "svr-10.8.1.30", "description": "LND DB Primary"},
      ]},
-    {"name": "grp-LND-BAT-NH09-GEN", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "BAT",
+    {"name": "grp-LND-NH09-CCS-BAT", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "BAT",
      "description": "LND Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.8.1.160", "description": "LND Batch 1"},
+        {"type": "ip", "value": "svr-10.8.1.40", "description": "LND Batch 1"},
      ]},
 
-    # --- WLT: WEB in NH14/PAA, APP/API in NH10/GEN, DB in NH10/CDE ---
-    {"name": "grp-WLT-WEB-NH14-PAA", "app_id": "WLT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
-     "description": "WLT Web Interface (PAA zone)", "members": [
-        {"type": "ip", "value": "svr-10.70.1.100", "description": "WLT Web 1"},
+    # --- WLT — Wealth Management (NH10/CDE) ---
+    {"name": "grp-WLT-NH10-CDE-WEB", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "WEB",
+     "description": "WLT Web Interface", "members": [
+        {"type": "ip", "value": "svr-10.9.1.10", "description": "WLT Web 1"},
      ]},
-    {"name": "grp-WLT-APP-NH10-GEN", "app_id": "WLT", "nh": "NH10", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-WLT-NH10-CDE-APP", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "APP",
      "description": "WLT Portfolio Engine", "members": [
-        {"type": "ip", "value": "svr-10.9.1.130", "description": "WLT App 1"},
-        {"type": "ip", "value": "svr-10.9.1.131", "description": "WLT App 2"},
+        {"type": "ip", "value": "svr-10.9.1.20", "description": "WLT App 1"},
+        {"type": "ip", "value": "svr-10.9.1.21", "description": "WLT App 2"},
      ]},
-    {"name": "grp-WLT-DB-NH10-CDE", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-WLT-NH10-CDE-DB", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "DB",
      "description": "WLT Database (PCI CDE)", "members": [
-        {"type": "ip", "value": "svr-10.9.1.1", "description": "WLT DB Primary"},
-        {"type": "ip", "value": "svr-10.9.1.2", "description": "WLT DB Replica"},
+        {"type": "ip", "value": "svr-10.9.1.30", "description": "WLT DB Primary"},
+        {"type": "ip", "value": "svr-10.9.1.31", "description": "WLT DB Replica"},
      ]},
-    {"name": "grp-WLT-API-NH10-GEN", "app_id": "WLT", "nh": "NH10", "sz": "GEN", "subtype": "API",
+    {"name": "grp-WLT-NH10-CDE-API", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "API",
      "description": "WLT API", "members": [
-        {"type": "ip", "value": "svr-10.9.1.144", "description": "WLT API 1"},
+        {"type": "ip", "value": "svr-10.9.1.40", "description": "WLT API 1"},
      ]},
 
-    # --- CBK: APP/MQ/API/BAT in NH08/CCS, DB in NH08/CDE ---
-    {"name": "grp-CBK-APP-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "APP",
+    # --- CBK — Core Banking (NH08/CCS) ---
+    {"name": "grp-CBK-NH08-CCS-APP", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "APP",
      "description": "CBK Core Engine", "members": [
-        {"type": "ip", "value": "svr-10.7.1.1", "description": "CBK App 1"},
-        {"type": "ip", "value": "svr-10.7.1.2", "description": "CBK App 2"},
-        {"type": "ip", "value": "svr-10.7.1.3", "description": "CBK App 3"},
+        {"type": "ip", "value": "svr-10.7.1.10", "description": "CBK App 1"},
+        {"type": "ip", "value": "svr-10.7.1.11", "description": "CBK App 2"},
+        {"type": "ip", "value": "svr-10.7.1.12", "description": "CBK App 3"},
      ]},
-    {"name": "grp-CBK-DB-NH08-CDE", "app_id": "CBK", "nh": "NH08", "sz": "CDE", "subtype": "DB",
-     "description": "CBK Database Cluster (PCI CDE)", "members": [
-        {"type": "ip", "value": "svr-10.7.1.129", "description": "CBK DB Primary"},
-        {"type": "ip", "value": "svr-10.7.1.130", "description": "CBK DB Standby"},
-        {"type": "ip", "value": "svr-10.7.1.131", "description": "CBK DB Archive"},
+    {"name": "grp-CBK-NH08-CCS-DB", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "DB",
+     "description": "CBK Database Cluster", "members": [
+        {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK DB Primary"},
+        {"type": "ip", "value": "svr-10.7.1.21", "description": "CBK DB Standby"},
+        {"type": "ip", "value": "svr-10.7.1.22", "description": "CBK DB Archive"},
      ]},
-    {"name": "grp-CBK-MQ-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "MQ",
+    {"name": "grp-CBK-NH08-CCS-MQ", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "MQ",
      "description": "CBK Message Bus", "members": [
-        {"type": "ip", "value": "svr-10.7.1.16", "description": "CBK MQ 1"},
-        {"type": "ip", "value": "svr-10.7.1.17", "description": "CBK MQ 2"},
+        {"type": "ip", "value": "svr-10.7.1.30", "description": "CBK MQ 1"},
+        {"type": "ip", "value": "svr-10.7.1.31", "description": "CBK MQ 2"},
      ]},
-    {"name": "grp-CBK-API-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "API",
+    {"name": "grp-CBK-NH08-CCS-API", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "API",
      "description": "CBK API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK API 1"},
+        {"type": "ip", "value": "svr-10.7.1.40", "description": "CBK API 1"},
      ]},
-    {"name": "grp-CBK-BAT-NH08-CCS", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
+    {"name": "grp-CBK-NH08-CCS-BAT", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
      "description": "CBK Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.7.1.24", "description": "CBK Batch 1"},
+        {"type": "ip", "value": "svr-10.7.1.50", "description": "CBK Batch 1"},
      ]},
 
-    # --- EPT: WEB in NH14/PAA, APP/API in NH01/CCS ---
-    {"name": "grp-EPT-WEB-NH14-PAA", "app_id": "EPT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+    # --- EPT — Enterprise Portal (NH01/PAA) ---
+    {"name": "grp-EPT-NH01-PAA-WEB", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "WEB",
      "description": "EPT Web Frontend (PAA zone)", "members": [
-        {"type": "ip", "value": "svr-10.70.1.20", "description": "EPT Web 1"},
-        {"type": "ip", "value": "svr-10.70.1.21", "description": "EPT Web 2"},
+        {"type": "ip", "value": "svr-10.0.1.10", "description": "EPT Web 1"},
+        {"type": "ip", "value": "svr-10.0.1.11", "description": "EPT Web 2"},
      ]},
-    {"name": "grp-EPT-APP-NH01-CCS", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "APP",
-     "description": "EPT App Backend (CCS zone)", "members": [
-        {"type": "ip", "value": "svr-10.0.1.1", "description": "EPT App 1"},
-        {"type": "ip", "value": "svr-10.0.1.2", "description": "EPT App 2"},
+    {"name": "grp-EPT-NH01-PAA-APP", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "APP",
+     "description": "EPT App Backend", "members": [
+        {"type": "ip", "value": "svr-10.0.1.20", "description": "EPT App 1"},
+        {"type": "ip", "value": "svr-10.0.1.21", "description": "EPT App 2"},
      ]},
-    {"name": "grp-EPT-API-NH01-CCS", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "API",
-     "description": "EPT API Gateway (CCS zone)", "members": [
-        {"type": "ip", "value": "svr-10.0.1.16", "description": "EPT API 1"},
+    {"name": "grp-EPT-NH01-PAA-API", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "API",
+     "description": "EPT API Gateway", "members": [
+        {"type": "ip", "value": "svr-10.0.1.30", "description": "EPT API 1"},
      ]},
 
-    # --- MBK: WEB in NH14/PAA, APP/DB/API in NH07/CPA ---
-    {"name": "grp-MBK-WEB-NH14-PAA", "app_id": "MBK", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
-     "description": "MBK Mobile Web (PAA zone)", "members": [
-        {"type": "ip", "value": "svr-10.70.1.50", "description": "MBK Web 1"},
+    # --- MBK — Mobile Banking (NH07/CPA) ---
+    {"name": "grp-MBK-NH07-CPA-WEB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "WEB",
+     "description": "MBK Mobile Web", "members": [
+        {"type": "ip", "value": "svr-10.6.1.180", "description": "MBK Web 1"},
      ]},
-    {"name": "grp-MBK-APP-NH07-CPA", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "APP",
+    {"name": "grp-MBK-NH07-CPA-APP", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "APP",
      "description": "MBK App Engine", "members": [
-        {"type": "ip", "value": "svr-10.6.1.180", "description": "MBK App 1"},
-        {"type": "ip", "value": "svr-10.6.1.181", "description": "MBK App 2"},
+        {"type": "ip", "value": "svr-10.6.1.190", "description": "MBK App 1"},
+        {"type": "ip", "value": "svr-10.6.1.191", "description": "MBK App 2"},
      ]},
-    {"name": "grp-MBK-DB-NH07-CPA", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "DB",
+    {"name": "grp-MBK-NH07-CPA-DB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "DB",
      "description": "MBK Database", "members": [
-        {"type": "ip", "value": "svr-10.6.1.190", "description": "MBK DB Primary"},
+        {"type": "ip", "value": "svr-10.6.1.200", "description": "MBK DB Primary"},
      ]},
-    {"name": "grp-MBK-API-NH07-CPA", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "API",
+    {"name": "grp-MBK-NH07-CPA-API", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "API",
      "description": "MBK API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.6.1.200", "description": "MBK API 1"},
+        {"type": "ip", "value": "svr-10.6.1.210", "description": "MBK API 1"},
      ]},
 ]
+
 
 
 # ============================================================
@@ -1711,82 +1708,115 @@ def build_seed_migrations() -> list[dict[str, Any]]:
 
 
 def build_seed_chg_requests() -> list[dict[str, Any]]:
-    """Build seed change requests."""
+    """Build seed change requests aligned with NGDC rule IDs from _build_seed_rules."""
     from datetime import datetime, timedelta
     return [
-        {"chg_id": "CHG10001", "rule_ids": ["LR-1001"], "status": "Approved",
-         "description": "CRM Web to App HTTPS rule migration",
+        {"chg_id": "CHG10001", "rule_ids": ["R-3001", "R-3002"], "status": "Approved",
+         "description": "CRM Web-to-App and App-to-DB rule deployment (NH02/CDE intra-zone)",
          "requested_by": "Team Eta", "approved_by": "Security Team",
          "created_at": (datetime.utcnow() + timedelta(days=-31)).isoformat(),
          "updated_at": (datetime.utcnow() + timedelta(days=-30)).isoformat()},
-        {"chg_id": "CHG10002", "rule_ids": ["LR-1007", "LR-1008"], "status": "Pending",
-         "description": "HRM Production rules migration batch",
+        {"chg_id": "CHG10002", "rule_ids": ["R-3005", "R-3006", "R-3007"], "status": "Approved",
+         "description": "TRD Trading Platform NGDC rules - Web/App/DB connectivity (NH06/CDE)",
+         "requested_by": "Team Xi", "approved_by": "Network Team",
+         "created_at": (datetime.utcnow() + timedelta(days=-120)).isoformat(),
+         "updated_at": (datetime.utcnow() + timedelta(days=-119)).isoformat()},
+        {"chg_id": "CHG10003", "rule_ids": ["R-3009", "R-3010", "R-3011"], "status": "Approved",
+         "description": "PAY Payment Processing NGDC rules (NH07/CPA)",
+         "requested_by": "Team Epsilon", "approved_by": "Security Team",
+         "created_at": (datetime.utcnow() + timedelta(days=-150)).isoformat(),
+         "updated_at": (datetime.utcnow() + timedelta(days=-149)).isoformat()},
+        {"chg_id": "CHG10004", "rule_ids": ["R-3038"], "status": "Pending",
+         "description": "PAY to FRD fraud check cross-zone rule (CPA to CDE, LDF-003)",
+         "requested_by": "Team Epsilon", "approved_by": None,
+         "created_at": (datetime.utcnow() + timedelta(days=-10)).isoformat(),
+         "updated_at": (datetime.utcnow() + timedelta(days=-10)).isoformat()},
+        {"chg_id": "CHG10005", "rule_ids": ["R-3043", "R-3044"], "status": "Approved",
+         "description": "Cross-NH CDE rules: CRM-to-WLT and WLT-to-TRD portfolio data (LDF-004)",
+         "requested_by": "Team Eta", "approved_by": "Security Team",
+         "created_at": (datetime.utcnow() + timedelta(days=-25)).isoformat(),
+         "updated_at": (datetime.utcnow() + timedelta(days=-24)).isoformat()},
+        {"chg_id": "CHG10006", "rule_ids": ["R-3050", "R-3051", "R-3052"], "status": "Pending",
+         "description": "EPT Enterprise Portal PAA flow rules to CRM/CBK/PAY (LDF-006)",
          "requested_by": "Team Platform", "approved_by": None,
-         "created_at": (datetime.utcnow() + timedelta(days=-5)).isoformat(),
-         "updated_at": (datetime.utcnow() + timedelta(days=-5)).isoformat()},
-        {"chg_id": "CHG10003", "rule_ids": ["LR-1013", "LR-1014", "LR-1015"], "status": "Pending",
-         "description": "TRD Trading Platform migration - Production rules",
-         "requested_by": "Team Xi", "approved_by": None,
-         "created_at": (datetime.utcnow() + timedelta(days=-2)).isoformat(),
-         "updated_at": (datetime.utcnow() + timedelta(days=-2)).isoformat()},
+         "created_at": (datetime.utcnow() + timedelta(days=-4)).isoformat(),
+         "updated_at": (datetime.utcnow() + timedelta(days=-4)).isoformat()},
+        {"chg_id": "CHG10007", "rule_ids": ["R-3015", "R-3016", "R-3017", "R-3018"], "status": "Approved",
+         "description": "CBK Core Banking full stack deployment (NH08/CCS)",
+         "requested_by": "Team Theta", "approved_by": "Network Team",
+         "created_at": (datetime.utcnow() + timedelta(days=-200)).isoformat(),
+         "updated_at": (datetime.utcnow() + timedelta(days=-199)).isoformat()},
+        {"chg_id": "CHG10008", "rule_ids": ["LR-1001", "LR-1002"], "status": "Approved",
+         "description": "CRM Legacy rule migration batch - WEB and APP connectivity",
+         "requested_by": "Migration Tool", "approved_by": "Security Team",
+         "created_at": (datetime.utcnow() + timedelta(days=-60)).isoformat(),
+         "updated_at": (datetime.utcnow() + timedelta(days=-59)).isoformat()},
     ]
 
 
 def build_seed_reviews() -> list[dict[str, Any]]:
-    """Build comprehensive seed review requests covering various scenarios."""
+    """Build seed review requests aligned with NGDC rule IDs from _build_seed_rules.
+
+    Covers lifecycle scenarios:
+    - new_rule: Initial rule creation review
+    - modification: Change to existing rule (with delta)
+    - migration: Legacy-to-NGDC migration review (with delta)
+    Statuses: Pending, Approved, Rejected
+    """
     from datetime import datetime, timedelta
     now = datetime.utcnow()
     reviews = [
-        # 1. Pending new rule - CRM WEB->APP
-        {"id": "REV-seed-001", "rule_id": "SEED-RULE-001",
+        # 1. Approved new rule - CRM Web to App (R-3001, Deployed)
+        {"id": "REV-seed-001", "rule_id": "R-3001",
          "rule_name": "CRM Web to App HTTPS", "request_type": "new_rule",
-         "requestor": "Team Eta", "reviewer": None, "status": "Pending",
-         "submitted_at": (now + timedelta(days=-2)).isoformat(),
-         "reviewed_at": None, "comments": "New CRM web-to-app rule for NGDC migration",
-         "review_notes": None,
+         "requestor": "Team Eta", "reviewer": "Security Team", "status": "Approved",
+         "submitted_at": (now + timedelta(days=-35)).isoformat(),
+         "reviewed_at": (now + timedelta(days=-34)).isoformat(),
+         "comments": "CRM web-to-app HTTPS connectivity within NH02/CDE",
+         "review_notes": "Approved - intra-NH/SZ traffic, LDF-002 compliant",
          "rule_summary": {"application": "CRM", "source": "grp-CRM-NH02-CDE-WEB",
-                          "destination": "grp-CRM-NH02-CDE-APP", "ports": "tcp/443",
+                          "destination": "grp-CRM-NH02-CDE-APP", "ports": "TCP 443",
                           "environment": "Production"},
          "delta": None},
-        # 2. Pending modification - TRD source IP added
-        {"id": "REV-seed-002", "rule_id": "SEED-RULE-002",
+        # 2. Pending modification - TRD source IP added (R-3006)
+        {"id": "REV-seed-002", "rule_id": "R-3006",
          "rule_name": "TRD App to DB Oracle", "request_type": "modification",
          "requestor": "Team Xi", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(days=-1)).isoformat(),
          "reviewed_at": None,
-         "comments": "Adding new app server svr-10.5.1.73 to TRD App group",
+         "comments": "Adding new app server svr-10.5.1.83 to TRD App group",
          "review_notes": None,
          "rule_summary": {"application": "TRD", "source": "grp-TRD-NH06-CDE-APP",
-                          "destination": "grp-TRD-NH06-CDE-DB", "ports": "tcp/1521",
+                          "destination": "grp-TRD-NH06-CDE-DB", "ports": "TCP 1521",
                           "environment": "Production"},
-         "delta": {"added": {"rule_source": ["svr-10.5.1.73"]},
+         "delta": {"added": {"rule_source": ["svr-10.5.1.83"]},
                    "removed": {}, "changed": {}}},
-        # 3. Approved rule - PAY CPA payment processing
-        {"id": "REV-seed-003", "rule_id": "SEED-RULE-003",
+        # 3. Approved new rule - PAY App to MQ (R-3010, Certified)
+        {"id": "REV-seed-003", "rule_id": "R-3010",
          "rule_name": "PAY App to MQ AMQP", "request_type": "new_rule",
          "requestor": "Team Epsilon", "reviewer": "Security Team", "status": "Approved",
-         "submitted_at": (now + timedelta(days=-10)).isoformat(),
-         "reviewed_at": (now + timedelta(days=-8)).isoformat(),
-         "comments": "Payment message queue connectivity",
+         "submitted_at": (now + timedelta(days=-105)).isoformat(),
+         "reviewed_at": (now + timedelta(days=-103)).isoformat(),
+         "comments": "Payment message queue connectivity within NH07/CPA",
          "review_notes": "Approved - PCI controls verified, CPA zone compliance confirmed",
          "rule_summary": {"application": "PAY", "source": "grp-PAY-NH07-CPA-APP",
-                          "destination": "grp-PAY-NH07-CPA-MQ", "ports": "tcp/5672",
+                          "destination": "grp-PAY-NH07-CPA-MQ", "ports": "TCP 5672",
                           "environment": "Production"},
          "delta": None},
-        # 4. Rejected rule - GEN to CDE cross-zone blocked
-        {"id": "REV-seed-004", "rule_id": "SEED-RULE-004",
-         "rule_name": "HRM App to CRM DB", "request_type": "new_rule",
+        # 4. Rejected rule - HRM GEN to CRM CDE cross-zone blocked
+        {"id": "REV-seed-004", "rule_id": "R-3030",
+         "rule_name": "HRM App to CRM DB Cross-Zone", "request_type": "new_rule",
          "requestor": "Team Platform", "reviewer": "Security Team", "status": "Rejected",
          "submitted_at": (now + timedelta(days=-7)).isoformat(),
          "reviewed_at": (now + timedelta(days=-6)).isoformat(),
          "comments": "HRM needs access to CRM database for employee data sync",
-         "review_notes": "REJECTED: GEN to CDE cross-zone traffic is blocked per NGDC Prod Policy Matrix.",
+         "review_notes": "REJECTED: GEN to CDE cross-zone traffic blocked per NGDC Prod Policy Matrix.",
          "rule_summary": {"application": "HRM", "source": "grp-HRM-NH01-GEN-APP",
-                          "destination": "grp-CRM-NH02-CDE-DB", "ports": "tcp/1521",
+                          "destination": "grp-CRM-NH02-CDE-DB", "ports": "TCP 1521",
                           "environment": "Production"},
          "delta": None},
         # 5. Pending migration review - FRD legacy to NGDC
-        {"id": "REV-seed-005", "rule_id": "SEED-RULE-005",
+        {"id": "REV-seed-005", "rule_id": "R-3012",
          "rule_name": "FRD Legacy Migration Rule", "request_type": "migration",
          "requestor": "Migration Tool", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-6)).isoformat(),
@@ -1794,52 +1824,52 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "comments": "Auto-generated migration from DC_LEGACY_E to ALPHA_NGDC with 1-1 IP mappings",
          "review_notes": None,
          "rule_summary": {"application": "FRD", "source": "grp-FRD-NH02-CDE-APP",
-                          "destination": "grp-FRD-NH02-CDE-DB", "ports": "tcp/1521\ntcp/1433",
+                          "destination": "grp-FRD-NH02-CDE-DB", "ports": "TCP 1521\nTCP 1433",
                           "environment": "Production"},
          "delta": {"added": {}, "removed": {},
-                   "changed": {"rule_source": {"from": "10.29.2.10\n10.29.2.11", "to": "svr-10.1.1.50\nsvr-10.1.1.51"},
+                   "changed": {"rule_source": {"from": "10.29.2.10\n10.29.2.11", "to": "svr-10.1.2.10\nsvr-10.1.2.11"},
                                "rule_destination": {"from": "10.29.3.10", "to": "svr-10.1.2.20"},
                                "rule_source_zone": {"from": "Zone-E-Internal", "to": "CDE"},
                                "rule_destination_zone": {"from": "Zone-E-DB", "to": "CDE"}}}},
-        # 6. Approved modification - CBK added API server
-        {"id": "REV-seed-006", "rule_id": "SEED-RULE-006",
+        # 6. Approved modification - CBK added API server (R-3017)
+        {"id": "REV-seed-006", "rule_id": "R-3017",
          "rule_name": "CBK API Gateway Rule", "request_type": "modification",
          "requestor": "Team Theta", "reviewer": "Network Team", "status": "Approved",
          "submitted_at": (now + timedelta(days=-15)).isoformat(),
          "reviewed_at": (now + timedelta(days=-14)).isoformat(),
          "comments": "Adding new CBK API endpoint svr-10.7.1.41 to API group",
-         "review_notes": "Approved - same NH/SZ, CCS intra-zone permitted",
+         "review_notes": "Approved - same NH08/CCS, intra-zone permitted",
          "rule_summary": {"application": "CBK", "source": "grp-CBK-NH08-CCS-API",
-                          "destination": "grp-CBK-NH08-CCS-APP", "ports": "tcp/8443",
+                          "destination": "grp-CBK-NH08-CCS-APP", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": {"added": {"rule_source": ["svr-10.7.1.41"]},
                    "removed": {}, "changed": {}}},
-        # 7. Pending - cross-NH CDE exception request
-        {"id": "REV-seed-007", "rule_id": "SEED-RULE-007",
+        # 7. Pending - cross-NH CDE exception request (R-3043)
+        {"id": "REV-seed-007", "rule_id": "R-3043",
          "rule_name": "CRM to WLT Cross-NH CDE", "request_type": "new_rule",
          "requestor": "Team Eta", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-3)).isoformat(),
          "reviewed_at": None,
-         "comments": "CRM (NH02/CDE) needs to reach WLT (NH10/CDE) for portfolio data.",
+         "comments": "CRM (NH02/CDE) needs to reach WLT (NH10/CDE) for portfolio data - LDF-004.",
          "review_notes": None,
          "rule_summary": {"application": "CRM", "source": "grp-CRM-NH02-CDE-APP",
-                          "destination": "grp-WLT-NH10-CDE-API", "ports": "tcp/443",
+                          "destination": "grp-WLT-NH10-CDE-API", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": None},
-        # 8. Rejected migration - DMZ to CDE blocked
-        {"id": "REV-seed-008", "rule_id": "SEED-RULE-008",
+        # 8. Rejected - EPT PAA to CRM CDE blocked
+        {"id": "REV-seed-008", "rule_id": "R-3050",
          "rule_name": "EPT PAA to CRM CDE", "request_type": "new_rule",
          "requestor": "Team Platform", "reviewer": "Security Team", "status": "Rejected",
          "submitted_at": (now + timedelta(days=-5)).isoformat(),
          "reviewed_at": (now + timedelta(days=-4)).isoformat(),
          "comments": "Enterprise Portal needs direct CRM database access",
-         "review_notes": "REJECTED: PAA/DMZ to CDE is blocked per policy matrix.",
+         "review_notes": "REJECTED: PAA to CDE direct DB access blocked per policy. Use API tier instead.",
          "rule_summary": {"application": "EPT", "source": "grp-EPT-NH01-PAA-APP",
-                          "destination": "grp-CRM-NH02-CDE-DB", "ports": "tcp/1521",
+                          "destination": "grp-CRM-NH02-CDE-DB", "ports": "TCP 1521",
                           "environment": "Production"},
          "delta": None},
-        # 9. Pending modification - service port change
-        {"id": "REV-seed-009", "rule_id": "SEED-RULE-009",
+        # 9. Pending modification - LND service port change (R-3021)
+        {"id": "REV-seed-009", "rule_id": "R-3021",
          "rule_name": "LND Batch to DB", "request_type": "modification",
          "requestor": "Team Iota", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-1)).isoformat(),
@@ -1847,55 +1877,50 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "comments": "Changing from Oracle to PostgreSQL - updating port from 1521 to 5432",
          "review_notes": None,
          "rule_summary": {"application": "LND", "source": "grp-LND-NH09-CCS-BAT",
-                          "destination": "grp-LND-NH09-CCS-DB", "ports": "tcp/5432",
+                          "destination": "grp-LND-NH09-CCS-DB", "ports": "TCP 5432",
                           "environment": "Production"},
          "delta": {"added": {}, "removed": {},
-                   "changed": {"rule_service": {"from": "tcp/1521", "to": "tcp/5432"}}}},
-        # 10. Approved - INS cross-zone GEN permitted
-        {"id": "REV-seed-010", "rule_id": "SEED-RULE-010",
+                   "changed": {"rule_service": {"from": "TCP 1521", "to": "TCP 5432"}}}},
+        # 10. Approved - INS to KYC GEN-to-GEN cross-NH (R-3031)
+        {"id": "REV-seed-010", "rule_id": "R-3031",
          "rule_name": "INS to KYC GEN-to-GEN", "request_type": "new_rule",
          "requestor": "Team Kappa", "reviewer": "Network Team", "status": "Approved",
          "submitted_at": (now + timedelta(days=-12)).isoformat(),
          "reviewed_at": (now + timedelta(days=-11)).isoformat(),
-         "comments": "Insurance Portal needs KYC validation - both in GEN zone",
-         "review_notes": "Approved - GEN to GEN cross-NH is permitted per policy matrix",
+         "comments": "Insurance needs KYC validation - both in GEN zone, LDF-001",
+         "review_notes": "Approved - GEN to GEN cross-NH permitted per policy matrix (0 FW boundaries)",
          "rule_summary": {"application": "INS", "source": "grp-INS-NH04-GEN-APP",
-                          "destination": "grp-KYC-NH05-GEN-API", "ports": "tcp/443",
+                          "destination": "grp-KYC-NH05-GEN-API", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": None},
-        # 11. Pending - MDW middleware new rule
-        {"id": "REV-seed-011", "rule_id": "SEED-RULE-011",
-         "rule_name": "MDW ESB to CBK Core Banking", "request_type": "new_rule",
-         "requestor": "Team Sigma", "reviewer": None, "status": "Pending",
-         "submitted_at": (now + timedelta(hours=-2)).isoformat(),
-         "reviewed_at": None,
-         "comments": "Middleware ESB needs to integrate with Core Banking API",
-         "review_notes": None,
-         "rule_summary": {"application": "MDW", "source": "grp-MDW-NH11-CCS-APP",
-                          "destination": "grp-CBK-NH08-CCS-API", "ports": "tcp/8443",
+        # 11. Approved - CBK to PAY cross-zone (R-3039, LDF-003)
+        {"id": "REV-seed-011", "rule_id": "R-3039",
+         "rule_name": "CBK to PAY Payment Gateway", "request_type": "new_rule",
+         "requestor": "Team Theta", "reviewer": "Security Team", "status": "Approved",
+         "submitted_at": (now + timedelta(days=-8)).isoformat(),
+         "reviewed_at": (now + timedelta(days=-7)).isoformat(),
+         "comments": "Core Banking needs Payment API for settlement - CCS to CPA cross-zone",
+         "review_notes": "Approved - LDF-003 compliant, 1 FW boundary (egress NH08-CCS)",
+         "rule_summary": {"application": "CBK", "source": "grp-CBK-NH08-CCS-APP",
+                          "destination": "grp-PAY-NH07-CPA-API", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": None},
-        # 12. Pending - RAP regulatory report migration
-        {"id": "REV-seed-012", "rule_id": "SEED-RULE-012",
-         "rule_name": "RAP Legacy Migration", "request_type": "migration",
+        # 12. Pending migration - HRM legacy
+        {"id": "REV-seed-012", "rule_id": "LR-1013",
+         "rule_name": "HRM Legacy Migration", "request_type": "migration",
          "requestor": "Migration Tool", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-4)).isoformat(),
          "reviewed_at": None,
-         "comments": "Auto-generated migration from DC_LEGACY_D to ALPHA_NGDC",
+         "comments": "Auto-generated migration from DC_LEGACY_B to ALPHA_NGDC",
          "review_notes": None,
-         "rule_summary": {"application": "RAP", "source": "grp-RAP-NH12-CDE-APP",
-                          "destination": "grp-RAP-NH12-CDE-DB", "ports": "tcp/1521",
+         "rule_summary": {"application": "HRM", "source": "grp-HRM-NH01-GEN-APP",
+                          "destination": "grp-HRM-NH01-GEN-DB", "ports": "TCP 5432",
                           "environment": "Production"},
          "delta": {"added": {}, "removed": {},
-                   "changed": {"rule_source": {"from": "10.28.21.10\n10.28.21.11", "to": "svr-10.11.1.20\nsvr-10.11.1.21"},
-                               "rule_destination": {"from": "10.28.22.10\n10.28.22.11", "to": "svr-10.11.1.30\nsvr-10.11.1.31"},
-                               "rule_source_zone": {"from": "Zone-D-Regulatory", "to": "CDE"},
-                               "rule_destination_zone": {"from": "Zone-D-Reg-DB", "to": "CDE"}}}},
+                   "changed": {"rule_source": {"from": "10.26.2.10\n10.26.2.11", "to": "svr-10.0.2.140\nsvr-10.0.2.141"},
+                               "rule_destination": {"from": "10.26.3.10\n10.26.3.11", "to": "svr-10.0.2.150\nsvr-10.0.2.151"},
+                               "rule_source_zone": {"from": "Zone-B-App", "to": "GEN"},
+                               "rule_destination_zone": {"from": "Zone-B-DB", "to": "GEN"}}}},
     ]
     return reviews
 
-
-# Build the data at module load time
-SEED_LEGACY_RULES = _build_legacy_rules()
-SEED_IP_MAPPINGS = _build_ip_mappings()
-SEED_REVIEWS = build_seed_reviews()

@@ -15,7 +15,7 @@ import {
   getFilteredNhSzDc,
 } from '@/lib/api';
 import { LDFFlowVisualization, type EgressIngressResult } from '@/components/design-studio/LDFFlowVisualization';
-import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, Application, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
+import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -120,9 +120,8 @@ export function MigrationStudioPage() {
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder' | 'group-mappings'>('table');
   const [allIPMappings, setAllIPMappings] = useState<Record<string, unknown>[]>([]);
-  const [groupMappingsFilter, setGroupMappingsFilter] = useState('');
+  const [groupMappingsFilter] = useState('');
   const [loadingMappings, setLoadingMappings] = useState(false);
-  const [applications, setApplications] = useState<Application[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
   const { notification, showNotification } = useNotification();
@@ -171,7 +170,7 @@ export function MigrationStudioPage() {
         getApplications(),
       ]);
       setLegacyRules(rulesData);
-      setApplications(appsData);
+      void appsData;  // apps used for appOptions via legacyRules
     } catch {
       showNotification('Failed to load migration data', 'error');
     }
@@ -243,7 +242,7 @@ export function MigrationStudioPage() {
   const appOptions = Array.from(new Set(legacyRules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
     const [appId, distId, appName] = key.split('|');
     return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
-  });
+  }).sort((a, b) => a.label.localeCompare(b.label));
 
   const toggleSelection = (ruleId: string) => {
     setSelectedRuleIds(prev => {
@@ -584,11 +583,6 @@ export function MigrationStudioPage() {
               <p className="text-xs text-gray-500 mt-0.5">Browse all group-level mappings. IPs are auto-recommended into groups. Filter by app to find relevant groups for migration.</p>
             </div>
             <div className="flex items-center gap-2">
-              <select value={groupMappingsFilter} onChange={e => setGroupMappingsFilter(e.target.value)}
-                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white">
-                <option value="">All Applications</option>
-                {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_id} - {a.name}</option>)}
-              </select>
               <button onClick={() => loadIPMappings(groupMappingsFilter)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">Refresh</button>
               <label className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 cursor-pointer">
                 Import CSV
