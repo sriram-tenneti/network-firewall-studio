@@ -8,6 +8,7 @@ from app.routes.migrations import router as migrations_router
 from app.routes.reference import router as reference_router
 from app.routes.policy import router as policy_router
 from app.routes.reviews import router as reviews_router
+from app.routes.integrations import router as integrations_router
 from app.database import seed_database
 
 
@@ -33,6 +34,7 @@ app.include_router(migrations_router)
 app.include_router(reference_router)
 app.include_router(policy_router)
 app.include_router(reviews_router)
+app.include_router(integrations_router)
 
 
 @app.get("/healthz")

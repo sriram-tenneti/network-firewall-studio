@@ -5,8 +5,9 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled } from '@/lib/api';
-import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled, getAuditLogs, getChgRequests, closeServiceNowCHG } from '@/lib/api';
+import type { CHGRequest } from '@/types';
+import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application, AuditLogEntry } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -680,6 +681,12 @@ export default function FirewallManagementPage() {
   const [sourceEntries, setSourceEntries] = useState<ResourceEntry[]>([]);
   const [destEntries, setDestEntries] = useState<ResourceEntry[]>([]);
   const [serviceEntries, setServiceEntries] = useState<ResourceEntry[]>([]);
+  // Audit trail
+  const [auditRuleId, setAuditRuleId] = useState<string | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  // CHG tracking
+  const [chgRequests, setChgRequests] = useState<CHGRequest[]>([]);
+  const chgModal = useModal();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -697,6 +704,21 @@ export default function FirewallManagementPage() {
   }, [selectedApp, showNotification]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Load CHG requests for tracking
+  useEffect(() => {
+    getChgRequests().then(setChgRequests).catch(() => setChgRequests([]));
+  }, []);
+
+  const handleCloseCHG = async (chgId: string) => {
+    try {
+      const result = await closeServiceNowCHG(chgId);
+      showNotification(`${chgId} closed — ${result.deployed_rules?.length || 0} rule(s) deployed`, 'success');
+      getChgRequests().then(setChgRequests).catch(() => {});
+    } catch {
+      showNotification('Failed to close CHG', 'error');
+    }
+  };
 
   const envFilteredRules = rules.filter(r => {
     if (selectedEnv && (r as unknown as Record<string, string>).environment !== selectedEnv) return false;
@@ -858,6 +880,16 @@ export default function FirewallManagementPage() {
     showNotification('Spreadsheet exported', 'success');
   };
 
+  const handleViewAudit = async (ruleId: string) => {
+    setAuditRuleId(ruleId);
+    try {
+      const logs = await getAuditLogs(ruleId);
+      setAuditLogs(logs);
+    } catch {
+      setAuditLogs([]);
+    }
+  };
+
   const columns: Column<LegacyRule>[] = [
     { key: 'id', header: 'Rule ID', sortable: true, width: '80px' },
     { key: 'app_id', header: 'App ID', sortable: true, width: '70px',
@@ -915,7 +947,7 @@ export default function FirewallManagementPage() {
         </span>
       ),
     },
-    { key: '_actions', header: 'Actions', width: '140px', sortable: false,
+    { key: '_actions', header: 'Actions', width: '160px', sortable: false,
       render: (_, row) => {
         const isNGDC = row.migration_status === 'Completed' || (row as unknown as Record<string, unknown>).studio_imported === true;
         return (
@@ -926,6 +958,7 @@ export default function FirewallManagementPage() {
             ) : (
               <button onClick={() => openModifyModal(row)} className="text-xs text-orange-600 hover:text-orange-800 font-medium">modify</button>
             )}
+            <button onClick={() => handleViewAudit(row.id)} className="text-xs text-gray-500 hover:text-gray-700 font-medium" title="Audit Trail">Audit</button>
           </div>
         );
       },
@@ -969,6 +1002,9 @@ export default function FirewallManagementPage() {
           </select>
           <button onClick={() => { setSelectedExportApps(selectedApp ? new Set([selectedApp]) : new Set()); setShowExportModal(true); }} className="px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100">
             Export Rules
+          </button>
+          <button onClick={() => chgModal.open()} className="px-4 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100">
+            CHG Tracker ({chgRequests.length})
           </button>
         </div>
       </div>
@@ -1343,6 +1379,73 @@ export default function FirewallManagementPage() {
           </div>
           );
         })()}
+      </Modal>
+
+      {/* CHG Tracker Modal */}
+      <Modal isOpen={chgModal.isOpen} onClose={chgModal.close} title="ServiceNow CHG Tracker" size="xl">
+        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+          {chgRequests.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No CHG requests found. Submit rules for change in Firewall Studio.</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="text-left p-2 font-semibold text-gray-700">CHG ID</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Description</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Status</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Rule IDs</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Created</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chgRequests.map(chg => (
+                  <tr key={chg.chg_id} className="border-t hover:bg-gray-50">
+                    <td className="p-2 font-mono font-semibold text-blue-700">{chg.chg_id}</td>
+                    <td className="p-2 text-gray-600">{chg.description || '—'}</td>
+                    <td className="p-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${chg.status === 'Implemented' ? 'bg-green-100 text-green-700' : chg.status === 'Submitted' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>{chg.status}</span>
+                    </td>
+                    <td className="p-2 font-mono text-gray-500">{chg.rule_ids?.join(', ') || '—'}</td>
+                    <td className="p-2 text-gray-500">{chg.created_at ? new Date(chg.created_at).toLocaleString() : '—'}</td>
+                    <td className="p-2">
+                      {chg.status !== 'Implemented' && (
+                        <button onClick={() => handleCloseCHG(chg.chg_id)} className="px-2 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-50 rounded border border-emerald-200 hover:bg-emerald-100">
+                          Close CHG
+                        </button>
+                      )}
+                      {chg.status === 'Implemented' && (
+                        <span className="text-[10px] text-green-600 font-medium">Deployed</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Modal>
+
+      {/* Audit Trail Modal */}
+      <Modal isOpen={!!auditRuleId} onClose={() => { setAuditRuleId(null); setAuditLogs([]); }} title={`Audit Trail — ${auditRuleId || ''}`} size="lg">
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {auditLogs.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No audit entries yet for this rule.</p>
+          ) : auditLogs.map(log => (
+            <div key={log.id} className="p-3 bg-gray-50 rounded-lg border text-xs">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="font-semibold text-gray-800">{log.action}</span>
+                  {log.chg_number && <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-mono text-[10px]">{log.chg_number}</span>}
+                </div>
+                <span className="text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+              </div>
+              <div className="text-gray-600 mt-1">{log.details}</div>
+              {log.previous_state && <div className="mt-1 text-gray-400">State: {log.previous_state} &rarr; {log.new_state}</div>}
+              <div className="text-gray-400 mt-0.5">Actor: {log.actor}</div>
+            </div>
+          ))}
+        </div>
       </Modal>
     </div>
   );

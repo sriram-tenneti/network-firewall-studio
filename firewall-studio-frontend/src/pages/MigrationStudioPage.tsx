@@ -488,11 +488,14 @@ export function MigrationStudioPage() {
     if (!migrateRule) return;
     setChgSubmitting(true);
     try {
-      // Placeholder: In production, this would call ServiceNow API to create a CHG
-      const placeholderCHG = `CHG${String(Date.now()).slice(-7)}`;
-      setChgNumber(placeholderCHG);
+      const result = await api.submitServiceNowCHG({
+        rule_ids: [migrateRule.id],
+        description: `Migration CHG for rule ${migrateRule.id} (${migrateRule.app_name})`,
+        requested_by: 'system',
+      });
+      setChgNumber(result.chg_number);
       setChgSubmitted(true);
-      showNotification(`Change ${placeholderCHG} submitted successfully. Rule will be deployed upon CHG closure.`, 'success');
+      showNotification(`Change ${result.chg_number} submitted successfully. Rule will be deployed upon CHG closure.`, 'success');
     } catch {
       showNotification('Failed to submit change request', 'error');
     }

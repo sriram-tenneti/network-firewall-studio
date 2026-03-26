@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Modal } from '@/components/shared/Modal';
 // RuleFormModal kept only for editing existing draft rules
 import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
@@ -14,7 +15,7 @@ import type { RuleModification } from '@/components/design-studio/RuleModifyModa
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import type { FirewallRule, Application } from '@/types';
+import type { FirewallRule, Application, AuditLogEntry, RuleVersion, GitOpsRuleEntry } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 import * as api from '@/lib/api';
 
@@ -33,6 +34,12 @@ export function DesignStudioPage() {
   const compilerModal = useModal<string>();
   const groupModal = useModal();
   const deleteConfirm = useModal<string>();
+  const auditModal = useModal<string>();
+  const versionModal = useModal<string>();
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [ruleVersions, setRuleVersions] = useState<RuleVersion[]>([]);
+  const gitopsModal = useModal();
+  const [gitopsRules, setGitopsRules] = useState<GitOpsRuleEntry[]>([]);
   const { notification, showNotification } = useNotification();
 
   const loadData = useCallback(async () => {
@@ -68,6 +75,7 @@ export function DesignStudioPage() {
     Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
     'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
     Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    'Submitted for Change': rules.filter(r => r.status === 'Submitted for Change' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
     Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
     Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
   };
@@ -133,12 +141,67 @@ export function DesignStudioPage() {
 
   const handleSubmitChange = async (ruleId: string) => {
     try {
-      // Placeholder: In production this calls ServiceNow API to create CHG
-      const placeholderCHG = `CHG${String(Date.now()).slice(-7)}`;
-      showNotification(`Change ${placeholderCHG} submitted for rule ${ruleId}. Rule will be deployed upon CHG closure.`, 'success');
+      const result = await api.submitServiceNowCHG({ rule_ids: [ruleId], description: `CHG for rule ${ruleId}` });
+      await api.snapshotRuleVersion(ruleId, `CHG ${result.chg_number} submitted`);
+      showNotification(`${result.chg_number} submitted for rule ${ruleId}. Rule will be deployed upon CHG closure.`, 'success');
       loadData();
     } catch {
       showNotification('Failed to submit change request', 'error');
+    }
+  };
+
+  const handleCloseCHG = async (ruleId: string) => {
+    try {
+      // Look up the CHG for this rule
+      const chg = await api.getChgForRule(ruleId);
+      if (chg && !chg.error && chg.chg_id) {
+        const result = await api.closeServiceNowCHG(chg.chg_id);
+        showNotification(`${chg.chg_id} closed — ${result.deployed_rules?.length || 0} rule(s) deployed and committed to GitOps`, 'success');
+        loadData();
+      } else {
+        showNotification('No CHG found for this rule', 'error');
+      }
+    } catch {
+      showNotification('Failed to close CHG', 'error');
+    }
+  };
+
+  const handleGitOpsPush = async (ruleId: string) => {
+    try {
+      const result = await api.pushToGitOps({ rule_id: ruleId });
+      showNotification(`Rule ${ruleId} pushed to GitOps branch ${result.branch}`, 'success');
+    } catch {
+      showNotification('Failed to push to GitOps', 'error');
+    }
+  };
+
+  const openGitOpsView = async () => {
+    gitopsModal.open();
+    try {
+      const data = await api.getGitOpsRules();
+      setGitopsRules(data);
+    } catch {
+      setGitopsRules([]);
+    }
+  };
+
+  const openAuditLog = async (ruleId: string) => {
+    auditModal.open(ruleId);
+    try {
+      const logs = await api.getAuditLogs(ruleId);
+      setAuditLogs(logs);
+    } catch {
+      setAuditLogs([]);
+    }
+  };
+
+  const openVersionHistory = async (ruleId: string) => {
+    versionModal.open(ruleId);
+    try {
+      const versions = await api.getRuleVersions(ruleId);
+      setRuleVersions(versions);
+    } catch {
+      setRuleVersions([]);
     }
   };
 
@@ -179,8 +242,15 @@ export function DesignStudioPage() {
       render: (_, row) => row.policy_result ? <StatusBadge status={row.policy_result} /> : <span className="text-gray-400 text-xs">N/A</span>,
     },
     {
-      key: 'status', header: 'Status', sortable: true, width: '120px',
-      render: (_, row) => <StatusBadge status={row.status} />,
+      key: 'status', header: 'Status', sortable: true, width: '180px',
+      render: (_, row) => {
+        const r = row as unknown as Record<string, unknown>;
+        const chgNum = r.chg_number as string | undefined;
+        const displayStatus = row.status === 'Submitted for Change' && chgNum
+          ? `Submitted for Change - ${chgNum}`
+          : row.status;
+        return <StatusBadge status={displayStatus} />;
+      },
     },
     {
       key: '_actions', header: 'Actions', sortable: false, width: '220px',
@@ -199,12 +269,19 @@ export function DesignStudioPage() {
           {row.status === 'Approved' && (
             <button onClick={() => handleSubmitChange(row.rule_id)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Submit CHG</button>
           )}
+          {row.status === 'Submitted for Change' && (
+            <button onClick={() => handleCloseCHG(row.rule_id)} className="px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100">Close CHG</button>
+          )}
           {(row.status === 'Approved' || row.status === 'Deployed') && (
             <button onClick={() => handleCertify(row.rule_id)} className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded hover:bg-purple-100">Certify</button>
           )}
           {(row.status === 'Pending Review' || row.status === 'Approved' || row.status === 'Deployed' || row.status === 'Certified') && (
             <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
           )}
+          {(row.status === 'Deployed' || row.status === 'Certified') && (
+            <button onClick={() => handleGitOpsPush(row.rule_id)} className="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-50 rounded hover:bg-gray-100">GitOps</button>
+          )}
+          <button onClick={() => openAuditLog(row.rule_id)} className="px-2 py-1 text-xs font-medium text-gray-500 bg-white rounded border border-gray-200 hover:bg-gray-50" title="Audit Trail">Audit</button>
           {row.status === 'Draft' && (
             <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
           )}
@@ -218,6 +295,7 @@ export function DesignStudioPage() {
     { id: 'Draft', label: 'Draft', count: statusCounts.Draft },
     { id: 'Pending Review', label: 'Pending Review', count: statusCounts['Pending Review'] },
     { id: 'Approved', label: 'Approved', count: statusCounts.Approved },
+    { id: 'Submitted for Change', label: 'Submitted for Change', count: statusCounts['Submitted for Change'] },
     { id: 'Deployed', label: 'Deployed', count: statusCounts.Deployed },
     { id: 'Certified', label: 'Certified', count: statusCounts.Certified },
   ];
@@ -262,6 +340,9 @@ export function DesignStudioPage() {
           <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
             Manage Groups
           </button>
+          <button onClick={openGitOpsView} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100">
+            GitOps
+          </button>
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Rules</button>
             <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>+ New Rule</button>
@@ -270,12 +351,13 @@ export function DesignStudioPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-7 gap-3 mb-6">
         {[
           { label: 'Total', value: statusCounts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
           { label: 'Draft', value: statusCounts.Draft, color: 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-800' },
           { label: 'Pending', value: statusCounts['Pending Review'], color: 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800' },
           { label: 'Approved', value: statusCounts.Approved, color: 'bg-gradient-to-br from-green-100 to-green-200 text-green-800' },
+          { label: 'CHG Pending', value: statusCounts['Submitted for Change'], color: 'bg-gradient-to-br from-orange-100 to-orange-200 text-orange-800' },
           { label: 'Deployed', value: statusCounts.Deployed, color: 'bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800' },
           { label: 'Certified', value: statusCounts.Certified, color: 'bg-gradient-to-br from-purple-100 to-purple-200 text-purple-800' },
         ].map(card => (
@@ -341,6 +423,98 @@ export function DesignStudioPage() {
         confirmLabel="Delete"
         confirmVariant="danger"
       />
+
+      {/* Audit Trail Modal */}
+      <Modal isOpen={auditModal.isOpen} onClose={() => { auditModal.close(); setAuditLogs([]); }} title={`Audit Trail — ${auditModal.data || ''}`} size="lg">
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {auditLogs.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No audit entries yet for this rule.</p>
+          ) : auditLogs.map(log => (
+            <div key={log.id} className="p-3 bg-gray-50 rounded-lg border text-xs">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="font-semibold text-gray-800">{log.action}</span>
+                  {log.chg_number && <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-mono text-[10px]">{log.chg_number}</span>}
+                </div>
+                <span className="text-gray-400">{new Date(log.timestamp).toLocaleString()}</span>
+              </div>
+              <div className="text-gray-600 mt-1">{log.details}</div>
+              {log.previous_state && <div className="mt-1 text-gray-400">State: {log.previous_state} → {log.new_state}</div>}
+              <div className="text-gray-400 mt-0.5">Actor: {log.actor}</div>
+            </div>
+          ))}
+          <div className="flex justify-end pt-2">
+            <button onClick={() => openVersionHistory(auditModal.data || '')} className="text-xs text-indigo-600 hover:underline">View Version History</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Version History Modal */}
+      <Modal isOpen={versionModal.isOpen} onClose={() => { versionModal.close(); setRuleVersions([]); }} title={`Version History — ${versionModal.data || ''}`} size="lg">
+        <div className="space-y-3 max-h-96 overflow-y-auto">
+          {ruleVersions.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No versions recorded yet. Versions are created on CHG submission and modifications.</p>
+          ) : ruleVersions.map(ver => (
+            <div key={ver.id} className="p-3 bg-gray-50 rounded-lg border">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-semibold text-gray-800">Version {ver.version}</span>
+                <span className="text-xs text-gray-400">{new Date(ver.created_at).toLocaleString()}</span>
+              </div>
+              {ver.change_summary && <p className="text-xs text-gray-600 mb-2">{ver.change_summary}</p>}
+              <details className="text-xs">
+                <summary className="cursor-pointer text-indigo-600 hover:underline">View Snapshot</summary>
+                <pre className="mt-2 p-2 bg-white rounded border text-[10px] overflow-x-auto max-h-40">{JSON.stringify(ver.snapshot, null, 2)}</pre>
+              </details>
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      {/* GitOps Dashboard Modal */}
+      <Modal isOpen={gitopsModal.isOpen} onClose={() => { gitopsModal.close(); setGitopsRules([]); }} title="GitOps Dashboard — All Rules" size="xl">
+        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+          {gitopsRules.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-4 text-center">No rules found. Create rules in Design Studio to see them here.</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="text-left p-2 font-semibold text-gray-700">Rule ID</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Application</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Env</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Status</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">CHG#</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">GitOps</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Last Push</th>
+                  <th className="text-left p-2 font-semibold text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gitopsRules.map(gr => (
+                  <tr key={gr.rule_id} className="border-t hover:bg-gray-50">
+                    <td className="p-2 font-mono">{gr.rule_id}</td>
+                    <td className="p-2">{gr.application}</td>
+                    <td className="p-2">{gr.environment}</td>
+                    <td className="p-2"><StatusBadge status={gr.status} /></td>
+                    <td className="p-2">{gr.chg_number ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-mono text-[10px]">{gr.chg_number}</span> : <span className="text-gray-400">—</span>}</td>
+                    <td className="p-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${gr.gitops_status === 'Committed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{gr.gitops_status}</span>
+                    </td>
+                    <td className="p-2 text-gray-500">{gr.gitops_last_push ? new Date(gr.gitops_last_push).toLocaleString() : '—'}</td>
+                    <td className="p-2">
+                      {(gr.status === 'Deployed' || gr.status === 'Certified') && (
+                        <button onClick={() => { handleGitOpsPush(gr.rule_id); openGitOpsView(); }} className="px-2 py-0.5 text-[10px] font-medium text-gray-700 bg-gray-50 rounded border hover:bg-gray-100">
+                          {gr.gitops_status === 'Committed' ? 'Re-push' : 'Push'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Modal>
 
     </div>
   );

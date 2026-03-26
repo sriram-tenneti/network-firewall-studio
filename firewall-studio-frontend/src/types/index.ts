@@ -1,4 +1,4 @@
-export type RuleStatus = 'Draft' | 'Pending Review' | 'Approved' | 'Rejected' | 'Deployed' | 'Certified' | 'Expired' | 'Deleted';
+export type RuleStatus = 'Draft' | 'Pending Review' | 'Approved' | 'Submitted for Change' | 'Rejected' | 'Deployed' | 'Certified' | 'Expired' | 'Deleted';
 export type PolicyResult = 'Permitted' | 'Blocked' | 'Exception Required' | 'Needs Review';
 export type MigrationStatus = 'Auto-Mapped' | 'Needs Review' | 'New Group' | 'Conflict' | 'Blocked' | 'Draft' | 'Policy Review';
 export type MappingStatus = 'Automapped' | 'Needs Review' | 'Blocked';
@@ -499,6 +499,70 @@ export interface AppDCMapping {
   cidr: string;
   status: 'Active' | 'Inactive';
   notes?: string;
+}
+
+// Audit Log Entry
+export interface AuditLogEntry {
+  id: string;
+  rule_id: string;
+  action: string;
+  actor: string;
+  details: string;
+  previous_state?: string;
+  new_state?: string;
+  chg_number?: string;
+  timestamp: string;
+}
+
+// Rule Version Snapshot
+export interface RuleVersion {
+  id: string;
+  rule_id: string;
+  version: number;
+  snapshot: Record<string, unknown>;
+  change_summary: string;
+  created_at: string;
+}
+
+// Work Request
+export interface WorkRequest {
+  wr_id: string;
+  app_id: string;
+  app_name: string;
+  request_type: string;
+  environment: string;
+  requested_by: string;
+  status: string;
+  spreadsheet_ref: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// GitOps Log Entry
+export interface GitOpsLogEntry {
+  id: string;
+  rule_id: string;
+  vendor: string;
+  branch: string;
+  commit_sha: string;
+  pr_url: string;
+  status: string;
+  created_at: string;
+}
+
+// GitOps Rule Entry (rule + gitops status for dashboard)
+export interface GitOpsRuleEntry {
+  rule_id: string;
+  application: string;
+  status: string;
+  chg_number?: string;
+  environment: string;
+  gitops_status: string;
+  gitops_commit?: string;
+  gitops_branch?: string;
+  gitops_last_push?: string;
+  last_push_entry?: GitOpsLogEntry | null;
 }
 
 // Exception request for individual IPs/subnets
