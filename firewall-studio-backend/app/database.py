@@ -546,6 +546,9 @@ def _build_seed_rules() -> list[dict[str, Any]]:
             "destination": dst, "destination_zone": sz_d, "destination_nh": dst_nh,
             "port": port, "protocol": port.split(" ")[0],
             "action": "Allow", "description": desc, "application": app, "status": st,
+            # rule_status mirrors status — "Submitted" only for new Studio-created rules
+            "rule_status": st,
+            "rule_migration_status": "Migration Deployed",
             "is_group_to_group": g2g, "environment": env, "datacenter": "ALPHA_NGDC",
             "ldf_scenario": ldf,
             "created_at": ct, "updated_at": ct,

@@ -15,7 +15,7 @@ import {
   getFilteredNhSzDc,
 } from '@/lib/api';
 import { LDFFlowVisualization, type EgressIngressResult } from '@/components/design-studio/LDFFlowVisualization';
-import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
+import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -122,6 +122,7 @@ export function MigrationStudioPage() {
   const [allIPMappings, setAllIPMappings] = useState<Record<string, unknown>[]>([]);
   const [groupMappingsFilter] = useState('');
   const [loadingMappings, setLoadingMappings] = useState(false);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
   const { notification, showNotification } = useNotification();

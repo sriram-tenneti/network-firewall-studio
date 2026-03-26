@@ -183,44 +183,33 @@ export function DesignStudioPage() {
       render: (_, row) => <StatusBadge status={row.status} />,
     },
     {
-      key: 'rule_status' as keyof FirewallRule, header: 'Rule Status', sortable: true, width: '110px',
-      render: (_, row) => <StatusBadge status={row.rule_status || 'Submitted'} />,
-    },
-    {
-      key: 'rule_migration_status' as keyof FirewallRule, header: 'Migration', sortable: true, width: '100px',
-      render: (_, row) => <StatusBadge status={row.rule_migration_status || 'Migration Deployed'} />,
-    },
-    {
-      key: '_actions', header: 'Actions', sortable: false, width: '260px',
+      key: '_actions', header: 'Actions', sortable: false, width: '280px',
       render: (_, row) => {
-        const ruleStatus = row.rule_status || 'Submitted';
-        const migStatus = row.rule_migration_status || 'Migration Deployed';
-        const isDeployed = ruleStatus === 'Deployed';
-        const isMigrationDeployed = migStatus === 'Migration Deployed';
-        // Edit allowed: Draft status (not yet submitted)
-        // Modify allowed: Deployed + Migration Deployed (fully live in Studio)
-        const canEdit = row.status === 'Draft';
-        const canModify = isDeployed && isMigrationDeployed && row.status !== 'Deleted';
+        const st = row.status;
+        const canEdit = st === 'Draft';
+        const canSubmit = st === 'Draft';
+        const canModify = (st === 'Deployed' || st === 'Certified') && st !== 'Deleted';
+        const canCompile = st === 'Deployed' || st === 'Certified' || st === 'Approved';
+        const canCertify = st === 'Deployed';
         return (
           <div className="flex gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
             <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
             {canEdit && (
               <>
                 <button onClick={() => editModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
-                <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
               </>
+            )}
+            {canSubmit && (
+              <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
             )}
             {canModify && (
               <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100">Modify</button>
             )}
-            {isDeployed && (
-              <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
-            )}
-            {isDeployed && (
+            {canCertify && (
               <button onClick={() => handleCertify(row.rule_id)} className="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded hover:bg-purple-100">Certify</button>
             )}
-            {!canEdit && !isDeployed && (
-              <span className="text-[10px] text-gray-400 italic">Status: {ruleStatus}</span>
+            {canCompile && (
+              <button onClick={() => compilerModal.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100">Compile</button>
             )}
             {canEdit && (
               <button onClick={() => deleteConfirm.open(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
