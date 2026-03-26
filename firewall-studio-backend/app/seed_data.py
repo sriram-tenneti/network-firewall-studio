@@ -1924,3 +1924,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
     ]
     return reviews
 
+
+# Build the data at module load time
+SEED_LEGACY_RULES = _build_legacy_rules()
+SEED_IP_MAPPINGS = _build_ip_mappings()
+SEED_REVIEWS = build_seed_reviews()
