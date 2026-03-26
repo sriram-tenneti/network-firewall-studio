@@ -412,7 +412,7 @@ export const exportLegacyRulesToExcel = (appId?: string) => {
 };
 
 // Excel import for legacy rules (supports large files up to 50K+ rows)
-export const importLegacyRulesExcel = async (file: File, environment?: string): Promise<{ added: number; duplicates: number; total: number }> => {
+export const importLegacyRulesExcel = async (file: File, environment?: string): Promise<Record<string, unknown>> => {
   const formData = new FormData();
   formData.append('file', file);
   if (environment) formData.append('environment', environment);

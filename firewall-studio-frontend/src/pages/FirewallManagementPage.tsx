@@ -78,19 +78,18 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
   const delta: RuleDelta = { added: {}, removed: {}, changed: {} };
   const fields = Object.keys(original) as (keyof ModifyState)[];
   for (const field of fields) {
-    const origVal = original[field] || '';
-    const modVal = modified[field] || '';
-    if (origVal !== modVal) {
-      if (origVal.includes('\n') || modVal.includes('\n')) {
-        const origLines = new Set(origVal.split('\n').filter(Boolean));
-        const modLines = new Set(modVal.split('\n').filter(Boolean));
-        const added = [...modLines].filter(l => !origLines.has(l));
-        const removed = [...origLines].filter(l => !modLines.has(l));
-        if (added.length) delta.added[field] = added;
-        if (removed.length) delta.removed[field] = removed;
-      } else {
-        delta.changed[field] = { from: origVal, to: modVal };
-      }
+    const origVal = (original[field] || '').trim();
+    const modVal = (modified[field] || '').trim();
+    if (origVal === modVal) continue;
+    if (origVal.includes('\n') || modVal.includes('\n')) {
+      const origLines = new Set(origVal.split('\n').map(l => l.trim()).filter(Boolean));
+      const modLines = new Set(modVal.split('\n').map(l => l.trim()).filter(Boolean));
+      const added = [...modLines].filter(l => !origLines.has(l));
+      const removed = [...origLines].filter(l => !modLines.has(l));
+      if (added.length) delta.added[field] = added;
+      if (removed.length) delta.removed[field] = removed;
+    } else {
+      delta.changed[field] = { from: origVal, to: modVal };
     }
   }
   return delta;
@@ -98,7 +97,7 @@ function computeLocalDelta(original: ModifyState, modified: ModifyState): RuleDe
 
 interface ResourceEntry {
   id: string;
-  type: 'ip' | 'subnet' | 'group';
+  type: 'ip' | 'subnet' | 'range' | 'group';
   value: string;
   groupMembers?: { type: string; value: string }[];
   isNew?: boolean;
@@ -110,25 +109,48 @@ const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
 /**
  * Naming conventions from Excel:
  *   svr-  = IP address (server)
- *   g- or grp- = Group (contains members)
+ *   Groups: ANY prefix — detected structurally by indented children in expansion column
  *   rng-  = Range of IPs/subnets
  *   sub-  = Subnet
+ *
+ * Legacy group prefix hints (used when expansion column is unavailable):
+ *   g-, grp-, ggrp-, gapigr-, netgrp-, addrgrp-, group-, etc.
+ * But in NGDC, groups follow strict naming standards.
  */
-function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'group' {
+const LEGACY_GROUP_PREFIXES = [
+  'g-', 'grp-', 'ggrp-', 'gapigr-', 'grp_', 'g_',
+  'group-', 'group_', 'netgrp-', 'netgrp_', 'addrgrp-',
+];
+
+/** Prefix-based hint for group detection (fallback when no expansion column). */
+function isLegacyGroupName(name: string): boolean {
+  const lower = name.trim().toLowerCase();
+  return LEGACY_GROUP_PREFIXES.some(pfx => lower.startsWith(pfx));
+}
+
+function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'subnet' | 'range' | 'group' {
   const v = value.trim();
   const vl = v.toLowerCase();
-  // grp- or g- prefix = GROUP
-  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
+  // Check known group prefixes as hint
+  if (isLegacyGroupName(v)) return 'group';
   // Check if it matches a known group name from the backend
   if (allGroupNames && allGroupNames.has(v)) return 'group';
-  // rng- prefix = SUBNET (range of IPs/subnets)
-  if (vl.startsWith('rng-')) return 'subnet';
-  // sub- prefix = SUBNET
+  // grp- prefix = GROUP
+  if (vl.startsWith('grp-')) return 'group';
+  // rng- prefix = RANGE (IP ranges xx.xx.xx.xx-xy)
+  if (vl.startsWith('rng-')) return 'range';
+  // net- prefix = SUBNET (NGDC standard for subnets)
+  if (vl.startsWith('net-')) return 'subnet';
+  // sub- prefix = SUBNET (legacy subnet prefix)
   if (vl.startsWith('sub-')) return 'subnet';
   // svr- prefix = IP (server)
   if (vl.startsWith('svr-')) return 'ip';
+  // gsvr- prefix = IP (legacy variant of svr-)
+  if (vl.startsWith('gsvr-')) return 'ip';
   // Check CIDR notation (subnet)
   if (CIDR_REGEX.test(v)) return 'subnet';
+  // Check IP range pattern (xx.xx.xx.xx-xx.xx.xx.xx or xx.xx.xx.xx-xy)
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(v)) return 'range';
   // Check plain IP
   if (IP_REGEX.test(v)) return 'ip';
   // If it contains '/' it's likely a subnet
@@ -138,66 +160,172 @@ function detectEntryType(value: string, allGroupNames?: Set<string>): 'ip' | 'su
 }
 
 /**
- * Parse expanded text (hierarchical) into ResourceEntry[]. The expanded format is:
- *   grp-xxx           <- group header (no indent)
- *     svr-10.1.2.3    <- member (indented 2+ spaces or tab)
- *     rng-10.1.2.3-10 <- member
- *   svr-10.5.6.7      <- standalone IP (no indent)
+ * Parse expanded text (hierarchical) into ResourceEntry[].
+ *
+ * Group detection is **structure-based**: any entry that has indented
+ * children below it is treated as a group, regardless of its prefix.
+ * The prefix can be anything — the indentation hierarchy is the sole
+ * authority for legacy groups.  (NGDC groups follow strict naming.)
+ *
+ * Example expansion text:
+ *   MY-CUSTOM-GROUP     <- group (has indented children below)
+ *     svr-10.1.2.3      <- member
+ *     rng-10.1.2.3-10   <- member
+ *     NESTED-SUB-GRP    <- nested sub-group (has deeper children)
+ *       10.2.2.1        <- member of nested sub-group
+ *   svr-10.5.6.7        <- standalone (no children → not a group)
  */
 function parseToResourceEntries(raw: string, groups: FirewallGroup[], expanded?: string): ResourceEntry[] {
   if (!raw && !expanded) return [];
   const groupNameSet = new Set(groups.map(g => g.name));
 
-  // If we have expanded text, parse the hierarchical structure
+  // Build a set of source-column values for source-vs-expansion comparison.
+  // If a value appears in the source column AND the expansion column contains
+  // additional values not in the source column, then it's a group (the expansion
+  // column shows the expanded members).  This handles cases where indentation
+  // is inconsistent or completely flat.
+  const rawValues = new Set(
+    (raw || '').split('\n').map(l => l.trim()).filter(Boolean)
+  );
+
+  // If we have expanded text, parse the hierarchical structure using look-ahead
   if (expanded && expanded.trim()) {
-    const lines = expanded.split('\n');
+    // First pass: collect all non-empty lines with indent + value
+    const parsedLines: { indent: number; value: string }[] = [];
+    for (const line of expanded.split('\n')) {
+      if (!line.trim()) continue;
+      const indent = line.startsWith('\t')
+        ? (line.length - line.replace(/^\t+/, '').length) * 4
+        : line.length - line.trimStart().length;
+      const v = line.trim();
+      const valueClean = v.includes('(') ? v.substring(0, v.indexOf('(')).trim() : v;
+      if (valueClean) parsedLines.push({ indent, value: valueClean });
+    }
+
+    if (parsedLines.length === 0) return [];
+
+    // Collect all unique values in the expansion column
+    const expandedValues = new Set(parsedLines.map(p => p.value));
+
+    // Source-vs-expansion group detection:
+    // A value is a group if it appears in the source column AND
+    // the expansion column contains values NOT in the source column
+    // (those extra values are the expanded members of the group).
+    const expansionHasExtraValues = (() => {
+      for (const ev of expandedValues) {
+        if (!rawValues.has(ev)) return true;
+      }
+      return false;
+    })();
+    const isSourceGroupByComparison = (val: string) =>
+      rawValues.has(val) && expansionHasExtraValues && rawValues.size < expandedValues.size;
+
+    // Structure-based group detection: entry has children if next line is more indented
+    // Also detect known group names even when flat (same indentation as members)
+    const hasChildren = (idx: number) => idx + 1 < parsedLines.length && parsedLines[idx + 1].indent > parsedLines[idx].indent;
+    const isKnownGroup = (val: string) => groupNameSet.has(val) || groups.some(g => g.name === val);
+    // Combined group check: structural (indentation), known group name, OR source-vs-expansion comparison
+    const isGroupEntry = (idx: number, val: string) =>
+      hasChildren(idx) || isKnownGroup(val) || isSourceGroupByComparison(val);
+
     const entries: ResourceEntry[] = [];
     let currentGroup: ResourceEntry | null = null;
+    let currentSubGroup: { type: string; value: string }[] | null = null;
+    let groupIndent = 0;
+    let memberIndent = 0;
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const indent = line.length - line.trimStart().length;
-      const v = line.trim();
+    for (let i = 0; i < parsedLines.length; i++) {
+      const { indent, value } = parsedLines[i];
 
-      if (indent >= 2 || line.startsWith('\t')) {
-        // This is an indented member belonging to the current group
-        if (currentGroup) {
-          const memberType = detectEntryType(v, groupNameSet);
-          const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'range' : 'ip';
-          if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
-          currentGroup.groupMembers.push({ type: mType, value: v });
-        }
-      } else {
-        // Top-level entry — finalize previous group if any
-        if (currentGroup) entries.push(currentGroup);
-        const type = detectEntryType(v, groupNameSet);
-        if (type === 'group') {
-          // Start a new group; members will come from indented lines below
-          const matchedGroup = groups.find(g => g.name === v);
+      // Not inside a group — check if this entry starts one
+      if (currentGroup === null) {
+        if (isGroupEntry(i, value)) {
+          const matchedGroup = groups.find(g => g.name === value);
           currentGroup = {
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             type: 'group',
-            value: v,
+            value,
             groupMembers: matchedGroup
               ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
               : [],
           };
+          currentSubGroup = null;
+          groupIndent = indent;
+          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent;
         } else {
-          currentGroup = null;
+          // Standalone entry
+          const type = detectEntryType(value, groupNameSet);
           entries.push({
             id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             type,
-            value: v,
+            value,
           });
         }
+        continue;
+      }
+
+      // Inside a group — check if this line still belongs to it
+      // For flat expansion (no indentation), members are values NOT in the source column
+      const isFlatExpansion = memberIndent === groupIndent;
+      const isStillMember = isFlatExpansion
+        ? !rawValues.has(value)  // flat: members are values not in source column
+        : indent > groupIndent;  // hierarchical: members are indented deeper
+
+      if (!isStillMember) {
+        // Group ended — flush it
+        entries.push(currentGroup);
+        currentGroup = null;
+        currentSubGroup = null;
+        // Re-evaluate: does this line start a new group?
+        if (isGroupEntry(i, value)) {
+          const matchedGroup = groups.find(g => g.name === value);
+          currentGroup = {
+            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'group',
+            value,
+            groupMembers: matchedGroup
+              ? matchedGroup.members.map(m => ({ type: m.type, value: m.value }))
+              : [],
+          };
+          currentSubGroup = null;
+          groupIndent = indent;
+          memberIndent = hasChildren(i) ? parsedLines[i + 1].indent : indent;
+        } else {
+          const type = detectEntryType(value, groupNameSet);
+          entries.push({
+            id: `entry-${entries.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type,
+            value,
+          });
+        }
+        continue;
+      }
+
+      // Member of the current group
+      const memberType = detectEntryType(value, groupNameSet);
+      const mType = memberType === 'group' ? 'group' : memberType === 'subnet' ? 'subnet' : memberType === 'range' ? 'range' : 'ip';
+
+      if (!isFlatExpansion && indent >= memberIndent && hasChildren(i)) {
+        // This member has deeper children → nested sub-group
+        currentSubGroup = [];
+        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+        currentGroup.groupMembers.push({ type: 'group', value });
+      } else if (!isFlatExpansion && currentSubGroup !== null && indent > memberIndent) {
+        // Deeper than first-level members → belongs to sub-group
+        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+        currentGroup.groupMembers.push({ type: mType, value });
+      } else {
+        // Direct member of the current group
+        currentSubGroup = null;
+        if (!currentGroup.groupMembers) currentGroup.groupMembers = [];
+        currentGroup.groupMembers.push({ type: mType, value });
       }
     }
-    // Push last group
     if (currentGroup) entries.push(currentGroup);
     return entries;
   }
 
-  // Fallback: parse flat raw text
+  // Fallback: parse flat raw text (no expansion column available)
   return raw.split('\n').filter(Boolean).map((line, i) => {
     const v = line.trim();
     const type = detectEntryType(v, groupNameSet);
@@ -219,10 +347,10 @@ function entriesToRaw(entries: ResourceEntry[]): string {
 
 /** Display-friendly member type label */
 function memberTypeLabel(t: string): string {
-  if (t === 'cidr' || t === 'subnet') return 'Subnet';
-  if (t === 'range') return 'Range';
+  if (t === 'cidr' || t === 'subnet') return 'NET';
+  if (t === 'range') return 'RNG';
   if (t === 'ip') return 'IP';
-  if (t === 'group') return 'SubGroup';
+  if (t === 'group') return 'GRP';
   return t.toUpperCase();
 }
 
@@ -242,7 +370,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
   appGroups: FirewallGroup[];
   colorScheme: { bg: string; border: string; text: string; headerBg: string };
 }) {
-  const [addType, setAddType] = useState<'ip' | 'subnet' | 'group'>('ip');
+  const [addType, setAddType] = useState<'ip' | 'subnet' | 'range' | 'group'>('ip');
   const [addValue, setAddValue] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -309,7 +437,14 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
     }]);
   };
 
-  const handleDelete = (id: string) => onChange(entries.filter(e => e.id !== id));
+  const handleDelete = (id: string) => {
+    const entry = entries.find(e => e.id === id);
+    if (entry?.type === 'group' && entry.groupMembers && entry.groupMembers.length > 0) {
+      // Group removal cascades — removing group also removes its members from the entries list
+      // (members are stored inline, so just removing the group entry is sufficient)
+    }
+    onChange(entries.filter(e => e.id !== id));
+  };
 
   const handleSaveEdit = (id: string) => {
     if (!editValue.trim()) return;
@@ -366,13 +501,15 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
 
   const typeColors: Record<string, string> = {
     ip: 'bg-blue-50 text-blue-700 border-blue-200',
-    subnet: 'bg-orange-50 text-orange-700 border-orange-200',
+    subnet: 'bg-purple-50 text-purple-700 border-purple-200',
+    range: 'bg-orange-50 text-orange-700 border-orange-200',
     group: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   };
   const typeLabels: Record<string, string> = {
     ip: 'IP',
-    subnet: 'RANGE',
-    group: 'GROUP',
+    subnet: 'NET',
+    range: 'RNG',
+    group: 'GRP',
   };
 
   const totalIPs = entries.reduce((sum, e) => {
@@ -434,11 +571,11 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                   {addingMemberToGroup === entry.id ? (
                     <div className="flex gap-1.5 items-center mt-1 bg-white border border-gray-200 rounded p-2">
                       <select value={newMemberType} onChange={e => setNewMemberType(e.target.value)} className="px-1.5 py-1 text-xs border border-gray-300 rounded">
-                        <option value="ip">IP Address</option>
-                        <option value="cidr">Subnet (CIDR)</option>
-                        <option value="range">IP Range</option>
+                        <option value="ip">IP (svr-)</option>
+                        <option value="subnet">Subnet (net-)</option>
+                        <option value="range">Range (rng-)</option>
                       </select>
-                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'cidr' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
+                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
                       <button onClick={() => handleAddGroupMember(entry.id)} disabled={!newMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
                       <button onClick={() => setAddingMemberToGroup(null)} className="text-xs text-gray-500 hover:text-gray-700">Done</button>
                     </div>
@@ -456,12 +593,13 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
         {/* Add new entry */}
         <div className="border-t border-gray-100 pt-3 space-y-2">
           <div className="flex gap-2">
-            <select value={addType} onChange={e => setAddType(e.target.value as 'ip' | 'subnet' | 'group')} className="px-2 py-1.5 text-xs font-medium border border-gray-300 rounded-md bg-white">
-              <option value="ip">IP Address</option>
-              <option value="subnet">Subnet (CIDR)</option>
-              <option value="group">Group</option>
+            <select value={addType} onChange={e => setAddType(e.target.value as 'ip' | 'subnet' | 'range' | 'group')} className="px-2 py-1.5 text-xs font-medium border border-gray-300 rounded-md bg-white">
+              <option value="ip">IP Address (svr-)</option>
+              <option value="subnet">Subnet (net-)</option>
+              <option value="range">Range (rng-)</option>
+              <option value="group">Group (grp-)</option>
             </select>
-            <input type="text" placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : 'e.g. grp-APP01-NH01-STD-web'} value={addValue} onChange={e => setAddValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500" />
+            <input type="text" placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : addType === 'range' ? 'e.g. 10.0.1.1-10.0.1.50' : 'e.g. grp-APP01-NH01-STD-web'} value={addValue} onChange={e => setAddValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500" />
             <button onClick={handleAdd} disabled={!addValue.trim()} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">+ Add</button>
           </div>
           {addType === 'group' && appGroups.length > 0 && (
@@ -498,11 +636,11 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
               ))}
               <div className="flex gap-1.5 items-center mt-2">
                 <select value={wizMemberType} onChange={e => setWizMemberType(e.target.value)} className="px-1.5 py-1 text-xs border border-gray-300 rounded">
-                  <option value="ip">IP Address</option>
-                  <option value="cidr">Subnet (CIDR)</option>
-                  <option value="range">IP Range</option>
+                  <option value="ip">IP (svr-)</option>
+                  <option value="subnet">Subnet (net-)</option>
+                  <option value="range">Range (rng-)</option>
                 </select>
-                <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)} placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'cidr' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
+                <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)} placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
                 <button onClick={handleWizAddMember} disabled={!wizMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
               </div>
             </div>
@@ -574,9 +712,9 @@ export default function FirewallManagementPage() {
   const standardCount = envFilteredRules.filter(r => r.is_standard).length;
   const nonStandardCount = envFilteredRules.filter(r => !r.is_standard).length;
 
-  const appOptions = Array.from(new Set(rules.map(r => `${r.app_id}|${r.app_distributed_id}|${r.app_name}`))).map(key => {
-    const [appId, distId, appName] = key.split('|');
-    return { value: String(appId), label: `${appId} - ${appName} (${distId})` };
+  const appOptions = Array.from(new Set(rules.map(r => `${r.app_distributed_id || r.app_id}|${r.app_id}|${r.app_name}`))).map(key => {
+    const [distId, appId, appName] = key.split('|');
+    return { value: distId, label: `${distId} - ${appName || appId}` };
   });
 
   const parseExpandedTree = (text: string): string[] => {
@@ -739,14 +877,31 @@ export default function FirewallManagementPage() {
     { key: 'rule_source', header: 'Source', sortable: false, width: '150px',
       render: (_, row) => {
         const entries = (row.rule_source || '').split('\n').filter(Boolean);
-        return <span className="font-mono text-xs">{entries.slice(0, 2).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}</span>;
+        // Structure-based: count groups by checking expansion column for entries with indented children
+        const expLines = (row.rule_source_expanded || '').split('\n').filter((l: string) => l.trim());
+        const expData = expLines.map((l: string) => ({ indent: l.length - l.trimStart().length, text: l.trim() }));
+        const groupCount = expData.filter((_: { indent: number; text: string }, idx: number) => idx + 1 < expData.length && expData[idx + 1].indent > _.indent && _.indent === 0).length;
+        return (
+          <span className="font-mono text-xs">
+            {groupCount > 0 && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded mr-1">{groupCount} grp</span>}
+            {entries.slice(0, 2).map((e: string) => e.trim()).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}
+          </span>
+        );
       },
     },
     { key: 'rule_source_zone', header: 'Src Zone', sortable: true, width: '100px' },
     { key: 'rule_destination', header: 'Destination', sortable: false, width: '150px',
       render: (_, row) => {
         const entries = (row.rule_destination || '').split('\n').filter(Boolean);
-        return <span className="font-mono text-xs">{entries.slice(0, 2).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}</span>;
+        const expLines = (row.rule_destination_expanded || '').split('\n').filter((l: string) => l.trim());
+        const expData = expLines.map((l: string) => ({ indent: l.length - l.trimStart().length, text: l.trim() }));
+        const groupCount = expData.filter((_: { indent: number; text: string }, idx: number) => idx + 1 < expData.length && expData[idx + 1].indent > _.indent && _.indent === 0).length;
+        return (
+          <span className="font-mono text-xs">
+            {groupCount > 0 && <span className="text-[9px] bg-fuchsia-100 text-fuchsia-700 px-1 py-0.5 rounded mr-1">{groupCount} grp</span>}
+            {entries.slice(0, 2).map((e: string) => e.trim()).join(', ')}{entries.length > 2 ? ` +${entries.length - 2}` : ''}
+          </span>
+        );
       },
     },
     { key: 'rule_destination_zone', header: 'Dst Zone', sortable: true, width: '90px' },
@@ -912,34 +1067,51 @@ export default function FirewallManagementPage() {
                 </div>
               ))}
             </div>
+            {/* Source Expanded — structure-based group detection */}
             <div className="border rounded-lg overflow-hidden">
               <div className="px-3 py-2 bg-blue-50 border-b">
                 <h3 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_source_expanded).map((line, i) => {
-                  const indent = line.length - line.trimStart().length;
-                  return (
-                    <div key={i} className="font-mono text-xs text-green-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
-                    </div>
-                  );
-                })}
+                {(() => {
+                  const allLines = parseExpandedTree(detailModal.data!.rule_source_expanded);
+                  // Build indent array for look-ahead group detection
+                  const lineData = allLines.map(l => ({ indent: l.length - l.trimStart().length, text: l.trim() }));
+                  return lineData.map((ld, i) => {
+                    const hasChild = i + 1 < lineData.length && lineData[i + 1].indent > ld.indent;
+                    const isGroup = hasChild && ld.indent === 0;
+                    const isMember = ld.indent > 0;
+                    return (
+                      <div key={i} className={`font-mono text-xs ${isGroup ? 'text-emerald-400 font-semibold' : isMember ? 'text-green-300' : 'text-green-400'}`} style={{ paddingLeft: `${ld.indent * 8}px` }}>
+                        {isGroup && <span className="text-[9px] bg-emerald-900 text-emerald-300 px-1 py-0.5 rounded mr-1">GRP</span>}
+                        {ld.text}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
+            {/* Destination Expanded — structure-based group detection */}
             <div className="border rounded-lg overflow-hidden">
               <div className="px-3 py-2 bg-purple-50 border-b">
                 <h3 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h3>
               </div>
               <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-                {parseExpandedTree(detailModal.data.rule_destination_expanded).map((line, i) => {
-                  const indent = line.length - line.trimStart().length;
-                  return (
-                    <div key={i} className="font-mono text-xs text-purple-400" style={{ paddingLeft: `${indent * 8}px` }}>
-                      {line.trim()}
-                    </div>
-                  );
-                })}
+                {(() => {
+                  const allLines = parseExpandedTree(detailModal.data!.rule_destination_expanded);
+                  const lineData = allLines.map(l => ({ indent: l.length - l.trimStart().length, text: l.trim() }));
+                  return lineData.map((ld, i) => {
+                    const hasChild = i + 1 < lineData.length && lineData[i + 1].indent > ld.indent;
+                    const isGroup = hasChild && ld.indent === 0;
+                    const isMember = ld.indent > 0;
+                    return (
+                      <div key={i} className={`font-mono text-xs ${isGroup ? 'text-fuchsia-400 font-semibold' : isMember ? 'text-purple-300' : 'text-purple-400'}`} style={{ paddingLeft: `${ld.indent * 8}px` }}>
+                        {isGroup && <span className="text-[9px] bg-fuchsia-900 text-fuchsia-300 px-1 py-0.5 rounded mr-1">GRP</span>}
+                        {ld.text}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
             <div className="border rounded-lg overflow-hidden">

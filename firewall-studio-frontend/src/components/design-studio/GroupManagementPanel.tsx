@@ -25,7 +25,10 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
   const [newGroupDesc, setNewGroupDesc] = useState('');
 
   // Derive DC/NH/SZ options from app DC mappings for the selected app
-  const appMappingsForApp = appDCMappings.filter(m => String(m.app_id || '') === newGroupAppId);
+  // Match on app_distributed_id first, then fall back to app_id
+  const appMappingsForApp = appDCMappings.filter(m =>
+    String(m.app_distributed_id || '') === newGroupAppId || String(m.app_id || '') === newGroupAppId
+  );
   const dcOptions = [...new Set(appMappingsForApp.map(m => String(m.dc || '')).filter(Boolean))];
   const nhOptions = [...new Set(appMappingsForApp.map(m => String(m.nh || '')).filter(Boolean))];
   const szOptions = [...new Set(appMappingsForApp.map(m => String(m.sz || '')).filter(Boolean))];
@@ -125,9 +128,9 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <div>
-              <label className="text-xs text-slate-500">App ID</label>
+              <label className="text-xs text-slate-500">App Distributed Id</label>
               <input value={newGroupAppId} onChange={(e) => { setNewGroupAppId(e.target.value); setNewGroupDc(''); setNewGroupNh(''); setNewGroupSz(''); }}
-                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="CRM" />
+                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="APP01" />
             </div>
             <div>
               <label className="text-xs text-slate-500">DC {dcOptions.length > 0 && `(${dcOptions.length})`}</label>
@@ -187,10 +190,11 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
                 <option value="API">API</option>
               </select>
             </div>
-          <div>
-            <label className="text-xs text-slate-500">Description</label>
-            <input value={newGroupDesc} onChange={(e) => setNewGroupDesc(e.target.value)}
-              className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="Group description" />
+            <div>
+              <label className="text-xs text-slate-500">Description</label>
+              <input value={newGroupDesc} onChange={(e) => setNewGroupDesc(e.target.value)}
+                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="Group description" />
+            </div>
           </div>
           <div className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600 font-mono">
             grp-{newGroupAppId}-{newGroupNh}-{newGroupSz}-{newGroupSubtype}
