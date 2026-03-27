@@ -592,7 +592,7 @@ async def delete_policy(source_zone: str, dest_zone: str):
 async def list_groups(app_id: str | None = None):
     groups = await get_groups()
     if app_id:
-        groups = [g for g in groups if g.get("app_id") == app_id]
+        groups = [g for g in groups if g.get("app_id") == app_id or g.get("app_distributed_id") == app_id]
     return groups
 
 

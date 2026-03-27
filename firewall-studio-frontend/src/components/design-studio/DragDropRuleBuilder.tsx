@@ -103,8 +103,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
     setLoadingSrc(false);
   }, []);
 
-  const loadDstData = useCallback(async (env: string, appId: string) => {
-    if (!env || !appId) return;
+  const loadDstData = useCallback(async (env: string, appId?: string) => {
+    if (!env) return;
     setLoadingDst(true);
     try {
       const data = await api.getFilteredNhSzDc(env, appId);
@@ -123,12 +123,17 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
 
   useEffect(() => {
     if (form.dst_application) {
+      // Destination has its own app — load its own app-specific NH/SZ/DC
       loadDstData(form.environment, form.dst_application);
+    } else if (form.application) {
+      // No separate destination app — load source app's data for destination too
+      // This ensures destination SZs are app-specific (same app), not "all SZs"
+      loadDstData(form.environment, form.application);
     } else {
-      setDstNHs(srcNHs); setDstSZs(srcSZs); setDstDCs(srcDCs);
+      setDstNHs([]); setDstSZs([]); setDstDCs([]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.environment, form.dst_application, loadDstData, srcNHs, srcSZs, srcDCs]);
+  }, [form.environment, form.dst_application, form.application, loadDstData]);
 
   const srcNeighbourhoods = useMemo(() =>
     srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS,
