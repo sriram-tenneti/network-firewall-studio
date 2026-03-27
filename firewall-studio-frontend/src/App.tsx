@@ -8,6 +8,7 @@ import FirewallManagementPage from '@/pages/FirewallManagementPage';
 import DataImportPage from '@/pages/DataImportPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AdminPage from '@/pages/AdminPage';
+import LifecycleDashboardPage from '@/pages/LifecycleDashboardPage';
 
 function App() {
   return (
@@ -67,6 +68,13 @@ function App() {
         <Route path="/settings" element={
           <ModuleLayout module="settings" title="Settings">
             <SettingsPage />
+          </ModuleLayout>
+        } />
+
+        {/* Lifecycle Management */}
+        <Route path="/lifecycle" element={
+          <ModuleLayout module="lifecycle" title="Lifecycle Management">
+            <LifecycleDashboardPage />
           </ModuleLayout>
         } />
 

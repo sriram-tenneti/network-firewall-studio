@@ -6,7 +6,7 @@ import { Notification } from '@/components/shared/Notification';
 import { ApprovalModal } from '@/components/review/ApprovalModal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification, transitionRuleStatus } from '@/lib/api';
+import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification } from '@/lib/api';
 import type { ReviewRequest, RuleModification } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -108,14 +108,7 @@ export default function ReviewPage(props: { context?: string }) {
         showNotification('Rule modification approved successfully', 'success');
       } else {
         await approveReview(reviewId, notes);
-        // Also transition rule lifecycle status when approved
-        const review = reviews.find(r => r.id === reviewId);
-        if (review?.rule_id) {
-          try {
-            const mod = review.module || 'studio';
-            await transitionRuleStatus(review.rule_id, 'Approved', mod, 'reviewer');
-          } catch { /* lifecycle transition may fail for legacy rules - that's OK */ }
-        }
+        // Backend approve_review now records lifecycle events automatically
         showNotification('Review approved successfully', 'success');
       }
       loadReviews();

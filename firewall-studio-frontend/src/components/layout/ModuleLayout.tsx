@@ -25,6 +25,9 @@ const moduleNav: Record<string, { path: string; label: string }[]> = {
   'settings': [
     { path: '/settings', label: 'Org Admin & Settings' },
   ],
+  'lifecycle': [
+    { path: '/lifecycle', label: 'Dashboard' },
+  ],
 };
 
 const moduleColors: Record<string, string> = {
@@ -32,6 +35,7 @@ const moduleColors: Record<string, string> = {
   'ngdc-standardization': 'from-emerald-600 to-teal-700',
   'firewall-management': 'from-amber-600 to-orange-700',
   'settings': 'from-slate-600 to-slate-700',
+  'lifecycle': 'from-violet-600 to-purple-700',
 };
 
 const moduleActiveColors: Record<string, string> = {
@@ -39,6 +43,7 @@ const moduleActiveColors: Record<string, string> = {
   'ngdc-standardization': 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30',
   'firewall-management': 'bg-amber-500/20 text-amber-200 border-amber-400/30',
   'settings': 'bg-slate-500/20 text-slate-200 border-slate-400/30',
+  'lifecycle': 'bg-violet-500/20 text-violet-200 border-violet-400/30',
 };
 
 export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {

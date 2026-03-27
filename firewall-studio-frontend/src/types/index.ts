@@ -510,6 +510,53 @@ export interface AppDCMapping {
   notes?: string;
 }
 
+// Lifecycle Management
+export type LifecycleStatus =
+  | 'Draft' | 'Submitted' | 'In Progress' | 'Approved' | 'Rejected'
+  | 'Deployed' | 'Certified' | 'Expired'
+  | 'Decommissioning' | 'Decommissioned' | 'Deleted';
+
+export type LifecycleEventType =
+  | 'created' | 'submitted' | 'approved' | 'rejected'
+  | 'deployed' | 'certified' | 'expired' | 'decommission_requested'
+  | 'decommissioned' | 'soft_deleted' | 'restored'
+  | 'modified' | 'migrated' | 'comment' | 'bulk_action'
+  | 'recertified' | 'ownership_changed';
+
+export interface LifecycleEvent {
+  id: string;
+  rule_id: string;
+  event_type: LifecycleEventType;
+  from_status: string | null;
+  to_status: string | null;
+  actor: string;
+  module: string;
+  details: string;
+  metadata: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface LifecycleDashboard {
+  ngdc_rules: { total: number; status_distribution: Record<string, number> };
+  legacy_rules: { total: number; status_distribution: Record<string, number> };
+  certification: {
+    expiring_soon: number;
+    already_expired: number;
+    expiring_rules: { rule_id: string; application: string; expiry_date: string; days_until_expiry: number }[];
+    expired_rules: { rule_id: string; application: string; expiry_date: string; days_overdue: number }[];
+  };
+  decommission_queue: { rule_id: string; application: string; requested_at: string; requested_by: string; store: string }[];
+  recent_events: LifecycleEvent[];
+  app_breakdown: Record<string, Record<string, number>>;
+}
+
+export interface BulkOperationResult {
+  results: { rule_id: string; success: boolean; detail: string }[];
+  total: number;
+  succeeded: number;
+  failed: number;
+}
+
 // Exception request for individual IPs/subnets
 export interface ExceptionRequest {
   id: string;

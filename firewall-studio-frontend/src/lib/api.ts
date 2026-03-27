@@ -837,3 +837,69 @@ export const getRealReviews = () =>
 /** Helper: check localStorage for hide-seed preference */
 export const isHideSeedEnabled = (): boolean =>
   typeof window !== 'undefined' && localStorage.getItem('nfs_hide_seed') === 'true';
+
+// ---- Lifecycle Management ----
+
+export const getLifecycleDashboard = () =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/dashboard');
+
+export const getLifecycleStates = () =>
+  fetchJSON<{ ngdc: Record<string, string[]>; legacy: Record<string, string[]> }>('/api/lifecycle/states');
+
+export const getLifecycleTransitions = (ruleId: string, isLegacy = false) =>
+  fetchJSON<{ rule_id: string; current_status: string; valid_transitions: string[] }>(
+    `/api/lifecycle/transitions/${ruleId}?is_legacy=${isLegacy}`
+  );
+
+export const transitionLifecycle = (ruleId: string, newStatus: string, actor = 'system', module = 'studio', comments = '', isLegacy = false) =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/transition', {
+    method: 'POST',
+    body: JSON.stringify({ rule_id: ruleId, new_status: newStatus, actor, module, comments, is_legacy: isLegacy }),
+  });
+
+export const softDeleteRule = (ruleId: string, reason = '', isLegacy = false, actor = 'system') =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/soft-delete', {
+    method: 'POST',
+    body: JSON.stringify({ rule_id: ruleId, reason, is_legacy: isLegacy, actor }),
+  });
+
+export const restoreDeletedRule = (ruleId: string, isLegacy = false, actor = 'system') =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/restore', {
+    method: 'POST',
+    body: JSON.stringify({ rule_id: ruleId, is_legacy: isLegacy, actor }),
+  });
+
+export const checkCertificationExpiry = (daysAhead = 30) =>
+  fetchJSON<Record<string, unknown>>(`/api/lifecycle/certification/check?days_ahead=${daysAhead}`);
+
+export const runAutoExpire = () =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/certification/auto-expire', { method: 'POST' });
+
+export const bulkCertifyRules = (ruleIds: string[], actor = 'system') =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/certification/bulk-certify', {
+    method: 'POST',
+    body: JSON.stringify({ rule_ids: ruleIds, actor }),
+  });
+
+export const bulkDecommissionRules = (ruleIds: string[], reason = '', actor = 'system') =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/decommission/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ rule_ids: ruleIds, reason, actor }),
+  });
+
+export const getLifecycleEvents = (ruleId?: string, eventType?: string, limit = 100) => {
+  const params = new URLSearchParams();
+  if (ruleId) params.set('rule_id', ruleId);
+  if (eventType) params.set('event_type', eventType);
+  params.set('limit', String(limit));
+  return fetchJSON<Record<string, unknown>[]>(`/api/lifecycle/events?${params}`);
+};
+
+export const getLifecycleTimeline = (ruleId: string) =>
+  fetchJSON<Record<string, unknown>[]>(`/api/lifecycle/timeline/${ruleId}`);
+
+export const createLifecycleEvent = (ruleId: string, eventType: string, details = '', actor = 'system') =>
+  fetchJSON<Record<string, unknown>>('/api/lifecycle/events', {
+    method: 'POST',
+    body: JSON.stringify({ rule_id: ruleId, event_type: eventType, details, actor }),
+  });

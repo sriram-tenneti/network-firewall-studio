@@ -1769,6 +1769,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 1. Approved new rule - CRM Web to App (R-3001, Deployed)
         {"id": "REV-seed-001", "rule_id": "R-3001",
          "rule_name": "CRM Web to App HTTPS", "request_type": "new_rule",
+         "module": "design-studio",
          "requestor": "Team Eta", "reviewer": "Security Team", "status": "Approved",
          "submitted_at": (now + timedelta(days=-35)).isoformat(),
          "reviewed_at": (now + timedelta(days=-34)).isoformat(),
@@ -1781,6 +1782,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 2. Pending modification - TRD source IP added (R-3006)
         {"id": "REV-seed-002", "rule_id": "R-3006",
          "rule_name": "TRD App to DB Oracle", "request_type": "modification",
+         "module": "firewall-management",
          "requestor": "Team Xi", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(days=-1)).isoformat(),
          "reviewed_at": None,
@@ -1794,6 +1796,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 3. Approved new rule - PAY App to MQ (R-3010, Certified)
         {"id": "REV-seed-003", "rule_id": "R-3010",
          "rule_name": "PAY App to MQ AMQP", "request_type": "new_rule",
+         "module": "design-studio",
          "requestor": "Team Epsilon", "reviewer": "Security Team", "status": "Approved",
          "submitted_at": (now + timedelta(days=-105)).isoformat(),
          "reviewed_at": (now + timedelta(days=-103)).isoformat(),
@@ -1806,6 +1809,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 4. Rejected rule - HRM GEN to CRM CDE cross-zone blocked
         {"id": "REV-seed-004", "rule_id": "R-3030",
          "rule_name": "HRM App to CRM DB Cross-Zone", "request_type": "new_rule",
+         "module": "design-studio",
          "requestor": "Team Platform", "reviewer": "Security Team", "status": "Rejected",
          "submitted_at": (now + timedelta(days=-7)).isoformat(),
          "reviewed_at": (now + timedelta(days=-6)).isoformat(),
@@ -1818,6 +1822,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 5. Pending migration review - FRD legacy to NGDC
         {"id": "REV-seed-005", "rule_id": "R-3012",
          "rule_name": "FRD Legacy Migration Rule", "request_type": "migration",
+         "module": "migration-studio",
          "requestor": "Migration Tool", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-6)).isoformat(),
          "reviewed_at": None,
@@ -1834,6 +1839,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 6. Approved modification - CBK added API server (R-3017)
         {"id": "REV-seed-006", "rule_id": "R-3017",
          "rule_name": "CBK API Gateway Rule", "request_type": "modification",
+         "module": "firewall-management",
          "requestor": "Team Theta", "reviewer": "Network Team", "status": "Approved",
          "submitted_at": (now + timedelta(days=-15)).isoformat(),
          "reviewed_at": (now + timedelta(days=-14)).isoformat(),
@@ -1847,6 +1853,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 7. Pending - cross-NH CDE exception request (R-3043)
         {"id": "REV-seed-007", "rule_id": "R-3043",
          "rule_name": "CRM to WLT Cross-NH CDE", "request_type": "new_rule",
+         "module": "design-studio",
          "requestor": "Team Eta", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-3)).isoformat(),
          "reviewed_at": None,
@@ -1859,6 +1866,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 8. Rejected - EPT PAA to CRM CDE blocked
         {"id": "REV-seed-008", "rule_id": "R-3050",
          "rule_name": "EPT PAA to CRM CDE", "request_type": "new_rule",
+         "module": "design-studio",
          "requestor": "Team Platform", "reviewer": "Security Team", "status": "Rejected",
          "submitted_at": (now + timedelta(days=-5)).isoformat(),
          "reviewed_at": (now + timedelta(days=-4)).isoformat(),
@@ -1871,6 +1879,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 9. Pending modification - LND service port change (R-3021)
         {"id": "REV-seed-009", "rule_id": "R-3021",
          "rule_name": "LND Batch to DB", "request_type": "modification",
+         "module": "firewall-management",
          "requestor": "Team Iota", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-1)).isoformat(),
          "reviewed_at": None,
@@ -1884,6 +1893,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 10. Approved - INS to KYC GEN-to-GEN cross-NH (R-3031)
         {"id": "REV-seed-010", "rule_id": "R-3031",
          "rule_name": "INS to KYC GEN-to-GEN", "request_type": "new_rule",
+         "module": "design-studio",
          "requestor": "Team Kappa", "reviewer": "Network Team", "status": "Approved",
          "submitted_at": (now + timedelta(days=-12)).isoformat(),
          "reviewed_at": (now + timedelta(days=-11)).isoformat(),
@@ -1896,6 +1906,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 11. Approved - CBK to PAY cross-zone (R-3039, LDF-003)
         {"id": "REV-seed-011", "rule_id": "R-3039",
          "rule_name": "CBK to PAY Payment Gateway", "request_type": "new_rule",
+         "module": "design-studio",
          "requestor": "Team Theta", "reviewer": "Security Team", "status": "Approved",
          "submitted_at": (now + timedelta(days=-8)).isoformat(),
          "reviewed_at": (now + timedelta(days=-7)).isoformat(),
@@ -1908,6 +1919,7 @@ def build_seed_reviews() -> list[dict[str, Any]]:
         # 12. Pending migration - HRM legacy
         {"id": "REV-seed-012", "rule_id": "LR-1013",
          "rule_name": "HRM Legacy Migration", "request_type": "migration",
+         "module": "migration-studio",
          "requestor": "Migration Tool", "reviewer": None, "status": "Pending",
          "submitted_at": (now + timedelta(hours=-4)).isoformat(),
          "reviewed_at": None,
@@ -1925,7 +1937,136 @@ def build_seed_reviews() -> list[dict[str, Any]]:
     return reviews
 
 
+def build_seed_lifecycle_events() -> list[dict[str, Any]]:
+    """Build seed lifecycle events matching the seed rules and reviews.
+
+    Provides a realistic timeline so the Lifecycle Dashboard isn't empty on first load.
+    Covers events from all modules: design-studio, firewall-management, migration-studio.
+    """
+    from datetime import datetime, timedelta
+    import uuid
+    now = datetime.utcnow()
+
+    def _evt(rule_id: str, event_type: str, from_status: str | None,
+             to_status: str | None, actor: str, module: str,
+             details: str, days_ago: int, hours_ago: int = 0) -> dict[str, Any]:
+        ts = (now + timedelta(days=-days_ago, hours=-hours_ago)).isoformat()
+        return {
+            "id": f"evt-seed-{uuid.uuid4().hex[:8]}",
+            "rule_id": rule_id,
+            "event_type": event_type,
+            "from_status": from_status,
+            "to_status": to_status,
+            "actor": actor,
+            "module": module,
+            "details": details,
+            "metadata": {},
+            "timestamp": ts,
+        }
+
+    events = [
+        # === Design Studio: CRM Web to App (R-3001) — Created → Submitted → Approved → Deployed ===
+        _evt("R-3001", "created", None, "Draft", "Team Eta", "design-studio",
+             "Rule created: CRM Web to App HTTPS", 36),
+        _evt("R-3001", "submitted", "Draft", "Pending Review", "Team Eta", "design-studio",
+             "Rule submitted for review", 35),
+        _evt("R-3001", "approved", "Pending Review", "Approved", "Security Team", "design-studio",
+             "Approved - intra-NH/SZ traffic, LDF-002 compliant", 34),
+        _evt("R-3001", "deployed", "Approved", "Deployed", "system", "design-studio",
+             "Rule deployed to firewall", 30),
+
+        # === Design Studio: PAY App to MQ (R-3010) — Created → Submitted → Approved → Deployed → Certified ===
+        _evt("R-3010", "created", None, "Draft", "Team Epsilon", "design-studio",
+             "Rule created: PAY App to MQ AMQP", 110),
+        _evt("R-3010", "submitted", "Draft", "Pending Review", "Team Epsilon", "design-studio",
+             "Rule submitted for review", 105),
+        _evt("R-3010", "approved", "Pending Review", "Approved", "Security Team", "design-studio",
+             "Approved - PCI controls verified", 103),
+        _evt("R-3010", "deployed", "Approved", "Deployed", "system", "design-studio",
+             "Rule deployed to firewall", 101),
+        _evt("R-3010", "certified", "Deployed", "Certified", "system", "design-studio",
+             "Rule certified after testing", 100),
+
+        # === Design Studio: HRM cross-zone rejected (R-3030) — Created → Submitted → Rejected ===
+        _evt("R-3030", "created", None, "Draft", "Team Platform", "design-studio",
+             "Rule created: HRM App to CRM DB Cross-Zone", 8),
+        _evt("R-3030", "submitted", "Draft", "Pending Review", "Team Platform", "design-studio",
+             "Rule submitted for review", 7),
+        _evt("R-3030", "rejected", "Pending Review", "Rejected", "Security Team", "design-studio",
+             "REJECTED: GEN to CDE cross-zone traffic blocked per policy", 6),
+
+        # === Firewall Management: CBK API modification (R-3017) — Modified → Submitted → Approved ===
+        _evt("R-3017", "submitted", "Deployed", "Pending Review", "Team Theta", "firewall-management",
+             "Rule modification submitted: Adding new CBK API endpoint", 15),
+        _evt("R-3017", "approved", "Pending Review", "Approved", "Network Team", "firewall-management",
+             "Approved - same NH08/CCS, intra-zone permitted", 14),
+        _evt("R-3017", "modified", None, None, "Network Team", "firewall-management",
+             "Rule modification applied: CBK API server added", 14),
+
+        # === Firewall Management: TRD modification pending (R-3006) ===
+        _evt("R-3006", "submitted", "Deployed", "Pending Review", "Team Xi", "firewall-management",
+             "Rule modification submitted: Adding new app server to TRD", 1),
+
+        # === Firewall Management: LND port change pending (R-3021) ===
+        _evt("R-3021", "submitted", "Certified", "Pending Review", "Team Iota", "firewall-management",
+             "Rule modification submitted: Changing from Oracle to PostgreSQL", 0, 1),
+
+        # === Migration Studio: FRD legacy migration pending (R-3012) ===
+        _evt("R-3012", "submitted", "Deployed", "Pending Review", "Migration Tool", "migration-studio",
+             "Migration review submitted for FRD legacy rule", 0, 6),
+
+        # === Migration Studio: HRM legacy migration pending (LR-1013) ===
+        _evt("LR-1013", "submitted", None, "Pending Review", "Migration Tool", "migration-studio",
+             "Migration review submitted for HRM legacy rule", 0, 4),
+
+        # === Design Studio: INS to KYC approved (R-3031) ===
+        _evt("R-3031", "created", None, "Draft", "Team Kappa", "design-studio",
+             "Rule created: INS to KYC GEN-to-GEN cross-NH", 14),
+        _evt("R-3031", "submitted", "Draft", "Pending Review", "Team Kappa", "design-studio",
+             "Rule submitted for review", 12),
+        _evt("R-3031", "approved", "Pending Review", "Approved", "Network Team", "design-studio",
+             "Approved - GEN to GEN cross-NH permitted per policy", 11),
+
+        # === Design Studio: CBK to PAY approved (R-3039) ===
+        _evt("R-3039", "submitted", "Draft", "Pending Review", "Team Theta", "design-studio",
+             "Rule submitted for review: CBK to PAY Payment Gateway", 8),
+        _evt("R-3039", "approved", "Pending Review", "Approved", "Security Team", "design-studio",
+             "Approved - LDF-003 compliant, 1 FW boundary", 7),
+
+        # === Design Studio: EPT PAA rejected (R-3050) ===
+        _evt("R-3050", "submitted", "Draft", "Pending Review", "Team Platform", "design-studio",
+             "Rule submitted for review: EPT PAA to CRM CDE", 5),
+        _evt("R-3050", "rejected", "Pending Review", "Rejected", "Security Team", "design-studio",
+             "REJECTED: PAA to CDE direct DB access blocked per policy", 4),
+
+        # === Design Studio: CRM to WLT pending (R-3043) ===
+        _evt("R-3043", "submitted", "Draft", "Pending Review", "Team Eta", "design-studio",
+             "Rule submitted for review: CRM to WLT Cross-NH CDE", 0, 3),
+
+        # === Additional deployed/certified rules with full lifecycle events ===
+        # TRD Web to App (R-3005) — full lifecycle
+        _evt("R-3005", "created", None, "Draft", "system", "design-studio",
+             "Rule created: TRD Web to App", 125),
+        _evt("R-3005", "deployed", "Approved", "Deployed", "system", "design-studio",
+             "Rule deployed to firewall", 120),
+
+        # PAY App to DB (R-3009) — full lifecycle
+        _evt("R-3009", "created", None, "Draft", "system", "design-studio",
+             "Rule created: PAY App to DB", 155),
+        _evt("R-3009", "deployed", "Approved", "Deployed", "system", "design-studio",
+             "Rule deployed to firewall", 150),
+
+        # CBK App to DB (R-3015) — full lifecycle
+        _evt("R-3015", "created", None, "Draft", "system", "design-studio",
+             "Rule created: CBK App to DB", 205),
+        _evt("R-3015", "deployed", "Approved", "Deployed", "system", "design-studio",
+             "Rule deployed to firewall", 200),
+    ]
+    return events
+
+
 # Build the data at module load time
 SEED_LEGACY_RULES = _build_legacy_rules()
 SEED_IP_MAPPINGS = _build_ip_mappings()
 SEED_REVIEWS = build_seed_reviews()
+SEED_LIFECYCLE_EVENTS = build_seed_lifecycle_events()
