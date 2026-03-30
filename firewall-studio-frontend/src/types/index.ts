@@ -358,6 +358,12 @@ export interface NGDCRecommendation {
   naming_standard: string;
   available_nhs: { nh_id: string; name: string }[];
   available_szs: { code: string; name: string }[];
+  app_distributed_id?: string;
+  legacy_group_mappings?: Record<string, unknown>[];
+  legacy_source_groups?: Record<string, unknown>[];
+  legacy_dest_groups?: Record<string, unknown>[];
+  app_dc_mappings?: Record<string, string>[];
+  available_components?: string[];
 }
 
 export interface IPMapping {

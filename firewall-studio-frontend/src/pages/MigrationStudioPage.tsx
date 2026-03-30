@@ -901,18 +901,34 @@ export function MigrationStudioPage() {
                           </div>
                           <div>
                             <h4 className="font-semibold text-red-700 mb-1">Source ({migrateRule.rule_source_zone})</h4>
-                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
-                              {(migrateRule.rule_source || '').split('\n').filter(Boolean).map((s, i) => (
-                                <div key={i} className="font-mono text-red-400 text-[11px]">{s.trim()}</div>
-                              ))}
+                            <div className="bg-gray-900 rounded p-2 max-h-40 overflow-y-auto">
+                              {parseExpandedToDisplayLines(migrateRule.rule_source || '', migrateRule.rule_source_expanded || '').length > 0
+                                ? parseExpandedToDisplayLines(migrateRule.rule_source || '', migrateRule.rule_source_expanded || '').map((item, i) => (
+                                  <div key={i} className="font-mono text-[11px] flex items-center gap-1" style={{ paddingLeft: `${item.indent * 12}px` }}>
+                                    {item.type === 'group' && <span className="text-[8px] bg-red-700 text-white px-1 rounded">GRP</span>}
+                                    <span className={item.type === 'group' ? 'text-red-300 font-semibold' : 'text-red-400'}>{item.text}</span>
+                                  </div>
+                                ))
+                                : (migrateRule.rule_source || '').split('\n').filter(Boolean).map((s, i) => (
+                                  <div key={i} className="font-mono text-red-400 text-[11px]">{s.trim()}</div>
+                                ))
+                              }
                             </div>
                           </div>
                           <div>
                             <h4 className="font-semibold text-red-700 mb-1">Destination ({migrateRule.rule_destination_zone})</h4>
-                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
-                              {(migrateRule.rule_destination || '').split('\n').filter(Boolean).map((d, i) => (
-                                <div key={i} className="font-mono text-red-400 text-[11px]">{d.trim()}</div>
-                              ))}
+                            <div className="bg-gray-900 rounded p-2 max-h-40 overflow-y-auto">
+                              {parseExpandedToDisplayLines(migrateRule.rule_destination || '', migrateRule.rule_destination_expanded || '').length > 0
+                                ? parseExpandedToDisplayLines(migrateRule.rule_destination || '', migrateRule.rule_destination_expanded || '').map((item, i) => (
+                                  <div key={i} className="font-mono text-[11px] flex items-center gap-1" style={{ paddingLeft: `${item.indent * 12}px` }}>
+                                    {item.type === 'group' && <span className="text-[8px] bg-red-700 text-white px-1 rounded">GRP</span>}
+                                    <span className={item.type === 'group' ? 'text-red-300 font-semibold' : 'text-red-400'}>{item.text}</span>
+                                  </div>
+                                ))
+                                : (migrateRule.rule_destination || '').split('\n').filter(Boolean).map((d, i) => (
+                                  <div key={i} className="font-mono text-red-400 text-[11px]">{d.trim()}</div>
+                                ))
+                              }
                             </div>
                           </div>
                           <div>
@@ -983,38 +999,123 @@ export function MigrationStudioPage() {
 
                           <div>
                             <h4 className="font-semibold text-green-700 mb-1">Source (NGDC Mapped)</h4>
-                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
-                              {customMappings.length > 0 ? customMappings.map((m, i) => (
-                                <div key={i} className="flex items-center gap-1 mb-0.5">
-                                  <span className="font-mono text-green-400 text-[11px]">{m.ngdc_recommended}</span>
-                                  <span className={`px-1 py-0 text-[8px] rounded ${
-                                    m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' :
-                                    m.mapping_source === 'existing_group' ? 'bg-blue-900 text-blue-300' :
-                                    'bg-gray-700 text-gray-400'
-                                  }`}>{m.mapping_source === 'ngdc_mapping_table' ? 'table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}</span>
-                                </div>
-                              )) : <span className="text-gray-500 italic text-[10px]">No source entries</span>}
+                            <div className="bg-gray-900 rounded p-2 max-h-40 overflow-y-auto">
+                              {(() => {
+                                const srcGrpMappings = (recommendation.legacy_group_mappings || []).filter((g: Record<string, unknown>) => g.direction === 'source');
+                                if (srcGrpMappings.length > 0) {
+                                  return srcGrpMappings.map((gm: Record<string, unknown>, gi: number) => (
+                                    <div key={gi}>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[8px] bg-green-700 text-white px-1 rounded">GRP</span>
+                                        <span className="font-mono text-green-300 font-semibold text-[11px]">{String(gm.ngdc_name)}</span>
+                                        <span className={`px-1 py-0 text-[8px] rounded ${gm.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}>
+                                          {gm.mapping_source === 'ngdc_mapping_table' ? 'table' : 'auto'}
+                                        </span>
+                                      </div>
+                                      {(gm.mapped_members as Record<string, unknown>[] || []).map((mm: Record<string, unknown>, mi: number) => (
+                                        <div key={mi} style={{ paddingLeft: '12px' }}>
+                                          {mm.type === 'group' ? (
+                                            <>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[8px] bg-green-800 text-white px-1 rounded">GRP</span>
+                                                <span className="font-mono text-green-400 font-semibold text-[10px]">{String(mm.ngdc)}</span>
+                                              </div>
+                                              {(mm.members as Record<string, unknown>[] || []).map((sub: Record<string, unknown>, si: number) => (
+                                                <div key={si} className="font-mono text-green-400 text-[10px]" style={{ paddingLeft: '12px' }}>{String(sub.ngdc)}</div>
+                                              ))}
+                                            </>
+                                          ) : (
+                                            <div className="font-mono text-green-400 text-[10px]">{String(mm.ngdc)}</div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ));
+                                }
+                                return customMappings.length > 0 ? customMappings.map((m, i) => (
+                                  <div key={i} className="flex items-center gap-1 mb-0.5">
+                                    <span className="font-mono text-green-400 text-[11px]">{m.ngdc_recommended}</span>
+                                    <span className={`px-1 py-0 text-[8px] rounded ${m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' : m.mapping_source === 'existing_group' ? 'bg-blue-900 text-blue-300' : 'bg-gray-700 text-gray-400'}`}>
+                                      {m.mapping_source === 'ngdc_mapping_table' ? 'table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}
+                                    </span>
+                                  </div>
+                                )) : <span className="text-gray-500 italic text-[10px]">No source entries</span>;
+                              })()}
                             </div>
                           </div>
                           <div>
                             <h4 className="font-semibold text-green-700 mb-1">Destination (NGDC Mapped)</h4>
-                            <div className="bg-gray-900 rounded p-2 max-h-32 overflow-y-auto">
-                              {customDestMappings.length > 0 ? customDestMappings.map((m, i) => (
-                                <div key={i} className="flex items-center gap-1 mb-0.5">
-                                  <span className="font-mono text-green-400 text-[11px]">{m.ngdc_recommended}</span>
-                                  <span className={`px-1 py-0 text-[8px] rounded ${
-                                    m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' :
-                                    m.mapping_source === 'existing_group' ? 'bg-blue-900 text-blue-300' :
-                                    'bg-gray-700 text-gray-400'
-                                  }`}>{m.mapping_source === 'ngdc_mapping_table' ? 'table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}</span>
-                                </div>
-                              )) : <span className="text-gray-500 italic text-[10px]">No destination entries</span>}
+                            <div className="bg-gray-900 rounded p-2 max-h-40 overflow-y-auto">
+                              {(() => {
+                                const dstGrpMappings = (recommendation.legacy_group_mappings || []).filter((g: Record<string, unknown>) => g.direction === 'destination');
+                                if (dstGrpMappings.length > 0) {
+                                  return dstGrpMappings.map((gm: Record<string, unknown>, gi: number) => (
+                                    <div key={gi}>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[8px] bg-green-700 text-white px-1 rounded">GRP</span>
+                                        <span className="font-mono text-green-300 font-semibold text-[11px]">{String(gm.ngdc_name)}</span>
+                                        <span className={`px-1 py-0 text-[8px] rounded ${gm.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}>
+                                          {gm.mapping_source === 'ngdc_mapping_table' ? 'table' : 'auto'}
+                                        </span>
+                                      </div>
+                                      {(gm.mapped_members as Record<string, unknown>[] || []).map((mm: Record<string, unknown>, mi: number) => (
+                                        <div key={mi} style={{ paddingLeft: '12px' }}>
+                                          {mm.type === 'group' ? (
+                                            <>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[8px] bg-green-800 text-white px-1 rounded">GRP</span>
+                                                <span className="font-mono text-green-400 font-semibold text-[10px]">{String(mm.ngdc)}</span>
+                                              </div>
+                                              {(mm.members as Record<string, unknown>[] || []).map((sub: Record<string, unknown>, si: number) => (
+                                                <div key={si} className="font-mono text-green-400 text-[10px]" style={{ paddingLeft: '12px' }}>{String(sub.ngdc)}</div>
+                                              ))}
+                                            </>
+                                          ) : (
+                                            <div className="font-mono text-green-400 text-[10px]">{String(mm.ngdc)}</div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ));
+                                }
+                                return customDestMappings.length > 0 ? customDestMappings.map((m, i) => (
+                                  <div key={i} className="flex items-center gap-1 mb-0.5">
+                                    <span className="font-mono text-green-400 text-[11px]">{m.ngdc_recommended}</span>
+                                    <span className={`px-1 py-0 text-[8px] rounded ${m.mapping_source === 'ngdc_mapping_table' ? 'bg-green-900 text-green-300' : m.mapping_source === 'existing_group' ? 'bg-blue-900 text-blue-300' : 'bg-gray-700 text-gray-400'}`}>
+                                      {m.mapping_source === 'ngdc_mapping_table' ? 'table' : m.mapping_source === 'existing_group' ? 'group' : 'auto'}
+                                    </span>
+                                  </div>
+                                )) : <span className="text-gray-500 italic text-[10px]">No destination entries</span>;
+                              })()}
                             </div>
                           </div>
                           <div>
                             <h4 className="font-semibold text-green-700 mb-1">Naming Standard</h4>
                             <span className="font-mono text-green-600 text-[10px] bg-green-50 px-1.5 py-0.5 rounded">{recommendation.naming_standard}</span>
                           </div>
+
+                          {/* App DC Mappings - NH/SZ/Component from App Management */}
+                          {recommendation.app_dc_mappings && recommendation.app_dc_mappings.length > 0 && (
+                            <div className="border border-green-300 rounded p-2 bg-green-50/30">
+                              <label className="text-[10px] font-semibold text-green-700 uppercase">App DC Mappings (from App Management)</label>
+                              <div className="mt-1 space-y-1">
+                                {recommendation.app_dc_mappings.map((dcm: Record<string, string>, di: number) => (
+                                  <div key={di} className="flex items-center gap-2 text-[10px]">
+                                    <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded font-medium">{dcm.component || 'N/A'}</span>
+                                    <span className="text-gray-500">NH:</span><span className="font-mono font-medium">{dcm.nh || '-'}</span>
+                                    <span className="text-gray-500">SZ:</span><span className="font-mono font-medium">{dcm.sz || '-'}</span>
+                                    <span className="text-gray-500">DC:</span><span className="font-mono font-medium">{dcm.dc || '-'}</span>
+                                    {dcm.cidr && <span className="text-gray-400 font-mono">{dcm.cidr}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                              {(recommendation.available_components?.length ?? 0) > 1 && (
+                                <div className="mt-1.5 pt-1.5 border-t border-green-200">
+                                  <span className="text-[9px] text-amber-600 font-medium">Multiple components detected - you can customize group names in the Group Mapping step</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1101,6 +1202,22 @@ export function MigrationStudioPage() {
                         )}
                       </div>
                       <p className="text-xs text-green-600">All IPs for each component are automatically grouped into NGDC groups. Legacy may or may not have groups — in NGDC, all IPs must be in groups. You can customize group names below.</p>
+                      {recommendation && recommendation.available_components && recommendation.available_components.length > 1 && (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                          <span className="text-[10px] font-semibold text-amber-700">Multiple Components Available:</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {recommendation.available_components.map((comp: string) => {
+                              const mapping = recommendation.app_dc_mappings?.find((m: Record<string, string>) => m.component === comp);
+                              return (
+                                <span key={comp} className="px-2 py-0.5 text-[10px] bg-amber-100 text-amber-800 rounded font-mono">
+                                  {comp} {mapping ? `(NH:${mapping.nh} SZ:${mapping.sz})` : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[9px] text-amber-600 mt-1">Select the correct component for each group below to ensure proper NH/SZ assignment</p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Source Component Groups */}
@@ -1115,7 +1232,31 @@ export function MigrationStudioPage() {
                             <div key={`src-${i}`} className="border border-green-200 rounded-lg p-3 bg-white">
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700">{cg.component}</span>
+                                  {recommendation && recommendation.available_components && recommendation.available_components.length > 1 ? (
+                                    <select
+                                      value={cg.component}
+                                      onChange={e => {
+                                        const newComp = e.target.value;
+                                        const mapping = recommendation.app_dc_mappings?.find((m: Record<string, string>) => m.component === newComp);
+                                        const updated = [...componentGroups];
+                                        const idx = updated.findIndex(g => g === cg);
+                                        if (idx >= 0) {
+                                          const newNh = mapping?.nh || cg.nh;
+                                          const newSz = mapping?.sz || cg.sz;
+                                          const appId = recommendation.app_distributed_id || '';
+                                          updated[idx] = { ...cg, component: newComp, nh: newNh, sz: newSz, ngdc_group: `grp-${appId}-${newNh}-${newSz}-${newComp}` };
+                                          setComponentGroups(updated);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300 cursor-pointer"
+                                    >
+                                      {recommendation.available_components.map((comp: string) => (
+                                        <option key={comp} value={comp}>{comp}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700">{cg.component}</span>
+                                  )}
                                   <span className="text-[10px] text-gray-500">{cg.ip_count} IP{cg.ip_count !== 1 ? 's' : ''}</span>
                                   <span className="text-[10px] font-mono text-gray-400">{cg.dc}/{cg.nh}/{cg.sz}</span>
                                 </div>
@@ -1158,6 +1299,45 @@ export function MigrationStudioPage() {
                                     }}
                                     disabled={!cg.customizable}
                                     className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-green-300 mt-0.5 disabled:bg-gray-100" />
+                                  {/* NH/SZ selectors when multiple options */}
+                                  {recommendation && recommendation.available_nhs && recommendation.available_nhs.length > 1 && (
+                                    <div className="flex gap-2 mt-1">
+                                      <div className="flex-1">
+                                        <label className="text-[9px] text-green-600">NH:</label>
+                                        <select value={cg.nh} onChange={e => {
+                                          const updated = [...componentGroups];
+                                          const idx = updated.findIndex(g => g === cg);
+                                          if (idx >= 0) {
+                                            const newNh = e.target.value;
+                                            const appId = recommendation.app_distributed_id || '';
+                                            updated[idx] = { ...cg, nh: newNh, ngdc_group: `grp-${appId}-${newNh}-${cg.sz}-${cg.component}` };
+                                            setComponentGroups(updated);
+                                          }
+                                        }} className="w-full text-[10px] font-mono border border-green-300 rounded px-1 py-0.5">
+                                          {recommendation.available_nhs.map((nh: Record<string, string>) => (
+                                            <option key={nh.nh_id} value={nh.nh_id}>{nh.nh_id} - {nh.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div className="flex-1">
+                                        <label className="text-[9px] text-green-600">SZ:</label>
+                                        <select value={cg.sz} onChange={e => {
+                                          const updated = [...componentGroups];
+                                          const idx = updated.findIndex(g => g === cg);
+                                          if (idx >= 0) {
+                                            const newSz = e.target.value;
+                                            const appId = recommendation.app_distributed_id || '';
+                                            updated[idx] = { ...cg, sz: newSz, ngdc_group: `grp-${appId}-${cg.nh}-${newSz}-${cg.component}` };
+                                            setComponentGroups(updated);
+                                          }
+                                        }} className="w-full text-[10px] font-mono border border-green-300 rounded px-1 py-0.5">
+                                          {recommendation.available_szs.map((sz: Record<string, string>) => (
+                                            <option key={sz.code} value={sz.code}>{sz.code} - {sz.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className="mt-1.5">
                                     <label className="text-[9px] text-green-600">NGDC IPs to be associated:</label>
                                     <div className="flex flex-wrap gap-1 mt-0.5">
@@ -1189,7 +1369,31 @@ export function MigrationStudioPage() {
                             <div key={`dst-${i}`} className="border border-purple-200 rounded-lg p-3 bg-white">
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700">{cg.component}</span>
+                                  {recommendation && recommendation.available_components && recommendation.available_components.length > 1 ? (
+                                    <select
+                                      value={cg.component}
+                                      onChange={e => {
+                                        const newComp = e.target.value;
+                                        const mapping = recommendation.app_dc_mappings?.find((m: Record<string, string>) => m.component === newComp);
+                                        const updated = [...componentGroups];
+                                        const idx = updated.findIndex(g => g === cg);
+                                        if (idx >= 0) {
+                                          const newNh = mapping?.nh || cg.nh;
+                                          const newSz = mapping?.sz || cg.sz;
+                                          const appId = recommendation.app_distributed_id || '';
+                                          updated[idx] = { ...cg, component: newComp, nh: newNh, sz: newSz, ngdc_group: `grp-${appId}-${newNh}-${newSz}-${newComp}` };
+                                          setComponentGroups(updated);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300 cursor-pointer"
+                                    >
+                                      {recommendation.available_components.map((comp: string) => (
+                                        <option key={comp} value={comp}>{comp}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700">{cg.component}</span>
+                                  )}
                                   <span className="text-[10px] text-gray-500">{cg.ip_count} IP{cg.ip_count !== 1 ? 's' : ''}</span>
                                   <span className="text-[10px] font-mono text-gray-400">{cg.dc}/{cg.nh}/{cg.sz}</span>
                                 </div>
@@ -1232,6 +1436,45 @@ export function MigrationStudioPage() {
                                     }}
                                     disabled={!cg.customizable}
                                     className="w-full font-mono text-xs text-green-700 rounded px-2 py-1 border border-green-300 mt-0.5 disabled:bg-gray-100" />
+                                  {/* NH/SZ selectors when multiple options */}
+                                  {recommendation && recommendation.available_nhs && recommendation.available_nhs.length > 1 && (
+                                    <div className="flex gap-2 mt-1">
+                                      <div className="flex-1">
+                                        <label className="text-[9px] text-green-600">NH:</label>
+                                        <select value={cg.nh} onChange={e => {
+                                          const updated = [...componentGroups];
+                                          const idx = updated.findIndex(g => g === cg);
+                                          if (idx >= 0) {
+                                            const newNh = e.target.value;
+                                            const appId = recommendation.app_distributed_id || '';
+                                            updated[idx] = { ...cg, nh: newNh, ngdc_group: `grp-${appId}-${newNh}-${cg.sz}-${cg.component}` };
+                                            setComponentGroups(updated);
+                                          }
+                                        }} className="w-full text-[10px] font-mono border border-green-300 rounded px-1 py-0.5">
+                                          {recommendation.available_nhs.map((nh: Record<string, string>) => (
+                                            <option key={nh.nh_id} value={nh.nh_id}>{nh.nh_id} - {nh.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div className="flex-1">
+                                        <label className="text-[9px] text-green-600">SZ:</label>
+                                        <select value={cg.sz} onChange={e => {
+                                          const updated = [...componentGroups];
+                                          const idx = updated.findIndex(g => g === cg);
+                                          if (idx >= 0) {
+                                            const newSz = e.target.value;
+                                            const appId = recommendation.app_distributed_id || '';
+                                            updated[idx] = { ...cg, sz: newSz, ngdc_group: `grp-${appId}-${cg.nh}-${newSz}-${cg.component}` };
+                                            setComponentGroups(updated);
+                                          }
+                                        }} className="w-full text-[10px] font-mono border border-green-300 rounded px-1 py-0.5">
+                                          {recommendation.available_szs.map((sz: Record<string, string>) => (
+                                            <option key={sz.code} value={sz.code}>{sz.code} - {sz.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className="mt-1.5">
                                     <label className="text-[9px] text-green-600">NGDC IPs to be associated:</label>
                                     <div className="flex flex-wrap gap-1 mt-0.5">

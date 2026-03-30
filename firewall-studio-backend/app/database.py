@@ -3445,12 +3445,20 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             mapped = _lookup_ip_mapping(legacy_name)
             if mapped:
                 return mapped
-        # Use direction-specific NH/SZ from the rule's actual zones
-        if direction == "destination":
+        # Use component detection + app DC metadata for NH/SZ
+        detected_comp = _detect_component(legacy_name)
+        comp_mapping = next((c for c in app_components if c.get("component") == detected_comp), None)
+        if comp_mapping:
+            nh = comp_mapping.get("nh", dst_nh if direction == "destination" else src_nh)
+            sz = comp_mapping.get("sz", dst_sz if direction == "destination" else src_sz)
+        elif direction == "destination":
             nh, sz = dst_nh, dst_sz
         else:
             nh, sz = src_nh, src_sz
-        return f"{prefix}-{short_app}-{entry_type}-{nh}-{sz}"
+        # Format: grp-APP-NH-SZ-COMP (standard naming)
+        if prefix == "grp":
+            return f"grp-{short_app}-{nh}-{sz}-{detected_comp}"
+        return f"{prefix}-{short_app}-{nh}-{sz}-{detected_comp}"
 
     def _build_mapping(legacy_name: str, entry_type: str, idx: int, direction: str = "source") -> dict[str, Any]:
         ln = legacy_name.lower()
@@ -3709,7 +3717,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 else:
                     ngdc_ips.append(f"svr-{clean_ip}")
 
-        ngdc_group_name = f"grp-{short_app}-{comp}-{comp_nh}-{comp_sz}"
+        ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}"
         return {
             "component": comp,
             "direction": direction,
@@ -3740,14 +3748,36 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     # Build NGDC group mapping suggestions for each legacy group
     def _map_legacy_group(lg: dict[str, Any], direction: str) -> dict[str, Any]:
-        """Map a legacy group to a suggested NGDC group with 1-1 member mappings."""
-        dir_nh = dst_nh if direction == "destination" else src_nh
-        dir_sz = dst_sz if direction == "destination" else src_sz
+        """Map a legacy group to a suggested NGDC group with 1-1 member mappings.
+        Uses component-based naming from App Management DC mappings:
+        grp-{APP}-{COMPONENT}-{NH}-{SZ}"""
         legacy_name = lg["name"]
+
+        # Detect component from the group's member IPs using app DC metadata
+        member_ips = [m["value"] for m in lg.get("members", []) if m.get("type") != "group"]
+        detected_comp = "APP"  # fallback
+        if member_ips:
+            detected_comp = _detect_component(member_ips[0])
+        elif lg.get("members"):
+            # If all members are sub-groups, try the first sub-group's members
+            for sub in lg["members"]:
+                sub_ips = [sm["value"] for sm in sub.get("members", []) if sm.get("type") != "group"]
+                if sub_ips:
+                    detected_comp = _detect_component(sub_ips[0])
+                    break
+
+        # Find the matching app_dc_mapping for this component to get NH/SZ
+        comp_mapping = next((c for c in app_components if c.get("component") == detected_comp), None)
+        if comp_mapping:
+            dir_nh = comp_mapping.get("nh", dst_nh if direction == "destination" else src_nh)
+            dir_sz = comp_mapping.get("sz", dst_sz if direction == "destination" else src_sz)
+        else:
+            dir_nh = dst_nh if direction == "destination" else src_nh
+            dir_sz = dst_sz if direction == "destination" else src_sz
 
         # Try to find existing NGDC mapping for this group
         table_match = _lookup_ngdc_mapping(legacy_name)
-        ngdc_name = table_match["ngdc_name"] if table_match else f"grp-{short_app}-{direction[:3].upper()}-{dir_nh}-{dir_sz}"
+        ngdc_name = table_match["ngdc_name"] if table_match else f"grp-{short_app}-{dir_nh}-{dir_sz}-{detected_comp}"
 
         # Map each member to NGDC equivalent
         mapped_members: list[dict[str, Any]] = []
@@ -3792,6 +3822,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "member_count": len(lg.get("members", [])),
             "mapped_members": mapped_members,
             "mapping_source": "ngdc_mapping_table" if table_match else "auto_generated",
+            "component": detected_comp,
             "nh": dir_nh,
             "sz": dir_sz,
             "has_nested_groups": any(m["type"] == "group" for m in lg.get("members", [])),
@@ -3824,7 +3855,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "component_group_count": len(component_groups),
         },
         "app_distributed_id": app_label,
-        "naming_standard": f"grp-{short_app}-{{COMPONENT}}-{{NH}}-{{SZ}}",
+        "naming_standard": f"grp-{short_app}-{{NH}}-{{SZ}}-{{COMPONENT}}[-{{SUBCOMP}}]",
         "source_nh": src_nh,
         "source_sz": src_sz,
         "source_dc": src_dc,
@@ -3840,6 +3871,17 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         "legacy_group_mappings": legacy_group_mappings,
         "legacy_source_groups": legacy_source_groups,
         "legacy_dest_groups": legacy_dest_groups,
+        # App DC mapping metadata for frontend component/NH/SZ selection
+        "app_dc_mappings": [
+            {
+                "component": c.get("component", ""),
+                "nh": c.get("nh", ""),
+                "sz": c.get("sz", ""),
+                "dc": c.get("dc", ""),
+                "cidr": c.get("cidr", ""),
+            } for c in app_components
+        ],
+        "available_components": sorted(set(c.get("component", "") for c in app_components if c.get("component"))),
     }
 
 
