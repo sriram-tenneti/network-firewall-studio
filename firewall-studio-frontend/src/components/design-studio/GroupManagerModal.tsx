@@ -20,7 +20,8 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [filterAppId, setFilterAppId] = useState(appId || '');
   const [filterEnv, setFilterEnv] = useState(environment || '');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: environment || 'Production' });
+  const [newGroup, setNewGroup] = useState({ app_id: appId || '', dc: '', nh: '', sz: '', subtype: '', customSuffix: '', description: '', environment: environment || 'Production' });
+  const [createValidationError, setCreateValidationError] = useState<string | null>(null);
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
 
   // Policy change tracking — when group members change, affected rules need review
@@ -124,19 +125,38 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     setCreateMembers(prev => prev.filter((_, i) => i !== idx));
   };
 
+  // Auto-generate group name from standard fields: grp-{APP}-{NH}-{SZ}-{Component}[-{suffix}]
+  const autoGroupName = (() => {
+    const parts = ['grp', newGroup.app_id, newGroup.nh, newGroup.sz, newGroup.subtype].filter(Boolean);
+    if (parts.length < 5) return ''; // All 4 fields required (grp + 4)
+    let name = parts.join('-');
+    if (newGroup.customSuffix.trim()) name += `-${newGroup.customSuffix.trim()}`;
+    return name;
+  })();
+
+  // Validation: all required fields + at least 1 member
+  const canCreateGroup = !!(newGroup.app_id && newGroup.nh && newGroup.sz && newGroup.subtype && createMembers.length > 0 && autoGroupName);
+
   const handleCreateGroup = async () => {
+    if (!newGroup.app_id) { setCreateValidationError('Application is required'); return; }
+    if (!newGroup.nh) { setCreateValidationError('Neighbourhood (NH) is required'); return; }
+    if (!newGroup.sz) { setCreateValidationError('Security Zone (SZ) is required'); return; }
+    if (!newGroup.subtype) { setCreateValidationError('Component is required'); return; }
+    if (createMembers.length === 0) { setCreateValidationError('At least one member (IP/subnet/group) is required — empty groups are not allowed'); return; }
+    setCreateValidationError(null);
     try {
       const prefixedGroup = {
         ...newGroup,
-        name: autoPrefix(newGroup.name, 'group'),
+        name: autoGroupName,
         members: createMembers.map(m => ({ type: m.type, value: m.value, description: m.description })),
       };
       await createGroup(prefixedGroup);
       setShowCreate(false);
-      setNewGroup({ name: '', app_id: filterAppId || '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: filterEnv || 'Production' });
+      setNewGroup({ app_id: filterAppId || '', dc: '', nh: '', sz: '', subtype: '', customSuffix: '', description: '', environment: filterEnv || 'Production' });
       setCreateMembers([]);
+      setCreateValidationError(null);
       loadGroups(filterAppId, filterEnv);
-    } catch { /* ignore */ }
+    } catch { setCreateValidationError('Failed to create group — check for duplicates'); }
   };
 
   const handleAddMember = async () => {
@@ -251,12 +271,15 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
 
           {showCreate && (
             <div className="mb-3 p-3 bg-blue-50 rounded-lg space-y-2">
-              <input className={inputClass} placeholder="Group name (auto-generated if blank)" value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} />
+              {/* Standards notice */}
+              <div className="p-2 bg-blue-100 border border-blue-200 rounded text-[10px] text-blue-800">
+                <strong>NGDC Naming Standard:</strong> Group name is auto-generated as <span className="font-mono">grp-APP-NH-SZ-Component</span>. All fields are mandatory. At least one member is required.
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-gray-500">App Distributed Id</label>
-                  <select className={inputClass} value={newGroup.app_id} onChange={e => { setNewGroup({ ...newGroup, app_id: e.target.value }); updateAppOptions(e.target.value); }}>
-                    <option value="">-- Select App --</option>
+                  <label className="text-xs text-gray-500">Application <span className="text-red-500">*</span></label>
+                  <select className={inputClass} value={newGroup.app_id} onChange={e => { setNewGroup({ ...newGroup, app_id: e.target.value, dc: '', nh: '', sz: '', subtype: '', customSuffix: '' }); updateAppOptions(e.target.value); setCreateValidationError(null); }}>
+                    <option value="">-- Select Application --</option>
                     {applications.map(app => (
                       <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
                     ))}
@@ -264,55 +287,36 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">DC {appDCOptions.length > 0 && `(${appDCOptions.length} mapped)`}</label>
-                  {appDCOptions.length > 0 ? (
-                    <select className={inputClass} value={newGroup.dc || ''} onChange={e => setNewGroup({ ...newGroup, dc: e.target.value })}>
-                      <option value="">-- Select DC --</option>
-                      {appDCOptions.map(dc => <option key={dc} value={dc}>{dc}</option>)}
-                    </select>
-                  ) : (
-                    <select className={inputClass} value={newGroup.dc || ''} onChange={e => setNewGroup({ ...newGroup, dc: e.target.value })}>
-                      <option value="">-- Select DC --</option>
-                      <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                      <option value="BETA_NGDC">BETA_NGDC</option>
-                      <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                    </select>
-                  )}
+                  <select className={inputClass} value={newGroup.dc || ''} onChange={e => setNewGroup({ ...newGroup, dc: e.target.value })} disabled={!newGroup.app_id}>
+                    <option value="">-- Select DC --</option>
+                    {appDCOptions.map(dc => <option key={dc} value={dc}>{dc}</option>)}
+                  </select>
+                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-xs text-gray-500">NH {appNHOptions.length > 0 && `(${appNHOptions.length} mapped)`}</label>
-                  {appNHOptions.length > 0 ? (
-                    <select className={inputClass} value={newGroup.nh} onChange={e => setNewGroup({ ...newGroup, nh: e.target.value })}>
-                      <option value="">-- Select NH --</option>
-                      {appNHOptions.map(nh => <option key={nh} value={nh}>{nh}</option>)}
-                    </select>
-                  ) : (
-                    <input className={inputClass} placeholder="NH (e.g. NH01)" value={newGroup.nh} onChange={e => setNewGroup({ ...newGroup, nh: e.target.value })} />
-                  )}
+                  <label className="text-xs text-gray-500">NH <span className="text-red-500">*</span></label>
+                  <select className={inputClass} value={newGroup.nh} onChange={e => { setNewGroup({ ...newGroup, nh: e.target.value }); setCreateValidationError(null); }} disabled={!newGroup.app_id}>
+                    <option value="">-- Select NH --</option>
+                    {appNHOptions.map(nh => <option key={nh} value={nh}>{nh}</option>)}
+                  </select>
+                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
+                  {newGroup.app_id && appNHOptions.length === 0 && <p className="text-[9px] text-amber-600 mt-0.5">No NHs mapped for this app</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500">SZ {appSZOptions.length > 0 && `(${appSZOptions.length} mapped)`}</label>
-                  {appSZOptions.length > 0 ? (
-                    <select className={inputClass} value={newGroup.sz} onChange={e => setNewGroup({ ...newGroup, sz: e.target.value })}>
-                      <option value="">-- Select SZ --</option>
-                      {appSZOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
-                    </select>
-                  ) : (
-                    <select className={inputClass} value={newGroup.sz} onChange={e => setNewGroup({ ...newGroup, sz: e.target.value })}>
-                      <option value="">-- Select SZ --</option>
-                      <option value="STD">STD</option>
-                      <option value="GEN">GEN</option>
-                      <option value="CPA">CPA</option>
-                      <option value="CDE">CDE</option>
-                      <option value="CCS">CCS</option>
-                      <option value="PAA">PAA</option>
-                    </select>
-                  )}
+                  <label className="text-xs text-gray-500">SZ <span className="text-red-500">*</span></label>
+                  <select className={inputClass} value={newGroup.sz} onChange={e => { setNewGroup({ ...newGroup, sz: e.target.value }); setCreateValidationError(null); }} disabled={!newGroup.app_id}>
+                    <option value="">-- Select SZ --</option>
+                    {appSZOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+                  </select>
+                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
+                  {newGroup.app_id && appSZOptions.length === 0 && <p className="text-[9px] text-amber-600 mt-0.5">No SZs mapped for this app</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500">Component</label>
-                  <select className={inputClass} value={newGroup.subtype} onChange={e => setNewGroup({ ...newGroup, subtype: e.target.value })}>
+                  <label className="text-xs text-gray-500">Component <span className="text-red-500">*</span></label>
+                  <select className={inputClass} value={newGroup.subtype} onChange={e => { setNewGroup({ ...newGroup, subtype: e.target.value }); setCreateValidationError(null); }}>
+                    <option value="">-- Select Component --</option>
                     <option value="WEB">WEB</option>
                     <option value="APP">APP</option>
                     <option value="DB">DB</option>
@@ -322,15 +326,32 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                   </select>
                 </div>
               </div>
-              <select className={inputClass} value={newGroup.environment} onChange={e => setNewGroup({ ...newGroup, environment: e.target.value })}>
-                <option value="Production">Production</option>
-                <option value="Non-Production">Non-Production</option>
-                <option value="Pre-Production">Pre-Production</option>
-              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500">Custom Suffix <span className="text-gray-400">(optional)</span></label>
+                  <input className={inputClass} placeholder="e.g. frontend, batch01" value={newGroup.customSuffix} onChange={e => setNewGroup({ ...newGroup, customSuffix: e.target.value.replace(/[^a-zA-Z0-9_-]/g, '') })} />
+                  <p className="text-[9px] text-gray-400 mt-0.5">For sub-component differentiation only</p>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">Environment</label>
+                  <select className={inputClass} value={newGroup.environment} onChange={e => setNewGroup({ ...newGroup, environment: e.target.value })}>
+                    <option value="Production">Production</option>
+                    <option value="Non-Production">Non-Production</option>
+                    <option value="Pre-Production">Pre-Production</option>
+                  </select>
+                </div>
+              </div>
+              {/* Auto-generated group name preview */}
+              <div className={`rounded px-2 py-1.5 text-xs font-mono ${autoGroupName ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-gray-100 border border-gray-200 text-gray-400'}`}>
+                {autoGroupName || 'grp-{APP}-{NH}-{SZ}-{Component} — select all required fields'}
+              </div>
               <input className={inputClass} placeholder="Description" value={newGroup.description} onChange={e => setNewGroup({ ...newGroup, description: e.target.value })} />
-              {/* Inline member creation during group creation */}
-              <div className="border border-gray-200 rounded-md p-2 bg-white">
-                <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Members (optional — add IPs/subnets/groups now)</div>
+              {/* Inline member creation during group creation — REQUIRED */}
+              <div className={`border rounded-md p-2 ${createMembers.length === 0 ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'}`}>
+                <div className="text-[10px] font-semibold uppercase mb-1 flex items-center gap-1">
+                  <span className={createMembers.length === 0 ? 'text-red-600' : 'text-gray-500'}>Members <span className="text-red-500">*</span> (at least 1 required)</span>
+                  {createMembers.length > 0 && <span className="text-green-600">({createMembers.length} added)</span>}
+                </div>
                 {createMembers.length > 0 && (
                   <div className="space-y-1 mb-2 max-h-24 overflow-y-auto">
                     {createMembers.map((m, i) => (
@@ -359,7 +380,14 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                   <button onClick={handleAddCreateMember} disabled={!createMemberValue.trim()} className="px-2 py-1 text-[10px] font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap">+</button>
                 </div>
               </div>
-              <button onClick={handleCreateGroup} className="w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Create Group{createMembers.length > 0 ? ` with ${createMembers.length} member${createMembers.length > 1 ? 's' : ''}` : ''}</button>
+              {createValidationError && (
+                <div className="p-2 bg-red-50 border border-red-200 rounded text-[10px] text-red-700 font-medium">
+                  {createValidationError}
+                </div>
+              )}
+              <button onClick={handleCreateGroup} disabled={!canCreateGroup} className={`w-full px-3 py-1.5 text-xs font-medium text-white rounded-md ${canCreateGroup ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'}`}>
+                {canCreateGroup ? `Create Group "${autoGroupName}" with ${createMembers.length} member${createMembers.length > 1 ? 's' : ''}` : 'Complete all required fields & add members'}
+              </button>
             </div>
           )}
 
