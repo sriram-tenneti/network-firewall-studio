@@ -192,20 +192,6 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
     setAddValue('');
   };
 
-  const handleAddFromGroupSelect = (groupName: string) => {
-    if (!groupName) return;
-    const group = appGroups.find(g => g.name === groupName);
-    if (!group) return;
-    if (entries.some(e => e.value === groupName)) return;
-    onChange([...entries, {
-      id: `new-${_nextId++}`,
-      type: 'group',
-      value: groupName,
-      groupMembers: group.members.map(m => ({ type: m.type, value: m.value })),
-      isNew: true,
-    }]);
-  };
-
   const handleDelete = (id: string) => {
     const entry = entries.find(e => e.id === id);
     if (entry?.type === 'group' && entry.groupMembers && entry.groupMembers.length > 0) {
@@ -466,15 +452,10 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
             <input type="text" placeholder={addType === 'ip' ? 'e.g. 10.0.1.5' : addType === 'subnet' ? 'e.g. 10.0.1.0/24' : addType === 'range' ? 'e.g. 10.0.1.1-10.0.1.50' : 'e.g. grp-APP01-NH01-STD-web'} value={addValue} onChange={e => setAddValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500" />
             <button onClick={handleAdd} disabled={!addValue.trim()} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">+ Add</button>
           </div>
-          {addType === 'group' && appGroups.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Or select existing group:</span>
-              <select onChange={e => { handleAddFromGroupSelect(e.target.value); e.target.value = ''; }} className="px-2 py-1 text-xs border border-gray-300 rounded-md flex-1" defaultValue="">
-                <option value="">Select group...</option>
-                {appGroups.map(g => <option key={g.name} value={g.name}>{g.name} ({g.members.length} IPs/subnets)</option>)}
-              </select>
-            </div>
-          )}
+          {/* "Choose from existing groups" dropdown removed — in Firewall Management context,
+              NGDC groups should not be offered as selections since this module manages
+              existing legacy rules, not NGDC migration targets. Users should type group
+              names manually following the naming standard (grp-APP-COMPONENT-NH-SZ). */}
         </div>
 
         {/* New Group Wizard */}

@@ -3335,10 +3335,16 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     app_dc_mappings = _load("app_dc_mappings") or []
 
     app_id = str(rule.get("app_id", ""))
-    app_dist = rule.get("app_distributed_id", "")
+    app_dist = rule.get("app_distributed_id", "") or ""
     app_name = rule.get("app_name", "")
     rule_env = rule.get("environment", "Production")
     app_info = next((a for a in apps if str(a.get("app_id")) == app_id or a.get("app_distributed_id") == app_dist), None)
+
+    # Prefer app_distributed_id for naming; fall back to app_id
+    # Also check the application record for a distributed_id if the rule doesn't have one
+    if not app_dist and app_info:
+        app_dist = app_info.get("app_distributed_id", "") or ""
+    app_label = app_dist if app_dist else app_id
 
     # --- Step 1: Determine NH/SZ using the rule's actual source/dest zones ---
     # The rule itself tells us source_zone and destination_zone — use these to
@@ -3347,8 +3353,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     rule_dst_zone = (rule.get("rule_destination_zone") or "").strip()
 
     # Get ALL app-DC mappings for this app (component-level)
+    # Match on app_distributed_id first, then fall back to app_id
     all_app_comps = [m for m in app_dc_mappings
-                     if str(m.get("app_id", "")).upper() == app_id.upper()]
+                     if str(m.get("app_distributed_id", "")).upper() == app_label.upper()
+                     or str(m.get("app_id", "")).upper() == app_id.upper()]
 
     def _find_nh_for_zone(zone: str) -> tuple[str, str, str]:
         """Find NH, SZ, DC for a given zone from app-DC mappings.
@@ -3431,7 +3439,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                  "net" if ln.startswith("net-") or ln.startswith("sub-") else \
                  "net" if "/" in legacy_name and not ln.startswith("tcp") and not ln.startswith("udp") else \
                  "grp"
-        short_app = app_id.upper()
+        short_app = app_label.upper()
         # For individual IPs/subnets/ranges, try 1-to-1 mapping first
         if prefix in ("svr", "net", "rng"):
             mapped = _lookup_ip_mapping(legacy_name)
@@ -3546,8 +3554,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     # --- Step 4: Build component-based group mappings ---
     # Get all app_dc_mappings for this app to determine component-level grouping
-    app_components = [m for m in app_dc_mappings if str(m.get("app_id", "")).upper() == app_id.upper()]
-    short_app = app_id.upper()
+    app_components = [m for m in app_dc_mappings
+                      if str(m.get("app_distributed_id", "")).upper() == app_label.upper()
+                      or str(m.get("app_id", "")).upper() == app_id.upper()]
+    short_app = app_label.upper()
 
     # Load IP mappings table for 1-to-1 legacy -> NGDC IP lookups
     ip_mappings_table = _load("ip_mappings") or []
@@ -3813,6 +3823,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "auto_generated": auto_count,
             "component_group_count": len(component_groups),
         },
+        "app_distributed_id": app_label,
         "naming_standard": f"grp-{short_app}-{{COMPONENT}}-{{NH}}-{{SZ}}",
         "source_nh": src_nh,
         "source_sz": src_sz,

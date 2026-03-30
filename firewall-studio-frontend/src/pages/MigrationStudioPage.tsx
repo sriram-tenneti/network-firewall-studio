@@ -151,6 +151,8 @@ export function MigrationStudioPage() {
   const [boundaryAnalysis, setBoundaryAnalysis] = useState<Record<string, unknown> | null>(null);
   const [boundaryLoading, setBoundaryLoading] = useState(false);
   const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [legacyGroupMappings, setLegacyGroupMappings] = useState<any[]>([]);
   const [isModifyMode, setIsModifyMode] = useState(false);
   const [originalRuleSnapshot, setOriginalRuleSnapshot] = useState<Record<string, unknown> | null>(null);
 
@@ -316,15 +318,20 @@ export function MigrationStudioPage() {
   const openMigratePopup = async (rule: LegacyRule) => {
     setMigrateRule(rule); setLoadingRec(true); setCompiledRule(null);
     setBirthrightResult(null); setMigrateComments(''); setMigrationStep('review');
+    // Prefer app_distributed_id for group lookups
+    const appKey = rule.app_distributed_id || String(rule.app_id);
     try {
       const [rec, groups] = await Promise.all([
         getNGDCRecommendations(rule.id),
-        getGroups(String(rule.app_id)).catch(() => [] as FirewallGroup[]),
+        getGroups(appKey).catch(() => [] as FirewallGroup[]),
       ]);
       setRecommendation(rec);
       setSelectedNh(rec.recommended_nh); setSelectedSz(rec.recommended_sz);
       setAppGroups(groups);
       setComponentGroups((rec.component_groups || []) as ComponentGroup[]);
+      // Store legacy group mappings with nested member data from backend
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setLegacyGroupMappings((rec as any).legacy_group_mappings || []);
 
       // Enrich mappings with 1-1 IP lookup table for auto-population
       const enrichMapping = async (m: IPMapping): Promise<IPMapping> => {
@@ -361,13 +368,21 @@ export function MigrationStudioPage() {
       ]);
       setCustomMappings(enrichedSrc);
       setCustomDestMappings(enrichedDst);
-    } catch { setRecommendation(null); showNotification('Failed to load NGDC recommendations', 'error'); }
+    } catch {
+      // Even if recommendations fail, still try to load groups so the user can see something
+      setRecommendation(null);
+      try {
+        const groups = await getGroups(appKey).catch(() => [] as FirewallGroup[]);
+        setAppGroups(groups);
+      } catch { /* ignore */ }
+      showNotification('Failed to load NGDC recommendations — showing basic rule info', 'error');
+    }
     setLoadingRec(false);
   };
 
   const closeMigratePopup = () => {
     setMigrateRule(null); setRecommendation(null); setCustomMappings([]);
-    setCustomDestMappings([]); setCompiledRule(null); setBirthrightResult(null); setAppGroups([]); setComponentGroups([]); setIsModifyMode(false); setOriginalRuleSnapshot(null); setChgNumber(''); setChgSubmitted(false);
+    setCustomDestMappings([]); setCompiledRule(null); setBirthrightResult(null); setAppGroups([]); setComponentGroups([]); setLegacyGroupMappings([]); setIsModifyMode(false); setOriginalRuleSnapshot(null); setChgNumber(''); setChgSubmitted(false);
   };
 
   const handleCompileMigration = async () => {
@@ -426,7 +441,7 @@ export function MigrationStudioPage() {
       setNewGroupName('');
       setNewGroupMembers([{ type: 'ip', value: '' }]);
       // Refresh groups
-      const groups = await getGroups(String(migrateRule.app_id));
+      const groups = await getGroups(migrateRule.app_distributed_id || String(migrateRule.app_id));
       setAppGroups(groups);
     } catch { showNotification('Failed to create migration group', 'error'); }
   };
@@ -847,6 +862,26 @@ export function MigrationStudioPage() {
             ) : (
               <>
                 {/* Step 1: Side-by-Side Legacy → NGDC Review */}
+                {migrationStep === 'review' && !recommendation && (
+                  <div className="border border-amber-300 rounded-lg p-6 bg-amber-50 text-center space-y-3">
+                    <div className="text-amber-600 text-3xl">&#9888;</div>
+                    <h3 className="text-sm font-semibold text-amber-800">Unable to Load NGDC Recommendations</h3>
+                    <p className="text-xs text-amber-600">The recommendation engine could not generate migration data for this rule. This may be due to missing app-DC mappings, IP mapping data, or application configuration.</p>
+                    <div className="border-t border-amber-200 pt-3 space-y-2">
+                      <h4 className="text-xs font-semibold text-gray-700">Rule Details</h4>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-left max-w-md mx-auto">
+                        <div><span className="text-gray-500">Rule ID:</span> <span className="font-medium">{migrateRule.id}</span></div>
+                        <div><span className="text-gray-500">App:</span> <span className="font-medium">{migrateRule.app_name} ({migrateRule.app_distributed_id || migrateRule.app_id})</span></div>
+                        <div><span className="text-gray-500">Source Zone:</span> <span className="font-medium">{migrateRule.rule_source_zone}</span></div>
+                        <div><span className="text-gray-500">Dest Zone:</span> <span className="font-medium">{migrateRule.rule_destination_zone}</span></div>
+                      </div>
+                    </div>
+                    <div className="flex justify-center gap-3 pt-2">
+                      <button onClick={closeMigratePopup} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Close</button>
+                      <button onClick={() => openMigratePopup(migrateRule)} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Retry</button>
+                    </div>
+                  </div>
+                )}
                 {migrationStep === 'review' && recommendation && (
                   <div className="space-y-4">
                     {/* Side-by-Side: Legacy (Left) vs NGDC (Right) */}
@@ -860,7 +895,7 @@ export function MigrationStudioPage() {
                         <div className="p-3 space-y-3 text-xs">
                           <div className="grid grid-cols-2 gap-2">
                             <div><span className="text-gray-500">Rule ID:</span> <span className="font-medium">{migrateRule.id}</span></div>
-                            <div><span className="text-gray-500">App:</span> <span className="font-medium">{migrateRule.app_name} ({migrateRule.app_id})</span></div>
+                            <div><span className="text-gray-500">App:</span> <span className="font-medium">{migrateRule.app_name} ({migrateRule.app_distributed_id || migrateRule.app_id})</span></div>
                             <div><span className="text-gray-500">Action:</span> <span className={`font-medium ${migrateRule.rule_action === 'Accept' ? 'text-green-700' : 'text-red-700'}`}>{migrateRule.rule_action}</span></div>
                             <div><span className="text-gray-500">Policy:</span> <span className="font-medium">{migrateRule.policy_name}</span></div>
                           </div>
@@ -998,7 +1033,7 @@ export function MigrationStudioPage() {
                     {/* Available Groups */}
                     {appGroups.length > 0 && (
                       <div className="border rounded-lg p-3">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Available Groups for App {migrateRule.app_id}</h4>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Available Groups for App {migrateRule.app_distributed_id || migrateRule.app_id}</h4>
                         <div className="grid grid-cols-3 gap-2">
                           {appGroups.map(g => (
                             <div key={g.name} className="px-2 py-1 bg-gray-50 rounded text-xs">
@@ -1216,10 +1251,89 @@ export function MigrationStudioPage() {
                       );
                     })()}
 
+                    {/* Legacy Group Mappings — Nested Groups with Members (Legacy → NGDC) */}
+                    {legacyGroupMappings.length > 0 && (
+                      <div className="border border-indigo-200 rounded-lg p-3 bg-indigo-50">
+                        <h4 className="text-xs font-semibold text-indigo-800 mb-2 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-indigo-500" /> Legacy Group Mappings ({legacyGroupMappings.length} groups)
+                        </h4>
+                        <p className="text-[10px] text-indigo-600 mb-3">Each legacy group is mapped to an NGDC group. Members (IPs, subnets, nested sub-groups) are shown with their NGDC equivalents.</p>
+                        <div className="space-y-3">
+                          {legacyGroupMappings.map((gm: Record<string, unknown>, gi: number) => (
+                            <div key={gi} className="border border-indigo-200 rounded-lg bg-white overflow-hidden">
+                              <div className="px-3 py-2 bg-indigo-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${gm.direction === 'source' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                    {(gm.direction as string || '').toUpperCase()}
+                                  </span>
+                                  <span className="text-xs font-mono text-red-700">{gm.legacy_name as string}</span>
+                                  <span className="text-gray-400 text-xs">&rarr;</span>
+                                  <span className="text-xs font-mono text-green-700">{gm.ngdc_name as string}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                                  <span>{gm.member_count as number} members</span>
+                                  <span className="text-[9px] font-mono">{gm.nh as string}/{gm.sz as string}</span>
+                                  {Boolean(gm.has_nested_groups) && <span className="px-1 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-bold">NESTED</span>}
+                                </div>
+                              </div>
+                              <div className="p-2">
+                                <table className="w-full text-[10px]">
+                                  <thead>
+                                    <tr className="border-b border-gray-100">
+                                      <th className="text-left px-2 py-1 font-semibold text-red-600 w-[40%]">Legacy</th>
+                                      <th className="text-center px-1 py-1 text-gray-400 w-[5%]">&rarr;</th>
+                                      <th className="text-left px-2 py-1 font-semibold text-green-600 w-[40%]">NGDC</th>
+                                      <th className="text-left px-2 py-1 font-semibold text-gray-500 w-[15%]">Type</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-50">
+                                    {((gm.mapped_members || []) as Record<string, unknown>[]).map((mem: Record<string, unknown>, mi: number) => (
+                                      <tr key={mi} className={`hover:bg-gray-50 ${mem.type === 'group' ? 'bg-amber-50/50' : ''}`}>
+                                        <td className="px-2 py-1 font-mono text-red-700">{mem.legacy as string}</td>
+                                        <td className="text-center text-gray-300">&rarr;</td>
+                                        <td className="px-2 py-1 font-mono text-green-700">{mem.ngdc as string}</td>
+                                        <td className="px-2 py-1">
+                                          <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
+                                            mem.type === 'group' ? 'bg-emerald-100 text-emerald-700' :
+                                            mem.type === 'subnet' ? 'bg-purple-100 text-purple-700' :
+                                            mem.type === 'range' ? 'bg-orange-100 text-orange-700' :
+                                            'bg-blue-100 text-blue-700'
+                                          }`}>{(mem.type as string || 'ip').toUpperCase()}</span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {((gm.mapped_members || []) as Record<string, unknown>[]).some((mem: Record<string, unknown>) => mem.type === 'group' && (mem.members as unknown[])?.length > 0) && (
+                                  <div className="mt-2 border-t border-indigo-100 pt-2">
+                                    <span className="text-[9px] font-semibold text-indigo-600">Nested Sub-Group Members:</span>
+                                    {((gm.mapped_members || []) as Record<string, unknown>[]).filter((mem: Record<string, unknown>) => mem.type === 'group' && (mem.members as unknown[])?.length > 0).map((subGrp: Record<string, unknown>, si: number) => (
+                                      <div key={si} className="ml-4 mt-1 border-l-2 border-indigo-200 pl-2">
+                                        <span className="text-[9px] font-mono text-indigo-700">{subGrp.legacy as string} &rarr; {subGrp.ngdc as string}</span>
+                                        <div className="grid grid-cols-2 gap-x-2 mt-0.5">
+                                          {((subGrp.members || []) as Record<string, unknown>[]).map((sm: Record<string, unknown>, smi: number) => (
+                                            <div key={smi} className="flex items-center gap-1 text-[9px]">
+                                              <span className="text-red-600 font-mono">{sm.legacy as string}</span>
+                                              <span className="text-gray-300">&rarr;</span>
+                                              <span className="text-green-600 font-mono">{sm.ngdc as string}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Existing App Groups + Create New */}
                     <div className="border rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-semibold text-gray-700">Existing Groups for App {migrateRule.app_id}</h4>
+                        <h4 className="text-xs font-semibold text-gray-700">Existing Groups for App {migrateRule.app_distributed_id || migrateRule.app_id}</h4>
                         <button onClick={() => setShowNewGroupModal(true)} className="px-3 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100">
                           + Create New Group
                         </button>
@@ -1370,7 +1484,7 @@ export function MigrationStudioPage() {
                     <div className="grid grid-cols-2 gap-2">
                       {([
                         ['Rule ID', migrateRule.id],
-                        ['Application', `${migrateRule.app_name} (${migrateRule.app_id})`],
+        ['Application', `${migrateRule.app_name} (${migrateRule.app_distributed_id || migrateRule.app_id})`],
                         ['Dist ID', migrateRule.app_distributed_id || 'N/A'],
                         ['Policy', migrateRule.policy_name || 'N/A'],
                         ['Source NH / SZ', `${recommendation?.source_nh || selectedNh} / ${recommendation?.source_sz || selectedSz}`],
@@ -1525,7 +1639,7 @@ export function MigrationStudioPage() {
                       </div>
                       <div className="p-3 bg-gray-50 rounded-lg border">
                         <span className="text-[10px] text-gray-500 uppercase">Application</span>
-                        <div className="text-sm font-medium">{migrateRule?.app_name} ({migrateRule?.app_id})</div>
+                        <div className="text-sm font-medium">{migrateRule?.app_name} ({migrateRule?.app_distributed_id || migrateRule?.app_id})</div>
                       </div>
                     </div>
 
