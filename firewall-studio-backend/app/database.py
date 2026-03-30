@@ -2510,6 +2510,85 @@ async def create_rule_modification(rule_id: str, modifications: dict[str, Any], 
     return modification
 
 
+async def create_studio_rule_modification(rule_id: str, modifications: dict[str, Any],
+                                           delta: dict[str, Any] | None = None,
+                                           comments: str = "") -> dict[str, Any] | None:
+    """Create a rule modification for a Design Studio rule with frontend-computed delta.
+
+    Unlike legacy rule modifications, Studio rules use the frontend-computed delta
+    (which includes group member-level changes like group:grp-name keys).
+    """
+    rules = _load("rules") or []
+    rule = next((r for r in rules if r.get("rule_id") == rule_id), None)
+    if not rule:
+        return None
+
+    # Use frontend-provided delta if available, otherwise compute from fields
+    if not delta:
+        delta = {"added": {}, "removed": {}, "changed": {}}
+
+    now = _now()
+    mod_id = f"MOD-{_id()}"
+
+    modification = {
+        "id": mod_id,
+        "rule_id": rule_id,
+        "original": {
+            "source": rule.get("source", ""),
+            "destination": rule.get("destination", ""),
+            "ports": rule.get("ports", ""),
+            "action": rule.get("action", "Allow"),
+            "protocol": rule.get("protocol", "TCP"),
+        },
+        "modified": modifications,
+        "delta": delta,
+        "comments": comments,
+        "status": "Pending",
+        "created_at": now,
+        "reviewed_at": None,
+        "reviewer": None,
+        "review_notes": None,
+    }
+
+    mods = _load("rule_modifications") or []
+    mods.append(modification)
+    _save("rule_modifications", mods)
+
+    # Also create a review request so it appears in Review page
+    reviews = _load("reviews") or []
+    review = {
+        "id": f"REV-{_id()}",
+        "rule_id": rule_id,
+        "rule_name": f"{rule.get('application', '')} - {rule_id}",
+        "request_type": "modify_rule",
+        "module": "design-studio",
+        "requestor": "system",
+        "reviewer": None,
+        "status": "Pending",
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments or f"Studio rule modification for {rule_id}",
+        "review_notes": None,
+        "modification_id": mod_id,
+        "delta": delta,
+        "rule_summary": {
+            "application": rule.get("application", ""),
+            "source": str(modifications.get("source", rule.get("source", "")))[:100],
+            "destination": str(modifications.get("destination", rule.get("destination", "")))[:100],
+            "ports": str(modifications.get("ports", rule.get("ports", ""))),
+            "environment": rule.get("environment", ""),
+        },
+    }
+    reviews.append(review)
+    _save("reviews", reviews)
+
+    await _record_lifecycle(rule_id, "submitted", to_status="Pending Review",
+                            module="design-studio",
+                            details=comments or f"Studio rule modification submitted for {rule_id}")
+
+    return modification
+
+
 async def get_rule_modifications(rule_id: str | None = None) -> list[dict[str, Any]]:
     mods = _load("rule_modifications") or []
     if rule_id:

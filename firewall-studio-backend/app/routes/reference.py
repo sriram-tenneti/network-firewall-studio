@@ -1078,6 +1078,19 @@ async def modify_legacy_rule(rule_id: str, data: dict):
     return result
 
 
+@router.post("/rules/{rule_id}/modify")
+async def modify_studio_rule(rule_id: str, data: dict):
+    """Create a studio rule modification request with frontend-computed delta."""
+    from app.database import create_studio_rule_modification
+    modifications = data.get("modifications", {})
+    delta = data.get("delta", None)
+    comments = data.get("comments", "")
+    result = await create_studio_rule_modification(rule_id, modifications, delta, comments)
+    if not result:
+        raise HTTPException(status_code=404, detail="Studio rule not found")
+    return result
+
+
 @router.get("/rule-modifications")
 async def list_rule_modifications(rule_id: str | None = None):
     return await get_rule_modifications(rule_id)

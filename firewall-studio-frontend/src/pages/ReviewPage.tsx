@@ -147,9 +147,9 @@ export default function ReviewPage(props: { context?: string }) {
     if (review.delta) {
       headers.push('Added', 'Removed', 'Changed');
       row.push(
-        Object.entries(review.delta.added).map(([k, v]) => `${k}: ${v.join(', ')}`).join('; '),
-        Object.entries(review.delta.removed).map(([k, v]) => `${k}: ${v.join(', ')}`).join('; '),
-        Object.entries(review.delta.changed).map(([k, v]) => `${k}: ${v.from} -> ${v.to}`).join('; '),
+        Object.entries(review.delta.added).map(([k, v]) => `${k.startsWith('group:') ? `Group Members (${k.slice(6)})` : k}: ${v.join(', ')}`).join('; '),
+        Object.entries(review.delta.removed).map(([k, v]) => `${k.startsWith('group:') ? `Group Members (${k.slice(6)})` : k}: ${v.join(', ')}`).join('; '),
+        Object.entries(review.delta.changed).map(([k, v]) => `${k.startsWith('group:') ? `Group Members (${k.slice(6)})` : k}: ${v.from} -> ${v.to}`).join('; '),
       );
     }
     const csvContent = [headers, row].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');

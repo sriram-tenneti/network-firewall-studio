@@ -458,6 +458,13 @@ export const createRuleModification = (ruleId: string, modifications: Record<str
     method: 'POST', body: JSON.stringify({ modifications, comments })
   });
 
+// Studio Rule Modification with frontend-computed delta (includes group member changes)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createStudioRuleModification = (ruleId: string, modifications: Record<string, string>, delta: { added: Record<string, string[]>; removed: Record<string, string[]>; changed: Record<string, { from: string; to: string }> }, comments: string = '') =>
+  fetchJSON<RuleModification>(`/api/reference/rules/${ruleId}/modify`, {
+    method: 'POST', body: JSON.stringify({ modifications, delta, comments })
+  });
+
 export const getRuleModifications = (ruleId?: string) => {
   const params = new URLSearchParams();
   if (ruleId) params.set('rule_id', ruleId);

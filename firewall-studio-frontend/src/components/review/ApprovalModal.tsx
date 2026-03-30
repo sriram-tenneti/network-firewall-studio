@@ -123,6 +123,12 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     ['Comments', review.comments || 'N/A'],
   ];
 
+  // Format field keys: group:grp-name → "Group Members (grp-name)", others → title case
+  const formatDeltaField = (field: string): string => {
+    if (field.startsWith('group:')) return `Group Members (${field.slice(6)})`;
+    return field.replace(/rule_/g, '').replace(/_/g, ' ');
+  };
+
   const hasDelta = review.delta && (
     Object.keys(review.delta.added).length > 0 ||
     Object.keys(review.delta.removed).length > 0 ||
@@ -152,7 +158,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
                 <h4 className="text-xs font-semibold text-green-700 mb-1">Added</h4>
                 {Object.entries(review.delta.added).map(([field, values]) => (
                   <div key={field} className="ml-2">
-                    <span className="text-xs text-gray-500">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                    <span className="text-xs text-gray-500">{formatDeltaField(field)}:</span>
                     {values.map((v, i) => (
                       <div key={i} className="text-xs text-green-700 font-mono ml-2">+ {v}</div>
                     ))}
@@ -165,7 +171,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
                 <h4 className="text-xs font-semibold text-red-700 mb-1">Removed</h4>
                 {Object.entries(review.delta.removed).map(([field, values]) => (
                   <div key={field} className="ml-2">
-                    <span className="text-xs text-gray-500">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                    <span className="text-xs text-gray-500">{formatDeltaField(field)}:</span>
                     {values.map((v, i) => (
                       <div key={i} className="text-xs text-red-700 font-mono ml-2">- {v}</div>
                     ))}
@@ -178,7 +184,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
                 <h4 className="text-xs font-semibold text-blue-700 mb-1">Changed</h4>
                 {Object.entries(review.delta.changed).map(([field, change]) => (
                   <div key={field} className="ml-2 text-xs">
-                    <span className="text-gray-500">{field.replace(/rule_/g, '').replace(/_/g, ' ')}:</span>
+                    <span className="text-gray-500">{formatDeltaField(field)}:</span>
                     <span className="text-red-600 line-through ml-1">{change.from}</span>
                     <span className="mx-1">&rarr;</span>
                     <span className="text-green-600">{change.to}</span>
