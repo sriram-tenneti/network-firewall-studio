@@ -280,6 +280,15 @@ export function entriesToDisplayLines(entries: ResourceEntry[], level = 0): Disp
  * This is the single entry point for View detail modals across all pages.
  */
 export function parseExpandedToDisplayLines(raw: string, expanded: string): DisplayLine[] {
-  if (!expanded) return [];
+  // When expanded/details column is empty, fall back to raw source/destination column
+  if (!expanded || !expanded.trim()) {
+    if (!raw || !raw.trim()) return [];
+    // Parse raw text as flat entries (no hierarchy, just list each value)
+    return raw.split('\n').filter(l => l.trim()).map(line => {
+      const v = line.trim();
+      const type = detectEntryType(v);
+      return { text: v, indent: 0, type: type === 'group' ? 'group' : type === 'subnet' ? 'subnet' : type === 'range' ? 'range' : 'ip' } as DisplayLine;
+    });
+  }
   return entriesToDisplayLines(parseToResourceEntries(raw || '', [], expanded || ''));
 }

@@ -9,7 +9,7 @@ import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, g
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
 import { autoPrefix } from '@/lib/utils';
-import { detectEntryType, parseToResourceEntries, entriesToDisplayLines } from '@/lib/nestingParser';
+import { detectEntryType, parseToResourceEntries, parseExpandedToDisplayLines } from '@/lib/nestingParser';
 import type { ResourceEntry } from '@/lib/nestingParser';
 import type { Column } from '@/components/shared/DataTable';
 
@@ -564,8 +564,8 @@ export default function FirewallManagementPage() {
 
   /** Use the same nesting parser for View and Modify so Source/Destination hierarchy is consistent everywhere. */
   const parseExpandedTree = (raw: string, expanded: string): { text: string; indent: number; type: 'group' | 'ip' | 'subnet' | 'range' }[] => {
-    if (!expanded) return [];
-    return entriesToDisplayLines(parseToResourceEntries(raw || '', [], expanded || ''));
+    // Delegate to shared parser which already handles fallback to raw when expanded is empty
+    return parseExpandedToDisplayLines(raw, expanded);
   };
 
   const openModifyModal = async (rule: LegacyRule) => {
