@@ -2510,6 +2510,221 @@ async def create_rule_modification(rule_id: str, modifications: dict[str, Any], 
     return modification
 
 
+async def create_studio_rule_modification(rule_id: str, modifications: dict[str, Any],
+                                           delta: dict[str, Any] | None = None,
+                                           comments: str = "") -> dict[str, Any] | None:
+    """Create a rule modification for a Design Studio rule with frontend-computed delta.
+
+    Unlike legacy rule modifications, Studio rules use the frontend-computed delta
+    (which includes group member-level changes like group:grp-name keys).
+    """
+    rules = _load("rules") or []
+    rule = next((r for r in rules if r.get("rule_id") == rule_id), None)
+    if not rule:
+        return None
+
+    # Use frontend-provided delta if available, otherwise compute from fields
+    if not delta:
+        delta = {"added": {}, "removed": {}, "changed": {}}
+
+    now = _now()
+    mod_id = f"MOD-{_id()}"
+
+    modification = {
+        "id": mod_id,
+        "rule_id": rule_id,
+        "original": {
+            "source": rule.get("source", ""),
+            "destination": rule.get("destination", ""),
+            "ports": rule.get("ports", ""),
+            "action": rule.get("action", "Allow"),
+            "protocol": rule.get("protocol", "TCP"),
+        },
+        "modified": modifications,
+        "delta": delta,
+        "comments": comments,
+        "status": "Pending",
+        "created_at": now,
+        "reviewed_at": None,
+        "reviewer": None,
+        "review_notes": None,
+    }
+
+    mods = _load("rule_modifications") or []
+    mods.append(modification)
+    _save("rule_modifications", mods)
+
+    # Also create a review request so it appears in Review page
+    reviews = _load("reviews") or []
+    review = {
+        "id": f"REV-{_id()}",
+        "rule_id": rule_id,
+        "rule_name": f"{rule.get('application', '')} - {rule_id}",
+        "request_type": "modify_rule",
+        "module": "design-studio",
+        "requestor": "system",
+        "reviewer": None,
+        "status": "Pending",
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments or f"Studio rule modification for {rule_id}",
+        "review_notes": None,
+        "modification_id": mod_id,
+        "delta": delta,
+        "rule_summary": {
+            "application": rule.get("application", ""),
+            "source": str(modifications.get("source", rule.get("source", "")))[:100],
+            "destination": str(modifications.get("destination", rule.get("destination", "")))[:100],
+            "ports": str(modifications.get("ports", rule.get("ports", ""))),
+            "environment": rule.get("environment", ""),
+        },
+    }
+    reviews.append(review)
+    _save("reviews", reviews)
+
+    await _record_lifecycle(rule_id, "submitted", to_status="Pending Review",
+                            module="design-studio",
+                            details=comments or f"Studio rule modification submitted for {rule_id}")
+
+    return modification
+
+
+def find_rules_referencing_group(group_name: str) -> list[dict[str, Any]]:
+    """Find all firewall rules (studio + legacy) that reference a group by name in source or destination."""
+    affected: list[dict[str, Any]] = []
+    # Check studio/firewall rules
+    rules = _load("firewall_rules") or []
+    for r in rules:
+        src = str(r.get("source", ""))
+        dst = str(r.get("destination", ""))
+        if group_name in src or group_name in dst:
+            affected.append(r)
+    # Check legacy rules too
+    legacy = _load("legacy_rules") or []
+    for lr in legacy:
+        src = str(lr.get("rule_source", ""))
+        dst = str(lr.get("rule_destination", ""))
+        src_exp = str(lr.get("rule_source_expanded", ""))
+        dst_exp = str(lr.get("rule_destination_expanded", ""))
+        if group_name in src or group_name in dst or group_name in src_exp or group_name in dst_exp:
+            affected.append({
+                "rule_id": lr.get("id", ""),
+                "source": src,
+                "destination": dst,
+                "application": lr.get("app_name", ""),
+                "environment": "Production",
+                "port": lr.get("rule_service", ""),
+                "protocol": "TCP",
+                "action": lr.get("rule_action", "Allow"),
+                "_legacy": True,
+            })
+    return affected
+
+
+async def create_group_change_policy_reviews(
+    group_name: str,
+    change_type: str,  # "member_added", "member_removed", "group_updated"
+    change_details: str,
+    member_delta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """When a group/subgroup changes, find all affected rules and create policy change
+    review records so they can be submitted, reviewed, approved, and compiled."""
+    affected_rules = find_rules_referencing_group(group_name)
+    if not affected_rules:
+        return {"group": group_name, "affected_rules": 0, "reviews_created": []}
+
+    now = _now()
+    reviews_created: list[dict[str, Any]] = []
+    reviews = _load("reviews") or []
+    mods = _load("rule_modifications") or []
+
+    delta = member_delta or {"added": {}, "removed": {}, "changed": {}}
+
+    for rule in affected_rules:
+        rule_id = rule.get("rule_id", "")
+        mod_id = f"MOD-{_id()}"
+
+        # Determine if the group is in source, destination, or both
+        src = str(rule.get("source", ""))
+        dst = str(rule.get("destination", ""))
+        affected_field = []
+        if group_name in src:
+            affected_field.append("source")
+        if group_name in dst:
+            affected_field.append("destination")
+
+        modification = {
+            "id": mod_id,
+            "rule_id": rule_id,
+            "original": {
+                "source": src,
+                "destination": dst,
+                "ports": rule.get("port", rule.get("ports", "")),
+                "action": rule.get("action", "Allow"),
+                "protocol": rule.get("protocol", "TCP"),
+            },
+            "modified": {
+                "source": src,
+                "destination": dst,
+                "ports": rule.get("port", rule.get("ports", "")),
+                "action": rule.get("action", "Allow"),
+                "protocol": rule.get("protocol", "TCP"),
+            },
+            "delta": delta,
+            "comments": f"Group '{group_name}' {change_type}: {change_details} — affects {', '.join(affected_field)} of rule {rule_id}",
+            "status": "Pending",
+            "created_at": now,
+            "reviewed_at": None,
+            "reviewer": None,
+            "review_notes": None,
+            "group_change": True,
+            "group_name": group_name,
+        }
+        mods.append(modification)
+
+        review = {
+            "id": f"REV-{_id()}",
+            "rule_id": rule_id,
+            "rule_name": f"{rule.get('application', '')} - {rule_id}",
+            "request_type": "group_policy_change",
+            "module": "design-studio",
+            "requestor": "system",
+            "reviewer": None,
+            "status": "Pending",
+            "submitted_at": now,
+            "reviewed_at": None,
+            "comments": f"Group '{group_name}' changed ({change_type}): {change_details}",
+            "review_notes": None,
+            "modification_id": mod_id,
+            "delta": delta,
+            "group_change": True,
+            "group_name": group_name,
+            "rule_summary": {
+                "application": rule.get("application", ""),
+                "source": src[:100],
+                "destination": dst[:100],
+                "ports": str(rule.get("port", rule.get("ports", ""))),
+                "environment": rule.get("environment", ""),
+            },
+        }
+        reviews.append(review)
+        reviews_created.append({"review_id": review["id"], "rule_id": rule_id, "mod_id": mod_id})
+
+        await _record_lifecycle(rule_id, "submitted", to_status="Pending Review",
+                                module="design-studio",
+                                details=f"Policy change review: group '{group_name}' {change_type}")
+
+    _save("rule_modifications", mods)
+    _save("reviews", reviews)
+
+    return {
+        "group": group_name,
+        "change_type": change_type,
+        "affected_rules": len(affected_rules),
+        "reviews_created": reviews_created,
+    }
+
+
 async def get_rule_modifications(rule_id: str | None = None) -> list[dict[str, Any]]:
     mods = _load("rule_modifications") or []
     if rule_id:
@@ -3120,10 +3335,16 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     app_dc_mappings = _load("app_dc_mappings") or []
 
     app_id = str(rule.get("app_id", ""))
-    app_dist = rule.get("app_distributed_id", "")
+    app_dist = rule.get("app_distributed_id", "") or ""
     app_name = rule.get("app_name", "")
     rule_env = rule.get("environment", "Production")
     app_info = next((a for a in apps if str(a.get("app_id")) == app_id or a.get("app_distributed_id") == app_dist), None)
+
+    # Prefer app_distributed_id for naming; fall back to app_id
+    # Also check the application record for a distributed_id if the rule doesn't have one
+    if not app_dist and app_info:
+        app_dist = app_info.get("app_distributed_id", "") or ""
+    app_label = app_dist if app_dist else app_id
 
     # --- Step 1: Determine NH/SZ using the rule's actual source/dest zones ---
     # The rule itself tells us source_zone and destination_zone — use these to
@@ -3132,8 +3353,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
     rule_dst_zone = (rule.get("rule_destination_zone") or "").strip()
 
     # Get ALL app-DC mappings for this app (component-level)
+    # Match on app_distributed_id first, then fall back to app_id
     all_app_comps = [m for m in app_dc_mappings
-                     if str(m.get("app_id", "")).upper() == app_id.upper()]
+                     if str(m.get("app_distributed_id", "")).upper() == app_label.upper()
+                     or str(m.get("app_id", "")).upper() == app_id.upper()]
 
     def _find_nh_for_zone(zone: str) -> tuple[str, str, str]:
         """Find NH, SZ, DC for a given zone from app-DC mappings.
@@ -3216,18 +3439,26 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                  "net" if ln.startswith("net-") or ln.startswith("sub-") else \
                  "net" if "/" in legacy_name and not ln.startswith("tcp") and not ln.startswith("udp") else \
                  "grp"
-        short_app = app_id.upper()
+        short_app = app_label.upper()
         # For individual IPs/subnets/ranges, try 1-to-1 mapping first
         if prefix in ("svr", "net", "rng"):
             mapped = _lookup_ip_mapping(legacy_name)
             if mapped:
                 return mapped
-        # Use direction-specific NH/SZ from the rule's actual zones
-        if direction == "destination":
+        # Use component detection + app DC metadata for NH/SZ
+        detected_comp = _detect_component(legacy_name)
+        comp_mapping = next((c for c in app_components if c.get("component") == detected_comp), None)
+        if comp_mapping:
+            nh = comp_mapping.get("nh", dst_nh if direction == "destination" else src_nh)
+            sz = comp_mapping.get("sz", dst_sz if direction == "destination" else src_sz)
+        elif direction == "destination":
             nh, sz = dst_nh, dst_sz
         else:
             nh, sz = src_nh, src_sz
-        return f"{prefix}-{short_app}-{entry_type}-{nh}-{sz}"
+        # Format: grp-APP-NH-SZ-COMP (standard naming)
+        if prefix == "grp":
+            return f"grp-{short_app}-{nh}-{sz}-{detected_comp}"
+        return f"{prefix}-{short_app}-{nh}-{sz}-{detected_comp}"
 
     def _build_mapping(legacy_name: str, entry_type: str, idx: int, direction: str = "source") -> dict[str, Any]:
         ln = legacy_name.lower()
@@ -3331,8 +3562,10 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     # --- Step 4: Build component-based group mappings ---
     # Get all app_dc_mappings for this app to determine component-level grouping
-    app_components = [m for m in app_dc_mappings if str(m.get("app_id", "")).upper() == app_id.upper()]
-    short_app = app_id.upper()
+    app_components = [m for m in app_dc_mappings
+                      if str(m.get("app_distributed_id", "")).upper() == app_label.upper()
+                      or str(m.get("app_id", "")).upper() == app_id.upper()]
+    short_app = app_label.upper()
 
     # Load IP mappings table for 1-to-1 legacy -> NGDC IP lookups
     ip_mappings_table = _load("ip_mappings") or []
@@ -3484,7 +3717,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 else:
                     ngdc_ips.append(f"svr-{clean_ip}")
 
-        ngdc_group_name = f"grp-{short_app}-{comp}-{comp_nh}-{comp_sz}"
+        ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}"
         return {
             "component": comp,
             "direction": direction,
@@ -3515,14 +3748,36 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
     # Build NGDC group mapping suggestions for each legacy group
     def _map_legacy_group(lg: dict[str, Any], direction: str) -> dict[str, Any]:
-        """Map a legacy group to a suggested NGDC group with 1-1 member mappings."""
-        dir_nh = dst_nh if direction == "destination" else src_nh
-        dir_sz = dst_sz if direction == "destination" else src_sz
+        """Map a legacy group to a suggested NGDC group with 1-1 member mappings.
+        Uses component-based naming from App Management DC mappings:
+        grp-{APP}-{COMPONENT}-{NH}-{SZ}"""
         legacy_name = lg["name"]
+
+        # Detect component from the group's member IPs using app DC metadata
+        member_ips = [m["value"] for m in lg.get("members", []) if m.get("type") != "group"]
+        detected_comp = "APP"  # fallback
+        if member_ips:
+            detected_comp = _detect_component(member_ips[0])
+        elif lg.get("members"):
+            # If all members are sub-groups, try the first sub-group's members
+            for sub in lg["members"]:
+                sub_ips = [sm["value"] for sm in sub.get("members", []) if sm.get("type") != "group"]
+                if sub_ips:
+                    detected_comp = _detect_component(sub_ips[0])
+                    break
+
+        # Find the matching app_dc_mapping for this component to get NH/SZ
+        comp_mapping = next((c for c in app_components if c.get("component") == detected_comp), None)
+        if comp_mapping:
+            dir_nh = comp_mapping.get("nh", dst_nh if direction == "destination" else src_nh)
+            dir_sz = comp_mapping.get("sz", dst_sz if direction == "destination" else src_sz)
+        else:
+            dir_nh = dst_nh if direction == "destination" else src_nh
+            dir_sz = dst_sz if direction == "destination" else src_sz
 
         # Try to find existing NGDC mapping for this group
         table_match = _lookup_ngdc_mapping(legacy_name)
-        ngdc_name = table_match["ngdc_name"] if table_match else f"grp-{short_app}-{direction[:3].upper()}-{dir_nh}-{dir_sz}"
+        ngdc_name = table_match["ngdc_name"] if table_match else f"grp-{short_app}-{dir_nh}-{dir_sz}-{detected_comp}"
 
         # Map each member to NGDC equivalent
         mapped_members: list[dict[str, Any]] = []
@@ -3567,6 +3822,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "member_count": len(lg.get("members", [])),
             "mapped_members": mapped_members,
             "mapping_source": "ngdc_mapping_table" if table_match else "auto_generated",
+            "component": detected_comp,
             "nh": dir_nh,
             "sz": dir_sz,
             "has_nested_groups": any(m["type"] == "group" for m in lg.get("members", [])),
@@ -3598,7 +3854,8 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "auto_generated": auto_count,
             "component_group_count": len(component_groups),
         },
-        "naming_standard": f"grp-{short_app}-{{COMPONENT}}-{{NH}}-{{SZ}}",
+        "app_distributed_id": app_label,
+        "naming_standard": f"grp-{short_app}-{{NH}}-{{SZ}}-{{COMPONENT}}[-{{SUBCOMP}}]",
         "source_nh": src_nh,
         "source_sz": src_sz,
         "source_dc": src_dc,
@@ -3614,6 +3871,17 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
         "legacy_group_mappings": legacy_group_mappings,
         "legacy_source_groups": legacy_source_groups,
         "legacy_dest_groups": legacy_dest_groups,
+        # App DC mapping metadata for frontend component/NH/SZ selection
+        "app_dc_mappings": [
+            {
+                "component": c.get("component", ""),
+                "nh": c.get("nh", ""),
+                "sz": c.get("sz", ""),
+                "dc": c.get("dc", ""),
+                "cidr": c.get("cidr", ""),
+            } for c in app_components
+        ],
+        "available_components": sorted(set(c.get("component", "") for c in app_components if c.get("component"))),
     }
 
 

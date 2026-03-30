@@ -259,7 +259,7 @@ export interface ReviewRequest {
   id: string;
   rule_id: string;
   rule_name: string;
-  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification';
+  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification' | 'group_policy_change';
   requestor: string;
   reviewer: string | null;
   status: 'Pending' | 'Approved' | 'Rejected' | 'Withdrawn';
@@ -358,6 +358,12 @@ export interface NGDCRecommendation {
   naming_standard: string;
   available_nhs: { nh_id: string; name: string }[];
   available_szs: { code: string; name: string }[];
+  app_distributed_id?: string;
+  legacy_group_mappings?: Record<string, unknown>[];
+  legacy_source_groups?: Record<string, unknown>[];
+  legacy_dest_groups?: Record<string, unknown>[];
+  app_dc_mappings?: Record<string, string>[];
+  available_components?: string[];
 }
 
 export interface IPMapping {

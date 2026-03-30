@@ -114,6 +114,11 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
   const legacyRule = rule as unknown as Record<string, string>;
   const srcExpanded = legacyRule.rule_source_expanded || '';
   const dstExpanded = legacyRule.rule_destination_expanded || '';
+  // Fallback: use raw source/dest columns when expanded is empty
+  const srcRaw = legacyRule.rule_source || '';
+  const dstRaw = legacyRule.rule_destination || '';
+  const hasSrcDisplay = !!(srcExpanded || srcRaw);
+  const hasDstDisplay = !!(dstExpanded || dstRaw);
 
   const rows: [string, string | React.ReactNode][] = [
     ['Rule ID', rule.rule_id],
@@ -152,26 +157,26 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
         ))}
       </div>
 
-      {/* Hierarchical Source Expanded */}
-      {srcExpanded && (
+      {/* Hierarchical Source — uses expanded if available, falls back to raw source column */}
+      {hasSrcDisplay && (
         <div className="mt-4 border rounded-lg overflow-hidden">
           <div className="px-3 py-2 bg-blue-50 border-b">
-            <h4 className="text-sm font-semibold text-blue-800">Source (Expanded IPs/Groups)</h4>
+            <h4 className="text-sm font-semibold text-blue-800">Source {srcExpanded ? '(Expanded IPs/Groups)' : '(from Source column)'}</h4>
           </div>
           <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-            <ExpandedHierarchy text={srcExpanded} color="text-green-400" />
+            <ExpandedHierarchy text={srcExpanded || srcRaw} color="text-green-400" />
           </div>
         </div>
       )}
 
-      {/* Hierarchical Destination Expanded */}
-      {dstExpanded && (
+      {/* Hierarchical Destination — uses expanded if available, falls back to raw destination column */}
+      {hasDstDisplay && (
         <div className="mt-4 border rounded-lg overflow-hidden">
           <div className="px-3 py-2 bg-purple-50 border-b">
-            <h4 className="text-sm font-semibold text-purple-800">Destination (Expanded IPs/Groups)</h4>
+            <h4 className="text-sm font-semibold text-purple-800">Destination {dstExpanded ? '(Expanded IPs/Groups)' : '(from Destination column)'}</h4>
           </div>
           <div className="p-3 bg-gray-900 max-h-60 overflow-y-auto">
-            <ExpandedHierarchy text={dstExpanded} color="text-purple-400" />
+            <ExpandedHierarchy text={dstExpanded || dstRaw} color="text-purple-400" />
           </div>
         </div>
       )}

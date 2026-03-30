@@ -17,12 +17,18 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
   const [newMemberValue, setNewMemberValue] = useState('');
   const [newMemberType, setNewMemberType] = useState<'ip' | 'cidr' | 'group' | 'range'>('ip');
   const [newMemberDesc, setNewMemberDesc] = useState('');
-  const [newGroupAppId, setNewGroupAppId] = useState(appFilter || '');
+  const [newGroupAppId] = useState(appFilter || '');
   const [newGroupDc, setNewGroupDc] = useState('');
   const [newGroupNh, setNewGroupNh] = useState('');
   const [newGroupSz, setNewGroupSz] = useState('');
-  const [newGroupSubtype, setNewGroupSubtype] = useState('APP');
+  const [newGroupSubtype, setNewGroupSubtype] = useState('');
+  const [newGroupCustomSuffix, setNewGroupCustomSuffix] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [createValidationError, setCreateValidationError] = useState<string | null>(null);
+  const [createMembers, setCreateMembers] = useState<{ type: 'ip' | 'cidr' | 'group' | 'range'; value: string; description: string }[]>([]);
+  const [createMemberType, setCreateMemberType] = useState<'ip' | 'cidr' | 'group' | 'range'>('ip');
+  const [createMemberValue, setCreateMemberValue] = useState('');
+  const [createMemberDesc, setCreateMemberDesc] = useState('');
 
   // Derive DC/NH/SZ options from app DC mappings for the selected app
   // Match on app_distributed_id first, then fall back to app_id
@@ -44,16 +50,45 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
 
   useEffect(() => { loadGroups(); }, [appFilter]);
 
+  // Auto-generate group name: grp-{APP}-{NH}-{SZ}-{Component}[-{suffix}]
+  const autoGroupName = (() => {
+    const parts = ['grp', newGroupAppId, newGroupNh, newGroupSz, newGroupSubtype].filter(Boolean);
+    if (parts.length < 5) return '';
+    let name = parts.join('-');
+    if (newGroupCustomSuffix.trim()) name += `-${newGroupCustomSuffix.trim()}`;
+    return name;
+  })();
+
+  const canCreateGroup = !!(newGroupAppId && newGroupNh && newGroupSz && newGroupSubtype && createMembers.length > 0 && autoGroupName);
+
+  const handleAddCreateMember = () => {
+    if (!createMemberValue.trim()) return;
+    const prefixed = autoPrefix(createMemberValue.trim(), createMemberType);
+    setCreateMembers(prev => [...prev, { type: createMemberType, value: prefixed, description: createMemberDesc }]);
+    setCreateMemberValue('');
+    setCreateMemberDesc('');
+  };
+
   const handleCreateGroup = async () => {
-    const name = `grp-${newGroupAppId}-${newGroupNh}-${newGroupSz}-${newGroupSubtype}`;
+    if (!newGroupAppId) { setCreateValidationError('Application is required'); return; }
+    if (!newGroupNh) { setCreateValidationError('NH is required'); return; }
+    if (!newGroupSz) { setCreateValidationError('SZ is required'); return; }
+    if (!newGroupSubtype) { setCreateValidationError('Component is required'); return; }
+    if (createMembers.length === 0) { setCreateValidationError('At least one member is required'); return; }
+    setCreateValidationError(null);
     try {
       const group = await api.createGroup({
-        name, app_id: newGroupAppId, nh: newGroupNh, sz: newGroupSz,
-        subtype: newGroupSubtype, description: newGroupDesc, members: [],
+        name: autoGroupName, app_id: newGroupAppId, nh: newGroupNh, sz: newGroupSz,
+        subtype: newGroupSubtype, description: newGroupDesc,
+        members: createMembers.map(m => ({ type: m.type, value: m.value, description: m.description })),
       });
       onNotification(`Group ${group.name} created`, 'success');
       setShowCreateForm(false);
       setNewGroupDesc('');
+      setNewGroupSubtype('');
+      setNewGroupCustomSuffix('');
+      setCreateMembers([]);
+      setCreateValidationError(null);
       loadGroups();
     } catch {
       onNotification('Failed to create group', 'error');
@@ -122,66 +157,54 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
         <div className="border-b border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-indigo-800">New Group</span>
-            <button onClick={() => setShowCreateForm(false)} className="text-slate-400 hover:text-slate-600">
+            <button onClick={() => { setShowCreateForm(false); setCreateValidationError(null); setCreateMembers([]); }} className="text-slate-400 hover:text-slate-600">
               <X className="h-3 w-3" />
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <div>
-              <label className="text-xs text-slate-500">App Distributed Id</label>
-              <input value={newGroupAppId} onChange={(e) => { setNewGroupAppId(e.target.value); setNewGroupDc(''); setNewGroupNh(''); setNewGroupSz(''); }}
-                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="APP01" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-500">DC {dcOptions.length > 0 && `(${dcOptions.length})`}</label>
-              {dcOptions.length > 0 ? (
-                <select value={newGroupDc} onChange={(e) => setNewGroupDc(e.target.value)}
-                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
-                  <option value="">-- Select DC --</option>
-                  {dcOptions.map(dc => <option key={dc} value={dc}>{dc}</option>)}
-                </select>
-              ) : (
-                <select value={newGroupDc} onChange={(e) => setNewGroupDc(e.target.value)}
-                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
-                  <option value="">-- Select DC --</option>
-                  <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                  <option value="BETA_NGDC">BETA_NGDC</option>
-                  <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                </select>
-              )}
-            </div>
-            <div>
-              <label className="text-xs text-slate-500">NH {nhOptions.length > 0 && `(${nhOptions.length})`}</label>
-              {nhOptions.length > 0 ? (
-                <select value={newGroupNh} onChange={(e) => setNewGroupNh(e.target.value)}
-                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
-                  <option value="">-- Select NH --</option>
-                  {nhOptions.map(nh => <option key={nh} value={nh}>{nh}</option>)}
-                </select>
-              ) : (
-                <input value={newGroupNh} onChange={(e) => setNewGroupNh(e.target.value)}
-                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="NH01" />
-              )}
-            </div>
-            <div>
-              <label className="text-xs text-slate-500">SZ {szOptions.length > 0 && `(${szOptions.length})`}</label>
-              {szOptions.length > 0 ? (
-                <select value={newGroupSz} onChange={(e) => setNewGroupSz(e.target.value)}
-                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
-                  <option value="">-- Select SZ --</option>
-                  {szOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
-                </select>
-              ) : (
-                <input value={newGroupSz} onChange={(e) => setNewGroupSz(e.target.value)}
-                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="GEN" />
-              )}
-            </div>
+          <div className="p-1.5 bg-indigo-100 border border-indigo-200 rounded text-[9px] text-indigo-700">
+            <strong>Standard:</strong> <span className="font-mono">grp-APP-NH-SZ-Component</span>. All fields mandatory. At least 1 member required.
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <div>
-              <label className="text-xs text-slate-500">Component</label>
-              <select value={newGroupSubtype} onChange={(e) => setNewGroupSubtype(e.target.value)}
+              <label className="text-xs text-slate-500">App <span className="text-red-500">*</span></label>
+              <input value={newGroupAppId} readOnly
+                className="w-full rounded border border-slate-300 bg-slate-100 px-2 py-1 text-xs cursor-not-allowed" />
+              <p className="text-[8px] text-slate-400">From current app filter</p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">DC</label>
+              <select value={newGroupDc} onChange={(e) => setNewGroupDc(e.target.value)} disabled={dcOptions.length === 0}
                 className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                <option value="">-- Select DC --</option>
+                {dcOptions.map(dc => <option key={dc} value={dc}>{dc}</option>)}
+              </select>
+              {dcOptions.length === 0 && <p className="text-[8px] text-amber-600">No DCs mapped</p>}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            <div>
+              <label className="text-xs text-slate-500">NH <span className="text-red-500">*</span></label>
+              <select value={newGroupNh} onChange={(e) => { setNewGroupNh(e.target.value); setCreateValidationError(null); }}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                <option value="">-- Select --</option>
+                {nhOptions.map(nh => <option key={nh} value={nh}>{nh}</option>)}
+              </select>
+              {nhOptions.length === 0 && <p className="text-[8px] text-amber-600">No NHs mapped</p>}
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">SZ <span className="text-red-500">*</span></label>
+              <select value={newGroupSz} onChange={(e) => { setNewGroupSz(e.target.value); setCreateValidationError(null); }}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                <option value="">-- Select --</option>
+                {szOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+              </select>
+              {szOptions.length === 0 && <p className="text-[8px] text-amber-600">No SZs mapped</p>}
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Component <span className="text-red-500">*</span></label>
+              <select value={newGroupSubtype} onChange={(e) => { setNewGroupSubtype(e.target.value); setCreateValidationError(null); }}
+                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+                <option value="">-- Select --</option>
                 <option value="WEB">WEB</option>
                 <option value="APP">APP</option>
                 <option value="DB">DB</option>
@@ -190,18 +213,56 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
                 <option value="API">API</option>
               </select>
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <label className="text-xs text-slate-500">Suffix <span className="text-slate-400">(optional)</span></label>
+              <input value={newGroupCustomSuffix} onChange={(e) => setNewGroupCustomSuffix(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="e.g. frontend" />
+            </div>
             <div>
               <label className="text-xs text-slate-500">Description</label>
               <input value={newGroupDesc} onChange={(e) => setNewGroupDesc(e.target.value)}
                 className="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="Group description" />
             </div>
           </div>
-          <div className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600 font-mono">
-            grp-{newGroupAppId}-{newGroupNh}-{newGroupSz}-{newGroupSubtype}
+          <div className={`rounded px-2 py-1 text-xs font-mono ${autoGroupName ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+            {autoGroupName || 'grp-{APP}-{NH}-{SZ}-{Component}'}
           </div>
-          <button onClick={handleCreateGroup}
-            className="w-full rounded bg-indigo-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
-            <Save className="inline h-3 w-3 mr-1" />Create Group
+          {/* Members - REQUIRED */}
+          <div className={`border rounded p-2 ${createMembers.length === 0 ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white'}`}>
+            <div className="text-[9px] font-semibold uppercase mb-1">
+              <span className={createMembers.length === 0 ? 'text-red-600' : 'text-slate-500'}>Members <span className="text-red-500">*</span></span>
+              {createMembers.length > 0 && <span className="text-green-600 ml-1">({createMembers.length})</span>}
+            </div>
+            {createMembers.map((m, i) => (
+              <div key={i} className="flex items-center gap-1 px-1 py-0.5 bg-slate-50 rounded text-[10px] mb-0.5">
+                <span className="px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-blue-100 text-blue-700">{m.type}</span>
+                <span className="flex-1 font-mono text-slate-700 truncate">{m.value}</span>
+                <button onClick={() => setCreateMembers(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 text-[8px]">x</button>
+              </div>
+            ))}
+            <div className="flex gap-1 mt-1">
+              <select value={createMemberType} onChange={e => setCreateMemberType(e.target.value as 'ip' | 'cidr' | 'group' | 'range')}
+                className="rounded border border-slate-300 bg-white px-1 py-0.5 text-[10px]">
+                <option value="ip">IP</option>
+                <option value="cidr">CIDR</option>
+                <option value="range">Range</option>
+                <option value="group">Group</option>
+              </select>
+              <input value={createMemberValue} onChange={e => setCreateMemberValue(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddCreateMember(); }}
+                className="flex-1 rounded border border-slate-300 px-1 py-0.5 text-[10px] font-mono" placeholder="10.1.1.1" />
+              <button onClick={handleAddCreateMember} disabled={!createMemberValue.trim()}
+                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${createMemberValue.trim() ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-200 text-slate-400'}`}>+</button>
+            </div>
+          </div>
+          {createValidationError && (
+            <div className="p-1.5 bg-red-50 border border-red-200 rounded text-[9px] text-red-700 font-medium">{createValidationError}</div>
+          )}
+          <button onClick={handleCreateGroup} disabled={!canCreateGroup}
+            className={`w-full rounded px-2 py-1.5 text-xs font-semibold text-white ${canCreateGroup ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-300 cursor-not-allowed'}`}>
+            <Save className="inline h-3 w-3 mr-1" />{canCreateGroup ? `Create "${autoGroupName}"` : 'Complete all fields & add members'}
           </button>
         </div>
       )}

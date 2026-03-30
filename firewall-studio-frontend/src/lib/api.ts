@@ -458,6 +458,22 @@ export const createRuleModification = (ruleId: string, modifications: Record<str
     method: 'POST', body: JSON.stringify({ modifications, comments })
   });
 
+// Studio Rule Modification with frontend-computed delta (includes group member changes)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createStudioRuleModification = (ruleId: string, modifications: Record<string, string>, delta: { added: Record<string, string[]>; removed: Record<string, string[]>; changed: Record<string, { from: string; to: string }> }, comments: string = '') =>
+  fetchJSON<RuleModification>(`/api/reference/rules/${ruleId}/modify`, {
+    method: 'POST', body: JSON.stringify({ modifications, delta, comments })
+  });
+
+// Group policy change — find affected rules and submit for review
+export const getAffectedRules = (groupName: string) =>
+  fetchJSON<{ group: string; affected_rules: number; rules: Record<string, unknown>[] }>(`/api/reference/groups/${encodeURIComponent(groupName)}/affected-rules`);
+
+export const submitGroupPolicyChanges = (groupName: string, changeType: string, changeDetails: string, memberDelta?: Record<string, unknown>) =>
+  fetchJSON<{ group: string; change_type: string; affected_rules: number; reviews_created: { review_id: string; rule_id: string; mod_id: string }[] }>(`/api/reference/groups/${encodeURIComponent(groupName)}/submit-policy-changes`, {
+    method: 'POST', body: JSON.stringify({ change_type: changeType, change_details: changeDetails, member_delta: memberDelta })
+  });
+
 export const getRuleModifications = (ruleId?: string) => {
   const params = new URLSearchParams();
   if (ruleId) params.set('rule_id', ruleId);
