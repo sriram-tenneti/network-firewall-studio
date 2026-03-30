@@ -16,6 +16,7 @@ import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
+import { createStudioRuleModification } from '@/lib/api';
 import * as api from '@/lib/api';
 
 export function DesignStudioPage() {
@@ -95,11 +96,24 @@ export function DesignStudioPage() {
     try {
       const srcValue = changes.source_entries.map(e => e.value).join(',');
       const dstValue = changes.destination_entries.map(e => e.value).join(',');
+      // Update the rule itself
       await api.updateRule(ruleId, {
         source: { source_type: 'Group', ip_address: null, cidr: null, group_name: srcValue, ports: changes.ports, neighbourhood: null, security_zone: '' },
         destination: { name: dstValue, security_zone: '', dest_ip: null, ports: changes.ports, is_predefined: false },
       });
-      showNotification('Rule modified successfully', 'success');
+      // Create a modification record with delta so it appears in Review
+      const hasDelta = Object.keys(changes.delta.added).length > 0 ||
+                       Object.keys(changes.delta.removed).length > 0 ||
+                       Object.keys(changes.delta.changed).length > 0;
+      if (hasDelta) {
+        await createStudioRuleModification(
+          ruleId,
+          { source: srcValue, destination: dstValue, ports: changes.ports, protocol: changes.protocol, action: changes.action },
+          changes.delta,
+          'Studio rule modification'
+        );
+      }
+      showNotification('Rule modified successfully' + (hasDelta ? ' — submitted for review' : ''), 'success');
       loadData();
     } catch {
       showNotification('Failed to modify rule', 'error');

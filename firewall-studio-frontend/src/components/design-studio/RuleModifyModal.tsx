@@ -19,6 +19,7 @@ export interface RuleModification {
   ports: string;
   protocol: string;
   action: string;
+  delta: RuleDelta;
 }
 
 interface RuleModifyModalProps {
@@ -321,6 +322,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
       ports,
       protocol,
       action,
+      delta: computeDelta(),
     });
     onClose();
   };
