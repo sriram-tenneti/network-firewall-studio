@@ -847,6 +847,9 @@ export const getRealRules = () =>
 export const getRealGroups = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/groups/real');
 
+export const getRealGroup = (name: string) =>
+  fetchJSON<FirewallGroup>(`/api/reference/groups/real/${name}`);
+
 export const getRealReviews = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/reviews/real');
 

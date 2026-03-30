@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import type { FirewallRule, RuleDelta, BirthrightValidation, FirewallGroup, Application, GroupMember } from '@/types';
-import { validateBirthright, getGroup, getApplications, getFilteredNhSzDc, addGroupMember, removeGroupMember } from '@/lib/api';
+import { validateBirthright, getRealGroup, getApplications, getFilteredNhSzDc, addGroupMember, removeGroupMember } from '@/lib/api';
 import { autoPrefix } from '@/lib/utils';
 import { detectEntryType } from '@/lib/nestingParser';
 
@@ -250,7 +250,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
       });
       if (groupNames.length > 0) {
         setLoadingGroups(true);
-        Promise.allSettled(groupNames.map(n => getGroup(n)))
+        Promise.allSettled(groupNames.map(n => getRealGroup(n)))
           .then(results => {
             const map: Record<string, FirewallGroup> = {};
             const origMembers: Record<string, GroupMember[]> = {};
@@ -327,7 +327,8 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
     onClose();
   };
 
-  // Compute full delta for display (Fix #7: includes group member changes)
+  // Compute full delta for display — field names match backend _compute_delta convention
+  // so the delta shown here matches what appears in ReviewPage/ApprovalModal after submission.
   const computeDelta = (): RuleDelta => {
     const delta: RuleDelta = { added: {}, removed: {}, changed: {} };
     const origSrc = parseEntries(rule.source);
@@ -337,22 +338,22 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
     const curSrcVals = new Set(sourceEntries.map(e => e.value));
     const addedSrc = sourceEntries.filter(e => !origSrcVals.has(e.value)).map(e => e.value);
     const removedSrc = origSrc.filter(e => !curSrcVals.has(e.value)).map(e => e.value);
-    if (addedSrc.length) delta.added['source'] = addedSrc;
-    if (removedSrc.length) delta.removed['source'] = removedSrc;
+    if (addedSrc.length) delta.added['rule_source'] = addedSrc;
+    if (removedSrc.length) delta.removed['rule_source'] = removedSrc;
     const origDstVals = new Set(origDst.map(e => e.value));
     const curDstVals = new Set(destEntries.map(e => e.value));
     const addedDst = destEntries.filter(e => !origDstVals.has(e.value)).map(e => e.value);
     const removedDst = origDst.filter(e => !curDstVals.has(e.value)).map(e => e.value);
-    if (addedDst.length) delta.added['destination'] = addedDst;
-    if (removedDst.length) delta.removed['destination'] = removedDst;
+    if (addedDst.length) delta.added['rule_destination'] = addedDst;
+    if (removedDst.length) delta.removed['rule_destination'] = removedDst;
     const modifiedSrc = sourceEntries.filter(e => e.isModified).map(e => e.value);
     const modifiedDst = destEntries.filter(e => e.isModified).map(e => e.value);
-    if (modifiedSrc.length) delta.changed['source_modified'] = { from: 'original', to: modifiedSrc.join(', ') };
-    if (modifiedDst.length) delta.changed['destination_modified'] = { from: 'original', to: modifiedDst.join(', ') };
-    if (ports !== origPorts) delta.changed['ports'] = { from: origPorts || '(none)', to: ports || '(none)' };
+    if (modifiedSrc.length) delta.changed['rule_source_modified'] = { from: 'original', to: modifiedSrc.join(', ') };
+    if (modifiedDst.length) delta.changed['rule_destination_modified'] = { from: 'original', to: modifiedDst.join(', ') };
+    if (ports !== origPorts) delta.changed['rule_service'] = { from: origPorts || '(none)', to: ports || '(none)' };
     if (protocol !== 'TCP') delta.changed['protocol'] = { from: 'TCP', to: protocol };
-    if (action !== 'Allow') delta.changed['action'] = { from: 'Allow', to: action };
-    // Fix #7: Track group member add/remove in deltas
+    if (action !== 'Allow') delta.changed['rule_action'] = { from: 'Allow', to: action };
+    // Track group member add/remove in deltas
     for (const [grpName, editedMembers] of Object.entries(editedGroupMembers)) {
       const origMembers = originalGroupMembers[grpName] || [];
       const origVals = new Set(origMembers.map(m => m.value));

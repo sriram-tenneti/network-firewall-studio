@@ -737,9 +737,8 @@ export function MigrationStudioPage() {
                 {parseExpandedToDisplayLines(detailModal.data.rule_source || '', detailModal.data.rule_source_expanded || '').map((item, i) => {
                   const eType = item.type === 'group' ? 'GRP' : item.type === 'range' ? 'RNG' : item.type === 'subnet' ? 'NET' : 'IP';
                   const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
-                  const isChild = item.indent >= 1;
                   return (
-                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
+                    <div key={i} className={`flex items-center gap-2 ${item.indent > 0 ? 'border-l-2 border-gray-600 pl-2' : ''}`} style={{ marginLeft: `${item.indent * 16}px` }}>
                       <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
                       <span className="font-mono text-xs text-green-400">{item.text}</span>
                     </div>
@@ -756,9 +755,8 @@ export function MigrationStudioPage() {
                 {parseExpandedToDisplayLines(detailModal.data.rule_destination || '', detailModal.data.rule_destination_expanded || '').map((item, i) => {
                   const eType = item.type === 'group' ? 'GRP' : item.type === 'range' ? 'RNG' : item.type === 'subnet' ? 'NET' : 'IP';
                   const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
-                  const isChild = item.indent >= 1;
                   return (
-                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
+                    <div key={i} className={`flex items-center gap-2 ${item.indent > 0 ? 'border-l-2 border-gray-600 pl-2' : ''}`} style={{ marginLeft: `${item.indent * 16}px` }}>
                       <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
                       <span className="font-mono text-xs text-purple-400">{item.text}</span>
                     </div>
