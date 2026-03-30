@@ -23,6 +23,16 @@ const INITIAL_USERS: ADUser[] = [
   { id: 'u5', username: 'audit.user', display_name: 'Audit User', email: 'audit@corp.local', groups: ['FW-Auditors'], access_type: 'Auditor', last_login: null, is_active: false },
 ];
 
+/** Validate a CIDR string (e.g. 10.0.0.0/16). Returns true if valid or empty. */
+function isValidCIDR(cidr: string): boolean {
+  if (!cidr || !cidr.trim()) return true; // empty is allowed
+  const m = cidr.trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+  if (!m) return false;
+  const octets = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3]), parseInt(m[4])];
+  const prefix = parseInt(m[5]);
+  return octets.every(o => o >= 0 && o <= 255) && prefix >= 0 && prefix <= 32;
+}
+
 const ACCESS_COLORS: Record<string, string> = {
   Admin: 'bg-red-100 text-red-700 border-red-200',
   Approver: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -604,6 +614,7 @@ export default function SettingsPage() {
 
   // ── NH CRUD handlers ──
   const handleSaveNh = async (nhId: string) => {
+    if (!isValidCIDR(String(editNhForm.cidr || ''))) { showNotification('Invalid CIDR format (e.g. 10.0.0.0/16)', 'error'); return; }
     try {
       await api.updateNeighbourhood(nhId, editNhForm);
       setNeighbourhoods(prev => prev.map(n => String(n.nh_id || n.id) === nhId ? { ...n, ...editNhForm } : n));
@@ -612,6 +623,7 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to update neighbourhood', 'error'); }
   };
   const handleAddNh = async () => {
+    if (!isValidCIDR(String(newNhForm.cidr || ''))) { showNotification('Invalid CIDR format (e.g. 10.0.0.0/16)', 'error'); return; }
     try {
       const created = await api.createNeighbourhood(newNhForm);
       setNeighbourhoods(prev => [...prev, created]);
@@ -631,6 +643,7 @@ export default function SettingsPage() {
 
   // ── SZ CRUD handlers ──
   const handleSaveSz = async (code: string) => {
+    if (!isValidCIDR(String(editSzForm.cidr || ''))) { showNotification('Invalid CIDR format (e.g. 10.128.0.0/16)', 'error'); return; }
     try {
       await api.updateSecurityZone(code, editSzForm);
       setSecurityZones(prev => prev.map(s => String(s.code) === code ? { ...s, ...editSzForm } : s));
@@ -639,6 +652,7 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to update security zone', 'error'); }
   };
   const handleAddSz = async () => {
+    if (!isValidCIDR(String(newSzForm.cidr || ''))) { showNotification('Invalid CIDR format (e.g. 10.128.0.0/16)', 'error'); return; }
     try {
       const created = await api.createSecurityZone(newSzForm);
       setSecurityZones(prev => [...prev, created]);
@@ -658,6 +672,7 @@ export default function SettingsPage() {
 
   // ── DC CRUD handlers ──
   const handleSaveDc = async (dcId: string) => {
+    if (!isValidCIDR(String(editDcForm.cidr || ''))) { showNotification('Invalid CIDR format (e.g. 10.0.0.0/8)', 'error'); return; }
     try {
       await api.updateNGDCDatacenter(dcId, editDcForm);
       setNgdcDatacenters(prev => prev.map(d => String(d.dc_id || d.code) === dcId ? { ...d, ...editDcForm } : d));
@@ -666,6 +681,7 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to update data center', 'error'); }
   };
   const handleAddDc = async () => {
+    if (!isValidCIDR(String(newDcForm.cidr || ''))) { showNotification('Invalid CIDR format (e.g. 10.0.0.0/8)', 'error'); return; }
     try {
       const created = await api.createNGDCDatacenter(newDcForm);
       setNgdcDatacenters(prev => [...prev, created]);

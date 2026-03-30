@@ -1665,6 +1665,21 @@ async def get_real_groups_only():
     return real_groups
 
 
+@router.get("/groups/real/{name:path}")
+async def get_real_group_by_name(name: str):
+    """Return a single group by name, but only if it is user-created (Manage Groups).
+    Returns 404 if the group is a legacy/seed group or doesn't exist."""
+    from app.database import get_groups
+    groups = await get_groups()
+    for g in groups:
+        if g.get("name") == name:
+            if g.get("_user_created", False) or g.get("source") == "studio":
+                return g
+            # Group exists but is legacy — return 404 so Studio won't show it
+            raise HTTPException(status_code=404, detail=f"Group '{name}' is a legacy group (not from Manage Groups)")
+    raise HTTPException(status_code=404, detail=f"Group '{name}' not found")
+
+
 @router.get("/reviews/real")
 async def get_real_reviews_only():
     """Return only reviews for real/user-created rules."""

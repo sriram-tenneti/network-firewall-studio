@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
-import { compileEgressIngress, getGroup } from '@/lib/api';
+import { compileEgressIngress, getRealGroup } from '@/lib/api';
 import { LDFFlowVisualization } from '../design-studio/LDFFlowVisualization';
 import type { ReviewRequest, CompiledRule, FirewallGroup } from '@/types';
 
@@ -51,7 +51,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
     }
     if (groupNames.length === 0) return;
     setLoadingGroups(true);
-    Promise.allSettled(groupNames.map(n => getGroup(n)))
+    Promise.allSettled(groupNames.map(n => getRealGroup(n)))
       .then(results => {
         const map: Record<string, FirewallGroup> = {};
         results.forEach((r, i) => { if (r.status === 'fulfilled') map[groupNames[i]] = r.value; });
