@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import { getGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings } from '@/lib/api';
+import { getRealGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings } from '@/lib/api';
 import type { FirewallGroup, GroupMember } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 
@@ -75,7 +75,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const loadGroups = async (forAppId?: string, forEnv?: string) => {
     setLoading(true);
     try {
-      const data = await getGroups(forAppId || undefined);
+      const data = await getRealGroups(forAppId || undefined);
       // Client-side environment filter since backend groups may have environment field
       const filtered = forEnv ? data.filter(g => {
         const gEnv = (g as unknown as Record<string, string>).environment;

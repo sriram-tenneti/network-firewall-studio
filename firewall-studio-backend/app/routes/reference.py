@@ -1655,13 +1655,16 @@ async def get_real_rules_only():
 
 
 @router.get("/groups/real")
-async def get_real_groups_only():
+async def get_real_groups_only(app_id: str | None = None):
     """Return only groups that were created by the user (not seed data).
-    Groups with _user_created=True or created after seed are considered real."""
+    Groups with _user_created=True or created after seed are considered real.
+    Optionally filter by app_id (matches app_id or app_distributed_id)."""
     from app.database import get_groups
     groups = await get_groups()
     # Filter: only groups with _user_created flag or groups created via Studio
     real_groups = [g for g in groups if g.get("_user_created", False) or g.get("source") == "studio"]
+    if app_id:
+        real_groups = [g for g in real_groups if str(g.get("app_id", "")) == app_id or str(g.get("app_distributed_id", "")) == app_id]
     return real_groups
 
 

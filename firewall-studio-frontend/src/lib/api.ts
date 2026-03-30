@@ -828,8 +828,12 @@ export const setHideSeed = (hide: boolean) =>
 export const getRealRules = () =>
   fetchJSON<Record<string, unknown>[]>('/api/reference/rules/real');
 
-export const getRealGroups = () =>
-  fetchJSON<Record<string, unknown>[]>('/api/reference/groups/real');
+export const getRealGroups = (appId?: string) => {
+  const params = new URLSearchParams();
+  if (appId) params.set('app_id', appId);
+  const qs = params.toString();
+  return fetchJSON<FirewallGroup[]>(`/api/reference/groups/real${qs ? `?${qs}` : ''}`);
+};
 
 export const getRealGroup = (name: string) =>
   fetchJSON<FirewallGroup>(`/api/reference/groups/real/${name}`);
