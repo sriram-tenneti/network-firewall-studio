@@ -62,10 +62,20 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
 
   const updateAppOptions = (selectedAppId: string, mappings?: Record<string, unknown>[]) => {
     const source = mappings || allAppDCMappings;
-    const appMappings = source.filter(m => String(m.app_distributed_id || m.app_id || '') === selectedAppId || String(m.app_id || '') === selectedAppId);
-    const nhs = [...new Set(appMappings.map(m => String(m.nh || '')).filter(Boolean))];
-    const szs = [...new Set(appMappings.map(m => String(m.sz || '')).filter(Boolean))];
-    const dcs = [...new Set(appMappings.map(m => String(m.dc || '')).filter(Boolean))];
+    // Resolve: selectedAppId may be app_distributed_id (e.g. "AD-1001") or app_id (e.g. "CRM")
+    // We need to match against both fields in app_dc_mappings, plus resolve via applications list
+    const resolvedAppId = (() => {
+      const app = applications.find(a => (a.app_distributed_id || a.app_id) === selectedAppId);
+      return app ? app.app_id : selectedAppId;
+    })();
+    const appMappings = source.filter(m => {
+      const mDistId = String(m.app_distributed_id || '');
+      const mAppId = String(m.app_id || '');
+      return mDistId === selectedAppId || mAppId === selectedAppId || mAppId === resolvedAppId || mDistId === resolvedAppId;
+    });
+    const nhs = [...new Set(appMappings.map(m => String(m.nh || '')).filter(Boolean))].sort();
+    const szs = [...new Set(appMappings.map(m => String(m.sz || '')).filter(Boolean))].sort();
+    const dcs = [...new Set(appMappings.map(m => String(m.dc || '')).filter(Boolean))].sort();
     setAppNHOptions(nhs);
     setAppSZOptions(szs);
     setAppDCOptions(dcs);
@@ -73,7 +83,6 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     setNewGroup(prev => ({
       ...prev,
       app_id: selectedAppId,
-      dc: dcs.length === 1 ? dcs[0] : '',
       nh: nhs.length === 1 ? nhs[0] : '',
       sz: szs.length === 1 ? szs[0] : '',
     }));
@@ -98,6 +107,8 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     setSelectedGroup(null);
     loadGroups(newAppId, filterEnv);
     setNewGroup(prev => ({ ...prev, app_id: newAppId }));
+    // Also update NH/SZ options when filter app changes
+    if (newAppId) updateAppOptions(newAppId);
   };
 
   const handleEnvFilterChange = (newEnv: string) => {
@@ -275,24 +286,17 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
               <div className="p-2 bg-blue-100 border border-blue-200 rounded text-[10px] text-blue-800">
                 <strong>NGDC Naming Standard:</strong> Group name is auto-generated as <span className="font-mono">grp-APP-NH-SZ-Component</span>. All fields are mandatory. At least one member is required.
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-500">Application <span className="text-red-500">*</span></label>
-                  <select className={inputClass} value={newGroup.app_id} onChange={e => { setNewGroup({ ...newGroup, app_id: e.target.value, dc: '', nh: '', sz: '', subtype: '', customSuffix: '' }); updateAppOptions(e.target.value); setCreateValidationError(null); }}>
-                    <option value="">-- Select Application --</option>
-                    {applications.map(app => (
-                      <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500">DC {appDCOptions.length > 0 && `(${appDCOptions.length} mapped)`}</label>
-                  <select className={inputClass} value={newGroup.dc || ''} onChange={e => setNewGroup({ ...newGroup, dc: e.target.value })} disabled={!newGroup.app_id}>
-                    <option value="">-- Select DC --</option>
-                    {appDCOptions.map(dc => <option key={dc} value={dc}>{dc}</option>)}
-                  </select>
-                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
-                </div>
+              <div>
+                <label className="text-xs text-gray-500">Application <span className="text-red-500">*</span></label>
+                <select className={inputClass} value={newGroup.app_id} onChange={e => { setNewGroup({ ...newGroup, app_id: e.target.value, dc: '', nh: '', sz: '', subtype: '', customSuffix: '' }); updateAppOptions(e.target.value); setCreateValidationError(null); }}>
+                  <option value="">-- Select Application --</option>
+                  {applications.map(app => (
+                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
+                  ))}
+                </select>
+                {newGroup.app_id && appDCOptions.length > 0 && (
+                  <p className="text-[9px] text-gray-500 mt-0.5">DCs: {appDCOptions.join(', ')} (group applies to all mapped DCs)</p>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>

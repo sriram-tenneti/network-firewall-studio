@@ -393,146 +393,163 @@ SEED_APPLICATIONS = [
 # ============================================================
 
 SEED_APP_DC_MAPPINGS = [
-    # --- CRM: NH02, across ALPHA+BETA, WEB in PAA(NH14), APP in CCS, DB in CDE ---
-    {"app_id": "CRM", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.1.10/32", "status": "Active", "notes": "CRM internet-facing web tier"},
-    {"app_id": "CRM", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "10.1.1.0/28", "status": "Active", "notes": "CRM application servers"},
-    {"app_id": "CRM", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "10.1.1.128/28", "status": "Active", "notes": "CRM database – PCI CDE"},
-    {"app_id": "CRM", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "10.1.1.30/32", "status": "Active", "notes": "CRM batch processing"},
-    {"app_id": "CRM", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "10.1.1.40/30", "status": "Active", "notes": "CRM API gateway"},
-    {"app_id": "CRM", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS",
+    # ================================================================
+    # NGDC App-DC Mappings — aligned with _build_ip_mappings() zones
+    # NH/SZ must match SEED_GROUPS naming: grp-{APP}-{NH}-{SZ}-{COMP}
+    # ================================================================
+
+    # --- CRM (AD-1001): Source NH02/STD, Destination NH02/GEN ---
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "STD",
+     "cidr": "10.50.1.10/31", "status": "Active", "notes": "CRM web servers"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "STD",
+     "cidr": "10.50.1.20/29", "status": "Active", "notes": "CRM application servers"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "STD",
+     "cidr": "10.50.1.40/32", "status": "Active", "notes": "CRM batch processing"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "GEN",
+     "cidr": "10.50.1.30/31", "status": "Active", "notes": "CRM database"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "GEN",
+     "cidr": "10.50.1.42/31", "status": "Active", "notes": "CRM message queue"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "STD",
      "cidr": "172.16.1.20/28", "status": "Active", "notes": "CRM Beta DR app tier"},
-    {"app_id": "CRM", "component": "DB", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc": "BETA_NGDC", "nh": "NH02", "sz": "GEN",
      "cidr": "172.16.1.128/28", "status": "Active", "notes": "CRM Beta DR database"},
 
-    # --- HRM: NH01, ALPHA only, all in GEN ---
-    {"app_id": "HRM", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
+    # --- HRM (AD-1002): Source NH01/GEN, Destination NH01/STD ---
+    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
      "cidr": "10.0.2.130/31", "status": "Active", "notes": "HRM web servers"},
-    {"app_id": "HRM", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
+    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
      "cidr": "10.0.2.140/30", "status": "Active", "notes": "HRM application servers"},
-    {"app_id": "HRM", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
-     "cidr": "10.0.2.150/31", "status": "Active", "notes": "HRM database"},
-    {"app_id": "HRM", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
+    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "GEN",
      "cidr": "10.0.2.160/32", "status": "Active", "notes": "HRM batch"},
+    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "STD",
+     "cidr": "10.0.2.150/31", "status": "Active", "notes": "HRM database"},
+    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "STD",
+     "cidr": "10.0.2.162/31", "status": "Active", "notes": "HRM message queue"},
 
-    # --- TRD: NH06, ALPHA+BETA+GAMMA, WEB in PAA, APP/DB/MQ in CDE ---
-    {"app_id": "TRD", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.1.65/30", "status": "Active", "notes": "TRD internet-facing trading UI"},
-    {"app_id": "TRD", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "10.5.1.64/27", "status": "Active", "notes": "TRD application servers"},
-    {"app_id": "TRD", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "10.5.1.80/30", "status": "Active", "notes": "TRD database cluster"},
-    {"app_id": "TRD", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "10.5.1.85/31", "status": "Active", "notes": "TRD message queue brokers"},
-    {"app_id": "TRD", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CCS",
-     "cidr": "10.5.1.0/28", "status": "Active", "notes": "TRD API layer in CCS"},
-    {"app_id": "TRD", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "10.5.1.95/32", "status": "Active", "notes": "TRD batch processing"},
-    {"app_id": "TRD", "component": "APP", "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE",
+    # --- TRD (AD-1003): Source NH06/CDE, Destination NH07/CPA ---
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "172.16.20.10/31", "status": "Active", "notes": "TRD web servers"},
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "172.16.20.20/29", "status": "Active", "notes": "TRD application servers"},
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
+     "cidr": "172.16.20.50/32", "status": "Active", "notes": "TRD batch processing"},
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+     "cidr": "10.6.1.30/31", "status": "Active", "notes": "TRD database cluster"},
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+     "cidr": "10.6.1.40/31", "status": "Active", "notes": "TRD message queue brokers"},
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "APP", "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE",
      "cidr": "172.16.6.64/27", "status": "Active", "notes": "TRD Beta DR app tier"},
-    {"app_id": "TRD", "component": "DB", "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE",
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "DB", "dc": "BETA_NGDC", "nh": "NH07", "sz": "CPA",
      "cidr": "172.16.6.80/30", "status": "Active", "notes": "TRD Beta DR database"},
-    {"app_id": "TRD", "component": "APP", "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CDE",
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "APP", "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CDE",
      "cidr": "172.16.20.64/27", "status": "Active", "notes": "TRD Gamma DR app tier"},
 
-    # --- PAY: NH07, ALPHA only, APP/DB in CPA, API in CCS ---
-    {"app_id": "PAY", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "10.6.1.128/27", "status": "Active", "notes": "PAY transaction processors"},
-    {"app_id": "PAY", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
-     "cidr": "10.6.1.0/28", "status": "Active", "notes": "PAY database – PCI CDE"},
-    {"app_id": "PAY", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "10.6.1.160/30", "status": "Active", "notes": "PAY message queue"},
-    {"app_id": "PAY", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "10.6.1.164/30", "status": "Active", "notes": "PAY API gateway"},
+    # --- PAY (AD-1004): Source NH08/CCS, Destination NH07/CDE ---
+    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
+     "cidr": "10.50.8.10/31", "status": "Active", "notes": "PAY web servers"},
+    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
+     "cidr": "10.50.8.20/29", "status": "Active", "notes": "PAY application servers"},
+    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
+     "cidr": "10.50.8.50/32", "status": "Active", "notes": "PAY batch processing"},
+    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
+     "cidr": "10.50.7.30/31", "status": "Active", "notes": "PAY database – PCI CDE"},
+    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
+     "cidr": "10.50.7.40/31", "status": "Active", "notes": "PAY message queue"},
 
-    # --- INS: NH04, ALPHA+BETA, all in GEN ---
-    {"app_id": "INS", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "GEN",
-     "cidr": "10.3.1.128/28", "status": "Active", "notes": "INS web portal"},
-    {"app_id": "INS", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "GEN",
-     "cidr": "10.3.1.144/28", "status": "Active", "notes": "INS application servers"},
-    {"app_id": "INS", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "CCS",
-     "cidr": "10.3.1.0/28", "status": "Active", "notes": "INS database in CCS"},
-    {"app_id": "INS", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "GEN",
+    # --- INS (AD-1005): Source NH04/STD, Destination NH14/PAA ---
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
+     "cidr": "10.3.1.130/31", "status": "Active", "notes": "INS web portal"},
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
+     "cidr": "10.3.1.140/29", "status": "Active", "notes": "INS application servers"},
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
      "cidr": "10.3.1.160/32", "status": "Active", "notes": "INS batch processing"},
-    {"app_id": "INS", "component": "APP", "dc": "BETA_NGDC", "nh": "NH04", "sz": "GEN",
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.4.30/31", "status": "Active", "notes": "INS database"},
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.4.40/31", "status": "Active", "notes": "INS message queue"},
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "APP", "dc": "BETA_NGDC", "nh": "NH04", "sz": "STD",
      "cidr": "172.16.4.144/28", "status": "Active", "notes": "INS Beta DR"},
 
-    # --- KYC: NH05, ALPHA only, WEB/APP in GEN, DB in CCS ---
-    {"app_id": "KYC", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "GEN",
-     "cidr": "10.4.1.128/28", "status": "Active", "notes": "KYC web portal"},
-    {"app_id": "KYC", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "GEN",
-     "cidr": "10.4.1.144/28", "status": "Active", "notes": "KYC application servers"},
-    {"app_id": "KYC", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
-     "cidr": "10.4.1.0/28", "status": "Active", "notes": "KYC database in CCS"},
-    {"app_id": "KYC", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "GEN",
-     "cidr": "10.4.1.160/30", "status": "Active", "notes": "KYC API layer"},
+    # --- KYC (AD-1006): Source NH05/CCS, Destination NH05/CDE ---
+    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
+     "cidr": "10.4.1.130/31", "status": "Active", "notes": "KYC web portal"},
+    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
+     "cidr": "10.4.1.140/29", "status": "Active", "notes": "KYC application servers"},
+    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
+     "cidr": "10.4.1.160/32", "status": "Active", "notes": "KYC batch processing"},
+    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CDE",
+     "cidr": "10.4.2.10/31", "status": "Active", "notes": "KYC database"},
+    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CDE",
+     "cidr": "10.4.2.20/31", "status": "Active", "notes": "KYC message queue"},
 
-    # --- FRD: NH02, ALPHA+BETA, APP/DB in CDE, API in CCS ---
-    {"app_id": "FRD", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "10.1.1.160/28", "status": "Active", "notes": "FRD fraud engine"},
-    {"app_id": "FRD", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "10.1.2.0/28", "status": "Active", "notes": "FRD database – PCI CDE"},
-    {"app_id": "FRD", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "10.1.1.176/30", "status": "Active", "notes": "FRD message queue"},
-    {"app_id": "FRD", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "10.1.1.0/30", "status": "Active", "notes": "FRD API in CCS"},
-    {"app_id": "FRD", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
+    # --- FRD (AD-1007): Source NH02/CDE, Destination NH02/Swift ---
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.110/31", "status": "Active", "notes": "FRD web servers"},
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.50/29", "status": "Active", "notes": "FRD fraud engine"},
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.60/32", "status": "Active", "notes": "FRD batch processing"},
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "Swift",
+     "cidr": "10.1.2.20/31", "status": "Active", "notes": "FRD database"},
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "Swift",
+     "cidr": "10.1.1.55/31", "status": "Active", "notes": "FRD Kafka message queue"},
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
      "cidr": "172.16.1.160/28", "status": "Active", "notes": "FRD Beta DR"},
 
-    # --- LND: NH09, ALPHA only, WEB/APP in GEN, DB in CCS ---
-    {"app_id": "LND", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
-     "cidr": "10.8.1.128/28", "status": "Active", "notes": "LND web portal"},
-    {"app_id": "LND", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
-     "cidr": "10.8.1.144/28", "status": "Active", "notes": "LND application servers"},
-    {"app_id": "LND", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CCS",
-     "cidr": "10.8.1.0/28", "status": "Active", "notes": "LND database in CCS"},
-    {"app_id": "LND", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
+    # --- LND (AD-1008): Source NH09/GEN, Destination NH09/CPA ---
+    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
+     "cidr": "10.8.1.130/31", "status": "Active", "notes": "LND web portal"},
+    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
+     "cidr": "10.8.1.140/29", "status": "Active", "notes": "LND application servers"},
+    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
      "cidr": "10.8.1.160/32", "status": "Active", "notes": "LND batch processing"},
+    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CPA",
+     "cidr": "10.8.2.30/31", "status": "Active", "notes": "LND database"},
+    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CPA",
+     "cidr": "10.8.2.40/31", "status": "Active", "notes": "LND message queue"},
 
-    # --- WLT: NH10, ALPHA only, WEB in PAA, APP in GEN, DB in CDE ---
-    {"app_id": "WLT", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.1.100/30", "status": "Active", "notes": "WLT internet-facing portal"},
-    {"app_id": "WLT", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "GEN",
-     "cidr": "10.9.1.128/28", "status": "Active", "notes": "WLT application servers"},
-    {"app_id": "WLT", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "CDE",
-     "cidr": "10.9.1.0/28", "status": "Active", "notes": "WLT database – PCI CDE"},
-    {"app_id": "WLT", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "GEN",
-     "cidr": "10.9.1.144/30", "status": "Active", "notes": "WLT API layer"},
+    # --- WLT (AD-1009): WEB NH14/PAA, APP/BAT NH10/PAA, DB/MQ NH10/3PY ---
+    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.1.100/31", "status": "Active", "notes": "WLT internet-facing portal"},
+    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "PAA",
+     "cidr": "10.9.1.20/29", "status": "Active", "notes": "WLT application servers"},
+    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "PAA",
+     "cidr": "10.9.1.50/32", "status": "Active", "notes": "WLT batch processing"},
+    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "3PY",
+     "cidr": "10.9.1.30/31", "status": "Active", "notes": "WLT database"},
+    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "3PY",
+     "cidr": "10.9.1.40/31", "status": "Active", "notes": "WLT message queue"},
 
-    # --- CBK: NH08, ALPHA only, APP/DB in CCS, MQ in CDE ---
-    {"app_id": "CBK", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
-     "cidr": "10.7.1.0/28", "status": "Active", "notes": "CBK core banking engine"},
-    {"app_id": "CBK", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE",
-     "cidr": "10.7.1.128/28", "status": "Active", "notes": "CBK database – PCI CDE"},
-    {"app_id": "CBK", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
-     "cidr": "10.7.1.16/30", "status": "Active", "notes": "CBK message queue"},
-    {"app_id": "CBK", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
-     "cidr": "10.7.1.20/30", "status": "Active", "notes": "CBK API layer"},
-    {"app_id": "CBK", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
-     "cidr": "10.7.1.24/32", "status": "Active", "notes": "CBK batch processing"},
+    # --- CBK (AD-1010): Source NH08/CPA, Destination NH08/CDE ---
+    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CPA",
+     "cidr": "10.7.1.10/31", "status": "Active", "notes": "CBK web servers"},
+    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CPA",
+     "cidr": "10.7.1.20/29", "status": "Active", "notes": "CBK core banking engine"},
+    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CPA",
+     "cidr": "10.7.1.50/32", "status": "Active", "notes": "CBK batch processing"},
+    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE",
+     "cidr": "10.7.2.30/31", "status": "Active", "notes": "CBK database – PCI CDE"},
+    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE",
+     "cidr": "10.7.2.40/31", "status": "Active", "notes": "CBK message queue"},
 
-    # --- EPT: NH01, ALPHA+BETA, WEB in PAA, APP/API in CCS ---
-    {"app_id": "EPT", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+    # --- EPT (AD-1011): WEB NH14/PAA, APP/API NH01/CCS ---
+    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
      "cidr": "10.70.1.20/30", "status": "Active", "notes": "EPT internet-facing portal"},
-    {"app_id": "EPT", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
+    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
      "cidr": "10.0.1.0/28", "status": "Active", "notes": "EPT application servers"},
-    {"app_id": "EPT", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
+    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
      "cidr": "10.0.1.16/30", "status": "Active", "notes": "EPT API gateway"},
-    {"app_id": "EPT", "component": "APP", "dc": "BETA_NGDC", "nh": "NH01", "sz": "CCS",
+    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "APP", "dc": "BETA_NGDC", "nh": "NH01", "sz": "CCS",
      "cidr": "172.16.50.0/28", "status": "Active", "notes": "EPT Beta DR"},
 
-    # --- MBK: NH07, ALPHA only, WEB in PAA, APP in CPA, DB in CDE ---
-    {"app_id": "MBK", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+    # --- MBK (AD-1012): WEB NH14/PAA, APP/API NH07/CPA, DB NH07/CDE ---
+    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
      "cidr": "10.70.1.30/30", "status": "Active", "notes": "MBK mobile banking web"},
-    {"app_id": "MBK", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
      "cidr": "10.6.1.168/28", "status": "Active", "notes": "MBK application servers"},
-    {"app_id": "MBK", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
+    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
      "cidr": "10.6.1.16/28", "status": "Active", "notes": "MBK database – PCI CDE"},
-    {"app_id": "MBK", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
+    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
      "cidr": "10.6.1.184/30", "status": "Active", "notes": "MBK API layer"},
 ]
 
@@ -1001,34 +1018,39 @@ SEED_ORG_CONFIG = {
 # ============================================================
 
 SEED_GROUPS = [
-    # --- CRM — Customer Relationship (NH02/CDE) ---
-    {"name": "grp-CRM-NH02-CDE-WEB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "WEB",
+    # ================================================================
+    # NGDC Groups — aligned with _build_ip_mappings() NGDC IPs exactly
+    # Naming: grp-{APP}-{NH}-{SZ}-{COMPONENT}
+    # ================================================================
+
+    # --- CRM: Source NH02/STD, Destination NH02/GEN ---
+    {"name": "grp-CRM-NH02-STD-WEB", "app_id": "CRM", "nh": "NH02", "sz": "STD", "subtype": "WEB",
      "description": "CRM Web Servers", "members": [
-        {"type": "ip", "value": "svr-10.1.1.10", "description": "CRM Web 1"},
-        {"type": "ip", "value": "svr-10.1.1.11", "description": "CRM Web 2"},
+        {"type": "ip", "value": "svr-10.50.1.10", "description": "CRM Web 1"},
+        {"type": "ip", "value": "svr-10.50.1.11", "description": "CRM Web 2"},
      ]},
-    {"name": "grp-CRM-NH02-CDE-APP", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-CRM-NH02-STD-APP", "app_id": "CRM", "nh": "NH02", "sz": "STD", "subtype": "APP",
      "description": "CRM Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.1.1.20", "description": "CRM App 1"},
-        {"type": "ip", "value": "svr-10.1.1.21", "description": "CRM App 2"},
-        {"type": "ip", "value": "svr-10.1.1.22", "description": "CRM App 3"},
+        {"type": "ip", "value": "svr-10.50.1.20", "description": "CRM App 1"},
+        {"type": "ip", "value": "svr-10.50.1.21", "description": "CRM App 2"},
+        {"type": "ip", "value": "svr-10.50.1.22", "description": "CRM App 3"},
      ]},
-    {"name": "grp-CRM-NH02-CDE-DB", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "DB",
-     "description": "CRM Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.1.1.30", "description": "CRM DB Primary"},
-        {"type": "ip", "value": "svr-10.1.1.31", "description": "CRM DB Standby"},
-     ]},
-    {"name": "grp-CRM-NH02-CDE-BAT", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "BAT",
+    {"name": "grp-CRM-NH02-STD-BAT", "app_id": "CRM", "nh": "NH02", "sz": "STD", "subtype": "BAT",
      "description": "CRM Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.1.1.40", "description": "CRM Batch 1"},
+        {"type": "ip", "value": "svr-10.50.1.40", "description": "CRM Batch 1"},
      ]},
-    {"name": "grp-CRM-NH02-CDE-API", "app_id": "CRM", "nh": "NH02", "sz": "CDE", "subtype": "API",
-     "description": "CRM API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.1.1.50", "description": "CRM API 1"},
-        {"type": "ip", "value": "svr-10.1.1.51", "description": "CRM API 2"},
+    {"name": "grp-CRM-NH02-GEN-DB", "app_id": "CRM", "nh": "NH02", "sz": "GEN", "subtype": "DB",
+     "description": "CRM Database Cluster", "members": [
+        {"type": "ip", "value": "svr-10.50.1.30", "description": "CRM DB Primary"},
+        {"type": "ip", "value": "svr-10.50.1.31", "description": "CRM DB Standby"},
+     ]},
+    {"name": "grp-CRM-NH02-GEN-MQ", "app_id": "CRM", "nh": "NH02", "sz": "GEN", "subtype": "MQ",
+     "description": "CRM Message Queue", "members": [
+        {"type": "ip", "value": "svr-10.50.1.42", "description": "CRM MQ 1"},
+        {"type": "ip", "value": "svr-10.50.1.43", "description": "CRM MQ 2"},
      ]},
 
-    # --- HRM — HR Management (NH01/GEN) ---
+    # --- HRM: Source NH01/GEN, Destination NH01/STD ---
     {"name": "grp-HRM-NH01-GEN-WEB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
      "description": "HRM Web Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.130", "description": "HRM Web 1"},
@@ -1038,226 +1060,284 @@ SEED_GROUPS = [
      "description": "HRM Application Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.140", "description": "HRM App 1"},
         {"type": "ip", "value": "svr-10.0.2.141", "description": "HRM App 2"},
+        {"type": "ip", "value": "svr-10.0.2.142", "description": "HRM App 3"},
      ]},
-    {"name": "grp-HRM-NH01-GEN-DB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "DB",
+    {"name": "grp-HRM-NH01-GEN-BAT", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
+     "description": "HRM Batch Processing", "members": [
+        {"type": "ip", "value": "svr-10.0.2.160", "description": "HRM Batch 1"},
+     ]},
+    {"name": "grp-HRM-NH01-STD-DB", "app_id": "HRM", "nh": "NH01", "sz": "STD", "subtype": "DB",
      "description": "HRM Database", "members": [
         {"type": "ip", "value": "svr-10.0.2.150", "description": "HRM DB Primary"},
         {"type": "ip", "value": "svr-10.0.2.151", "description": "HRM DB Replica"},
      ]},
-    {"name": "grp-HRM-NH01-GEN-BAT", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
-     "description": "HRM Batch Servers", "members": [
-        {"type": "ip", "value": "svr-10.0.2.160", "description": "HRM Batch 1"},
+    {"name": "grp-HRM-NH01-STD-MQ", "app_id": "HRM", "nh": "NH01", "sz": "STD", "subtype": "MQ",
+     "description": "HRM Message Queue", "members": [
+        {"type": "ip", "value": "svr-10.0.2.162", "description": "HRM MQ 1"},
+        {"type": "ip", "value": "svr-10.0.2.163", "description": "HRM MQ 2"},
      ]},
 
-    # --- TRD — Trading Platform (NH06/CDE) ---
+    # --- TRD: Source NH06/CDE, Destination NH07/CPA ---
     {"name": "grp-TRD-NH06-CDE-WEB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
      "description": "TRD Web Frontend", "members": [
-        {"type": "ip", "value": "svr-10.5.1.70", "description": "TRD Web 1"},
-        {"type": "ip", "value": "svr-10.5.1.71", "description": "TRD Web 2"},
+        {"type": "ip", "value": "svr-172.16.20.10", "description": "TRD Web 1"},
+        {"type": "ip", "value": "svr-172.16.20.11", "description": "TRD Web 2"},
      ]},
     {"name": "grp-TRD-NH06-CDE-APP", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
      "description": "TRD Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.5.1.80", "description": "TRD App 1"},
-        {"type": "ip", "value": "svr-10.5.1.81", "description": "TRD App 2"},
-        {"type": "ip", "value": "svr-10.5.1.82", "description": "TRD App 3"},
+        {"type": "ip", "value": "svr-172.16.20.20", "description": "TRD App 1"},
+        {"type": "ip", "value": "svr-172.16.20.21", "description": "TRD App 2"},
+        {"type": "ip", "value": "svr-172.16.20.22", "description": "TRD App 3"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-DB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-TRD-NH06-CDE-BAT", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "BAT",
+     "description": "TRD Batch Processing", "members": [
+        {"type": "ip", "value": "svr-172.16.20.50", "description": "TRD Batch 1"},
+     ]},
+    {"name": "grp-TRD-NH07-CPA-DB", "app_id": "TRD", "nh": "NH07", "sz": "CPA", "subtype": "DB",
      "description": "TRD Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.5.1.90", "description": "TRD DB Primary"},
-        {"type": "ip", "value": "svr-10.5.1.91", "description": "TRD DB Standby"},
+        {"type": "ip", "value": "svr-10.6.1.30", "description": "TRD DB Primary"},
+        {"type": "ip", "value": "svr-10.6.1.31", "description": "TRD DB Standby"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-MQ", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-TRD-NH07-CPA-MQ", "app_id": "TRD", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
      "description": "TRD Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.5.1.100", "description": "TRD MQ Broker 1"},
-        {"type": "ip", "value": "svr-10.5.1.101", "description": "TRD MQ Broker 2"},
-     ]},
-    {"name": "grp-TRD-NH06-CDE-API", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "API",
-     "description": "TRD API Layer", "members": [
-        {"type": "ip", "value": "svr-10.5.1.110", "description": "TRD API 1"},
+        {"type": "ip", "value": "svr-10.6.1.40", "description": "TRD MQ Broker 1"},
+        {"type": "ip", "value": "svr-10.6.1.41", "description": "TRD MQ Broker 2"},
      ]},
 
-    # --- PAY — Payment Processing (NH07/CPA) ---
-    {"name": "grp-PAY-NH07-CPA-APP", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "APP",
+    # --- PAY: Source NH08/CCS, Destination NH07/CDE ---
+    {"name": "grp-PAY-NH08-CCS-WEB", "app_id": "PAY", "nh": "NH08", "sz": "CCS", "subtype": "WEB",
+     "description": "PAY Web Portal", "members": [
+        {"type": "ip", "value": "svr-10.50.8.10", "description": "PAY Web 1"},
+        {"type": "ip", "value": "svr-10.50.8.11", "description": "PAY Web 2"},
+     ]},
+    {"name": "grp-PAY-NH08-CCS-APP", "app_id": "PAY", "nh": "NH08", "sz": "CCS", "subtype": "APP",
      "description": "PAY Transaction Processors", "members": [
-        {"type": "ip", "value": "svr-10.6.1.130", "description": "PAY App 1"},
-        {"type": "ip", "value": "svr-10.6.1.131", "description": "PAY App 2"},
-        {"type": "range", "value": "rng-10.6.1.132-140", "description": "PAY App Pool"},
+        {"type": "ip", "value": "svr-10.50.8.20", "description": "PAY App 1"},
+        {"type": "ip", "value": "svr-10.50.8.21", "description": "PAY App 2"},
+        {"type": "ip", "value": "svr-10.50.8.22", "description": "PAY App 3"},
      ]},
-    {"name": "grp-PAY-NH07-CPA-DB", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "DB",
-     "description": "PAY Database (PCI)", "members": [
-        {"type": "ip", "value": "svr-10.6.1.10", "description": "PAY DB Primary"},
-        {"type": "ip", "value": "svr-10.6.1.11", "description": "PAY DB Standby"},
+    {"name": "grp-PAY-NH08-CCS-BAT", "app_id": "PAY", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
+     "description": "PAY Batch Processing", "members": [
+        {"type": "ip", "value": "svr-10.50.8.50", "description": "PAY Batch 1"},
      ]},
-    {"name": "grp-PAY-NH07-CPA-MQ", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
+    {"name": "grp-PAY-NH07-CDE-DB", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "DB",
+     "description": "PAY Database (PCI CDE)", "members": [
+        {"type": "ip", "value": "svr-10.50.7.30", "description": "PAY DB Primary"},
+        {"type": "ip", "value": "svr-10.50.7.31", "description": "PAY DB Standby"},
+     ]},
+    {"name": "grp-PAY-NH07-CDE-MQ", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "MQ",
      "description": "PAY Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.6.1.160", "description": "PAY MQ 1"},
-     ]},
-    {"name": "grp-PAY-NH07-CPA-API", "app_id": "PAY", "nh": "NH07", "sz": "CPA", "subtype": "API",
-     "description": "PAY API Endpoint", "members": [
-        {"type": "ip", "value": "svr-10.6.1.170", "description": "PAY API 1"},
-        {"type": "ip", "value": "svr-10.6.1.171", "description": "PAY API 2"},
+        {"type": "ip", "value": "svr-10.50.7.40", "description": "PAY MQ 1"},
+        {"type": "ip", "value": "svr-10.50.7.41", "description": "PAY MQ 2"},
      ]},
 
-    # --- INS — Insurance Platform (NH04/GEN) ---
-    {"name": "grp-INS-NH04-GEN-WEB", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "WEB",
+    # --- INS: Source NH04/STD, Destination NH14/PAA ---
+    {"name": "grp-INS-NH04-STD-WEB", "app_id": "INS", "nh": "NH04", "sz": "STD", "subtype": "WEB",
      "description": "INS Web Portal", "members": [
         {"type": "ip", "value": "svr-10.3.1.130", "description": "INS Web 1"},
         {"type": "ip", "value": "svr-10.3.1.131", "description": "INS Web 2"},
      ]},
-    {"name": "grp-INS-NH04-GEN-APP", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-INS-NH04-STD-APP", "app_id": "INS", "nh": "NH04", "sz": "STD", "subtype": "APP",
      "description": "INS Application Servers", "members": [
         {"type": "ip", "value": "svr-10.3.1.140", "description": "INS App 1"},
         {"type": "ip", "value": "svr-10.3.1.141", "description": "INS App 2"},
+        {"type": "ip", "value": "svr-10.3.1.142", "description": "INS App 3"},
      ]},
-    {"name": "grp-INS-NH04-GEN-DB", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "DB",
+    {"name": "grp-INS-NH04-STD-BAT", "app_id": "INS", "nh": "NH04", "sz": "STD", "subtype": "BAT",
+     "description": "INS Batch Processing", "members": [
+        {"type": "ip", "value": "svr-10.3.1.160", "description": "INS Batch 1"},
+     ]},
+    {"name": "grp-INS-NH14-PAA-DB", "app_id": "INS", "nh": "NH14", "sz": "PAA", "subtype": "DB",
      "description": "INS Database", "members": [
-        {"type": "ip", "value": "svr-10.3.1.10", "description": "INS DB Primary"},
+        {"type": "ip", "value": "svr-10.70.4.30", "description": "INS DB Primary"},
+        {"type": "ip", "value": "svr-10.70.4.31", "description": "INS DB Standby"},
      ]},
-    {"name": "grp-INS-NH04-GEN-API", "app_id": "INS", "nh": "NH04", "sz": "GEN", "subtype": "API",
-     "description": "INS API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.3.1.150", "description": "INS API 1"},
+    {"name": "grp-INS-NH14-PAA-MQ", "app_id": "INS", "nh": "NH14", "sz": "PAA", "subtype": "MQ",
+     "description": "INS Message Queue", "members": [
+        {"type": "ip", "value": "svr-10.70.4.40", "description": "INS MQ 1"},
+        {"type": "ip", "value": "svr-10.70.4.41", "description": "INS MQ 2"},
      ]},
 
-    # --- KYC — KYC Compliance (NH05/GEN) ---
-    {"name": "grp-KYC-NH05-GEN-WEB", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "WEB",
+    # --- KYC: Source NH05/CCS, Destination NH05/CDE ---
+    {"name": "grp-KYC-NH05-CCS-WEB", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "WEB",
      "description": "KYC Web Interface", "members": [
         {"type": "ip", "value": "svr-10.4.1.130", "description": "KYC Web 1"},
+        {"type": "ip", "value": "svr-10.4.1.131", "description": "KYC Web 2"},
      ]},
-    {"name": "grp-KYC-NH05-GEN-APP", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-KYC-NH05-CCS-APP", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "APP",
      "description": "KYC Application", "members": [
         {"type": "ip", "value": "svr-10.4.1.140", "description": "KYC App 1"},
         {"type": "ip", "value": "svr-10.4.1.141", "description": "KYC App 2"},
+        {"type": "ip", "value": "svr-10.4.1.142", "description": "KYC App 3"},
      ]},
-    {"name": "grp-KYC-NH05-GEN-DB", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "DB",
+    {"name": "grp-KYC-NH05-CCS-BAT", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "BAT",
+     "description": "KYC Batch Processing", "members": [
+        {"type": "ip", "value": "svr-10.4.1.160", "description": "KYC Batch 1"},
+     ]},
+    {"name": "grp-KYC-NH05-CDE-DB", "app_id": "KYC", "nh": "NH05", "sz": "CDE", "subtype": "DB",
      "description": "KYC Database", "members": [
-        {"type": "ip", "value": "svr-10.4.1.10", "description": "KYC DB Primary"},
-        {"type": "ip", "value": "svr-10.4.1.11", "description": "KYC DB Replica"},
+        {"type": "ip", "value": "svr-10.4.2.10", "description": "KYC DB Primary"},
+        {"type": "ip", "value": "svr-10.4.2.11", "description": "KYC DB Replica"},
      ]},
-    {"name": "grp-KYC-NH05-GEN-API", "app_id": "KYC", "nh": "NH05", "sz": "GEN", "subtype": "API",
-     "description": "KYC API Layer", "members": [
-        {"type": "ip", "value": "svr-10.4.1.160", "description": "KYC API 1"},
+    {"name": "grp-KYC-NH05-CDE-MQ", "app_id": "KYC", "nh": "NH05", "sz": "CDE", "subtype": "MQ",
+     "description": "KYC Message Queue", "members": [
+        {"type": "ip", "value": "svr-10.4.2.20", "description": "KYC MQ 1"},
+        {"type": "ip", "value": "svr-10.4.2.21", "description": "KYC MQ 2"},
      ]},
 
-    # --- FRD — Fraud Detection (NH02/CDE) ---
+    # --- FRD: Source NH02/CDE, Destination NH02/Swift ---
+    {"name": "grp-FRD-NH02-CDE-WEB", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "WEB",
+     "description": "FRD Web Interface", "members": [
+        {"type": "ip", "value": "svr-10.1.1.110", "description": "FRD Web 1"},
+        {"type": "ip", "value": "svr-10.1.1.111", "description": "FRD Web 2"},
+     ]},
     {"name": "grp-FRD-NH02-CDE-APP", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
      "description": "FRD Detection Engine", "members": [
-        {"type": "ip", "value": "svr-10.1.2.10", "description": "FRD Engine 1"},
-        {"type": "ip", "value": "svr-10.1.2.11", "description": "FRD Engine 2"},
+        {"type": "ip", "value": "svr-10.1.1.50", "description": "FRD Engine 1"},
+        {"type": "ip", "value": "svr-10.1.1.51", "description": "FRD Engine 2"},
+        {"type": "ip", "value": "svr-10.1.1.52", "description": "FRD Engine 3"},
      ]},
-    {"name": "grp-FRD-NH02-CDE-DB", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-FRD-NH02-CDE-BAT", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "BAT",
+     "description": "FRD Batch Processing", "members": [
+        {"type": "ip", "value": "svr-10.1.1.60", "description": "FRD Batch 1"},
+     ]},
+    {"name": "grp-FRD-NH02-Swift-DB", "app_id": "FRD", "nh": "NH02", "sz": "Swift", "subtype": "DB",
      "description": "FRD Database (PCI CDE)", "members": [
         {"type": "ip", "value": "svr-10.1.2.20", "description": "FRD DB Primary"},
         {"type": "ip", "value": "svr-10.1.2.21", "description": "FRD DB Standby"},
      ]},
-    {"name": "grp-FRD-NH02-CDE-MQ", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-FRD-NH02-Swift-MQ", "app_id": "FRD", "nh": "NH02", "sz": "Swift", "subtype": "MQ",
      "description": "FRD Event Stream", "members": [
-        {"type": "ip", "value": "svr-10.1.2.30", "description": "FRD Kafka 1"},
-        {"type": "ip", "value": "svr-10.1.2.31", "description": "FRD Kafka 2"},
-     ]},
-    {"name": "grp-FRD-NH02-CDE-API", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "API",
-     "description": "FRD API (CDE zone)", "members": [
-        {"type": "ip", "value": "svr-10.1.2.40", "description": "FRD API 1"},
+        {"type": "ip", "value": "svr-10.1.1.55", "description": "FRD Kafka 1"},
+        {"type": "ip", "value": "svr-10.1.1.56", "description": "FRD Kafka 2"},
      ]},
 
-    # --- LND — Lending Platform (NH09/CCS) ---
-    {"name": "grp-LND-NH09-CCS-WEB", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "WEB",
+    # --- LND: Source NH09/GEN, Destination NH09/CPA ---
+    {"name": "grp-LND-NH09-GEN-WEB", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "WEB",
      "description": "LND Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.8.1.10", "description": "LND Web 1"},
+        {"type": "ip", "value": "svr-10.8.1.130", "description": "LND Web 1"},
+        {"type": "ip", "value": "svr-10.8.1.131", "description": "LND Web 2"},
      ]},
-    {"name": "grp-LND-NH09-CCS-APP", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "APP",
+    {"name": "grp-LND-NH09-GEN-APP", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "APP",
      "description": "LND Loan Engine", "members": [
-        {"type": "ip", "value": "svr-10.8.1.20", "description": "LND App 1"},
-        {"type": "ip", "value": "svr-10.8.1.21", "description": "LND App 2"},
+        {"type": "ip", "value": "svr-10.8.1.140", "description": "LND App 1"},
+        {"type": "ip", "value": "svr-10.8.1.141", "description": "LND App 2"},
+        {"type": "ip", "value": "svr-10.8.1.142", "description": "LND App 3"},
      ]},
-    {"name": "grp-LND-NH09-CCS-DB", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "DB",
-     "description": "LND Database", "members": [
-        {"type": "ip", "value": "svr-10.8.1.30", "description": "LND DB Primary"},
-     ]},
-    {"name": "grp-LND-NH09-CCS-BAT", "app_id": "LND", "nh": "NH09", "sz": "CCS", "subtype": "BAT",
+    {"name": "grp-LND-NH09-GEN-BAT", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "BAT",
      "description": "LND Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.8.1.40", "description": "LND Batch 1"},
+        {"type": "ip", "value": "svr-10.8.1.160", "description": "LND Batch 1"},
+     ]},
+    {"name": "grp-LND-NH09-CPA-DB", "app_id": "LND", "nh": "NH09", "sz": "CPA", "subtype": "DB",
+     "description": "LND Database", "members": [
+        {"type": "ip", "value": "svr-10.8.2.30", "description": "LND DB Primary"},
+        {"type": "ip", "value": "svr-10.8.2.31", "description": "LND DB Standby"},
+     ]},
+    {"name": "grp-LND-NH09-CPA-MQ", "app_id": "LND", "nh": "NH09", "sz": "CPA", "subtype": "MQ",
+     "description": "LND Message Queue", "members": [
+        {"type": "ip", "value": "svr-10.8.2.40", "description": "LND MQ 1"},
+        {"type": "ip", "value": "svr-10.8.2.41", "description": "LND MQ 2"},
      ]},
 
-    # --- WLT — Wealth Management (NH10/CDE) ---
-    {"name": "grp-WLT-NH10-CDE-WEB", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "WEB",
+    # --- WLT: Source NH14/PAA (WEB), NH10/PAA (APP/BAT), Destination NH10/3PY ---
+    {"name": "grp-WLT-NH14-PAA-WEB", "app_id": "WLT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
      "description": "WLT Web Interface", "members": [
-        {"type": "ip", "value": "svr-10.9.1.10", "description": "WLT Web 1"},
+        {"type": "ip", "value": "svr-10.70.1.100", "description": "WLT Web 1"},
+        {"type": "ip", "value": "svr-10.70.1.101", "description": "WLT Web 2"},
      ]},
-    {"name": "grp-WLT-NH10-CDE-APP", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-WLT-NH10-PAA-APP", "app_id": "WLT", "nh": "NH10", "sz": "PAA", "subtype": "APP",
      "description": "WLT Portfolio Engine", "members": [
         {"type": "ip", "value": "svr-10.9.1.20", "description": "WLT App 1"},
         {"type": "ip", "value": "svr-10.9.1.21", "description": "WLT App 2"},
+        {"type": "ip", "value": "svr-10.9.1.22", "description": "WLT App 3"},
      ]},
-    {"name": "grp-WLT-NH10-CDE-DB", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-WLT-NH10-PAA-BAT", "app_id": "WLT", "nh": "NH10", "sz": "PAA", "subtype": "BAT",
+     "description": "WLT Batch Processing", "members": [
+        {"type": "ip", "value": "svr-10.9.1.50", "description": "WLT Batch 1"},
+     ]},
+    {"name": "grp-WLT-NH10-3PY-DB", "app_id": "WLT", "nh": "NH10", "sz": "3PY", "subtype": "DB",
      "description": "WLT Database (PCI CDE)", "members": [
         {"type": "ip", "value": "svr-10.9.1.30", "description": "WLT DB Primary"},
         {"type": "ip", "value": "svr-10.9.1.31", "description": "WLT DB Replica"},
      ]},
-    {"name": "grp-WLT-NH10-CDE-API", "app_id": "WLT", "nh": "NH10", "sz": "CDE", "subtype": "API",
-     "description": "WLT API", "members": [
-        {"type": "ip", "value": "svr-10.9.1.40", "description": "WLT API 1"},
+    {"name": "grp-WLT-NH10-3PY-MQ", "app_id": "WLT", "nh": "NH10", "sz": "3PY", "subtype": "MQ",
+     "description": "WLT Message Queue", "members": [
+        {"type": "ip", "value": "svr-10.9.1.40", "description": "WLT MQ 1"},
+        {"type": "ip", "value": "svr-10.9.1.41", "description": "WLT MQ 2"},
      ]},
 
-    # --- CBK — Core Banking (NH08/CCS) ---
-    {"name": "grp-CBK-NH08-CCS-APP", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "APP",
+    # --- CBK: Source NH08/CPA, Destination NH08/CDE ---
+    {"name": "grp-CBK-NH08-CPA-WEB", "app_id": "CBK", "nh": "NH08", "sz": "CPA", "subtype": "WEB",
+     "description": "CBK Web Portal", "members": [
+        {"type": "ip", "value": "svr-10.7.1.10", "description": "CBK Web 1"},
+        {"type": "ip", "value": "svr-10.7.1.11", "description": "CBK Web 2"},
+     ]},
+    {"name": "grp-CBK-NH08-CPA-APP", "app_id": "CBK", "nh": "NH08", "sz": "CPA", "subtype": "APP",
      "description": "CBK Core Engine", "members": [
-        {"type": "ip", "value": "svr-10.7.1.10", "description": "CBK App 1"},
-        {"type": "ip", "value": "svr-10.7.1.11", "description": "CBK App 2"},
-        {"type": "ip", "value": "svr-10.7.1.12", "description": "CBK App 3"},
+        {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK App 1"},
+        {"type": "ip", "value": "svr-10.7.1.21", "description": "CBK App 2"},
+        {"type": "ip", "value": "svr-10.7.1.22", "description": "CBK App 3"},
      ]},
-    {"name": "grp-CBK-NH08-CCS-DB", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "DB",
-     "description": "CBK Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK DB Primary"},
-        {"type": "ip", "value": "svr-10.7.1.21", "description": "CBK DB Standby"},
-        {"type": "ip", "value": "svr-10.7.1.22", "description": "CBK DB Archive"},
-     ]},
-    {"name": "grp-CBK-NH08-CCS-MQ", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "MQ",
-     "description": "CBK Message Bus", "members": [
-        {"type": "ip", "value": "svr-10.7.1.30", "description": "CBK MQ 1"},
-        {"type": "ip", "value": "svr-10.7.1.31", "description": "CBK MQ 2"},
-     ]},
-    {"name": "grp-CBK-NH08-CCS-API", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "API",
-     "description": "CBK API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.7.1.40", "description": "CBK API 1"},
-     ]},
-    {"name": "grp-CBK-NH08-CCS-BAT", "app_id": "CBK", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
+    {"name": "grp-CBK-NH08-CPA-BAT", "app_id": "CBK", "nh": "NH08", "sz": "CPA", "subtype": "BAT",
      "description": "CBK Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.7.1.50", "description": "CBK Batch 1"},
      ]},
+    {"name": "grp-CBK-NH08-CDE-DB", "app_id": "CBK", "nh": "NH08", "sz": "CDE", "subtype": "DB",
+     "description": "CBK Database Cluster", "members": [
+        {"type": "ip", "value": "svr-10.7.2.30", "description": "CBK DB Primary"},
+        {"type": "ip", "value": "svr-10.7.2.31", "description": "CBK DB Standby"},
+     ]},
+    {"name": "grp-CBK-NH08-CDE-MQ", "app_id": "CBK", "nh": "NH08", "sz": "CDE", "subtype": "MQ",
+     "description": "CBK Message Bus", "members": [
+        {"type": "ip", "value": "svr-10.7.2.40", "description": "CBK MQ 1"},
+        {"type": "ip", "value": "svr-10.7.2.41", "description": "CBK MQ 2"},
+     ]},
 
-    # --- EPT — Enterprise Portal (NH01/PAA) ---
-    {"name": "grp-EPT-NH01-PAA-WEB", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "WEB",
+    # --- SHARED: Cross-app infrastructure groups ---
+    {"name": "grp-SHARED-NH14-PSE-API", "app_id": "SHARED", "nh": "NH14", "sz": "PSE", "subtype": "API",
+     "description": "DMZ API Gateway (External)", "members": [
+        {"type": "ip", "value": "svr-10.70.1.10", "description": "DMZ API 1"},
+        {"type": "ip", "value": "svr-10.70.1.11", "description": "DMZ API 2"},
+     ]},
+    {"name": "grp-SHARED-NH01-UC-MON", "app_id": "SHARED", "nh": "NH01", "sz": "UC", "subtype": "MON",
+     "description": "Monitoring Agents", "members": [
+        {"type": "ip", "value": "svr-10.80.1.100", "description": "Monitor Agent 1"},
+        {"type": "ip", "value": "svr-10.80.1.101", "description": "Monitor Agent 2"},
+     ]},
+
+    # --- EPT — Enterprise Portal (NH14/PAA WEB, NH01/CCS APP/API) ---
+    {"name": "grp-EPT-NH14-PAA-WEB", "app_id": "EPT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
      "description": "EPT Web Frontend (PAA zone)", "members": [
-        {"type": "ip", "value": "svr-10.0.1.10", "description": "EPT Web 1"},
-        {"type": "ip", "value": "svr-10.0.1.11", "description": "EPT Web 2"},
+        {"type": "ip", "value": "svr-10.70.1.20", "description": "EPT Web 1"},
+        {"type": "ip", "value": "svr-10.70.1.21", "description": "EPT Web 2"},
      ]},
-    {"name": "grp-EPT-NH01-PAA-APP", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "APP",
+    {"name": "grp-EPT-NH01-CCS-APP", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "APP",
      "description": "EPT App Backend", "members": [
-        {"type": "ip", "value": "svr-10.0.1.20", "description": "EPT App 1"},
-        {"type": "ip", "value": "svr-10.0.1.21", "description": "EPT App 2"},
+        {"type": "ip", "value": "svr-10.0.1.10", "description": "EPT App 1"},
+        {"type": "ip", "value": "svr-10.0.1.11", "description": "EPT App 2"},
      ]},
-    {"name": "grp-EPT-NH01-PAA-API", "app_id": "EPT", "nh": "NH01", "sz": "PAA", "subtype": "API",
+    {"name": "grp-EPT-NH01-CCS-API", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "API",
      "description": "EPT API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.0.1.30", "description": "EPT API 1"},
+        {"type": "ip", "value": "svr-10.0.1.16", "description": "EPT API 1"},
      ]},
 
-    # --- MBK — Mobile Banking (NH07/CPA) ---
-    {"name": "grp-MBK-NH07-CPA-WEB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "WEB",
+    # --- MBK — Mobile Banking (NH14/PAA WEB, NH07/CPA APP/API, NH07/CDE DB) ---
+    {"name": "grp-MBK-NH14-PAA-WEB", "app_id": "MBK", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
      "description": "MBK Mobile Web", "members": [
-        {"type": "ip", "value": "svr-10.6.1.180", "description": "MBK Web 1"},
+        {"type": "ip", "value": "svr-10.70.1.30", "description": "MBK Web 1"},
      ]},
     {"name": "grp-MBK-NH07-CPA-APP", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "APP",
      "description": "MBK App Engine", "members": [
-        {"type": "ip", "value": "svr-10.6.1.190", "description": "MBK App 1"},
-        {"type": "ip", "value": "svr-10.6.1.191", "description": "MBK App 2"},
+        {"type": "ip", "value": "svr-10.6.1.168", "description": "MBK App 1"},
+        {"type": "ip", "value": "svr-10.6.1.169", "description": "MBK App 2"},
      ]},
-    {"name": "grp-MBK-NH07-CPA-DB", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "DB",
+    {"name": "grp-MBK-NH07-CDE-DB", "app_id": "MBK", "nh": "NH07", "sz": "CDE", "subtype": "DB",
      "description": "MBK Database", "members": [
-        {"type": "ip", "value": "svr-10.6.1.200", "description": "MBK DB Primary"},
+        {"type": "ip", "value": "svr-10.6.1.16", "description": "MBK DB Primary"},
      ]},
     {"name": "grp-MBK-NH07-CPA-API", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "API",
      "description": "MBK API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.6.1.210", "description": "MBK API 1"},
+        {"type": "ip", "value": "svr-10.6.1.184", "description": "MBK API 1"},
      ]},
 ]
 
