@@ -6,7 +6,9 @@ IP Ranges, Naming Standards, Policy Matrix) is fully customizable via CRUD APIs.
 Data is stored in JSON files under the data/ directory and seeded on first startup.
 """
 
+import asyncio
 import json
+import logging
 import os
 import uuid
 from copy import deepcopy
@@ -204,6 +206,31 @@ def _auto_prefix(value: str, entry_type: str = "ip") -> str:
     return f"svr-{v}"
 
 
+_git_saas_logger = logging.getLogger("git_saas.hook")
+
+
+def _fire_git_saas(store_name: str) -> None:
+    """Fire-and-forget: schedule a git-saas commit in the running event loop.
+
+    This is safe to call from synchronous _save helpers because FastAPI
+    always has an active event loop on the serving thread.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return  # no event loop – e.g. during startup seeding
+
+    from app.services.git_saas import notify_change  # lazy import to avoid circular deps
+
+    async def _bg() -> None:
+        try:
+            await notify_change(store_name)
+        except Exception as exc:  # noqa: BLE001
+            _git_saas_logger.warning("git-saas notify_change failed: %s", exc)
+
+    loop.create_task(_bg())
+
+
 def _ensure_dir() -> None:
     _get_data_dir().mkdir(parents=True, exist_ok=True)
 
@@ -223,6 +250,7 @@ def _save(name: str, data: Any) -> None:
     indent = None if isinstance(data, list) and len(data) > 5000 else 2
     with open(path, "w") as f:
         json.dump(data, f, indent=indent, default=str)
+    _fire_git_saas(name)
 
 
 # --- Org-level reference data helpers (always use SEED_DATA_DIR) ---
@@ -245,6 +273,7 @@ def _save_ref(name: str, data: Any) -> None:
     path = SEED_DATA_DIR / f"{name}.json"
     with open(path, "w") as f:
         json.dump(data, f, indent=2, default=str)
+    _fire_git_saas(name)
 
 
 # --- Separate user-data JSON helpers (migration_data, studio_rules) ---
@@ -268,6 +297,7 @@ def _save_separate(name: str, data: Any) -> None:
     path = SEPARATE_DATA_DIR / f"{name}.json"
     with open(path, "w") as f:
         json.dump(data, f, indent=2, default=str)
+    _fire_git_saas(name)
 
 
 

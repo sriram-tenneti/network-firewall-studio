@@ -903,3 +903,62 @@ export const createLifecycleEvent = (ruleId: string, eventType: string, details 
     method: 'POST',
     body: JSON.stringify({ rule_id: ruleId, event_type: eventType, details, actor }),
   });
+
+// Git SaaS Integration
+export interface GitSaasConfig {
+  enabled: boolean;
+  remote_url: string;
+  branch: string;
+  commit_author_name: string;
+  commit_author_email: string;
+  auto_push: boolean;
+  include_seed_data: boolean;
+  include_live_data: boolean;
+  include_user_data: boolean;
+  last_commit_sha: string;
+  last_push_at: string;
+  last_error: string;
+  total_commits: number;
+}
+
+export interface GitSaasStatus {
+  enabled: boolean;
+  repo_initialized: boolean;
+  last_commit_sha: string;
+  last_push_at: string;
+  total_commits: number;
+  tracked_files: string[];
+  last_error: string;
+  config: GitSaasConfig;
+}
+
+export interface GitSaasCommit {
+  sha: string;
+  author: string;
+  date: string;
+  message: string;
+}
+
+export const getGitSaasConfig = () =>
+  fetchJSON<GitSaasConfig>('/api/git-saas/config');
+
+export const updateGitSaasConfig = (updates: Partial<GitSaasConfig>) =>
+  fetchJSON<GitSaasConfig>('/api/git-saas/config', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+
+export const getGitSaasStatus = () =>
+  fetchJSON<GitSaasStatus>('/api/git-saas/status');
+
+export const manualGitSaasSync = () =>
+  fetchJSON<Record<string, unknown>>('/api/git-saas/sync', { method: 'POST' });
+
+export const getGitSaasHistory = (limit = 50) =>
+  fetchJSON<GitSaasCommit[]>(`/api/git-saas/history?limit=${limit}`);
+
+export const getGitSaasDiff = (sha: string) =>
+  fetchJSON<{ sha: string; diff: string }>(`/api/git-saas/diff/${sha}`);
+
+export const resetGitSaasRepo = () =>
+  fetchJSON<Record<string, unknown>>('/api/git-saas/reset', { method: 'POST' });

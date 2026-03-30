@@ -148,6 +148,17 @@ export default function SettingsPage() {
     group_pattern: '{APP}-{NH}-{SZ}-{SUBTYPE}', server_pattern: '{IP_ADDRESS}', range_pattern: '{APP}-{NH}-{SZ}-{DESC}',
   });
 
+  // Git SaaS state
+  const [gitSaasConfig, setGitSaasConfig] = useState<api.GitSaasConfig | null>(null);
+  const [gitSaasStatus, setGitSaasStatus] = useState<api.GitSaasStatus | null>(null);
+  const [gitSaasHistory, setGitSaasHistory] = useState<api.GitSaasCommit[]>([]);
+  const [gitSaasSyncing, setGitSaasSyncing] = useState(false);
+  const [gitSaasResetting, setGitSaasResetting] = useState(false);
+  const [gitSaasSaving, setGitSaasSaving] = useState(false);
+  const [gitSaasDiffSha, setGitSaasDiffSha] = useState<string | null>(null);
+  const [gitSaasDiffText, setGitSaasDiffText] = useState<string>('');
+  const [gitSaasEditForm, setGitSaasEditForm] = useState<Partial<api.GitSaasConfig>>({});
+
   // Edit states for Users
   const userModal = useModal<ADUser>();
   const [editUser, setEditUser] = useState<Partial<ADUser>>({});
@@ -698,7 +709,76 @@ export default function SettingsPage() {
     { id: 'ad_groups', label: 'User Groups' },
     { id: 'ad_users', label: 'Users' },
     { id: 'ad_config', label: 'AD Configuration' },
+    { id: 'git_saas', label: 'Git SaaS' },
   ];
+
+  const loadGitSaas = useCallback(async () => {
+    try {
+      const [cfg, status, history] = await Promise.all([
+        api.getGitSaasConfig(),
+        api.getGitSaasStatus(),
+        api.getGitSaasHistory(50),
+      ]);
+      setGitSaasConfig(cfg);
+      setGitSaasStatus(status);
+      setGitSaasHistory(history);
+      setGitSaasEditForm(cfg);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { if (activeTab === 'git_saas') loadGitSaas(); }, [activeTab, loadGitSaas]);
+
+  const handleGitSaasSave = async () => {
+    setGitSaasSaving(true);
+    try {
+      const updated = await api.updateGitSaasConfig(gitSaasEditForm);
+      setGitSaasConfig(updated);
+      setGitSaasEditForm(updated);
+      showNotification('Git SaaS configuration saved', 'success');
+      loadGitSaas();
+    } catch {
+      showNotification('Failed to save Git SaaS configuration', 'error');
+    } finally {
+      setGitSaasSaving(false);
+    }
+  };
+
+  const handleGitSaasSync = async () => {
+    setGitSaasSyncing(true);
+    try {
+      await api.manualGitSaasSync();
+      showNotification('Manual sync completed', 'success');
+      loadGitSaas();
+    } catch {
+      showNotification('Manual sync failed', 'error');
+    } finally {
+      setGitSaasSyncing(false);
+    }
+  };
+
+  const handleGitSaasReset = async () => {
+    if (!confirm('Reset the Git SaaS repo? This deletes the local repo and resets config. You will need to re-enable and reconfigure.')) return;
+    setGitSaasResetting(true);
+    try {
+      await api.resetGitSaasRepo();
+      showNotification('Git SaaS repo reset', 'success');
+      loadGitSaas();
+    } catch {
+      showNotification('Failed to reset Git SaaS repo', 'error');
+    } finally {
+      setGitSaasResetting(false);
+    }
+  };
+
+  const handleViewDiff = async (sha: string) => {
+    setGitSaasDiffSha(sha);
+    try {
+      const res = await api.getGitSaasDiff(sha);
+      setGitSaasDiffText(res.diff);
+    } catch {
+      setGitSaasDiffText('Failed to load diff');
+    }
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -2191,6 +2271,163 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* ── Git SaaS Tab ── */}
+        {activeTab === 'git_saas' && (
+          <div className="space-y-6">
+            {/* Status Banner */}
+            <div className={`p-4 rounded-lg border ${gitSaasConfig?.enabled ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${gitSaasConfig?.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
+                  <span className="text-sm font-semibold text-gray-800">
+                    {gitSaasConfig?.enabled ? 'Git SaaS Enabled' : 'Git SaaS Disabled'}
+                  </span>
+                </div>
+                {gitSaasStatus && (
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span>Repo: {gitSaasStatus.repo_initialized ? 'Initialized' : 'Not initialized'}</span>
+                    <span>Commits: {gitSaasStatus.total_commits}</span>
+                    {gitSaasStatus.last_push_at && <span>Last push: {gitSaasStatus.last_push_at}</span>}
+                  </div>
+                )}
+              </div>
+              {gitSaasConfig?.last_error && (
+                <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded">Last error: {gitSaasConfig.last_error}</div>
+              )}
+            </div>
+
+            {/* Configuration */}
+            <div className="p-5 bg-white border border-gray-200 rounded-lg space-y-4">
+              <h3 className="text-sm font-semibold text-gray-800">Configuration</h3>
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium text-gray-700">Enable Git SaaS</label>
+                <input type="checkbox" checked={gitSaasEditForm.enabled ?? false}
+                  onChange={e => setGitSaasEditForm(prev => ({ ...prev, enabled: e.target.checked }))}
+                  className="rounded border-gray-300 text-indigo-600" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Remote URL (GitHub)</label>
+                  <input type="text" className={inp} placeholder="https://github.com/org/repo.git"
+                    value={gitSaasEditForm.remote_url ?? ''} onChange={e => setGitSaasEditForm(prev => ({ ...prev, remote_url: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Branch</label>
+                  <input type="text" className={inp} placeholder="main"
+                    value={gitSaasEditForm.branch ?? ''} onChange={e => setGitSaasEditForm(prev => ({ ...prev, branch: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Author Name</label>
+                  <input type="text" className={inp} placeholder="Firewall Studio"
+                    value={gitSaasEditForm.commit_author_name ?? ''} onChange={e => setGitSaasEditForm(prev => ({ ...prev, commit_author_name: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Author Email</label>
+                  <input type="text" className={inp} placeholder="studio@noreply.local"
+                    value={gitSaasEditForm.commit_author_email ?? ''} onChange={e => setGitSaasEditForm(prev => ({ ...prev, commit_author_email: e.target.value }))} />
+                </div>
+              </div>
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input type="checkbox" checked={gitSaasEditForm.auto_push ?? true}
+                    onChange={e => setGitSaasEditForm(prev => ({ ...prev, auto_push: e.target.checked }))}
+                    className="rounded border-gray-300 text-indigo-600" /> Auto-push to remote
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input type="checkbox" checked={gitSaasEditForm.include_seed_data ?? false}
+                    onChange={e => setGitSaasEditForm(prev => ({ ...prev, include_seed_data: e.target.checked }))}
+                    className="rounded border-gray-300 text-indigo-600" /> Include seed data
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input type="checkbox" checked={gitSaasEditForm.include_live_data ?? true}
+                    onChange={e => setGitSaasEditForm(prev => ({ ...prev, include_live_data: e.target.checked }))}
+                    className="rounded border-gray-300 text-indigo-600" /> Include live data
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input type="checkbox" checked={gitSaasEditForm.include_user_data ?? true}
+                    onChange={e => setGitSaasEditForm(prev => ({ ...prev, include_user_data: e.target.checked }))}
+                    className="rounded border-gray-300 text-indigo-600" /> Include user data
+                </label>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={handleGitSaasSave} disabled={gitSaasSaving}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                  {gitSaasSaving ? 'Saving...' : 'Save Configuration'}
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-5 bg-white border border-gray-200 rounded-lg space-y-4">
+              <h3 className="text-sm font-semibold text-gray-800">Actions</h3>
+              <div className="flex gap-3">
+                <button onClick={handleGitSaasSync} disabled={gitSaasSyncing || !gitSaasConfig?.enabled}
+                  className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-50">
+                  {gitSaasSyncing ? 'Syncing...' : 'Manual Sync'}
+                </button>
+                <button onClick={loadGitSaas}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100">
+                  Refresh Status
+                </button>
+                <button onClick={handleGitSaasReset} disabled={gitSaasResetting}
+                  className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                  {gitSaasResetting ? 'Resetting...' : 'Reset Repo'}
+                </button>
+              </div>
+            </div>
+
+            {/* Tracked Files */}
+            {gitSaasStatus && gitSaasStatus.tracked_files.length > 0 && (
+              <div className="p-5 bg-white border border-gray-200 rounded-lg space-y-3">
+                <h3 className="text-sm font-semibold text-gray-800">Tracked Files ({gitSaasStatus.tracked_files.length})</h3>
+                <div className="max-h-40 overflow-auto">
+                  <div className="flex flex-wrap gap-1">
+                    {gitSaasStatus.tracked_files.map(f => (
+                      <span key={f} className="px-2 py-0.5 text-xs font-mono bg-gray-100 text-gray-600 rounded">{f}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Commit History */}
+            <div className="p-5 bg-white border border-gray-200 rounded-lg space-y-3">
+              <h3 className="text-sm font-semibold text-gray-800">Commit History ({gitSaasHistory.length})</h3>
+              {gitSaasHistory.length === 0 ? (
+                <p className="text-xs text-gray-500">No commits yet. Enable Git SaaS and make changes to see commit history.</p>
+              ) : (
+                <div className="overflow-auto max-h-80">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">SHA</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Date</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Author</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Message</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-500">Diff</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {gitSaasHistory.map(c => (
+                        <tr key={c.sha} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-mono text-indigo-600">{c.sha.substring(0, 8)}</td>
+                          <td className="px-3 py-2 text-gray-500">{c.date}</td>
+                          <td className="px-3 py-2 text-gray-700">{c.author}</td>
+                          <td className="px-3 py-2 text-gray-700 truncate max-w-xs">{c.message.split('\n')[0]}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button onClick={() => handleViewDiff(c.sha)}
+                              className="text-indigo-600 hover:text-indigo-800 hover:underline">View</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Group Modal ── */}
@@ -2238,6 +2475,14 @@ export default function SettingsPage() {
             <button onClick={userModal.close} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
             <button onClick={handleSaveUser} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save</button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Git SaaS Diff Modal */}
+      <Modal isOpen={!!gitSaasDiffSha} onClose={() => setGitSaasDiffSha(null)} title={`Commit Diff: ${gitSaasDiffSha?.substring(0, 8) ?? ''}`}>
+        <pre className="text-xs font-mono bg-gray-50 p-4 rounded-lg overflow-auto max-h-96 whitespace-pre-wrap">{gitSaasDiffText || 'Loading...'}</pre>
+        <div className="flex justify-end mt-3">
+          <button onClick={() => setGitSaasDiffSha(null)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Close</button>
         </div>
       </Modal>
     </div>

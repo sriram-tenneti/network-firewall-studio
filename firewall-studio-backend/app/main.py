@@ -9,6 +9,7 @@ from app.routes.reference import router as reference_router
 from app.routes.policy import router as policy_router
 from app.routes.reviews import router as reviews_router
 from app.routes.lifecycle import router as lifecycle_router
+from app.routes.git_saas import router as git_saas_router
 from app.database import seed_database
 
 
@@ -35,6 +36,7 @@ app.include_router(reference_router)
 app.include_router(policy_router)
 app.include_router(reviews_router)
 app.include_router(lifecycle_router)
+app.include_router(git_saas_router)
 
 
 @app.get("/healthz")
