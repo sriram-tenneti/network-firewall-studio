@@ -6,6 +6,7 @@ IP Ranges, Naming Standards, Policy Matrix) is fully customizable via CRUD APIs.
 Data is stored in JSON files under the data/ directory and seeded on first startup.
 """
 
+import hashlib
 import json
 import os
 import uuid
@@ -716,6 +717,8 @@ async def update_legacy_rule(rule_id: str, data: dict[str, Any]) -> dict[str, An
     for r in rules:
         if r["id"] == rule_id:
             r.update(data)
+            r["fingerprint"] = _rule_fingerprint(r)
+            r["updated_at"] = _now()
             _save("legacy_rules", rules)
             return r
     return None
@@ -742,15 +745,20 @@ async def clear_all_legacy_rules() -> int:
 
 
 def _rule_fingerprint(rule: dict[str, Any]) -> str:
-    """Build a fingerprint from ALL data columns of a rule (excludes internal fields like id, is_standard, migration_status).
-    Two records are duplicates only when every imported column matches."""
-    skip = {"id", "is_standard", "migration_status", "rule_status", "rule_migration_status", "imported_at", "environment"}
+    """Build a fingerprint from ALL data columns of a rule (excludes internal/meta fields).
+    Two records are duplicates only when every imported column matches.
+    Returns a stable SHA-256 hex digest (first 16 chars) for compact storage."""
+    skip = {"id", "rule_id", "is_standard", "migration_status", "rule_status",
+            "rule_migration_status", "imported_at", "environment", "fingerprint",
+            "created_at", "updated_at", "certified_date", "expiry_date",
+            "migrated_at", "certified_at", "status", "_user_created", "source_type"}
     parts: list[str] = []
     for k in sorted(rule.keys()):
         if k in skip:
             continue
         parts.append(f"{k}={rule[k]}")
-    return "|".join(parts)
+    raw = "|".join(parts)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def _load_superseded_fingerprints() -> set[str]:
@@ -825,6 +833,8 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         # rule_migration_status = Yet to Migrate (not yet migrated to NGDC)
         rule.setdefault("rule_status", "Deployed")
         rule.setdefault("rule_migration_status", "Yet to Migrate")
+        rule["fingerprint"] = fp
+        rule["imported_at"] = _now()
         existing.append(rule)
         existing_keys.add(fp)
         added += 1
@@ -839,6 +849,15 @@ async def get_migration_history() -> list[dict[str, Any]]:
 
 async def log_migration(rule_id: str, action: str, from_status: str, to_status: str, details: str = "") -> dict[str, Any]:
     history = _load("migration_history") or []
+    # Look up the rule's current fingerprint for history tracking
+    rule_fp = ""
+    for store in ("legacy_rules", "firewall_rules"):
+        for r in (_load(store) or []):
+            if r.get("id") == rule_id or r.get("rule_id") == rule_id:
+                rule_fp = r.get("fingerprint", "")
+                break
+        if rule_fp:
+            break
     entry = {
         "id": f"MH-{_id()}",
         "rule_id": rule_id,
@@ -848,6 +867,7 @@ async def log_migration(rule_id: str, action: str, from_status: str, to_status: 
         "details": details,
         "timestamp": _now(),
         "user": "system",
+        "fingerprint": rule_fp,
     }
     history.append(entry)
     _save("migration_history", history)
@@ -865,6 +885,8 @@ async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
             # Update lifecycle statuses on migration
             r["rule_migration_status"] = "Migrated"
             r["migrated_at"] = _now()
+            # Recompute fingerprint after migration status change
+            r["fingerprint"] = _rule_fingerprint(r)
             _save("legacy_rules", rules)
             await log_migration(rule_id, "migrate_to_ngdc", old_status, "Completed",
                                 f"Rule {rule_id} migrated to NGDC standards")
@@ -882,6 +904,7 @@ async def migrate_rule_to_ngdc(rule_id: str) -> dict[str, Any] | None:
                 "rule_service": r.get("rule_service", ""),
                 "migrated_at": r["migrated_at"],
                 "migration_status": "Completed",
+                "fingerprint": r.get("fingerprint", ""),
             })
 
             # Auto-create recommended NGDC groups post-migration
@@ -1057,12 +1080,14 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "certified_date": None,
         "expiry_date": None,
     }
+    rule["fingerprint"] = _rule_fingerprint(rule)
     rules.append(rule)
     _save("firewall_rules", rules)
     history = _load("rule_history") or []
     history.append({
         "rule_id": rule_id, "action": "Created", "timestamp": now,
         "details": f"Rule created: {rule['description']}", "user": "system",
+        "fingerprint": rule["fingerprint"],
     })
     _save("rule_history", history)
     # Record lifecycle event: rule created
@@ -1077,9 +1102,20 @@ async def update_rule(rule_id: str, updates: dict[str, Any]) -> dict[str, Any] |
     rules = _load("firewall_rules") or []
     for r in rules:
         if r.get("rule_id") == rule_id:
+            old_fp = r.get("fingerprint", "")
             r.update(updates)
             r["updated_at"] = _now()
+            r["fingerprint"] = _rule_fingerprint(r)
             _save("firewall_rules", rules)
+            # Record fingerprint change in history
+            if old_fp and old_fp != r["fingerprint"]:
+                hist = _load("rule_history") or []
+                hist.append({
+                    "rule_id": rule_id, "action": "Updated", "timestamp": r["updated_at"],
+                    "details": f"Rule updated (fingerprint {old_fp} -> {r['fingerprint']})",
+                    "user": "system", "old_fingerprint": old_fp, "new_fingerprint": r["fingerprint"],
+                })
+                _save("rule_history", hist)
             # Also update the copy in studio_rules.json
             await _sync_studio_rule(r)
             return r
@@ -1114,11 +1150,14 @@ async def update_rule_status(rule_id: str, new_status: str, module: str = "studi
                 config = (await get_org_config()) or SEED_ORG_CONFIG
                 expiry_days = config.get("auto_certify_days", 365)
                 r["expiry_date"] = (datetime.utcnow() + timedelta(days=expiry_days)).isoformat()
+            # Recompute fingerprint after status change
+            r["fingerprint"] = _rule_fingerprint(r)
             _save("firewall_rules", rules)
             history = _load("rule_history") or []
             history.append({
                 "rule_id": rule_id, "action": f"Status changed to {new_status}",
                 "timestamp": now, "details": f"Status updated to {new_status}", "user": "system",
+                "fingerprint": r["fingerprint"],
             })
             _save("rule_history", history)
             # Record lifecycle event for every status change
@@ -1198,6 +1237,8 @@ async def transition_rule_status(rule_id: str, new_status: str, module: str = "s
                 r["status"] = "Approved"
             elif new_status == "Rejected":
                 r["status"] = "Rejected"
+            # Recompute fingerprint after status change
+            r["fingerprint"] = _rule_fingerprint(r)
             _save("firewall_rules", rules)
             # Record history
             history = _load("rule_history") or []
@@ -1207,6 +1248,7 @@ async def transition_rule_status(rule_id: str, new_status: str, module: str = "s
                 "timestamp": now,
                 "details": f"Lifecycle status changed from {current} to {new_status} (module: {module})",
                 "user": reviewer,
+                "fingerprint": r["fingerprint"],
             })
             _save("rule_history", history)
             await _sync_studio_rule(r)
@@ -1222,6 +1264,8 @@ async def transition_legacy_rule_status(rule_id: str, new_status: str, reviewer:
         if r.get("id") == rule_id:
             current = r.get("rule_status", "Deployed")
             r["rule_status"] = new_status
+            # Recompute fingerprint after status change
+            r["fingerprint"] = _rule_fingerprint(r)
             _save("legacy_rules", rules)
             history = _load("rule_history") or []
             history.append({
@@ -1230,6 +1274,7 @@ async def transition_legacy_rule_status(rule_id: str, new_status: str, reviewer:
                 "timestamp": now,
                 "details": f"Legacy lifecycle status changed from {current} to {new_status}",
                 "user": reviewer,
+                "fingerprint": r["fingerprint"],
             })
             _save("rule_history", history)
             return r
@@ -2451,6 +2496,14 @@ async def create_rule_modification(rule_id: str, modifications: dict[str, Any], 
     now = _now()
     mod_id = f"MOD-{_id()}"
 
+    # Compute fingerprints for original and proposed modified state
+    original_fp = rule.get("fingerprint") or _rule_fingerprint(rule)
+    # Build a temp rule with modifications applied to compute the new fingerprint
+    modified_rule = {**rule, **{k: modifications.get(k, rule.get(k, "")) for k in ["rule_source", "rule_destination", "rule_service",
+                      "rule_source_expanded", "rule_destination_expanded", "rule_service_expanded",
+                      "rule_source_zone", "rule_destination_zone", "rule_action"]}}
+    proposed_fp = _rule_fingerprint(modified_rule)
+
     modification = {
         "id": mod_id,
         "rule_id": rule_id,
@@ -2467,6 +2520,8 @@ async def create_rule_modification(rule_id: str, modifications: dict[str, Any], 
         "reviewed_at": None,
         "reviewer": None,
         "review_notes": None,
+        "original_fingerprint": original_fp,
+        "proposed_fingerprint": proposed_fp,
     }
 
     mods = _load("rule_modifications") or []
@@ -2568,6 +2623,8 @@ async def _record_completed_modification(mod: dict[str, Any]) -> None:
         "delta": mod.get("delta", {}),
         "approved_at": mod.get("reviewed_at"),
         "reviewer": mod.get("reviewer"),
+        "original_fingerprint": mod.get("original_fingerprint", ""),
+        "proposed_fingerprint": mod.get("proposed_fingerprint", ""),
     }
     # Avoid duplicates by modification_id
     existing_ids = {r.get("modification_id") for r in data if r.get("type") == "modification"}
