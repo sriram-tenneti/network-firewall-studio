@@ -1091,6 +1091,25 @@ async def modify_studio_rule(rule_id: str, data: dict):
     return result
 
 
+@router.get("/groups/{group_name}/affected-rules")
+async def get_affected_rules(group_name: str):
+    """Find all rules that reference this group in source or destination."""
+    from app.database import find_rules_referencing_group
+    affected = find_rules_referencing_group(group_name)
+    return {"group": group_name, "affected_rules": len(affected), "rules": affected}
+
+
+@router.post("/groups/{group_name}/submit-policy-changes")
+async def submit_group_policy_changes(group_name: str, data: dict):
+    """When a group/subgroup is modified, submit policy change reviews for all affected rules."""
+    from app.database import create_group_change_policy_reviews
+    change_type = data.get("change_type", "group_updated")
+    change_details = data.get("change_details", "")
+    member_delta = data.get("member_delta", None)
+    result = await create_group_change_policy_reviews(group_name, change_type, change_details, member_delta)
+    return result
+
+
 @router.get("/rule-modifications")
 async def list_rule_modifications(rule_id: str | None = None):
     return await get_rule_modifications(rule_id)

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import { getGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings } from '@/lib/api';
+import { getGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings, getAffectedRules, submitGroupPolicyChanges } from '@/lib/api';
 import type { FirewallGroup, GroupMember } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 
@@ -22,6 +22,12 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [searchQuery, setSearchQuery] = useState('');
   const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: environment || 'Production' });
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
+
+  // Policy change tracking — when group members change, affected rules need review
+  const [affectedRulesCount, setAffectedRulesCount] = useState(0);
+  const [pendingChanges, setPendingChanges] = useState<{ type: string; detail: string; delta?: Record<string, unknown> }[]>([]);
+  const [submittingPolicy, setSubmittingPolicy] = useState(false);
+  const [policySubmitResult, setPolicySubmitResult] = useState<string | null>(null);
 
   // Inline members for group creation (Issue #5)
   const [createMembers, setCreateMembers] = useState<{ type: GroupMember['type']; value: string; description: string }[]>([]);
@@ -141,6 +147,11 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       setSelectedGroup(updated);
       setNewMember({ type: 'ip', value: '', description: '' });
       loadGroups();
+      // Track this as a pending policy change
+      const delta = { added: { [`group:${selectedGroup.name}`]: [prefixedMember.value] }, removed: {}, changed: {} };
+      setPendingChanges(prev => [...prev, { type: 'member_added', detail: `Added ${prefixedMember.value}`, delta }]);
+      // Check affected rules count
+      try { const res = await getAffectedRules(selectedGroup.name); setAffectedRulesCount(res.affected_rules); } catch { /* ignore */ }
     } catch { /* ignore */ }
   };
 
@@ -150,7 +161,42 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       const updated = await removeGroupMember(selectedGroup.name, memberValue);
       setSelectedGroup(updated);
       loadGroups();
+      // Track this as a pending policy change
+      const delta = { added: {}, removed: { [`group:${selectedGroup.name}`]: [memberValue] }, changed: {} };
+      setPendingChanges(prev => [...prev, { type: 'member_removed', detail: `Removed ${memberValue}`, delta }]);
+      // Check affected rules count
+      try { const res = await getAffectedRules(selectedGroup.name); setAffectedRulesCount(res.affected_rules); } catch { /* ignore */ }
     } catch { /* ignore */ }
+  };
+
+  const handleSubmitPolicyChanges = async () => {
+    if (!selectedGroup || pendingChanges.length === 0) return;
+    setSubmittingPolicy(true);
+    try {
+      // Merge all pending deltas
+      const mergedDelta: Record<string, unknown> = { added: {} as Record<string, string[]>, removed: {} as Record<string, string[]>, changed: {} };
+      for (const pc of pendingChanges) {
+        if (pc.delta) {
+          const d = pc.delta as { added?: Record<string, string[]>; removed?: Record<string, string[]> };
+          for (const [k, v] of Object.entries(d.added || {})) {
+            (mergedDelta.added as Record<string, string[]>)[k] = [...((mergedDelta.added as Record<string, string[]>)[k] || []), ...v];
+          }
+          for (const [k, v] of Object.entries(d.removed || {})) {
+            (mergedDelta.removed as Record<string, string[]>)[k] = [...((mergedDelta.removed as Record<string, string[]>)[k] || []), ...v];
+          }
+        }
+      }
+      const changeDetails = pendingChanges.map(c => c.detail).join('; ');
+      const result = await submitGroupPolicyChanges(selectedGroup.name, 'group_member_change', changeDetails, mergedDelta);
+      setPolicySubmitResult(`Submitted ${result.affected_rules} rule(s) for policy review`);
+      setPendingChanges([]);
+      setAffectedRulesCount(0);
+    } catch {
+      setPolicySubmitResult('Failed to submit policy changes');
+    } finally {
+      setSubmittingPolicy(false);
+      setTimeout(() => setPolicySubmitResult(null), 5000);
+    }
   };
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
@@ -423,6 +469,37 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
           )}
         </div>
       </div>
+
+      {/* Policy change notification bar */}
+      {pendingChanges.length > 0 && affectedRulesCount > 0 && (
+        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-amber-800">
+                {pendingChanges.length} group change(s) affect {affectedRulesCount} rule(s)
+              </p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                Submit for policy review to ensure affected rules are reviewed, approved, and compiled.
+              </p>
+              <ul className="mt-1 text-xs text-amber-700 list-disc list-inside">
+                {pendingChanges.map((pc, i) => <li key={i}>{pc.detail}</li>)}
+              </ul>
+            </div>
+            <button
+              onClick={handleSubmitPolicyChanges}
+              disabled={submittingPolicy}
+              className="px-4 py-2 text-xs font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap ml-4"
+            >
+              {submittingPolicy ? 'Submitting...' : 'Submit for Policy Review'}
+            </button>
+          </div>
+        </div>
+      )}
+      {policySubmitResult && (
+        <div className={`mt-2 p-2 rounded text-xs font-medium ${policySubmitResult.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {policySubmitResult}
+        </div>
+      )}
 
       <div className="flex justify-end mt-4 pt-4 border-t">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Close</button>

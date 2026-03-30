@@ -465,6 +465,15 @@ export const createStudioRuleModification = (ruleId: string, modifications: Reco
     method: 'POST', body: JSON.stringify({ modifications, delta, comments })
   });
 
+// Group policy change — find affected rules and submit for review
+export const getAffectedRules = (groupName: string) =>
+  fetchJSON<{ group: string; affected_rules: number; rules: Record<string, unknown>[] }>(`/api/reference/groups/${encodeURIComponent(groupName)}/affected-rules`);
+
+export const submitGroupPolicyChanges = (groupName: string, changeType: string, changeDetails: string, memberDelta?: Record<string, unknown>) =>
+  fetchJSON<{ group: string; change_type: string; affected_rules: number; reviews_created: { review_id: string; rule_id: string; mod_id: string }[] }>(`/api/reference/groups/${encodeURIComponent(groupName)}/submit-policy-changes`, {
+    method: 'POST', body: JSON.stringify({ change_type: changeType, change_details: changeDetails, member_delta: memberDelta })
+  });
+
 export const getRuleModifications = (ruleId?: string) => {
   const params = new URLSearchParams();
   if (ruleId) params.set('rule_id', ruleId);

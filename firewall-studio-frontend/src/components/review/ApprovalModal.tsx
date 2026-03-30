@@ -97,11 +97,11 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
   };
 
   // Key context fields always shown at top (minimal)
-  const contextRows: [string, string | React.ReactNode][] = [
-    ['Rule ID', review.rule_id],
-    ['Request Type', review.request_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())],
-    ['Status', <StatusBadge key="s" status={review.status} />],
-    ['Requestor', review.requestor],
+  const contextRows: { label: string; value: React.ReactNode }[] = [
+    { label: 'Rule ID', value: review.rule_id },
+    { label: 'Request Type', value: review.request_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) },
+    { label: 'Status', value: <StatusBadge key="s" status={review.status} /> },
+    { label: 'Requestor', value: review.requestor },
   ];
 
   // Full details (collapsible) — comprehensive info for reviewer
@@ -140,13 +140,25 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
       <div className="max-h-[80vh] overflow-y-auto pr-1 space-y-4">
       {/* Minimal Context — always visible */}
       <div className="grid grid-cols-4 gap-3">
-        {contextRows.map(([label, value]) => (
-          <div key={label} className="p-2 bg-gray-50 rounded">
-            <span className="text-xs text-gray-500">{label}</span>
-            <div className="text-sm font-medium text-gray-800">{value}</div>
-          </div>
-        ))}
+          {contextRows.map((row) => (
+            <div key={row.label} className="p-2 bg-gray-50 rounded">
+              <span className="text-xs text-gray-500">{row.label}</span>
+              <div className="text-sm font-medium text-gray-800">{row.value}</div>
+            </div>
+          ))}
       </div>
+
+      {/* Group Policy Change indicator */}
+      {review.request_type === 'group_policy_change' && (
+        <div className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 text-xs font-bold uppercase rounded bg-purple-100 text-purple-700">Group Policy Change</span>
+            <span className="text-xs text-purple-800">
+              Group was modified — affected rules require review, approval, and compile.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Delta View — PRIMARY section for reviewers: only changed fields */}
       {hasDelta && review.delta ? (

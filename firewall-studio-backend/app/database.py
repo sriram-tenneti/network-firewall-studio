@@ -2589,6 +2589,142 @@ async def create_studio_rule_modification(rule_id: str, modifications: dict[str,
     return modification
 
 
+def find_rules_referencing_group(group_name: str) -> list[dict[str, Any]]:
+    """Find all firewall rules (studio + legacy) that reference a group by name in source or destination."""
+    affected: list[dict[str, Any]] = []
+    # Check studio/firewall rules
+    rules = _load("firewall_rules") or []
+    for r in rules:
+        src = str(r.get("source", ""))
+        dst = str(r.get("destination", ""))
+        if group_name in src or group_name in dst:
+            affected.append(r)
+    # Check legacy rules too
+    legacy = _load("legacy_rules") or []
+    for lr in legacy:
+        src = str(lr.get("rule_source", ""))
+        dst = str(lr.get("rule_destination", ""))
+        src_exp = str(lr.get("rule_source_expanded", ""))
+        dst_exp = str(lr.get("rule_destination_expanded", ""))
+        if group_name in src or group_name in dst or group_name in src_exp or group_name in dst_exp:
+            affected.append({
+                "rule_id": lr.get("id", ""),
+                "source": src,
+                "destination": dst,
+                "application": lr.get("app_name", ""),
+                "environment": "Production",
+                "port": lr.get("rule_service", ""),
+                "protocol": "TCP",
+                "action": lr.get("rule_action", "Allow"),
+                "_legacy": True,
+            })
+    return affected
+
+
+async def create_group_change_policy_reviews(
+    group_name: str,
+    change_type: str,  # "member_added", "member_removed", "group_updated"
+    change_details: str,
+    member_delta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """When a group/subgroup changes, find all affected rules and create policy change
+    review records so they can be submitted, reviewed, approved, and compiled."""
+    affected_rules = find_rules_referencing_group(group_name)
+    if not affected_rules:
+        return {"group": group_name, "affected_rules": 0, "reviews_created": []}
+
+    now = _now()
+    reviews_created: list[dict[str, Any]] = []
+    reviews = _load("reviews") or []
+    mods = _load("rule_modifications") or []
+
+    delta = member_delta or {"added": {}, "removed": {}, "changed": {}}
+
+    for rule in affected_rules:
+        rule_id = rule.get("rule_id", "")
+        mod_id = f"MOD-{_id()}"
+
+        # Determine if the group is in source, destination, or both
+        src = str(rule.get("source", ""))
+        dst = str(rule.get("destination", ""))
+        affected_field = []
+        if group_name in src:
+            affected_field.append("source")
+        if group_name in dst:
+            affected_field.append("destination")
+
+        modification = {
+            "id": mod_id,
+            "rule_id": rule_id,
+            "original": {
+                "source": src,
+                "destination": dst,
+                "ports": rule.get("port", rule.get("ports", "")),
+                "action": rule.get("action", "Allow"),
+                "protocol": rule.get("protocol", "TCP"),
+            },
+            "modified": {
+                "source": src,
+                "destination": dst,
+                "ports": rule.get("port", rule.get("ports", "")),
+                "action": rule.get("action", "Allow"),
+                "protocol": rule.get("protocol", "TCP"),
+            },
+            "delta": delta,
+            "comments": f"Group '{group_name}' {change_type}: {change_details} — affects {', '.join(affected_field)} of rule {rule_id}",
+            "status": "Pending",
+            "created_at": now,
+            "reviewed_at": None,
+            "reviewer": None,
+            "review_notes": None,
+            "group_change": True,
+            "group_name": group_name,
+        }
+        mods.append(modification)
+
+        review = {
+            "id": f"REV-{_id()}",
+            "rule_id": rule_id,
+            "rule_name": f"{rule.get('application', '')} - {rule_id}",
+            "request_type": "group_policy_change",
+            "module": "design-studio",
+            "requestor": "system",
+            "reviewer": None,
+            "status": "Pending",
+            "submitted_at": now,
+            "reviewed_at": None,
+            "comments": f"Group '{group_name}' changed ({change_type}): {change_details}",
+            "review_notes": None,
+            "modification_id": mod_id,
+            "delta": delta,
+            "group_change": True,
+            "group_name": group_name,
+            "rule_summary": {
+                "application": rule.get("application", ""),
+                "source": src[:100],
+                "destination": dst[:100],
+                "ports": str(rule.get("port", rule.get("ports", ""))),
+                "environment": rule.get("environment", ""),
+            },
+        }
+        reviews.append(review)
+        reviews_created.append({"review_id": review["id"], "rule_id": rule_id, "mod_id": mod_id})
+
+        await _record_lifecycle(rule_id, "submitted", to_status="Pending Review",
+                                module="design-studio",
+                                details=f"Policy change review: group '{group_name}' {change_type}")
+
+    _save("rule_modifications", mods)
+    _save("reviews", reviews)
+
+    return {
+        "group": group_name,
+        "change_type": change_type,
+        "affected_rules": len(affected_rules),
+        "reviews_created": reviews_created,
+    }
+
+
 async def get_rule_modifications(rule_id: str | None = None) -> list[dict[str, Any]]:
     mods = _load("rule_modifications") or []
     if rule_id:

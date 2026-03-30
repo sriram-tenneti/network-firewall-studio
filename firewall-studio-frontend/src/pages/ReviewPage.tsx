@@ -172,6 +172,7 @@ export default function ReviewPage(props: { context?: string }) {
           row.request_type === 'new_rule' ? 'bg-green-50 text-green-700' :
           row.request_type === 'modify_rule' ? 'bg-amber-50 text-amber-700' :
           row.request_type === 'delete_rule' ? 'bg-red-50 text-red-700' :
+          row.request_type === 'group_policy_change' ? 'bg-purple-50 text-purple-700' :
           'bg-gray-50 text-gray-700'
         }`}>{row.request_type.replace(/_/g, ' ')}</span>
       ),

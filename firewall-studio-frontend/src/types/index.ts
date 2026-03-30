@@ -259,7 +259,7 @@ export interface ReviewRequest {
   id: string;
   rule_id: string;
   rule_name: string;
-  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification';
+  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification' | 'group_policy_change';
   requestor: string;
   reviewer: string | null;
   status: 'Pending' | 'Approved' | 'Rejected' | 'Withdrawn';
