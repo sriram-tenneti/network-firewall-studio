@@ -199,8 +199,10 @@ export function MigrationStudioPage() {
     }
     setLoading(true);
     try {
+      // Don't exclude migrated rules — show all rules for the selected app
+      // so users can see full picture (migrated + not-started + in-progress)
       const [rulesData, appsData] = await Promise.all([
-        getLegacyRules(selectedApp, true, undefined, true),
+        getLegacyRules(selectedApp, false, undefined, true),
         getApplications(),
       ]);
       setLegacyRules(rulesData);

@@ -23,6 +23,12 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [newGroup, setNewGroup] = useState({ name: '', app_id: appId || '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: environment || 'Production' });
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
 
+  // Inline members for group creation (Issue #5)
+  const [createMembers, setCreateMembers] = useState<{ type: GroupMember['type']; value: string; description: string }[]>([]);
+  const [createMemberType, setCreateMemberType] = useState<GroupMember['type']>('ip');
+  const [createMemberValue, setCreateMemberValue] = useState('');
+  const [createMemberDesc, setCreateMemberDesc] = useState('');
+
   // App DC mappings for auto-populating NH/SZ dropdowns
   const [allAppDCMappings, setAllAppDCMappings] = useState<Record<string, unknown>[]>([]);
   const [appNHOptions, setAppNHOptions] = useState<string[]>([]);
@@ -100,13 +106,30 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     return g.name.toLowerCase().includes(q) || g.app_id.toLowerCase().includes(q) || g.description.toLowerCase().includes(q) || (g.members || []).some(m => m.value.toLowerCase().includes(q));
   });
 
+  const handleAddCreateMember = () => {
+    if (!createMemberValue.trim()) return;
+    const prefixed = autoPrefix(createMemberValue.trim(), createMemberType);
+    setCreateMembers(prev => [...prev, { type: createMemberType, value: prefixed, description: createMemberDesc }]);
+    setCreateMemberValue('');
+    setCreateMemberDesc('');
+  };
+
+  const handleRemoveCreateMember = (idx: number) => {
+    setCreateMembers(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleCreateGroup = async () => {
     try {
-      const prefixedGroup = { ...newGroup, name: autoPrefix(newGroup.name, 'group') };
+      const prefixedGroup = {
+        ...newGroup,
+        name: autoPrefix(newGroup.name, 'group'),
+        members: createMembers.map(m => ({ type: m.type, value: m.value, description: m.description })),
+      };
       await createGroup(prefixedGroup);
       setShowCreate(false);
-      setNewGroup({ name: '', app_id: '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: filterEnv || 'Production' });
-      loadGroups();
+      setNewGroup({ name: '', app_id: filterAppId || '', dc: '', nh: '', sz: '', subtype: 'APP', description: '', environment: filterEnv || 'Production' });
+      setCreateMembers([]);
+      loadGroups(filterAppId, filterEnv);
     } catch { /* ignore */ }
   };
 
@@ -259,7 +282,38 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 <option value="Pre-Production">Pre-Production</option>
               </select>
               <input className={inputClass} placeholder="Description" value={newGroup.description} onChange={e => setNewGroup({ ...newGroup, description: e.target.value })} />
-              <button onClick={handleCreateGroup} className="w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Create Group</button>
+              {/* Inline member creation during group creation */}
+              <div className="border border-gray-200 rounded-md p-2 bg-white">
+                <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Members (optional — add IPs/subnets/groups now)</div>
+                {createMembers.length > 0 && (
+                  <div className="space-y-1 mb-2 max-h-24 overflow-y-auto">
+                    {createMembers.map((m, i) => (
+                      <div key={i} className="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded text-xs">
+                        <span className={`px-1 py-0.5 text-[9px] font-bold uppercase rounded ${
+                          m.type === 'ip' ? 'bg-blue-100 text-blue-700' :
+                          m.type === 'cidr' ? 'bg-green-100 text-green-700' :
+                          m.type === 'range' ? 'bg-amber-100 text-amber-700' :
+                          'bg-purple-100 text-purple-700'
+                        }`}>{m.type}</span>
+                        <span className="flex-1 font-mono text-gray-700 truncate">{m.value}</span>
+                        <button onClick={() => handleRemoveCreateMember(i)} className="text-red-500 hover:text-red-700 text-[10px] font-medium">Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-1">
+                  <select className="px-1.5 py-1 border border-gray-300 rounded text-[10px]" value={createMemberType} onChange={e => setCreateMemberType(e.target.value as GroupMember['type'])}>
+                    <option value="ip">IP</option>
+                    <option value="cidr">CIDR</option>
+                    <option value="range">Range</option>
+                    <option value="group">Group</option>
+                  </select>
+                  <input className="flex-1 px-1.5 py-1 border border-gray-300 rounded text-[10px]" placeholder={createMemberType === 'cidr' ? '10.0.1.0/24' : createMemberType === 'range' ? '10.0.1.1-10.0.1.50' : createMemberType === 'group' ? 'grp-name' : '10.0.1.1'} value={createMemberValue} onChange={e => setCreateMemberValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddCreateMember(); }} />
+                  <input className="w-20 px-1.5 py-1 border border-gray-300 rounded text-[10px]" placeholder="Desc" value={createMemberDesc} onChange={e => setCreateMemberDesc(e.target.value)} />
+                  <button onClick={handleAddCreateMember} disabled={!createMemberValue.trim()} className="px-2 py-1 text-[10px] font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap">+</button>
+                </div>
+              </div>
+              <button onClick={handleCreateGroup} className="w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Create Group{createMembers.length > 0 ? ` with ${createMembers.length} member${createMembers.length > 1 ? 's' : ''}` : ''}</button>
             </div>
           )}
 

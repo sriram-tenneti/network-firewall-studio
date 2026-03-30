@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import type { FirewallRule, RuleDelta, BirthrightValidation, FirewallGroup, Application } from '@/types';
-import { validateBirthright, getGroup, getApplications, getFilteredNhSzDc } from '@/lib/api';
+import type { FirewallRule, RuleDelta, BirthrightValidation, FirewallGroup, Application, GroupMember } from '@/types';
+import { validateBirthright, getGroup, getApplications, getFilteredNhSzDc, addGroupMember, removeGroupMember } from '@/lib/api';
 import { autoPrefix } from '@/lib/utils';
+import { detectEntryType } from '@/lib/nestingParser';
 
 interface EntryItem {
   id: string;
@@ -34,16 +35,9 @@ function getVal(obj: unknown, key: string): string {
   return '';
 }
 
+// Use shared detectEntryType from nestingParser for consistency across all modules (Fix #1)
 function detectType(value: string): 'ip' | 'subnet' | 'range' | 'group' {
-  const vl = value.toLowerCase();
-  if (vl.startsWith('grp-') || vl.startsWith('g-')) return 'group';
-  if (vl.startsWith('rng-')) return 'range';
-  if (vl.startsWith('net-') || vl.startsWith('sub-')) return 'subnet';
-  if (vl.startsWith('svr-')) return 'ip';
-  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d/.test(value)) return 'subnet';
-  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*-\s*\d/.test(value)) return 'range';
-  if (value.includes('/')) return 'subnet';
-  return 'ip';
+  return detectEntryType(value);
 }
 
 function parseEntries(obj: unknown): EntryItem[] {
@@ -202,6 +196,12 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
   const [fwDeviceInfo, setFwDeviceInfo] = useState<BirthrightValidation | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, FirewallGroup>>({});
   const [loadingGroups, setLoadingGroups] = useState(false);
+  // Fix #7: Track original group members for delta computation + editable group members
+  const [originalGroupMembers, setOriginalGroupMembers] = useState<Record<string, GroupMember[]>>({});
+  const [editedGroupMembers, setEditedGroupMembers] = useState<Record<string, GroupMember[]>>({});
+  const [addingMemberTo, setAddingMemberTo] = useState<string | null>(null);
+  const [newMemberType, setNewMemberType] = useState<GroupMember['type']>('ip');
+  const [newMemberValue, setNewMemberValue] = useState('');
   // Fix #10: destination app display + app-filtered SZ
   const [applications, setApplications] = useState<Application[]>([]);
   const [destApp, setDestApp] = useState<string>('');
@@ -252,8 +252,16 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
         Promise.allSettled(groupNames.map(n => getGroup(n)))
           .then(results => {
             const map: Record<string, FirewallGroup> = {};
-            results.forEach((r, i) => { if (r.status === 'fulfilled') map[groupNames[i]] = r.value; });
+            const origMembers: Record<string, GroupMember[]> = {};
+            results.forEach((r, i) => {
+              if (r.status === 'fulfilled') {
+                map[groupNames[i]] = r.value;
+                origMembers[groupNames[i]] = r.value.members.map(m => ({ ...m }));
+              }
+            });
             setExpandedGroups(map);
+            setOriginalGroupMembers(origMembers);
+            setEditedGroupMembers(origMembers);
           })
           .finally(() => setLoadingGroups(false));
       }
@@ -277,6 +285,35 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
 
   if (!rule) return null;
 
+  // Fix #7: Add/remove members from groups with delta tracking
+  const handleAddMemberToGroup = async (groupName: string) => {
+    if (!newMemberValue.trim()) return;
+    const prefixed = autoPrefix(newMemberValue.trim(), newMemberType);
+    const member: GroupMember = { type: newMemberType, value: prefixed, description: '' };
+    // Update local edited state
+    setEditedGroupMembers(prev => ({
+      ...prev,
+      [groupName]: [...(prev[groupName] || []), member],
+    }));
+    // Persist to backend
+    try {
+      await addGroupMember(groupName, member);
+    } catch { /* will be retried on save */ }
+    setNewMemberValue('');
+    setAddingMemberTo(null);
+  };
+
+  const handleRemoveMemberFromGroup = async (groupName: string, memberValue: string) => {
+    setEditedGroupMembers(prev => ({
+      ...prev,
+      [groupName]: (prev[groupName] || []).filter(m => m.value !== memberValue),
+    }));
+    // Persist to backend
+    try {
+      await removeGroupMember(groupName, memberValue);
+    } catch { /* will be retried on save */ }
+  };
+
   const handleSave = () => {
     onSave(rule.rule_id, {
       source_entries: sourceEntries,
@@ -288,7 +325,7 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
     onClose();
   };
 
-  // Compute full delta for display
+  // Compute full delta for display (Fix #7: includes group member changes)
   const computeDelta = (): RuleDelta => {
     const delta: RuleDelta = { added: {}, removed: {}, changed: {} };
     const origSrc = parseEntries(rule.source);
@@ -313,6 +350,16 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
     if (ports !== origPorts) delta.changed['ports'] = { from: origPorts || '(none)', to: ports || '(none)' };
     if (protocol !== 'TCP') delta.changed['protocol'] = { from: 'TCP', to: protocol };
     if (action !== 'Allow') delta.changed['action'] = { from: 'Allow', to: action };
+    // Fix #7: Track group member add/remove in deltas
+    for (const [grpName, editedMembers] of Object.entries(editedGroupMembers)) {
+      const origMembers = originalGroupMembers[grpName] || [];
+      const origVals = new Set(origMembers.map(m => m.value));
+      const editVals = new Set(editedMembers.map(m => m.value));
+      const addedMembers = editedMembers.filter(m => !origVals.has(m.value)).map(m => m.value);
+      const removedMembers = origMembers.filter(m => !editVals.has(m.value)).map(m => m.value);
+      if (addedMembers.length) delta.added[`group:${grpName}`] = addedMembers;
+      if (removedMembers.length) delta.removed[`group:${grpName}`] = removedMembers;
+    }
     return delta;
   };
   const currentDelta = computeDelta();
@@ -360,26 +407,46 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
             {activeSection === 'source' && (
               <>
                 <EntryEditor label="Source Entries" entries={sourceEntries} onChange={setSourceEntries} />
-                {/* Expanded group members for source */}
-                {sourceEntries.filter(e => expandedGroups[e.value]).map(e => (
+                {/* Expanded group members for source (Fix #7: editable) */}
+                {sourceEntries.filter(e => expandedGroups[e.value]).map(e => {
+                  const members = editedGroupMembers[e.value] || expandedGroups[e.value].members;
+                  const origVals = new Set((originalGroupMembers[e.value] || []).map(m => m.value));
+                  return (
                   <div key={e.value} className="mt-2 border border-emerald-200 rounded-lg overflow-hidden">
                     <div className="px-3 py-1.5 bg-emerald-50 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">GROUP</span>
                         <span className="text-xs font-mono font-medium text-gray-800">{e.value}</span>
                       </div>
-                      <span className="text-[10px] text-gray-500">{expandedGroups[e.value].members.length} member{expandedGroups[e.value].members.length !== 1 ? 's' : ''}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-500">{members.length} member{members.length !== 1 ? 's' : ''}</span>
+                        <button onClick={() => { setAddingMemberTo(addingMemberTo === e.value ? null : e.value); setNewMemberValue(''); }} className="px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200">+ Add</button>
+                      </div>
                     </div>
+                    {addingMemberTo === e.value && (
+                      <div className="px-3 py-2 bg-emerald-50 border-b border-emerald-200 flex gap-2">
+                        <select value={newMemberType} onChange={ev => setNewMemberType(ev.target.value as GroupMember['type'])} className="px-1.5 py-1 text-xs border border-gray-300 rounded bg-white">
+                          <option value="ip">IP</option><option value="subnet">Subnet</option><option value="range">Range</option><option value="group">Group</option>
+                        </select>
+                        <input type="text" placeholder="Value..." value={newMemberValue} onChange={ev => setNewMemberValue(ev.target.value)}
+                          onKeyDown={ev => { if (ev.key === 'Enter') handleAddMemberToGroup(e.value); }}
+                          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500" />
+                        <button onClick={() => handleAddMemberToGroup(e.value)} disabled={!newMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
+                      </div>
+                    )}
                     <div className="px-3 py-1.5 bg-gray-900 max-h-32 overflow-y-auto">
-                      {expandedGroups[e.value].members.map((m, i) => (
-                        <div key={i} className="flex items-center gap-2 py-0.5">
+                      {members.map((m, i) => (
+                        <div key={i} className="flex items-center gap-2 py-0.5 group">
                           <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : m.type === 'subnet' || m.type === 'cidr' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.type === 'ip' ? 'IP' : m.type === 'subnet' || m.type === 'cidr' ? 'NET' : m.type === 'range' ? 'RNG' : 'GRP'}</span>
-                          <span className="text-xs font-mono text-green-400">{m.value}</span>
+                          <span className="flex-1 text-xs font-mono text-green-400">{m.value}</span>
+                          {!origVals.has(m.value) && <span className="text-[9px] text-green-400 font-medium">NEW</span>}
+                          <button onClick={() => handleRemoveMemberFromGroup(e.value, m.value)} className="px-1 py-0.5 text-[9px] text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity">Del</button>
                         </div>
                       ))}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {loadingGroups && <p className="text-xs text-gray-400 italic mt-1">Loading group members...</p>}
               </>
             )}
@@ -419,26 +486,46 @@ export function RuleModifyModal({ isOpen, onClose, rule, onSave }: RuleModifyMod
                   </div>
                 </div>
                 <EntryEditor label="Destination Entries" entries={destEntries} onChange={setDestEntries} />
-                {/* Expanded group members for destination */}
-                {destEntries.filter(e => expandedGroups[e.value]).map(e => (
+                {/* Expanded group members for destination (Fix #7: editable) */}
+                {destEntries.filter(e => expandedGroups[e.value]).map(e => {
+                  const members = editedGroupMembers[e.value] || expandedGroups[e.value].members;
+                  const origVals = new Set((originalGroupMembers[e.value] || []).map(m => m.value));
+                  return (
                   <div key={e.value} className="mt-2 border border-emerald-200 rounded-lg overflow-hidden">
                     <div className="px-3 py-1.5 bg-emerald-50 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">GROUP</span>
                         <span className="text-xs font-mono font-medium text-gray-800">{e.value}</span>
                       </div>
-                      <span className="text-[10px] text-gray-500">{expandedGroups[e.value].members.length} member{expandedGroups[e.value].members.length !== 1 ? 's' : ''}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-500">{members.length} member{members.length !== 1 ? 's' : ''}</span>
+                        <button onClick={() => { setAddingMemberTo(addingMemberTo === e.value ? null : e.value); setNewMemberValue(''); }} className="px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200">+ Add</button>
+                      </div>
                     </div>
+                    {addingMemberTo === e.value && (
+                      <div className="px-3 py-2 bg-emerald-50 border-b border-emerald-200 flex gap-2">
+                        <select value={newMemberType} onChange={ev => setNewMemberType(ev.target.value as GroupMember['type'])} className="px-1.5 py-1 text-xs border border-gray-300 rounded bg-white">
+                          <option value="ip">IP</option><option value="subnet">Subnet</option><option value="range">Range</option><option value="group">Group</option>
+                        </select>
+                        <input type="text" placeholder="Value..." value={newMemberValue} onChange={ev => setNewMemberValue(ev.target.value)}
+                          onKeyDown={ev => { if (ev.key === 'Enter') handleAddMemberToGroup(e.value); }}
+                          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500" />
+                        <button onClick={() => handleAddMemberToGroup(e.value)} disabled={!newMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
+                      </div>
+                    )}
                     <div className="px-3 py-1.5 bg-gray-900 max-h-32 overflow-y-auto">
-                      {expandedGroups[e.value].members.map((m, i) => (
-                        <div key={i} className="flex items-center gap-2 py-0.5">
+                      {members.map((m, i) => (
+                        <div key={i} className="flex items-center gap-2 py-0.5 group">
                           <span className={`px-1 py-0.5 text-[8px] font-bold uppercase rounded ${m.type === 'ip' ? 'bg-blue-100 text-blue-700' : m.type === 'range' ? 'bg-orange-100 text-orange-700' : m.type === 'subnet' || m.type === 'cidr' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.type === 'ip' ? 'IP' : m.type === 'subnet' || m.type === 'cidr' ? 'NET' : m.type === 'range' ? 'RNG' : 'GRP'}</span>
-                          <span className="text-xs font-mono text-green-400">{m.value}</span>
+                          <span className="flex-1 text-xs font-mono text-green-400">{m.value}</span>
+                          {!origVals.has(m.value) && <span className="text-[9px] text-green-400 font-medium">NEW</span>}
+                          <button onClick={() => handleRemoveMemberFromGroup(e.value, m.value)} className="px-1 py-0.5 text-[9px] text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity">Del</button>
                         </div>
                       ))}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {loadingGroups && <p className="text-xs text-gray-400 italic mt-1">Loading group members...</p>}
               </>
             )}

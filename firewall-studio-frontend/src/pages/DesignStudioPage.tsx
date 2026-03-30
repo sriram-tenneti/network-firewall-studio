@@ -57,19 +57,27 @@ export function DesignStudioPage() {
 
   const filteredRules = rules.filter(r => {
     if (r.status === 'Deleted') return false;
-    if (selectedApp && r.application !== selectedApp) return false;
+    if (selectedApp) {
+      const rAppDist = (r as unknown as Record<string, string>).app_distributed_id || '';
+      if (r.application !== selectedApp && rAppDist !== selectedApp) return false;
+    }
     if (selectedEnv && r.environment !== selectedEnv) return false;
     if (activeTab === 'All') return true;
     return r.status === activeTab;
   });
 
+  const matchesApp = (r: FirewallRule) => {
+    if (!selectedApp) return true;
+    const rAppDist = (r as unknown as Record<string, string>).app_distributed_id || '';
+    return r.application === selectedApp || rAppDist === selectedApp;
+  };
   const statusCounts = {
-    All: rules.filter(r => r.status !== 'Deleted' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Draft: rules.filter(r => r.status === 'Draft' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    'Pending Review': rules.filter(r => r.status === 'Pending Review' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Approved: rules.filter(r => r.status === 'Approved' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Deployed: rules.filter(r => r.status === 'Deployed' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
-    Certified: rules.filter(r => r.status === 'Certified' && (!selectedApp || r.application === selectedApp) && (!selectedEnv || r.environment === selectedEnv)).length,
+    All: rules.filter(r => r.status !== 'Deleted' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Draft: rules.filter(r => r.status === 'Draft' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
+    'Pending Review': rules.filter(r => r.status === 'Pending Review' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Approved: rules.filter(r => r.status === 'Approved' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Deployed: rules.filter(r => r.status === 'Deployed' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
+    Certified: rules.filter(r => r.status === 'Certified' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
   };
 
   const handleEdit = async (data: Record<string, string | boolean>) => {
