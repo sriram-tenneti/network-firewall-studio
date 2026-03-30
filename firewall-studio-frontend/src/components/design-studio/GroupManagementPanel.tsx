@@ -41,7 +41,7 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
 
   const loadGroups = async () => {
     try {
-      const data = await api.getGroups(appFilter || undefined);
+      const data = await api.getRealGroups(appFilter || undefined);
       setGroups(data);
     } catch (err) {
       console.error('Failed to load groups:', err);
@@ -105,7 +105,7 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
       setNewMemberValue('');
       setNewMemberDesc('');
       loadGroups();
-      const updated = await api.getGroup(selectedGroup.name);
+      const updated = await api.getRealGroup(selectedGroup.name);
       setSelectedGroup(updated);
     } catch {
       onNotification('Failed to add member', 'error');
@@ -118,7 +118,7 @@ export function GroupManagementPanel({ appFilter, onNotification, appDCMappings 
       await api.removeGroupMember(selectedGroup.name, memberValue);
       onNotification(`Removed ${memberValue} from ${selectedGroup.name}`, 'success');
       loadGroups();
-      const updated = await api.getGroup(selectedGroup.name);
+      const updated = await api.getRealGroup(selectedGroup.name);
       setSelectedGroup(updated);
     } catch {
       onNotification('Failed to remove member', 'error');
