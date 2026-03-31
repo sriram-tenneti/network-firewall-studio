@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
@@ -131,6 +131,17 @@ export default function SettingsPage() {
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
   const [showAddApp, setShowAddApp] = useState(false);
   const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
+
+  // Inline component editor in All Applications table
+  const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
+  const [inlineAddMapping, setInlineAddMapping] = useState(false);
+  const [inlineNewMapping, setInlineNewMapping] = useState<Partial<AppDCMapping>>({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
+  const [inlineEditMappingId, setInlineEditMappingId] = useState<string | null>(null);
+  const [inlineEditForm, setInlineEditForm] = useState<Partial<AppDCMapping>>({});
+
+  // New app component mappings (for Add New Application form)
+  const [newAppMappings, setNewAppMappings] = useState<Partial<AppDCMapping>[]>([]);
+  const [newAppMappingForm, setNewAppMappingForm] = useState<Partial<AppDCMapping>>({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
   const [importingApps, setImportingApps] = useState(false);
   const [importResult, setImportResult] = useState<{ added: number; updated: number; skipped: number; total: number; overrides: { app_distributed_id: string; app_id: string }[] } | null>(null);
   void importResult;
@@ -270,9 +281,15 @@ export default function SettingsPage() {
   const handleAddApp = async () => {
     try {
       await api.createApplication(newAppForm as Record<string, unknown>);
-      showNotification('Application added', 'success');
+      // Also create any component mappings added during app creation
+      for (const mapping of newAppMappings) {
+        await api.createAppDCMapping({ ...mapping, app_id: newAppForm.app_id } as Record<string, unknown>);
+      }
+      showNotification(`Application added${newAppMappings.length > 0 ? ` with ${newAppMappings.length} component mapping(s)` : ''}`, 'success');
       setShowAddApp(false);
       setNewAppForm({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
+      setNewAppMappings([]);
+      setNewAppMappingForm({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
       loadRefData();
     } catch {
       showNotification('Failed to add application', 'error');
@@ -375,6 +392,36 @@ export default function SettingsPage() {
       loadRefData();
       showNotification('Component mapping added', 'success');
     } catch { showNotification('Failed to add mapping', 'error'); }
+  };
+
+  // Inline mapping handlers for All Applications table
+  const handleInlineAddMapping = async (appId: string) => {
+    try {
+      const data = { ...inlineNewMapping, app_id: appId };
+      await api.createAppDCMapping(data as Record<string, unknown>);
+      setInlineAddMapping(false);
+      setInlineNewMapping({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
+      loadRefData();
+      showNotification('Component mapping added', 'success');
+    } catch { showNotification('Failed to add mapping', 'error'); }
+  };
+
+  const handleInlineSaveMapping = async () => {
+    if (!inlineEditMappingId) return;
+    try {
+      await api.updateAppDCMapping(inlineEditMappingId, inlineEditForm as Record<string, unknown>);
+      setInlineEditMappingId(null);
+      loadRefData();
+      showNotification('Mapping updated', 'success');
+    } catch { showNotification('Failed to update mapping', 'error'); }
+  };
+
+  const handleInlineDeleteMapping = async (id: string) => {
+    try {
+      await api.deleteAppDCMapping(id);
+      loadRefData();
+      showNotification('Mapping deleted', 'success');
+    } catch { showNotification('Failed to delete mapping', 'error'); }
   };
 
   const handleSaveMapping = async () => {
@@ -1407,8 +1454,48 @@ export default function SettingsPage() {
                   <input className={inp} placeholder="DCs (e.g. ALPHA_NGDC,BETA_NGDC)" value={newAppForm.dcs || ''} onChange={e => setNewAppForm({ ...newAppForm, dcs: e.target.value })} />
                   <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
+                {/* Component Mappings for new app */}
+                <div className="border border-blue-200 rounded-lg p-3 bg-white/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold text-blue-800">Component Mappings ({newAppMappings.length})</h4>
+                  </div>
+                  <div className="grid grid-cols-7 gap-2 items-center">
+                    <select className="px-2 py-1 text-xs border rounded" value={newAppMappingForm.component || 'APP'} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, component: e.target.value as AppDCMapping['component'] })}>
+                      {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select className="px-2 py-1 text-xs border rounded" value={newAppMappingForm.dc || 'ALPHA_NGDC'} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, dc: e.target.value })}>
+                      <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                    </select>
+                    <input className="px-2 py-1 text-xs border rounded" placeholder="NH (e.g. NH02)" value={newAppMappingForm.nh || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, nh: e.target.value })} />
+                    <input className="px-2 py-1 text-xs border rounded" placeholder="SZ (e.g. CCS)" value={newAppMappingForm.sz || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, sz: e.target.value })} />
+                    <input className="px-2 py-1 text-xs border rounded font-mono" placeholder="CIDR" value={newAppMappingForm.cidr || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, cidr: e.target.value })} />
+                    <input className="px-2 py-1 text-xs border rounded" placeholder="Notes" value={newAppMappingForm.notes || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, notes: e.target.value })} />
+                    <button onClick={() => {
+                      if (!newAppMappingForm.component || !newAppMappingForm.sz) return;
+                      setNewAppMappings(prev => [...prev, { ...newAppMappingForm, status: 'Active' }]);
+                      setNewAppMappingForm({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
+                    }} disabled={!newAppMappingForm.component || !newAppMappingForm.sz}
+                      className="px-2 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-40">+ Add</button>
+                  </div>
+                  {newAppMappings.length > 0 && (
+                    <div className="mt-1 space-y-1">
+                      {newAppMappings.map((m, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs bg-indigo-50 px-2 py-1 rounded">
+                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span>
+                          <span className="font-mono text-gray-600">{m.dc}</span>
+                          <span className="font-mono text-gray-600">NH: {m.nh || '-'}</span>
+                          <span className="font-mono text-gray-700 font-medium">SZ: {m.sz}</span>
+                          <span className="font-mono text-gray-500">{m.cidr || ''}</span>
+                          <span className="text-gray-400 flex-1 truncate">{m.notes || ''}</span>
+                          <button onClick={() => setNewAppMappings(prev => prev.filter((_, i) => i !== idx))}
+                            className="px-1.5 py-0.5 text-[10px] text-red-600 hover:text-red-800">Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className="flex justify-end gap-2">
-                  <button onClick={() => setShowAddApp(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                  <button onClick={() => { setShowAddApp(false); setNewAppMappings([]); }} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
                   <button onClick={handleAddApp} disabled={!newAppForm.app_id || !newAppForm.name}
                     className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-40">Save</button>
                 </div>
@@ -1587,12 +1674,25 @@ export default function SettingsPage() {
                       <tbody className="divide-y divide-gray-100">
                         {applications.map(app => {
                           const isEditing = editingAppId === app.app_id;
+                          const isExpanded = expandedAppId === app.app_id;
+                          const appMappings = (appDCMappings || []).filter(m => m.app_id === app.app_id);
+                          const comps = [...new Set(appMappings.map(m => m.component))].sort();
                           return (
-                          <tr key={app.app_id} className={isEditing ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                          <React.Fragment key={app.app_id}>
+                          <tr className={isEditing ? 'bg-blue-50' : isExpanded ? 'bg-indigo-50' : 'hover:bg-gray-50'}>
                             <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700">{app.app_id}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.app_distributed_id ?? ''} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /> : <span className="font-mono text-xs text-gray-700">{app.app_distributed_id || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /> : <span className="text-xs text-gray-800">{app.name}</span>}</td>
-                            <td className="px-3 py-2">{(() => { const comps = [...new Set((appDCMappings || []).filter(m => m.app_id === app.app_id).map(m => m.component))].sort(); return comps.length > 0 ? <span className="font-mono text-xs text-gray-600">{comps.join(', ')}</span> : <span className="text-xs text-gray-400">-</span>; })()}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                onClick={() => { setExpandedAppId(isExpanded ? null : app.app_id); setInlineAddMapping(false); setInlineEditMappingId(null); }}
+                                className="inline-flex items-center gap-1 text-xs font-mono text-indigo-700 hover:text-indigo-900 hover:underline cursor-pointer"
+                                title={isExpanded ? 'Collapse component mappings' : 'Expand to view/edit component mappings'}
+                              >
+                                <span className="text-[10px]">{isExpanded ? '\u25BC' : '\u25B6'}</span>
+                                {comps.length > 0 ? comps.join(', ') : <span className="text-gray-400 italic">+ Add</span>}
+                              </button>
+                            </td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.dcs || '-'}</span>}</td>
@@ -1615,6 +1715,101 @@ export default function SettingsPage() {
                               )}
                             </td>
                           </tr>
+                          {/* Expanded inline component mapping editor */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={9} className="px-4 py-3 bg-indigo-50/50 border-t border-indigo-100">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-xs font-semibold text-indigo-800">Component Mappings for {app.app_distributed_id || app.app_id} ({appMappings.length})</h4>
+                                    <button onClick={() => { setInlineAddMapping(true); setInlineNewMapping({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' }); }}
+                                      className="px-2 py-1 text-[11px] font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">+ Add Mapping</button>
+                                  </div>
+                                  {inlineAddMapping && (
+                                    <div className="grid grid-cols-8 gap-1 items-center bg-blue-50 p-2 rounded border border-blue-200">
+                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.component || 'APP'} onChange={e => setInlineNewMapping({ ...inlineNewMapping, component: e.target.value as AppDCMapping['component'] })}>
+                                        {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
+                                      </select>
+                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.dc || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, dc: e.target.value })}>
+                                        <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                                      </select>
+                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="NH (e.g. NH02)" value={inlineNewMapping.nh || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, nh: e.target.value })} />
+                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="SZ (e.g. CCS)" value={inlineNewMapping.sz || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, sz: e.target.value })} />
+                                      <input className="px-1 py-1 text-[11px] border rounded font-mono" placeholder="CIDR" value={inlineNewMapping.cidr || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, cidr: e.target.value })} />
+                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.status || 'Active'} onChange={e => setInlineNewMapping({ ...inlineNewMapping, status: e.target.value as AppDCMapping['status'] })}>
+                                        <option value="Active">Active</option><option value="Inactive">Inactive</option>
+                                      </select>
+                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="Notes" value={inlineNewMapping.notes || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, notes: e.target.value })} />
+                                      <div className="flex gap-1">
+                                        <button onClick={() => handleInlineAddMapping(app.app_id)} className="px-2 py-0.5 text-[11px] text-white bg-indigo-600 rounded hover:bg-indigo-700">Add</button>
+                                        <button onClick={() => setInlineAddMapping(false)} className="px-2 py-0.5 text-[11px] text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {appMappings.length > 0 ? (
+                                    <table className="w-full text-[11px]">
+                                      <thead className="bg-indigo-100/50"><tr>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Component</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">DC</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">NH</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">SZ</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">CIDR</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Status</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Notes</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Actions</th>
+                                      </tr></thead>
+                                      <tbody className="divide-y divide-indigo-100">
+                                        {appMappings.map(m => {
+                                          const mid = m.id || `${m.app_id}-${m.component}-${m.dc}`;
+                                          if (inlineEditMappingId === mid) {
+                                            return (
+                                              <tr key={mid} className="bg-blue-50">
+                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.component || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, component: e.target.value as AppDCMapping['component'] })}>
+                                                  {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select></td>
+                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.dc || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, dc: e.target.value })}>
+                                                  <option value="ALPHA_NGDC">ALPHA</option><option value="BETA_NGDC">BETA</option><option value="GAMMA_NGDC">GAMMA</option>
+                                                </select></td>
+                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.nh || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, nh: e.target.value })} /></td>
+                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.sz || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, sz: e.target.value })} /></td>
+                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded font-mono" value={inlineEditForm.cidr || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, cidr: e.target.value })} /></td>
+                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.status || 'Active'} onChange={e => setInlineEditForm({ ...inlineEditForm, status: e.target.value as AppDCMapping['status'] })}>
+                                                  <option value="Active">Active</option><option value="Inactive">Inactive</option>
+                                                </select></td>
+                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.notes || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, notes: e.target.value })} /></td>
+                                                <td className="px-2 py-1"><div className="flex gap-1">
+                                                  <button onClick={handleInlineSaveMapping} className="px-1.5 py-0.5 text-[10px] text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
+                                                  <button onClick={() => setInlineEditMappingId(null)} className="px-1.5 py-0.5 text-[10px] text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
+                                                </div></td>
+                                              </tr>
+                                            );
+                                          }
+                                          return (
+                                            <tr key={mid} className="hover:bg-indigo-50/50">
+                                              <td className="px-2 py-1"><span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span></td>
+                                              <td className="px-2 py-1 font-mono text-gray-700">{m.dc}</td>
+                                              <td className="px-2 py-1 font-mono text-gray-700">{m.nh}</td>
+                                              <td className="px-2 py-1 font-mono text-gray-700">{m.sz}</td>
+                                              <td className="px-2 py-1 font-mono text-gray-600">{m.cidr || '-'}</td>
+                                              <td className="px-2 py-1"><span className={`px-1.5 py-0.5 text-[10px] rounded-full ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span></td>
+                                              <td className="px-2 py-1 text-gray-500 max-w-[120px] truncate">{m.notes || '-'}</td>
+                                              <td className="px-2 py-1"><div className="flex gap-1">
+                                                <button onClick={() => { setInlineEditMappingId(mid); setInlineEditForm({ ...m }); }} className="px-1.5 py-0.5 text-[10px] text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
+                                                <button onClick={() => handleInlineDeleteMapping(mid)} className="px-1.5 py-0.5 text-[10px] text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
+                                              </div></td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  ) : (
+                                    <p className="text-[11px] text-gray-400 italic py-2">No component mappings yet. Click &quot;+ Add Mapping&quot; to define DC/NH/SZ placement for each component.</p>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
                           );
                         })}
                       </tbody>
