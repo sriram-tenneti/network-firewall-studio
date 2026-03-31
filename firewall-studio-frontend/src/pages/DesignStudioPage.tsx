@@ -56,22 +56,27 @@ export function DesignStudioPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filteredRules = rules.filter(r => {
-    if (r.status === 'Deleted') return false;
-    if (selectedApp) {
-      const rAppDist = (r as unknown as Record<string, string>).app_distributed_id || '';
-      if (r.application !== selectedApp && rAppDist !== selectedApp) return false;
-    }
-    if (selectedEnv && r.environment !== selectedEnv) return false;
-    if (activeTab === 'All') return true;
-    return r.status === activeTab;
-  });
+  // Resolve selected app_distributed_id (e.g. "AD-1001") to app_id (e.g. "CRM")
+  // so the filter works against rules that store app_id in `application`
+  const resolvedAppId = (() => {
+    if (!selectedApp) return '';
+    const app = applications.find(a => (a.app_distributed_id || a.app_id) === selectedApp);
+    return app ? app.app_id : selectedApp;
+  })();
 
   const matchesApp = (r: FirewallRule) => {
     if (!selectedApp) return true;
     const rAppDist = (r as unknown as Record<string, string>).app_distributed_id || '';
-    return r.application === selectedApp || rAppDist === selectedApp;
+    return r.application === selectedApp || r.application === resolvedAppId || rAppDist === selectedApp;
   };
+
+  const filteredRules = rules.filter(r => {
+    if (r.status === 'Deleted') return false;
+    if (selectedApp && !matchesApp(r)) return false;
+    if (selectedEnv && r.environment !== selectedEnv) return false;
+    if (activeTab === 'All') return true;
+    return r.status === activeTab;
+  });
   const statusCounts = {
     All: rules.filter(r => r.status !== 'Deleted' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
     Draft: rules.filter(r => r.status === 'Draft' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
@@ -276,7 +281,7 @@ export function DesignStudioPage() {
           >
             <option value="">All Applications</option>
             {applications.map(app => (
-              <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
+              <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
             ))}
           </select>
           <select

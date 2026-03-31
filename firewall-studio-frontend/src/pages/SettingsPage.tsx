@@ -1357,7 +1357,7 @@ export default function SettingsPage() {
                       value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
                       <option value="">-- All Applications --</option>
                       {applications.map(app => (
-                        <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                        <option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id}</option>
                       ))}
                     </select>
                   </div>
@@ -1577,6 +1577,7 @@ export default function SettingsPage() {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Distributed Id</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Components</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Neighborhoods</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZs</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DCs</th>
@@ -1591,6 +1592,7 @@ export default function SettingsPage() {
                             <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700">{app.app_id}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.app_distributed_id ?? ''} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /> : <span className="font-mono text-xs text-gray-700">{app.app_distributed_id || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /> : <span className="text-xs text-gray-800">{app.name}</span>}</td>
+                            <td className="px-3 py-2">{(() => { const comps = [...new Set((appDCMappings || []).filter(m => m.app_id === app.app_id).map(m => m.component))].sort(); return comps.length > 0 ? <span className="font-mono text-xs text-gray-600">{comps.join(', ')}</span> : <span className="text-xs text-gray-400">-</span>; })()}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.dcs || '-'}</span>}</td>

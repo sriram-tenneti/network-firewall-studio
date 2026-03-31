@@ -271,7 +271,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 <select className={sel} value={form.application} onChange={e => { upd('application', e.target.value); upd('src_nh', ''); upd('src_sz', ''); }}>
                   <option value="">Select Source Application...</option>
                   {applications.map(app => (
-                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
+                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
                 <p className="text-[10px] text-gray-400 mt-1">Populates source NH and SZ dropdowns</p>
@@ -281,7 +281,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                 <select className={sel} value={form.dst_application} onChange={e => { upd('dst_application', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); }}>
                   <option value="">Same as Source / All</option>
                   {applications.map(app => (
-                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
+                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
                 <p className="text-[10px] text-gray-400 mt-1">Populates destination NH and SZ dropdowns</p>

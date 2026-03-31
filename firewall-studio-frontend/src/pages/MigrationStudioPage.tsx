@@ -281,7 +281,7 @@ export function MigrationStudioPage() {
   // Build app options from applications list (not from loaded rules, since rules need app selection first)
   const appOptions = applications.map(a => ({
     value: a.app_distributed_id || String(a.app_id),
-    label: `${a.app_distributed_id || a.app_id} - ${a.name}`,
+    label: a.app_distributed_id || a.app_id,
   })).sort((a, b) => a.label.localeCompare(b.label));
 
   const toggleSelection = (ruleId: string) => {
@@ -580,12 +580,12 @@ export function MigrationStudioPage() {
         <div className="flex items-center gap-3">
           <select className={`px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white ${!selectedApp ? 'border-amber-400 ring-1 ring-amber-300' : 'border-gray-300'}`}
             value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
-            <option value="">-- Select Application (Distributed ID) --</option>
-            {appOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                      <option value="">-- Select Application --</option>
+                      {appOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}>
             <option value="">All Environments</option>
             <option value="Production">Production</option>
@@ -721,11 +721,11 @@ export function MigrationStudioPage() {
           <div className="mt-4">
             <select className="px-4 py-2 border border-amber-400 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white min-w-[300px]"
               value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
-              <option value="">-- Select Application (Distributed ID) --</option>
-              {appOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+                          <option value="">-- Select Application --</option>
+                          {appOptions.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
           </div>
         </div>
       ) : (

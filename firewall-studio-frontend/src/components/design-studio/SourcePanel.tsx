@@ -143,7 +143,7 @@ export function SourcePanel({ source, onChange, neighbourhoods, applications, na
                 >
                   <option value="">Select Application</option>
                   {applications.map((app) => (
-                    <option key={app.id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                    <option key={app.id} value={app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
               </div>
