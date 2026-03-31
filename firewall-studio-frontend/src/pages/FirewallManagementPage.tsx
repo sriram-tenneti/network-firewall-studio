@@ -558,8 +558,8 @@ export default function FirewallManagementPage() {
   const nonStandardCount = envFilteredRules.filter(r => !r.is_standard).length;
 
   const appOptions = Array.from(new Set(rules.map(r => `${r.app_distributed_id || r.app_id}|${r.app_id}|${r.app_name}`))).map(key => {
-    const [distId, appId, appName] = key.split('|');
-    return { value: distId, label: `${distId} - ${appName || appId}` };
+    const [distId] = key.split('|');
+    return { value: distId, label: distId };
   }).sort((a, b) => a.label.localeCompare(b.label));
 
   /** Use the same nesting parser for View and Modify so Source/Destination hierarchy is consistent everywhere. */

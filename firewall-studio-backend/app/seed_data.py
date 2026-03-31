@@ -398,20 +398,22 @@ SEED_APP_DC_MAPPINGS = [
     # NH/SZ must match SEED_GROUPS naming: grp-{APP}-{NH}-{SZ}-{COMP}
     # ================================================================
 
-    # --- CRM (AD-1001): Source NH02/STD, Destination NH02/GEN ---
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "STD",
-     "cidr": "10.50.1.10/31", "status": "Active", "notes": "CRM web servers"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "STD",
-     "cidr": "10.50.1.20/29", "status": "Active", "notes": "CRM application servers"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "STD",
-     "cidr": "10.50.1.40/32", "status": "Active", "notes": "CRM batch processing"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "GEN",
-     "cidr": "10.50.1.30/31", "status": "Active", "notes": "CRM database"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "GEN",
-     "cidr": "10.50.1.42/31", "status": "Active", "notes": "CRM message queue"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "STD",
+    # --- CRM (AD-1001): WEB in NH14/PAA, APP/BAT/API in NH02/CCS, DB in NH02/CDE ---
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "WEB", "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
+     "cidr": "10.70.1.10/32", "status": "Active", "notes": "CRM internet-facing web tier"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "10.1.1.0/28", "status": "Active", "notes": "CRM application servers"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "BAT", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "10.1.1.30/32", "status": "Active", "notes": "CRM batch processing"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "API", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+     "cidr": "10.1.1.40/30", "status": "Active", "notes": "CRM API gateway"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.128/28", "status": "Active", "notes": "CRM database – PCI CDE"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "MQ", "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
+     "cidr": "10.1.1.50/31", "status": "Active", "notes": "CRM message queue"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS",
      "cidr": "172.16.1.20/28", "status": "Active", "notes": "CRM Beta DR app tier"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc": "BETA_NGDC", "nh": "NH02", "sz": "GEN",
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
      "cidr": "172.16.1.128/28", "status": "Active", "notes": "CRM Beta DR database"},
 
     # --- HRM (AD-1002): Source NH01/GEN, Destination NH01/STD ---
