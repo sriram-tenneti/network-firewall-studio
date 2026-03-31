@@ -60,9 +60,10 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
       .finally(() => setLoadingGroups(false));
   }, [review, isOpen]);
 
-  // Auto-load egress/ingress boundary analysis when modal opens
+  // Auto-load egress/ingress boundary analysis only for migration reviews
+  const isMigrationReview = review?.request_type === 'migration';
   useEffect(() => {
-    if (!review || !isOpen) return;
+    if (!review || !isOpen || review.request_type !== 'migration') { setEgressIngress(null); return; }
     setEiLoading(true);
     compileEgressIngress(review.rule_id, compileVendor)
       .then(data => setEgressIngress(data as unknown as EgressIngressResult))
@@ -274,13 +275,13 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
         </div>
       )}
 
-      {/* Logical Data Flow Visualization */}
-      {review.rule_id && (
+      {/* Logical Data Flow Visualization — only for migration reviews */}
+      {isMigrationReview && review.rule_id && (
         <LDFFlowVisualization ruleId={review.rule_id} vendor={compileVendor} boundaryData={egressIngress} />
       )}
 
-      {/* Firewall Boundary Analysis */}
-      <div className="border border-amber-200 rounded-lg p-4 bg-amber-50">
+      {/* Firewall Boundary Analysis — only for migration reviews */}
+      {isMigrationReview && <div className="border border-amber-200 rounded-lg p-4 bg-amber-50">
         <h3 className="text-sm font-semibold text-amber-800 mb-2">Firewall Boundary Analysis (Logical Data Flow)</h3>
         {eiLoading ? (
           <p className="text-xs text-amber-600 italic">Analyzing firewall boundaries...</p>
@@ -334,7 +335,7 @@ export function ApprovalModal({ isOpen, onClose, review, onApprove, onReject, on
         ) : (
           <p className="text-xs text-amber-600 italic">No boundary analysis available for this rule.</p>
         )}
-      </div>
+      </div>}
 
       {/* Compile Rule - Prominent for Approvers */}
       <div className="border border-indigo-200 rounded-lg p-4 bg-indigo-50">

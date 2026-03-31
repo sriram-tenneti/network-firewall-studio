@@ -698,15 +698,34 @@ export default function FirewallManagementPage() {
     setShowExportModal(false);
   };
 
+  // Format expanded column text: preserve hierarchy with indentation using parseExpandedToDisplayLines
+  const formatExpandedForExport = (raw: string | undefined, expanded: string | undefined): string => {
+    if (!expanded && !raw) return '';
+    const lines = parseExpandedToDisplayLines(raw || '', expanded || '');
+    if (lines.length === 0) return expanded || raw || '';
+    return lines.map(l => {
+      const indent = '  '.repeat(l.indent);
+      const prefix = l.type === 'group' ? '[GRP] ' : '';
+      return `${indent}${prefix}${l.text}`;
+    }).join('\n');
+  };
+
   const exportRulesToCSV = (exportRules: LegacyRule[], fileLabel: string) => {
     const headers = ['App ID', 'App Current Distributed ID', 'App Name', 'Inventory Item', 'Policy Name', 'Rule Global', 'Rule Action', 'Rule Source', 'Rule Source Expanded', 'Rule Source Zone', 'Rule Destination', 'Rule Destination Expanded', 'Rule Destination Zone', 'Rule Service', 'Rule Service Expanded', 'RN', 'RC'];
     const rows = exportRules.map(r => [
       r.app_id, r.app_distributed_id, r.app_name, r.inventory_item, r.policy_name,
-      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action, r.rule_source, r.rule_source_expanded,
-      r.rule_source_zone, r.rule_destination, r.rule_destination_expanded,
-      r.rule_destination_zone, r.rule_service, r.rule_service_expanded, r.rn, r.rc
+      r.rule_global ? 'TRUE' : 'FALSE', r.rule_action,
+      r.rule_source,
+      formatExpandedForExport(r.rule_source, r.rule_source_expanded),
+      r.rule_source_zone,
+      r.rule_destination,
+      formatExpandedForExport(r.rule_destination, r.rule_destination_expanded),
+      r.rule_destination_zone,
+      r.rule_service,
+      formatExpandedForExport(r.rule_service, r.rule_service_expanded),
+      r.rn, r.rc
     ]);
-    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
