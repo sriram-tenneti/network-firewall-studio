@@ -281,7 +281,7 @@ export function MigrationStudioPage() {
   // Build app options from applications list (not from loaded rules, since rules need app selection first)
   const appOptions = applications.map(a => ({
     value: a.app_distributed_id || String(a.app_id),
-    label: `${a.app_distributed_id || a.app_id} - ${a.name}`,
+    label: a.app_distributed_id || a.app_id,
   })).sort((a, b) => a.label.localeCompare(b.label));
 
   const toggleSelection = (ruleId: string) => {

@@ -1357,7 +1357,7 @@ export default function SettingsPage() {
                       value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
                       <option value="">-- All Applications --</option>
                       {applications.map(app => (
-                        <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                        <option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id}</option>
                       ))}
                     </select>
                   </div>

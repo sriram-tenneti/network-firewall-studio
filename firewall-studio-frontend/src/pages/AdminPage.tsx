@@ -173,7 +173,7 @@ export default function AdminPage() {
           >
             <option value="">All Applications</option>
             {applications.map(app => (
-              <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+              <option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id}</option>
             ))}
           </select>
         </div>
@@ -215,7 +215,7 @@ export default function AdminPage() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">Application</label>
                   <select className="w-full px-2 py-1.5 text-sm border rounded" value={String(addForm.app_id)} onChange={e => setAddForm({ ...addForm, app_id: e.target.value })}>
                     <option value="">Select...</option>
-                    {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_id} - {a.name}</option>)}
+                    {applications.map(a => <option key={a.app_id} value={a.app_id}>{a.app_distributed_id || a.app_id}</option>)}
                   </select>
                 </div>
                 <div>

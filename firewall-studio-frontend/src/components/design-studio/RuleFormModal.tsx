@@ -260,7 +260,7 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
             <select className={inputClass} value={form.application} onChange={e => setForm({ ...form, application: e.target.value })}>
               <option value="">Select Application</option>
               {applications.map(app => (
-                <option key={app.app_id} value={app.app_id}>{app.app_id} - {app.name}</option>
+                <option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id}</option>
               ))}
             </select>
           </div>

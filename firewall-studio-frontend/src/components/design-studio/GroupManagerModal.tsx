@@ -41,6 +41,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [appNHOptions, setAppNHOptions] = useState<string[]>([]);
   const [appSZOptions, setAppSZOptions] = useState<string[]>([]);
   const [appDCOptions, setAppDCOptions] = useState<string[]>([]);
+  const [appComponentOptions, setAppComponentOptions] = useState<string[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -60,30 +61,59 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     } catch { /* ignore */ }
   };
 
-  const updateAppOptions = (selectedAppId: string, mappings?: Record<string, unknown>[]) => {
+  // Resolve app_distributed_id or app_id to matching app_dc_mappings rows
+  const getAppMappings = (selectedAppId: string, mappings?: Record<string, unknown>[]) => {
     const source = mappings || allAppDCMappings;
-    // Resolve: selectedAppId may be app_distributed_id (e.g. "AD-1001") or app_id (e.g. "CRM")
-    // We need to match against both fields in app_dc_mappings, plus resolve via applications list
     const resolvedAppId = (() => {
       const app = applications.find(a => (a.app_distributed_id || a.app_id) === selectedAppId);
       return app ? app.app_id : selectedAppId;
     })();
-    const appMappings = source.filter(m => {
+    return source.filter(m => {
       const mDistId = String(m.app_distributed_id || '');
       const mAppId = String(m.app_id || '');
       return mDistId === selectedAppId || mAppId === selectedAppId || mAppId === resolvedAppId || mDistId === resolvedAppId;
     });
+  };
+
+  const updateAppOptions = (selectedAppId: string, mappings?: Record<string, unknown>[]) => {
+    const appMappings = getAppMappings(selectedAppId, mappings);
     const nhs = [...new Set(appMappings.map(m => String(m.nh || '')).filter(Boolean))].sort();
+    // SZ starts with all SZs for the app; will be narrowed when component is selected
     const szs = [...new Set(appMappings.map(m => String(m.sz || '')).filter(Boolean))].sort();
     const dcs = [...new Set(appMappings.map(m => String(m.dc || '')).filter(Boolean))].sort();
+    // Extract available components from mappings
+    const comps = [...new Set(appMappings.map(m => String(m.component || '')).filter(Boolean))].sort();
     setAppNHOptions(nhs);
     setAppSZOptions(szs);
     setAppDCOptions(dcs);
+    setAppComponentOptions(comps);
     // Auto-select first option if available
     setNewGroup(prev => ({
       ...prev,
       app_id: selectedAppId,
       nh: nhs.length === 1 ? nhs[0] : '',
+      sz: '',  // Reset SZ — user must pick component first
+      subtype: '',  // Reset component
+    }));
+  };
+
+  // When component changes, filter SZ options to only those mapped for that app+component
+  const updateSZForComponent = (component: string) => {
+    if (!component || !newGroup.app_id) {
+      // No component selected — show all SZs for the app
+      const appMappings = getAppMappings(newGroup.app_id);
+      const szs = [...new Set(appMappings.map(m => String(m.sz || '')).filter(Boolean))].sort();
+      setAppSZOptions(szs);
+      return;
+    }
+    const appMappings = getAppMappings(newGroup.app_id);
+    const compMappings = appMappings.filter(m => String(m.component || '') === component);
+    const szs = [...new Set(compMappings.map(m => String(m.sz || '')).filter(Boolean))].sort();
+    setAppSZOptions(szs);
+    // Auto-select SZ if only one option
+    setNewGroup(prev => ({
+      ...prev,
+      subtype: component,
       sz: szs.length === 1 ? szs[0] : '',
     }));
   };
@@ -259,7 +289,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
             >
               <option value="">All Applications</option>
               {applications.map(app => (
-                <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
+                <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
               ))}
             </select>
           </div>
@@ -291,7 +321,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 <select className={inputClass} value={newGroup.app_id} onChange={e => { setNewGroup({ ...newGroup, app_id: e.target.value, dc: '', nh: '', sz: '', subtype: '', customSuffix: '' }); updateAppOptions(e.target.value); setCreateValidationError(null); }}>
                   <option value="">-- Select Application --</option>
                   {applications.map(app => (
-                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id} - {app.name}</option>
+                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
                 {newGroup.app_id && appDCOptions.length > 0 && (
@@ -319,15 +349,15 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Component <span className="text-red-500">*</span></label>
-                  <select className={inputClass} value={newGroup.subtype} onChange={e => { setNewGroup({ ...newGroup, subtype: e.target.value }); setCreateValidationError(null); }}>
+                  <select className={inputClass} value={newGroup.subtype} onChange={e => { updateSZForComponent(e.target.value); setCreateValidationError(null); }} disabled={!newGroup.app_id}>
                     <option value="">-- Select Component --</option>
-                    <option value="WEB">WEB</option>
-                    <option value="APP">APP</option>
-                    <option value="DB">DB</option>
-                    <option value="MQ">MQ</option>
-                    <option value="BAT">BAT</option>
-                    <option value="API">API</option>
+                    {appComponentOptions.length > 0
+                      ? appComponentOptions.map(c => <option key={c} value={c}>{c}</option>)
+                      : ['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)
+                    }
                   </select>
+                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
+                  {newGroup.subtype && appSZOptions.length > 0 && <p className="text-[9px] text-green-600 mt-0.5">SZ filtered for {newGroup.subtype}</p>}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
