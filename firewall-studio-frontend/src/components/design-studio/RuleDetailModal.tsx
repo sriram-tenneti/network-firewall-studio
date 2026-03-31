@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { StatusBadge } from '../shared/StatusBadge';
-import { getRealGroup } from '@/lib/api';
+import { getGroup } from '@/lib/api';
 import type { FirewallRule, FirewallGroup } from '@/types';
 
 interface RuleDetailModalProps {
@@ -86,7 +86,7 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
     }
     if (groupNames.length === 0) return;
     setLoadingGroups(true);
-    Promise.allSettled(groupNames.map(n => getRealGroup(n)))
+    Promise.allSettled(groupNames.map(n => getGroup(n)))
       .then(results => {
         const map: Record<string, FirewallGroup> = {};
         results.forEach((r, i) => { if (r.status === 'fulfilled') map[groupNames[i]] = r.value; });

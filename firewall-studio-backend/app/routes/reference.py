@@ -1687,32 +1687,14 @@ async def get_real_rules_only():
 
 
 @router.get("/groups/real")
-async def get_real_groups_only(app_id: str | None = None):
+async def get_real_groups_only():
     """Return only groups that were created by the user (not seed data).
-    Groups with _user_created=True or created after seed are considered real.
-    Optionally filter by app_id (matches app_id or app_distributed_id)."""
+    Groups with _user_created=True or created after seed are considered real."""
     from app.database import get_groups
     groups = await get_groups()
     # Filter: only groups with _user_created flag or groups created via Studio
     real_groups = [g for g in groups if g.get("_user_created", False) or g.get("source") == "studio"]
-    if app_id:
-        real_groups = [g for g in real_groups if str(g.get("app_id", "")) == app_id or str(g.get("app_distributed_id", "")) == app_id]
     return real_groups
-
-
-@router.get("/groups/real/{name:path}")
-async def get_real_group_by_name(name: str):
-    """Return a single group by name, but only if it is user-created (Manage Groups).
-    Returns 404 if the group is a legacy/seed group or doesn't exist."""
-    from app.database import get_groups
-    groups = await get_groups()
-    for g in groups:
-        if g.get("name") == name:
-            if g.get("_user_created", False) or g.get("source") == "studio":
-                return g
-            # Group exists but is legacy — return 404 so Studio won't show it
-            raise HTTPException(status_code=404, detail=f"Group '{name}' is a legacy group (not from Manage Groups)")
-    raise HTTPException(status_code=404, detail=f"Group '{name}' not found")
 
 
 @router.get("/reviews/real")

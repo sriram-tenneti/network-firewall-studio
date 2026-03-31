@@ -7,8 +7,8 @@ import { Modal } from '@/components/shared/Modal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import {
-  getLegacyRules, submitLegacyRulesForReview, migrateRulesToNGDC,
-  getNGDCRecommendations, compileLegacyRule,
+  getLegacyRules, submitLegacyRulesForReview,
+  migrateRulesToNGDC, getNGDCRecommendations, compileLegacyRule,
   validateBirthright, getGroups,
   createMigrationGroup, getApplications, getImportedApps, lookupIPMapping,
   getIPMappings, importIPMappings, compileEgressIngress,
@@ -124,6 +124,7 @@ export function MigrationStudioPage() {
   const [groupMappingsFilter] = useState('');
   const [loadingMappings, setLoadingMappings] = useState(false);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const detailModal = useModal<LegacyRule>();
   const { notification, showNotification } = useNotification();
 
@@ -283,8 +284,36 @@ export function MigrationStudioPage() {
     label: a.app_distributed_id || a.app_id,
   })).sort((a, b) => a.label.localeCompare(b.label));
 
-  // Bulk select/migrate removed — each rule requires individual migration workflow
-  // with proper review of mappings, compile, and CHG submission
+  const toggleSelection = (ruleId: string) => {
+    setSelectedRuleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(ruleId)) next.delete(ruleId); else next.add(ruleId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRuleIds.size === filteredRules.length) setSelectedRuleIds(new Set());
+    else setSelectedRuleIds(new Set(filteredRules.map(r => r.id)));
+  };
+
+  const handleSubmitForReview = async () => {
+    if (selectedRuleIds.size === 0) { showNotification('Select rules to submit for review', 'error'); return; }
+    try {
+      const result = await submitLegacyRulesForReview(Array.from(selectedRuleIds));
+      showNotification(`${result.submitted} rules submitted for review`, 'success');
+      setSelectedRuleIds(new Set()); loadData();
+    } catch { showNotification('Failed to submit for review', 'error'); }
+  };
+
+  const handleMigrateSelected = async () => {
+    if (selectedRuleIds.size === 0) { showNotification('Select rules to migrate', 'error'); return; }
+    try {
+      const result = await migrateRulesToNGDC(Array.from(selectedRuleIds));
+      showNotification(`${result.migrated} rules migrated to NGDC`, 'success');
+      setSelectedRuleIds(new Set()); loadData();
+    } catch { showNotification('Failed to migrate rules', 'error'); }
+  };
 
   const openMigratePopup = async (rule: LegacyRule) => {
     setMigrateRule(rule); setLoadingRec(true); setCompiledRule(null);
@@ -418,6 +447,13 @@ export function MigrationStudioPage() {
   };
 
   const columns: Column<LegacyRule>[] = [
+    {
+      key: '_select', header: '', sortable: false, width: '40px',
+      render: (_, row) => (
+        <input type="checkbox" checked={selectedRuleIds.has(row.id)} onChange={() => toggleSelection(row.id)}
+          onClick={e => e.stopPropagation()} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+      ),
+    },
     { key: 'id', header: 'Rule ID', sortable: true, width: '80px' },
     { key: 'app_id', header: 'App ID', sortable: true, width: '70px',
       render: (_, row) => <span className="text-xs">{String(row.app_id)}</span>,
@@ -560,6 +596,17 @@ export function MigrationStudioPage() {
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Table View</button>
             <button onClick={() => setViewMode('group-mappings')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'group-mappings' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Group Mappings</button>
           </div>
+          {selectedRuleIds.size > 0 && (
+            <>
+              <span className="text-sm text-gray-600 font-medium">{selectedRuleIds.size} selected</span>
+              <button onClick={handleSubmitForReview} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
+                Submit for Review
+              </button>
+              <button onClick={handleMigrateSelected} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 shadow-sm">
+                Migrate to NGDC
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -685,6 +732,10 @@ export function MigrationStudioPage() {
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4 flex items-center justify-between">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+          <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+            <input type="checkbox" checked={selectedRuleIds.size === filteredRules.length && filteredRules.length > 0} onChange={toggleSelectAll} className="rounded border-gray-300 text-blue-600" />
+            Select All
+          </label>
         </div>
         <div className="p-4">
           {loading ? (
@@ -737,8 +788,9 @@ export function MigrationStudioPage() {
                 {parseExpandedToDisplayLines(detailModal.data.rule_source || '', detailModal.data.rule_source_expanded || '').map((item, i) => {
                   const eType = item.type === 'group' ? 'GRP' : item.type === 'range' ? 'RNG' : item.type === 'subnet' ? 'NET' : 'IP';
                   const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const isChild = item.indent >= 1;
                   return (
-                    <div key={i} className={`flex items-center gap-2 ${item.indent > 0 ? 'border-l-2 border-gray-600 pl-2' : ''}`} style={{ marginLeft: `${item.indent * 16}px` }}>
+                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
                       <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
                       <span className="font-mono text-xs text-green-400">{item.text}</span>
                     </div>
@@ -755,8 +807,9 @@ export function MigrationStudioPage() {
                 {parseExpandedToDisplayLines(detailModal.data.rule_destination || '', detailModal.data.rule_destination_expanded || '').map((item, i) => {
                   const eType = item.type === 'group' ? 'GRP' : item.type === 'range' ? 'RNG' : item.type === 'subnet' ? 'NET' : 'IP';
                   const badgeColor = eType === 'GRP' ? 'bg-emerald-100 text-emerald-700' : eType === 'RNG' ? 'bg-orange-100 text-orange-700' : eType === 'NET' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                  const isChild = item.indent >= 1;
                   return (
-                    <div key={i} className={`flex items-center gap-2 ${item.indent > 0 ? 'border-l-2 border-gray-600 pl-2' : ''}`} style={{ marginLeft: `${item.indent * 16}px` }}>
+                    <div key={i} className={`flex items-center gap-2 ${isChild ? 'ml-6 pl-3 border-l-2 border-gray-600' : ''}`}>
                       <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}`}>{eType}</span>
                       <span className="font-mono text-xs text-purple-400">{item.text}</span>
                     </div>
