@@ -1584,11 +1584,31 @@ async def delete_firewall_device_endpoint(device_id: str):
 
 @router.post("/ip-mappings/import")
 async def import_ip_mappings_endpoint(data: dict):
-    """Import multiple IP mappings at once, optionally for a specific app."""
+    """Import IP mappings with CIDR validation. Accepts: app_id, component, legacy_ip, ngdc_ip.
+    Auto-validates NGDC IPs against AppDCMapping CIDR ranges and populates NH/SZ/DC."""
     from app.database import import_ip_mappings
     records = data.get("mappings", [])
     app_id = data.get("app_id")
     return import_ip_mappings(records, app_id)
+
+
+# ---- Auto-Group Creation from IP Mappings ----
+
+@router.post("/ip-mappings/validate-and-create-groups")
+async def validate_and_create_groups_endpoint(data: dict = {}):
+    """Validate all IP mappings against CIDR ranges and auto-create groups.
+    Groups follow naming standard: grp-{APP}-{NH}-{SZ}-{Component}.
+    Optionally filter by app_id."""
+    from app.database import validate_and_create_groups_from_mappings
+    app_id = data.get("app_id") if data else None
+    return await validate_and_create_groups_from_mappings(app_id)
+
+
+@router.get("/ip-mappings/auto-groups")
+async def get_auto_generated_groups_endpoint(app_id: str | None = None):
+    """Get all auto-generated groups from IP mapping CIDR validation."""
+    from app.database import get_auto_generated_groups
+    return await get_auto_generated_groups(app_id)
 
 
 # ---- Firewall Device Patterns ----
