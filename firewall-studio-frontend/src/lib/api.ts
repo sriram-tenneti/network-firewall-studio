@@ -776,6 +776,89 @@ export const bulkSaveAppDCMappings = (mappings: Record<string, unknown>[]) =>
     method: 'POST', body: JSON.stringify({ mappings }),
   });
 
+// ---- Partial Migration Architecture ----
+
+export interface AppMigrationSummary {
+  app_id: string;
+  app_distributed_id: string;
+  total_components: number;
+  ngdc_count: number;
+  legacy_count: number;
+  pct_migrated: number;
+  migration_scenario: 'Full NGDC' | 'Full Legacy' | 'Partial';
+  components: {
+    component: string;
+    dc_location: 'NGDC' | 'Legacy';
+    dc: string;
+    nh: string;
+    sz: string;
+    legacy_dc: string;
+    legacy_cidr: string;
+    cidr: string;
+    status: string;
+    notes: string;
+  }[];
+}
+
+export interface RuleEndpointClassification {
+  source_dc_location: string;
+  destination_dc_location: string;
+  scenario: string;
+  is_cross_dc: boolean;
+  heritage_direction: string;
+  requires_heritage_matrix: boolean;
+}
+
+export interface AppLifecycleStatus {
+  app_id: string;
+  status: string;
+  pct_migrated: number;
+  scenario: string;
+  transitions: string[];
+  total_components: number;
+  ngdc_count: number;
+  legacy_count: number;
+}
+
+export const getAppMigrationSummary = () =>
+  fetchJSON<AppMigrationSummary[]>('/api/reference/app-migration-summary');
+
+export const getAppMigrationStatus = (appId: string) =>
+  fetchJSON<AppMigrationSummary>(`/api/reference/app-migration-summary/${appId}`);
+
+export const classifyRuleEndpoints = (data: Record<string, unknown>) =>
+  fetchJSON<RuleEndpointClassification>('/api/reference/classify-rule-endpoints', {
+    method: 'POST', body: JSON.stringify(data),
+  });
+
+export const validateBirthrightCrossDC = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/validate-birthright-cross-dc', {
+    method: 'POST', body: JSON.stringify(data),
+  });
+
+export const determineCrossDCBoundaries = (data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/determine-cross-dc-boundaries', {
+    method: 'POST', body: JSON.stringify(data),
+  });
+
+export const compileHybridRule = (ruleId: string, vendor = 'generic') =>
+  fetchJSON<Record<string, unknown>>('/api/reference/compile-hybrid-rule', {
+    method: 'POST', body: JSON.stringify({ rule_id: ruleId, vendor }),
+  });
+
+export const getAppLifecycleStatus = (appId: string) =>
+  fetchJSON<AppLifecycleStatus>(`/api/reference/app-lifecycle-status/${appId}`);
+
+export const transitionAppMigration = (appId: string, newStatus: string) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/app-lifecycle-transition', {
+    method: 'POST', body: JSON.stringify({ app_id: appId, new_status: newStatus }),
+  });
+
+export const getHybridGroupNames = (appId: string) =>
+  fetchJSON<{ app_id: string; scenario: string; groups: Record<string, unknown>[] }>(
+    `/api/reference/hybrid-group-names/${appId}`
+  );
+
 // Standalone JSON Seed Export
 export const exportSeedJSON = () =>
   fetchJSON<{

@@ -1877,6 +1877,85 @@ async def import_app_management_endpoint(file: UploadFile = File(...)):
 
 # ---- Standalone JSON Seed Export ----
 
+# ---- Partial Migration Architecture ----
+
+@router.get("/app-migration-summary")
+async def app_migration_summary():
+    """Return per-app migration summary with dc_location breakdown."""
+    from app.database import get_app_migration_summary
+    return await get_app_migration_summary()
+
+
+@router.get("/app-migration-summary/{app_id}")
+async def app_migration_status(app_id: str):
+    """Return migration status for a single app."""
+    from app.database import get_app_migration_status
+    result = await get_app_migration_status(app_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="App not found")
+    return result
+
+
+@router.post("/classify-rule-endpoints")
+async def classify_endpoints(data: dict):
+    """Classify rule source/destination as NGDC or Legacy."""
+    from app.database import classify_rule_endpoints
+    return await classify_rule_endpoints(data)
+
+
+@router.post("/validate-birthright-cross-dc")
+async def validate_cross_dc(data: dict):
+    """Validate a rule against Heritage DC matrix for cross-DC flows."""
+    from app.database import validate_birthright_cross_dc
+    return await validate_birthright_cross_dc(data)
+
+
+@router.post("/determine-cross-dc-boundaries")
+async def cross_dc_boundaries(data: dict):
+    """Determine LDF boundaries for cross-DC (NGDC ↔ Legacy) flows."""
+    from app.database import determine_cross_dc_boundaries
+    return await determine_cross_dc_boundaries(data)
+
+
+@router.post("/compile-hybrid-rule")
+async def compile_hybrid(data: dict):
+    """Compile a hybrid rule spanning NGDC and Legacy infrastructure."""
+    from app.database import compile_hybrid_rule
+    rule_id = data.get("rule_id", "")
+    vendor = data.get("vendor", "generic")
+    if not rule_id:
+        raise HTTPException(status_code=400, detail="rule_id required")
+    result = await compile_hybrid_rule(rule_id, vendor)
+    if not result:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return result
+
+
+@router.get("/app-lifecycle-status/{app_id}")
+async def app_lifecycle(app_id: str):
+    """Get migration lifecycle status for an app."""
+    from app.database import get_app_lifecycle_status
+    return await get_app_lifecycle_status(app_id)
+
+
+@router.post("/app-lifecycle-transition")
+async def app_lifecycle_transition(data: dict):
+    """Transition an app's migration lifecycle status."""
+    from app.database import transition_app_migration_status
+    app_id = data.get("app_id", "")
+    new_status = data.get("new_status", "")
+    if not app_id or not new_status:
+        raise HTTPException(status_code=400, detail="app_id and new_status required")
+    return await transition_app_migration_status(app_id, new_status)
+
+
+@router.get("/hybrid-group-names/{app_id}")
+async def hybrid_group_names(app_id: str):
+    """Generate NGDC and Legacy group names for an app's components."""
+    from app.database import generate_hybrid_group_names
+    return await generate_hybrid_group_names(app_id)
+
+
 @router.get("/export/seed-json")
 async def export_seed_json():
     """Export all seed reference data as standalone JSON objects suitable for
