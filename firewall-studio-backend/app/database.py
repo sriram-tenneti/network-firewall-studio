@@ -5105,6 +5105,259 @@ async def create_migration_group(name: str, app_id: str, members: list[dict[str,
 
 
 # ============================================================
+# CIDR Validation & Auto-Group Creation from IP Mappings
+# ============================================================
+
+def _validate_ip_against_cidr(ip_str: str, cidr_str: str) -> bool:
+    """Check if an IP address falls within a CIDR range."""
+    import ipaddress
+    if not ip_str or not cidr_str:
+        return False
+    # Strip common prefixes
+    ip_clean = ip_str.strip()
+    for pfx in ("svr-", "net-", "sub-", "rng-", "grp-"):
+        if ip_clean.lower().startswith(pfx):
+            ip_clean = ip_clean[len(pfx):]
+            break
+    try:
+        net = ipaddress.ip_network(cidr_str.strip(), strict=False)
+        # Try as single IP first
+        try:
+            addr = ipaddress.ip_address(ip_clean)
+            return addr in net
+        except ValueError:
+            # Try as subnet
+            try:
+                test_net = ipaddress.ip_network(ip_clean, strict=False)
+                return test_net.subnet_of(net)
+            except (ValueError, TypeError):
+                return False
+    except (ValueError, TypeError):
+        return False
+
+
+def _find_matching_app_dc_mapping(ngdc_ip: str, app_id: str, component: str = "") -> dict[str, Any] | None:
+    """Find the AppDCMapping entry whose CIDR contains the given NGDC IP.
+    If component is specified, prefer that component's mapping."""
+    app_dc_mappings = _load("app_dc_mappings") or []
+    app_maps = [m for m in app_dc_mappings
+                if str(m.get("app_distributed_id", "")).upper() == app_id.upper()
+                or str(m.get("app_id", "")).upper() == app_id.upper()]
+
+    # If component specified, try component-specific match first
+    if component:
+        comp_upper = component.upper()
+        for m in app_maps:
+            if str(m.get("component", "")).upper() == comp_upper:
+                cidr = m.get("cidr", "")
+                if cidr and _validate_ip_against_cidr(ngdc_ip, cidr):
+                    return m
+
+    # Fall back to any matching CIDR
+    for m in app_maps:
+        cidr = m.get("cidr", "")
+        if cidr and _validate_ip_against_cidr(ngdc_ip, cidr):
+            return m
+
+    return None
+
+
+def import_ip_mappings(records: list[dict[str, Any]], app_id: str | None = None) -> dict[str, Any]:
+    """Import IP mappings with CIDR validation against AppDCMapping.
+    Each record should have: app_id (or use the app_id param), component, legacy_ip, ngdc_ip.
+    Auto-populates NH, SZ, DC from matching AppDCMapping CIDR and creates groups."""
+    existing = _load("ip_mappings") or []
+    existing_keys = {(str(m.get("legacy_ip", "")), str(m.get("app_id", ""))) for m in existing}
+    added = 0
+    validated = 0
+    invalid = 0
+    validation_errors: list[str] = []
+
+    for rec in records:
+        rec_app = str(rec.get("app_id") or rec.get("app") or app_id or "").strip()
+        legacy_ip = str(rec.get("legacy_ip") or rec.get("Legacy IP") or "").strip()
+        ngdc_ip = str(rec.get("ngdc_ip") or rec.get("NGDC IP") or "").strip()
+        component = str(rec.get("component") or rec.get("Component") or "").strip().upper()
+
+        if not legacy_ip or not ngdc_ip:
+            continue
+        if (legacy_ip, rec_app) in existing_keys:
+            continue
+
+        # CIDR validation: check NGDC IP against AppDCMapping
+        match = _find_matching_app_dc_mapping(ngdc_ip, rec_app, component)
+        cidr_valid = match is not None
+        matched_nh = match.get("nh", "") if match else ""
+        matched_sz = match.get("sz", "") if match else ""
+        matched_dc = match.get("dc", "") if match else ""
+        matched_component = match.get("component", component) if match else component
+        matched_cidr = match.get("cidr", "") if match else ""
+
+        if not cidr_valid:
+            invalid += 1
+            validation_errors.append(f"{ngdc_ip} (app={rec_app}, component={component}) - no matching CIDR range")
+        else:
+            validated += 1
+
+        mapping = {
+            "id": _id(),
+            "app_id": rec_app,
+            "legacy_ip": legacy_ip,
+            "ngdc_ip": ngdc_ip,
+            "component": matched_component or component,
+            "ngdc_nh": matched_nh,
+            "ngdc_sz": matched_sz,
+            "ngdc_dc": matched_dc,
+            "cidr": matched_cidr,
+            "cidr_valid": cidr_valid,
+            "ngdc_group": f"grp-{rec_app}-{matched_nh}-{matched_sz}-{matched_component}" if cidr_valid and matched_nh and matched_sz and matched_component else "",
+            "created_at": _now(),
+        }
+        # Also copy over any extra fields from the record
+        for k in ("legacy_dc", "ngdc_name"):
+            if rec.get(k):
+                mapping[k] = str(rec[k])
+
+        existing.append(mapping)
+        existing_keys.add((legacy_ip, rec_app))
+        added += 1
+
+    _save("ip_mappings", existing)
+    return {
+        "added": added,
+        "validated": validated,
+        "invalid": invalid,
+        "validation_errors": validation_errors[:20],  # Limit error messages
+        "total": len(existing),
+    }
+
+
+async def validate_and_create_groups_from_mappings(app_id: str | None = None) -> dict[str, Any]:
+    """Validate all IP mappings against CIDR ranges and auto-create groups.
+    Groups follow naming standard: grp-{APP}-{NH}-{SZ}-{Component}
+    Returns summary of created/updated groups."""
+    ip_mappings = _load("ip_mappings") or []
+    if app_id:
+        ip_mappings = [m for m in ip_mappings if str(m.get("app_id", "")).upper() == app_id.upper()]
+
+    groups = _load("groups") or []
+    groups_by_name: dict[str, dict[str, Any]] = {g.get("name", ""): g for g in groups}
+
+    # Group IP mappings by auto-generated group name
+    group_buckets: dict[str, list[dict[str, Any]]] = {}
+    revalidated = 0
+    for m in ip_mappings:
+        ngdc_ip = str(m.get("ngdc_ip", ""))
+        m_app = str(m.get("app_id", ""))
+        component = str(m.get("component", ""))
+
+        # Re-validate CIDR on each call to pick up any mapping changes
+        match = _find_matching_app_dc_mapping(ngdc_ip, m_app, component)
+        if match:
+            nh = match.get("nh", "")
+            sz = match.get("sz", "")
+            comp = match.get("component", component)
+            grp_name = f"grp-{m_app}-{nh}-{sz}-{comp}"
+            m["ngdc_nh"] = nh
+            m["ngdc_sz"] = sz
+            m["ngdc_dc"] = match.get("dc", "")
+            m["component"] = comp
+            m["cidr"] = match.get("cidr", "")
+            m["cidr_valid"] = True
+            m["ngdc_group"] = grp_name
+            revalidated += 1
+
+            if grp_name not in group_buckets:
+                group_buckets[grp_name] = []
+            group_buckets[grp_name].append(m)
+        else:
+            m["cidr_valid"] = False
+            m["ngdc_group"] = ""
+
+    # Save updated mappings
+    all_mappings = _load("ip_mappings") or []
+    mappings_by_id = {m.get("id"): m for m in ip_mappings}
+    for i, em in enumerate(all_mappings):
+        mid = em.get("id")
+        if mid and mid in mappings_by_id:
+            all_mappings[i] = mappings_by_id[mid]
+    _save("ip_mappings", all_mappings)
+
+    # Create/update groups for each bucket
+    created = 0
+    updated = 0
+    created_groups: list[dict[str, Any]] = []
+
+    for grp_name, mappings in group_buckets.items():
+        members = []
+        for m in mappings:
+            ip = str(m.get("ngdc_ip", ""))
+            if "/" in ip:
+                members.append({"type": "subnet", "value": f"net-{ip}"})
+            elif "-" in ip and not ip.startswith("svr-"):
+                members.append({"type": "range", "value": f"rng-{ip}"})
+            else:
+                clean_ip = ip
+                for pfx in ("svr-", "net-", "rng-"):
+                    if clean_ip.lower().startswith(pfx):
+                        clean_ip = clean_ip[len(pfx):]
+                        break
+                members.append({"type": "ip", "value": f"svr-{clean_ip}"})
+
+        first = mappings[0]
+        m_app = str(first.get("app_id", ""))
+        nh = str(first.get("ngdc_nh", ""))
+        sz = str(first.get("ngdc_sz", ""))
+        component = str(first.get("component", ""))
+
+        if grp_name in groups_by_name:
+            # Update existing group members
+            existing_grp = groups_by_name[grp_name]
+            existing_grp["members"] = members
+            existing_grp["updated_at"] = _now()
+            existing_grp["component"] = component
+            existing_grp["auto_generated"] = True
+            updated += 1
+            created_groups.append(existing_grp)
+        else:
+            new_grp = {
+                "name": grp_name,
+                "app_id": m_app,
+                "members": members,
+                "nh": nh,
+                "sz": sz,
+                "component": component,
+                "type": "migration",
+                "auto_generated": True,
+                "created_at": _now(),
+                "updated_at": _now(),
+            }
+            groups.append(new_grp)
+            groups_by_name[grp_name] = new_grp
+            created += 1
+            created_groups.append(new_grp)
+
+    _save("groups", groups)
+
+    return {
+        "revalidated": revalidated,
+        "groups_created": created,
+        "groups_updated": updated,
+        "total_groups": len(created_groups),
+        "groups": created_groups,
+    }
+
+
+async def get_auto_generated_groups(app_id: str | None = None) -> list[dict[str, Any]]:
+    """Get all auto-generated groups, optionally filtered by app."""
+    groups = _load("groups") or []
+    auto_groups = [g for g in groups if g.get("auto_generated")]
+    if app_id:
+        auto_groups = [g for g in auto_groups if str(g.get("app_id", "")).upper() == app_id.upper()]
+    return auto_groups
+
+
+# ============================================================
 # Separate JSON Storage (user-data/) — Migration Data & Studio Rules
 # These are stored independently from seed/live data for safe cleanup.
 # ============================================================
