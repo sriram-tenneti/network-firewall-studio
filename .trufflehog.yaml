@@ -1,0 +1,30 @@
+# TruffleHog configuration for Network Firewall Studio
+# Scans for accidentally committed secrets, API keys, tokens, etc.
+
+detectors:
+  - name: AWS
+  - name: Azure
+  - name: GCP
+  - name: GitHub
+  - name: GitLab
+  - name: Slack
+  - name: PrivateKey
+  - name: JWT
+  - name: GenericAPIKey
+
+# Paths to exclude from scanning
+exclude_paths:
+  - node_modules/
+  - .venv/
+  - __pycache__/
+  - "*.pyc"
+  - dist/
+  - build/
+  - coverage/
+  - htmlcov/
+  - "*.lock"
+  - package-lock.json
+  - "*.map"
+
+# Only report verified secrets to reduce false positives
+only_verified: true

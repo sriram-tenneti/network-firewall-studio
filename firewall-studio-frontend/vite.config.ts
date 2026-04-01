@@ -9,5 +9,17 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/test/**/*.test.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary", "lcov", "cobertura"],
+      reportsDirectory: "./coverage",
+      include: ["src/lib/**", "src/types/**"],
+    },
+  },
 })
 
