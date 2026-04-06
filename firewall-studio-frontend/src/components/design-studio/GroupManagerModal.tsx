@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { getGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings, getAffectedRules, submitGroupPolicyChanges } from '@/lib/api';
 import type { FirewallGroup, GroupMember } from '@/types';
-import { autoPrefix } from '@/lib/utils';
+import { autoPrefix, isNgdcGroupName } from '@/lib/utils';
 
 interface GroupManagerModalProps {
   isOpen: boolean;
@@ -211,6 +211,8 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
         members: createMembers.map(m => ({ type: m.type, value: m.value, description: m.description })),
       };
       await createGroup(prefixedGroup);
+      // Track group creation as a policy change — new group affects any rule referencing it
+      setPendingChanges(prev => [...prev, { type: 'group_created', detail: `Created group ${autoGroupName} with ${createMembers.length} member(s)` }]);
       setShowCreate(false);
       setNewGroup({ app_id: filterAppId || '', dc: '', nh: '', sz: '', subtype: '', customSuffix: '', description: '', environment: filterEnv || 'Production' });
       setCreateMembers([]);
@@ -282,12 +284,10 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   // Classify group as NGDC or Legacy based on naming standard: grp-{APP}-{NH}-{SZ}-{Component}
   const classifyGroup = (g: FirewallGroup): 'NGDC' | 'Legacy' | 'Unknown' => {
     const name = g.name || '';
-    // NGDC naming standard: grp-{APP}-{NH}-{SZ}-{Component}
-    const ngdcPattern = /^grp-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+/;
-    if (ngdcPattern.test(name) && g.nh && g.sz && g.subtype) return 'NGDC';
+    if (isNgdcGroupName(name) && g.nh && g.sz && g.subtype) return 'NGDC';
     // Legacy groups often come from imports without structured naming
     if ((g as unknown as Record<string, unknown>).type === 'migration' || !g.nh || !g.sz) return 'Legacy';
-    return ngdcPattern.test(name) ? 'NGDC' : 'Legacy';
+    return isNgdcGroupName(name) ? 'NGDC' : 'Legacy';
   };
 
   // Compile group as vendor-specific device policy (like rule compile)

@@ -5,7 +5,7 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled } from '@/lib/api';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled, submitGroupPolicyChanges } from '@/lib/api';
 import { autoCreateLegacyGroupsFromRules } from '@/lib/legacyGroupAutoCreate';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
@@ -672,6 +672,18 @@ export default function FirewallManagementPage() {
         rule_service_expanded: buildExpandedText(serviceEntries),
       };
       await createRuleModification(modifyRule.id, finalState as unknown as Record<string, string>, modifyComments);
+      // If source or destination groups changed, also submit group policy change for Review & Approval
+      if (originalState && (finalState.rule_source !== originalState.rule_source || finalState.rule_destination !== originalState.rule_destination)) {
+        const groupDelta = {
+          added: {} as Record<string, string[]>,
+          removed: {} as Record<string, string[]>,
+          changed: { source: finalState.rule_source !== originalState.rule_source ? { from: originalState.rule_source, to: finalState.rule_source } : undefined, destination: finalState.rule_destination !== originalState.rule_destination ? { from: originalState.rule_destination, to: finalState.rule_destination } : undefined },
+        };
+        const changeDetail = `Rule ${modifyRule.id} modified: source/destination group changes`;
+        try {
+          await submitGroupPolicyChanges(modifyRule.id, 'rule_group_modification', changeDetail, groupDelta);
+        } catch { /* best-effort — rule modification itself already submitted */ }
+      }
       showNotification('Modification submitted for review', 'success');
       closeModifyModal();
       loadData();

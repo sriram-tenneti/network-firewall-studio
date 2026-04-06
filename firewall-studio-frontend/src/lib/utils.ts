@@ -6,14 +6,24 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Check if a group name follows the NGDC naming standard: grp-{APP}-{NH}-{SZ}-{Component}
+ */
+export function isNgdcGroupName(name: string): boolean {
+  return /^grp-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+/.test(name);
+}
+
+/**
  * Auto-prefix a value based on its entry type.
  * - 'ip' entries get 'svr-' prefix (server / host IP)
- * - 'group' entries get 'grp-' prefix
+ * - 'group' entries get 'grp-' prefix (only in NGDC contexts)
  * - 'subnet' / 'cidr' entries get 'net-' prefix (NGDC standard for subnets)
  * - 'range' entries get 'rng-' prefix (IP ranges xx.xx.xx.xx-xy)
  *
  * If the value already has a recognized prefix (svr-, grp-, rng-, net-, sub-, g-),
  * it is returned as-is (sub- normalized to net-).
+ *
+ * When skipGroupPrefix is true, group-type values are returned as-is without
+ * adding grp- prefix. This is used during legacy import to preserve original names.
  */
 /**
  * Shorten an IP range to compact form.
@@ -38,7 +48,7 @@ export function shortenIPRange(rangeStr: string): string {
   return `${m[1]}-${suffix}`;
 }
 
-export function autoPrefix(value: string, type: 'ip' | 'subnet' | 'cidr' | 'group' | 'range'): string {
+export function autoPrefix(value: string, type: 'ip' | 'subnet' | 'cidr' | 'group' | 'range', skipGroupPrefix = false): string {
   const v = value.trim();
   if (!v) return v;
   const vl = v.toLowerCase();
@@ -71,7 +81,7 @@ export function autoPrefix(value: string, type: 'ip' | 'subnet' | 'cidr' | 'grou
     return `svr-${v}`;
   }
   // Named value without prefix — add based on type
-  if (type === 'group') return `grp-${v}`;
+  if (type === 'group') return skipGroupPrefix ? v : `grp-${v}`;
   if (type === 'subnet' || type === 'cidr') return `net-${v}`;
   if (type === 'range') return `rng-${v}`;
   return `svr-${v}`;

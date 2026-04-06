@@ -20,6 +20,7 @@ import { LDFFlowVisualization, type EgressIngressResult } from '@/components/des
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, Application } from '@/types';
 import { parseExpandedToDisplayLines } from '@/lib/nestingParser';
+import { isNgdcGroupName } from '@/lib/utils';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -1313,18 +1314,44 @@ export function MigrationStudioPage() {
                       </div>
                     )}
 
-                    {/* Available Groups */}
+                    {/* Available Groups - split by NGDC vs Legacy */}
                     {appGroups.length > 0 && (
                       <div className="border rounded-lg p-3">
                         <h4 className="text-xs font-semibold text-gray-700 mb-2">Available Groups for App {migrateRule.app_distributed_id || migrateRule.app_id}</h4>
-                        <div className="grid grid-cols-3 gap-2">
-                          {appGroups.map(g => (
-                            <div key={g.name} className="px-2 py-1 bg-gray-50 rounded text-xs">
-                              <span className="font-medium">{g.name}</span>
-                              <span className="text-gray-400 ml-1">({g.members.length} members)</span>
-                            </div>
-                          ))}
-                        </div>
+                        {(() => {
+                          const ngdcGroups = appGroups.filter(g => isNgdcGroupName(g.name));
+                          const legacyGroups = appGroups.filter(g => !isNgdcGroupName(g.name));
+                          return (
+                            <>
+                              {ngdcGroups.length > 0 && (
+                                <div className="mb-2">
+                                  <span className="text-[10px] font-bold text-blue-600 uppercase">NGDC Groups ({ngdcGroups.length})</span>
+                                  <div className="grid grid-cols-3 gap-2 mt-1">
+                                    {ngdcGroups.map(g => (
+                                      <div key={g.name} className="px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
+                                        <span className="font-medium text-blue-800">{g.name}</span>
+                                        <span className="text-blue-400 ml-1">({g.members.length})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {legacyGroups.length > 0 && (
+                                <div>
+                                  <span className="text-[10px] font-bold text-amber-600 uppercase">Legacy Groups ({legacyGroups.length})</span>
+                                  <div className="grid grid-cols-3 gap-2 mt-1">
+                                    {legacyGroups.map(g => (
+                                      <div key={g.name} className="px-2 py-1 bg-amber-50 border border-amber-200 rounded text-xs">
+                                        <span className="font-medium text-amber-800">{g.name}</span>
+                                        <span className="text-amber-400 ml-1">({g.members.length})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
 
