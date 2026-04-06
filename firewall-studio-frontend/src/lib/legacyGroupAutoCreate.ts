@@ -17,11 +17,13 @@ import type { LegacyRule } from '@/types';
 import { createGroup, getGroups, addGroupMember } from '@/lib/api';
 import { isLegacyGroupName, detectEntryType } from '@/lib/nestingParser';
 
+type MemberType = 'ip' | 'subnet' | 'cidr' | 'group' | 'range';
+
 interface ExtractedGroup {
   name: string;
   appId: string;
-  members: { type: string; value: string }[];
-  children: { name: string; members: { type: string; value: string }[] }[];
+  members: { type: MemberType; value: string }[];
+  children: { name: string; members: { type: MemberType; value: string }[] }[];
 }
 
 /**
@@ -31,8 +33,8 @@ interface ExtractedGroup {
 function parseExpandedForGroups(
   raw: string,
   expanded: string
-): { name: string; members: { type: string; value: string }[]; children: { name: string; members: { type: string; value: string }[] }[] }[] {
-  const groups: { name: string; members: { type: string; value: string }[]; children: { name: string; members: { type: string; value: string }[] }[] }[] = [];
+): { name: string; members: { type: MemberType; value: string }[]; children: { name: string; members: { type: MemberType; value: string }[] }[] }[] {
+  const groups: { name: string; members: { type: MemberType; value: string }[]; children: { name: string; members: { type: MemberType; value: string }[] }[] }[] = [];
 
   if (!expanded || !expanded.trim()) {
     // No expanded text - just check if raw values are group names
@@ -63,8 +65,8 @@ function parseExpandedForGroups(
 
   const rawValues = new Set((raw || '').split('\n').map(l => l.trim()).filter(Boolean));
 
-  let currentGroup: { name: string; members: { type: string; value: string }[]; children: { name: string; members: { type: string; value: string }[] }[] } | null = null;
-  let currentSubGroup: { name: string; members: { type: string; value: string }[] } | null = null;
+  let currentGroup: { name: string; members: { type: MemberType; value: string }[]; children: { name: string; members: { type: MemberType; value: string }[] }[] } | null = null;
+  let currentSubGroup: { name: string; members: { type: MemberType; value: string }[] } | null = null;
   let groupIndent = 0;
   let memberIndent = 0;
 
@@ -116,14 +118,14 @@ function parseExpandedForGroups(
       memberIndent = indent;
     } else if (currentSubGroup !== null && indent > memberIndent) {
       // This is a member of the current sub-group
-      currentSubGroup.members.push({ type: memberType, value });
+      currentSubGroup.members.push({ type: memberType as MemberType, value });
     } else {
       // Direct member of the parent group
       if (currentSubGroup) {
         currentGroup.children.push(currentSubGroup);
         currentSubGroup = null;
       }
-      currentGroup.members.push({ type: memberType, value });
+      currentGroup.members.push({ type: memberType as MemberType, value });
     }
   }
 
@@ -280,11 +282,11 @@ export async function autoCreateLegacyGroupsFromRules(
         const allMembers = [
           ...group.members,
           // Add child groups as group-type members of parent
-          ...group.children.map(c => ({ type: 'group', value: c.name })),
+          ...group.children.map(c => ({ type: 'group' as MemberType, value: c.name })),
         ];
         for (const member of allMembers) {
           try {
-            await addGroupMember(group.name, { type: member.type, value: member.value, description: '' });
+            await addGroupMember(group.name, { type: member.type as MemberType, value: member.value, description: '' });
             result.membersAdded++;
           } catch {
             // Member likely already exists - that's fine
@@ -301,7 +303,7 @@ export async function autoCreateLegacyGroupsFromRules(
       // Build member list: direct members + nested sub-group references
       const allMembers = [
         ...group.members.map(m => ({ type: m.type, value: m.value, description: '' })),
-        ...group.children.map(c => ({ type: 'group', value: c.name, description: '' })),
+        ...group.children.map(c => ({ type: 'group' as MemberType, value: c.name, description: '' })),
       ];
 
       await createGroup({
