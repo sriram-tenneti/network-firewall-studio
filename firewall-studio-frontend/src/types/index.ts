@@ -503,6 +503,17 @@ export interface AsIsRule {
   output_generated: boolean;
 }
 
+// SZ-level CIDR entry (from NH security_zones with DC context)
+export interface NhSecurityZone {
+  nh: string;
+  nh_name: string;
+  sz: string;
+  dc: string;
+  cidr: string;
+  vrf_id: string;
+  description: string;
+}
+
 // App-to-DC/NH/SZ Component Mapping
 export interface AppDCMapping {
   id?: string;
