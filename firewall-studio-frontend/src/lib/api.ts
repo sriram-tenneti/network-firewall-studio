@@ -1032,3 +1032,43 @@ export const createLifecycleEvent = (ruleId: string, eventType: string, details 
     method: 'POST',
     body: JSON.stringify({ rule_id: ruleId, event_type: eventType, details, actor }),
   });
+
+// ---- Module Assistant ----
+
+export interface AssistantService {
+  id: string;
+  name: string;
+  description: string;
+  permission: string;
+  icon: string;
+}
+
+export interface AssistantResponse {
+  message: string;
+  intent: string;
+  actions_taken: string[];
+  suggestions: string[];
+  data: Record<string, unknown> | null;
+  error: string | null;
+  services: AssistantService[];
+}
+
+export const queryAssistant = (module: string, query: string, context?: Record<string, unknown>, userRole = 'admin') =>
+  fetchJSON<AssistantResponse>('/api/assistant/query', {
+    method: 'POST',
+    body: JSON.stringify({ module, query, context, user_role: userRole }),
+  });
+
+export const executeAssistantAction = (action: string, module: string, params?: Record<string, unknown>, context?: Record<string, unknown>, userRole = 'admin') =>
+  fetchJSON<AssistantResponse>('/api/assistant/action', {
+    method: 'POST',
+    body: JSON.stringify({ action, module, params, context, user_role: userRole }),
+  });
+
+export const getModuleServices = (module: string, userRole = 'admin') =>
+  fetchJSON<{ module: string; name: string; description: string; services: AssistantService[]; user_role: string }>(
+    `/api/assistant/services/${module}?user_role=${userRole}`
+  );
+
+export const listAssistantModules = () =>
+  fetchJSON<{ id: string; name: string; description: string; service_count: number }[]>('/api/assistant/modules');

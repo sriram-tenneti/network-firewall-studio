@@ -6,6 +6,7 @@ import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
+import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -2513,6 +2514,8 @@ export default function SettingsPage() {
           </div>
         </div>
       </Modal>
+
+      <ModuleAssistant module="settings" />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal'
 import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
 import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
+import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
@@ -377,6 +378,7 @@ export function DesignStudioPage() {
         confirmVariant="danger"
       />
 
+      <ModuleAssistant module="design-studio" context={{ app_id: selectedApp, environment: selectedEnv }} />
     </div>
   );
 }

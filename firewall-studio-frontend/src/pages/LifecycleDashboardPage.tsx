@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as api from '@/lib/api';
 import type { LifecycleEvent, LifecycleDashboard } from '@/types';
+import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
 
 /* ── colour helpers ──────────────────────────────────────── */
 const STATUS_COLORS: Record<string, string> = {
@@ -482,6 +483,7 @@ export default function LifecycleDashboardPage() {
           </div>
         </div>
       )}
+      <ModuleAssistant module="lifecycle" />
     </div>
   );
 }
