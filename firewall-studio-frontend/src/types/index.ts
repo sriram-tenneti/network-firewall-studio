@@ -507,11 +507,15 @@ export interface AsIsRule {
 export interface AppDCMapping {
   id?: string;
   app_id: string;
+  app_distributed_id?: string;
   component: 'WEB' | 'APP' | 'DB' | 'MQ' | 'BAT' | 'API';
+  dc_location: 'NGDC' | 'Legacy';
   dc: string;
   nh: string;
   sz: string;
   cidr: string;
+  legacy_dc: string;
+  legacy_cidr: string;
   status: 'Active' | 'Inactive';
   notes?: string;
 }
