@@ -23,6 +23,7 @@ import type {
   RuleModification,
   NGDCRecommendation,
   BirthrightValidation,
+  NhSecurityZone,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -578,6 +579,19 @@ export const setDataMode = (mode: string) =>
   fetchJSON<{ mode: string }>('/api/reference/data-mode', { method: 'POST', body: JSON.stringify({ mode }) });
 export const resetSeedData = () =>
   fetchJSON<{ message: string; current_mode: string }>('/api/reference/data-mode/reset-seed', { method: 'POST' });
+
+// SZ-level CIDR Resolution
+export const getSzCidrMap = () => fetchJSON<NhSecurityZone[]>('/api/reference/sz-cidr-map');
+export const resolveSzCidr = (dc: string, nh: string, sz: string) => {
+  const params = new URLSearchParams({ dc, nh, sz });
+  return fetchJSON<{ dc: string; nh: string; sz: string; cidr: string }>(`/api/reference/resolve-sz-cidr?${params}`);
+};
+export const getNhSecurityZones = (nhId: string, dc?: string) => {
+  const params = new URLSearchParams();
+  if (dc) params.set('dc', dc);
+  const qs = params.toString();
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/nh-security-zones/${nhId}${qs ? `?${qs}` : ''}`);
+};
 
 // Auto-populate NH/SZ/DC filtered by environment + app
 export const getFilteredNhSzDc = (environment: string, appId?: string) => {

@@ -4,7 +4,7 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping } from '@/types';
+import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
@@ -98,6 +98,10 @@ export default function SettingsPage() {
   const [showAddDc, setShowAddDc] = useState(false);
   const [newDcForm, setNewDcForm] = useState<Record<string, unknown>>({ dc_id: '', name: '', region: '', status: 'Active', cidr: '', description: '' });
   const [nhEnvFilter, setNhEnvFilter] = useState<string>('all');
+
+  // SZ-level CIDR map (loaded from backend)
+  const [szCidrMap, setSzCidrMap] = useState<NhSecurityZone[]>([]);
+  const [expandedNhSzId, setExpandedNhSzId] = useState<string | null>(null);
 
   // Data Mode state (seed vs live)
   const [dataMode, setDataModeState] = useState<string>('seed');
@@ -201,7 +205,7 @@ export default function SettingsPage() {
   const loadRefData = useCallback(async () => {
     setLoadingRef(true);
     try {
-      const [appsData, policyData, namingData, devicesData, dcMappings, prodMtx, nprodMtx, pprodMtx, fwPatternsData, nhData, szData, dcData] = await Promise.all([
+      const [appsData, policyData, namingData, devicesData, dcMappings, prodMtx, nprodMtx, pprodMtx, fwPatternsData, nhData, szData, dcData, szCidrData] = await Promise.all([
         api.getApplications(),
         api.getAllPolicyMatrices(),
         api.getNamingStandards(),
@@ -214,6 +218,7 @@ export default function SettingsPage() {
         api.getNeighbourhoods(),
         api.getSecurityZones(),
         api.getNGDCDatacenters(),
+        api.getSzCidrMap().catch(() => []),
       ]);
       setApplications(appsData);
       setPolicyMatrix(policyData.combined || []);
@@ -228,6 +233,7 @@ export default function SettingsPage() {
       setNeighbourhoods(nhData as unknown as Record<string, unknown>[]);
       setSecurityZones(szData as unknown as Record<string, unknown>[]);
       setNgdcDatacenters(dcData as unknown as Record<string, unknown>[]);
+      setSzCidrMap(szCidrData);
     } catch {
       showNotification('Failed to load reference data', 'error');
     }
@@ -382,6 +388,17 @@ export default function SettingsPage() {
 
   // App DC Mapping helpers
   const selectedAppMappings = appDCMappings.filter(m => m.app_id === selectedApp);
+
+  // Client-side CIDR resolution from szCidrMap (mirrors backend _resolve_sz_cidr_sync)
+  const clientResolveCidr = useCallback((dc: string, nh: string, sz: string): string => {
+    if (!nh || !sz) return '';
+    // Exact (DC, NH, SZ) match
+    const exact = szCidrMap.find(e => e.nh === nh && e.sz === sz && e.dc === dc);
+    if (exact) return exact.cidr;
+    // Fallback: match without DC
+    const fallback = szCidrMap.find(e => e.nh === nh && e.sz === sz && !e.dc);
+    return fallback ? fallback.cidr : '';
+  }, [szCidrMap]);
 
   const handleAddMapping = async () => {
     try {
@@ -1167,16 +1184,28 @@ export default function SettingsPage() {
                     {filteredNhs.map((nh, idx) => {
                       const nhId = String(nh.nh_id || nh.id || idx);
                       const isEditing = editingNhId === nhId;
+                      const isExpSz = expandedNhSzId === nhId;
+                      const nhSzEntries = szCidrMap.filter(e => e.nh === nhId);
+                      const nhDcs = [...new Set(nhSzEntries.map(e => e.dc))].sort();
                       return (
-                        <tr key={nhId} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{nhId}</td>
+                        <React.Fragment key={nhId}>
+                        <tr className={isExpSz ? 'bg-indigo-50' : 'hover:bg-gray-50'}>
+                          <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">
+                            <button onClick={() => setExpandedNhSzId(isExpSz ? null : nhId)} className="inline-flex items-center gap-1 hover:underline cursor-pointer" title={isExpSz ? 'Collapse SZ CIDR breakdown' : 'Expand SZ CIDR breakdown'}>
+                              <span className="text-[10px]">{isExpSz ? '\u25BC' : '\u25B6'}</span> {nhId}
+                            </button>
+                          </td>
                           <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editNhForm.name || '')} onChange={e => setEditNhForm({ ...editNhForm, name: e.target.value })} /> : String(nh.name || '')}</td>
                           <td className="px-3 py-2">{isEditing ? (
                             <select className={inp} value={String(editNhForm.environment || '')} onChange={e => setEditNhForm({ ...editNhForm, environment: e.target.value })}>
                               <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option>
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(nh.environment) === 'Production' ? 'bg-green-100 text-green-800' : String(nh.environment) === 'Pre-Production' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{String(nh.environment || 'N/A')}</span>}</td>
-                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editNhForm.cidr || '')} onChange={e => setEditNhForm({ ...editNhForm, cidr: e.target.value })} /> : String(nh.cidr || nh.cidr_range || '—')}</td>
+                          <td className="px-3 py-2 font-mono text-xs">
+                            {isEditing ? <input className={inp} value={String(editNhForm.cidr || '')} onChange={e => setEditNhForm({ ...editNhForm, cidr: e.target.value })} /> : (
+                              <span className="text-gray-500">{nhSzEntries.length > 0 ? `${nhSzEntries.length} SZ entries` : String(nh.cidr || nh.cidr_range || '—')}</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editNhForm.description || '')} onChange={e => setEditNhForm({ ...editNhForm, description: e.target.value })} /> : String(nh.description || '—')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
@@ -1192,6 +1221,51 @@ export default function SettingsPage() {
                             )}
                           </td>
                         </tr>
+                        {/* SZ-level CIDR breakdown per DC */}
+                        {isExpSz && nhSzEntries.length > 0 && (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-3 bg-indigo-50/50 border-t border-indigo-100">
+                              <div className="space-y-2">
+                                <h4 className="text-xs font-semibold text-indigo-800">SZ-Level CIDR Breakdown for {nhId} ({nhSzEntries.length} entries across {nhDcs.length} DC{nhDcs.length !== 1 ? 's' : ''})</h4>
+                                {nhDcs.map(dc => {
+                                  const dcEntries = nhSzEntries.filter(e => e.dc === dc);
+                                  return (
+                                    <div key={dc} className="ml-2">
+                                      <div className="text-[11px] font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                                        <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-green-100 text-green-700">{dc || 'Default'}</span>
+                                        <span className="text-gray-400">({dcEntries.length} zone{dcEntries.length !== 1 ? 's' : ''})</span>
+                                      </div>
+                                      <table className="w-full text-[11px] ml-2">
+                                        <thead><tr className="text-gray-500">
+                                          <th className="px-2 py-0.5 text-left font-medium w-20">SZ</th>
+                                          <th className="px-2 py-0.5 text-left font-medium w-32">VRF ID</th>
+                                          <th className="px-2 py-0.5 text-left font-medium w-40">CIDR</th>
+                                          <th className="px-2 py-0.5 text-left font-medium">Description</th>
+                                        </tr></thead>
+                                        <tbody>
+                                          {dcEntries.map((e, i) => (
+                                            <tr key={i} className="hover:bg-indigo-100/30">
+                                              <td className="px-2 py-0.5 font-mono font-medium text-indigo-700">{e.sz}</td>
+                                              <td className="px-2 py-0.5 font-mono text-gray-600">{e.vrf_id || '-'}</td>
+                                              <td className="px-2 py-0.5 font-mono font-medium text-gray-800">{e.cidr}</td>
+                                              <td className="px-2 py-0.5 text-gray-500">{e.description || '-'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {isExpSz && nhSzEntries.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-2 bg-gray-50 text-xs text-gray-400 italic">No SZ-level CIDR entries found for {nhId}.</td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                     {filteredNhs.length === 0 && (
@@ -1574,12 +1648,17 @@ export default function SettingsPage() {
                       <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.component || 'APP'} onChange={e => setNewMappingForm({ ...newMappingForm, component: e.target.value as AppDCMapping['component'] })}>
                         {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
-                      <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.dc || ''} onChange={e => setNewMappingForm({ ...newMappingForm, dc: e.target.value })}>
+                      <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.dc || ''} onChange={e => { const dc = e.target.value; const resolved = clientResolveCidr(dc, newMappingForm.nh || '', newMappingForm.sz || ''); setNewMappingForm({ ...newMappingForm, dc, cidr: resolved || newMappingForm.cidr || '' }); }}>
                         <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
                       </select>
-                      <input className="px-2 py-1 text-xs border rounded" placeholder="NH (e.g. NH02,NH14)" value={newMappingForm.nh || ''} onChange={e => setNewMappingForm({ ...newMappingForm, nh: e.target.value })} title="Comma-separated NHs allowed" />
-                      <input className="px-2 py-1 text-xs border rounded" placeholder="SZ (e.g. CCS,PAA)" value={newMappingForm.sz || ''} onChange={e => setNewMappingForm({ ...newMappingForm, sz: e.target.value })} title="Comma-separated SZs allowed" />
-                      <input className="px-2 py-1 text-xs border rounded" placeholder="CIDR" value={newMappingForm.cidr || ''} onChange={e => setNewMappingForm({ ...newMappingForm, cidr: e.target.value })} />
+                      <input className="px-2 py-1 text-xs border rounded" placeholder="NH (e.g. NH02)" value={newMappingForm.nh || ''} onChange={e => { const nh = e.target.value; const resolved = clientResolveCidr(newMappingForm.dc || '', nh, newMappingForm.sz || ''); setNewMappingForm({ ...newMappingForm, nh, cidr: resolved || newMappingForm.cidr || '' }); }} />
+                      <input className="px-2 py-1 text-xs border rounded" placeholder="SZ (e.g. CCS)" value={newMappingForm.sz || ''} onChange={e => { const sz = e.target.value; const resolved = clientResolveCidr(newMappingForm.dc || '', newMappingForm.nh || '', sz); setNewMappingForm({ ...newMappingForm, sz, cidr: resolved || newMappingForm.cidr || '' }); }} />
+                      <div className="relative">
+                        <input className="px-2 py-1 text-xs border rounded font-mono w-full" placeholder="CIDR (auto-resolved)" value={newMappingForm.cidr || ''} onChange={e => setNewMappingForm({ ...newMappingForm, cidr: e.target.value })} />
+                        {newMappingForm.cidr && clientResolveCidr(newMappingForm.dc || '', newMappingForm.nh || '', newMappingForm.sz || '') === newMappingForm.cidr && (
+                          <span className="absolute -top-1.5 right-1 text-[8px] text-green-600 bg-white px-0.5">auto</span>
+                        )}
+                      </div>
                       <input className="px-2 py-1 text-xs border rounded" placeholder="Notes" value={newMappingForm.notes || ''} onChange={e => setNewMappingForm({ ...newMappingForm, notes: e.target.value })} />
                       <div className="flex gap-1">
                         <button onClick={() => setShowAddMapping(false)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
@@ -1732,12 +1811,12 @@ export default function SettingsPage() {
                                       <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.component || 'APP'} onChange={e => setInlineNewMapping({ ...inlineNewMapping, component: e.target.value as AppDCMapping['component'] })}>
                                         {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
                                       </select>
-                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.dc || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, dc: e.target.value })}>
+                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.dc || ''} onChange={e => { const dc = e.target.value; const resolved = clientResolveCidr(dc, inlineNewMapping.nh || '', inlineNewMapping.sz || ''); setInlineNewMapping({ ...inlineNewMapping, dc, cidr: resolved || inlineNewMapping.cidr || '' }); }}>
                                         <option value="ALPHA_NGDC">ALPHA_NGDC</option><option value="BETA_NGDC">BETA_NGDC</option><option value="GAMMA_NGDC">GAMMA_NGDC</option>
                                       </select>
-                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="NH (e.g. NH02)" value={inlineNewMapping.nh || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, nh: e.target.value })} />
-                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="SZ (e.g. CCS)" value={inlineNewMapping.sz || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, sz: e.target.value })} />
-                                      <input className="px-1 py-1 text-[11px] border rounded font-mono" placeholder="CIDR" value={inlineNewMapping.cidr || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, cidr: e.target.value })} />
+                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="NH (e.g. NH02)" value={inlineNewMapping.nh || ''} onChange={e => { const nh = e.target.value; const resolved = clientResolveCidr(inlineNewMapping.dc || '', nh, inlineNewMapping.sz || ''); setInlineNewMapping({ ...inlineNewMapping, nh, cidr: resolved || inlineNewMapping.cidr || '' }); }} />
+                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="SZ (e.g. CCS)" value={inlineNewMapping.sz || ''} onChange={e => { const sz = e.target.value; const resolved = clientResolveCidr(inlineNewMapping.dc || '', inlineNewMapping.nh || '', sz); setInlineNewMapping({ ...inlineNewMapping, sz, cidr: resolved || inlineNewMapping.cidr || '' }); }} />
+                                      <input className="px-1 py-1 text-[11px] border rounded font-mono" placeholder="CIDR (auto)" value={inlineNewMapping.cidr || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, cidr: e.target.value })} />
                                       <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.status || 'Active'} onChange={e => setInlineNewMapping({ ...inlineNewMapping, status: e.target.value as AppDCMapping['status'] })}>
                                         <option value="Active">Active</option><option value="Inactive">Inactive</option>
                                       </select>
@@ -1770,11 +1849,11 @@ export default function SettingsPage() {
                                                 <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.component || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, component: e.target.value as AppDCMapping['component'] })}>
                                                   {['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)}
                                                 </select></td>
-                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.dc || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, dc: e.target.value })}>
+                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.dc || ''} onChange={e => { const dc = e.target.value; const resolved = clientResolveCidr(dc, inlineEditForm.nh || '', inlineEditForm.sz || ''); setInlineEditForm({ ...inlineEditForm, dc, cidr: resolved || inlineEditForm.cidr || '' }); }}>
                                                   <option value="ALPHA_NGDC">ALPHA</option><option value="BETA_NGDC">BETA</option><option value="GAMMA_NGDC">GAMMA</option>
                                                 </select></td>
-                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.nh || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, nh: e.target.value })} /></td>
-                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.sz || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, sz: e.target.value })} /></td>
+                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.nh || ''} onChange={e => { const nh = e.target.value; const resolved = clientResolveCidr(inlineEditForm.dc || '', nh, inlineEditForm.sz || ''); setInlineEditForm({ ...inlineEditForm, nh, cidr: resolved || inlineEditForm.cidr || '' }); }} /></td>
+                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.sz || ''} onChange={e => { const sz = e.target.value; const resolved = clientResolveCidr(inlineEditForm.dc || '', inlineEditForm.nh || '', sz); setInlineEditForm({ ...inlineEditForm, sz, cidr: resolved || inlineEditForm.cidr || '' }); }} /></td>
                                                 <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded font-mono" value={inlineEditForm.cidr || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, cidr: e.target.value })} /></td>
                                                 <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.status || 'Active'} onChange={e => setInlineEditForm({ ...inlineEditForm, status: e.target.value as AppDCMapping['status'] })}>
                                                   <option value="Active">Active</option><option value="Inactive">Inactive</option>
@@ -1794,7 +1873,9 @@ export default function SettingsPage() {
                                               <td className="px-2 py-1 font-mono text-gray-700">{m.dc || (m as unknown as Record<string,string>).legacy_dc || '-'}</td>
                                               <td className="px-2 py-1 font-mono text-gray-700">{m.nh || '-'}</td>
                                               <td className="px-2 py-1 font-mono text-gray-700">{m.sz || '-'}</td>
-                                              <td className="px-2 py-1 font-mono text-gray-600">{m.cidr || (m as unknown as Record<string,string>).legacy_cidr || '-'}</td>
+                                              <td className="px-2 py-1 font-mono text-gray-600">
+                                                {(() => { const resolved = clientResolveCidr(m.dc || '', m.nh || '', m.sz || ''); const display = m.cidr || (m as unknown as Record<string,string>).legacy_cidr || '-'; return (<span>{display}{resolved && resolved === m.cidr ? <span className="ml-1 text-[8px] text-green-600 font-sans">(SZ)</span> : null}</span>); })()}
+                                              </td>
                                               <td className="px-2 py-1"><span className={`px-1.5 py-0.5 text-[10px] rounded-full ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span></td>
                                               <td className="px-2 py-1 text-gray-500 max-w-[120px] truncate">{m.notes || '-'}</td>
                                               <td className="px-2 py-1"><div className="flex gap-1">

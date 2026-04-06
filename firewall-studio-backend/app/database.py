@@ -633,6 +633,68 @@ async def get_security_zones() -> list[dict[str, Any]]:
     return _load("security_zones") or []
 
 
+# ============================================================
+# SZ-Level CIDR Resolution  (DC, NH, SZ) → CIDR
+# ============================================================
+
+def _resolve_sz_cidr_sync(dc: str, nh: str, sz: str) -> str:
+    """Resolve CIDR from (DC, NH, SZ) tuple by looking up NH security_zones.
+    Returns the matching CIDR or empty string if not found.
+    Falls back to any-DC match if no DC-specific entry exists."""
+    neighbourhoods = _load("neighbourhoods") or []
+    for n in neighbourhoods:
+        if str(n.get("nh_id", "")) != str(nh):
+            continue
+        sz_entries = n.get("security_zones", [])
+        # First try exact DC match
+        for entry in sz_entries:
+            if str(entry.get("zone", "")) == str(sz) and str(entry.get("dc", "")) == str(dc):
+                return str(entry.get("cidr", ""))
+        # Fallback: match zone without DC (backward compat)
+        for entry in sz_entries:
+            if str(entry.get("zone", "")) == str(sz) and not entry.get("dc"):
+                return str(entry.get("cidr", ""))
+    return ""
+
+
+async def resolve_sz_cidr(dc: str, nh: str, sz: str) -> str:
+    """Async wrapper for SZ-level CIDR resolution."""
+    return _resolve_sz_cidr_sync(dc, nh, sz)
+
+
+async def get_nh_security_zones(nh_id: str, dc: str = "") -> list[dict[str, Any]]:
+    """Get all security zone entries for a given NH, optionally filtered by DC."""
+    neighbourhoods = _load("neighbourhoods") or []
+    for n in neighbourhoods:
+        if str(n.get("nh_id", "")) != str(nh_id):
+            continue
+        sz_entries = n.get("security_zones", [])
+        if dc:
+            return [e for e in sz_entries if str(e.get("dc", "")) == str(dc)]
+        return sz_entries
+    return []
+
+
+async def get_all_sz_cidr_map() -> list[dict[str, Any]]:
+    """Return a flat list of all (dc, nh, sz, cidr) tuples for the frontend."""
+    neighbourhoods = _load("neighbourhoods") or []
+    result: list[dict[str, Any]] = []
+    for n in neighbourhoods:
+        nh_id = str(n.get("nh_id", ""))
+        nh_name = str(n.get("name", ""))
+        for entry in n.get("security_zones", []):
+            result.append({
+                "nh": nh_id,
+                "nh_name": nh_name,
+                "sz": str(entry.get("zone", "")),
+                "dc": str(entry.get("dc", "")),
+                "cidr": str(entry.get("cidr", "")),
+                "vrf_id": str(entry.get("vrf_id", "")),
+                "description": str(entry.get("description", "")),
+            })
+    return result
+
+
 async def get_ngdc_datacenters() -> list[dict[str, Any]]:
     return _load("ngdc_datacenters") or []
 
@@ -4144,6 +4206,12 @@ async def add_app_dc_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
     mappings = _load("app_dc_mappings") or []
     mapping["id"] = mapping.get("id", _id())
     mapping["created_at"] = _now()
+    # Auto-resolve CIDR from (DC, NH, SZ) if NGDC and CIDR not explicitly set
+    if mapping.get("dc_location") == "NGDC" and mapping.get("dc") and mapping.get("nh") and mapping.get("sz"):
+        resolved = _resolve_sz_cidr_sync(mapping["dc"], mapping["nh"], mapping["sz"])
+        if resolved and not mapping.get("cidr"):
+            mapping["cidr"] = resolved
+        mapping["sz_cidr"] = resolved  # always store the SZ-level parent CIDR
     mappings.append(mapping)
     _save("app_dc_mappings", mappings)
     return mapping
@@ -4155,6 +4223,10 @@ async def update_app_dc_mapping(mapping_id: str, data: dict[str, Any]) -> dict[s
         if m.get("id") == mapping_id:
             m.update(data)
             m["updated_at"] = _now()
+            # Re-resolve SZ CIDR if DC/NH/SZ changed
+            if m.get("dc_location") == "NGDC" and m.get("dc") and m.get("nh") and m.get("sz"):
+                resolved = _resolve_sz_cidr_sync(m["dc"], m["nh"], m["sz"])
+                m["sz_cidr"] = resolved
             _save("app_dc_mappings", mappings)
             return m
     return None

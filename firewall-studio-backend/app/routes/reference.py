@@ -1287,6 +1287,30 @@ async def compile_rule_expanded(rule_id: str, data: dict):
 
 # ---- App-to-DC/NH/SZ Mapping (Organization Reference) ----
 
+@router.get("/sz-cidr-map")
+async def list_sz_cidr_map():
+    """Return flat list of all (dc, nh, sz, cidr) tuples — SZ-level CIDR resolution."""
+    from app.database import get_all_sz_cidr_map
+    return await get_all_sz_cidr_map()
+
+
+@router.get("/resolve-sz-cidr")
+async def resolve_sz_cidr_endpoint(dc: str = "", nh: str = "", sz: str = ""):
+    """Resolve CIDR from (DC, NH, SZ) tuple."""
+    from app.database import resolve_sz_cidr
+    if not nh or not sz:
+        raise HTTPException(status_code=400, detail="nh and sz are required")
+    cidr = await resolve_sz_cidr(dc, nh, sz)
+    return {"dc": dc, "nh": nh, "sz": sz, "cidr": cidr}
+
+
+@router.get("/nh-security-zones/{nh_id}")
+async def list_nh_security_zones(nh_id: str, dc: str = ""):
+    """Get all security zone entries for a given NH, optionally filtered by DC."""
+    from app.database import get_nh_security_zones
+    return await get_nh_security_zones(nh_id, dc)
+
+
 @router.get("/app-dc-mappings")
 async def list_app_dc_mappings():
     from app.database import get_app_dc_mappings
