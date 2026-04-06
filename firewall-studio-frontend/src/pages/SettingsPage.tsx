@@ -1593,6 +1593,7 @@ export default function SettingsPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50"><tr>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Component</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DC Location</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DC</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">NH</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZ</th>
@@ -1630,10 +1631,11 @@ export default function SettingsPage() {
                           return (
                             <tr key={mid} className="hover:bg-gray-50">
                               <td className="px-3 py-2"><span className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span></td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.dc}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.nh}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.sz}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-600">{m.cidr}</td>
+                              <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${(m as unknown as Record<string,string>).dc_location === 'NGDC' ? 'bg-green-100 text-green-700' : (m as unknown as Record<string,string>).dc_location === 'Legacy' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>{(m as unknown as Record<string,string>).dc_location || 'N/A'}</span></td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.dc || (m as unknown as Record<string,string>).legacy_dc || '-'}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.nh || '-'}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.sz || '-'}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-600">{m.cidr || (m as unknown as Record<string,string>).legacy_cidr || '-'}</td>
                               <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs rounded-full ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span></td>
                               <td className="px-3 py-2 text-xs text-gray-500 max-w-[150px] truncate">{m.notes || ''}</td>
                               <td className="px-3 py-2"><div className="flex gap-1">
@@ -1750,6 +1752,7 @@ export default function SettingsPage() {
                                     <table className="w-full text-[11px]">
                                       <thead className="bg-indigo-100/50"><tr>
                                         <th className="px-2 py-1 text-left font-medium text-indigo-700">Component</th>
+                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">DC Location</th>
                                         <th className="px-2 py-1 text-left font-medium text-indigo-700">DC</th>
                                         <th className="px-2 py-1 text-left font-medium text-indigo-700">NH</th>
                                         <th className="px-2 py-1 text-left font-medium text-indigo-700">SZ</th>
@@ -1787,10 +1790,11 @@ export default function SettingsPage() {
                                           return (
                                             <tr key={mid} className="hover:bg-indigo-50/50">
                                               <td className="px-2 py-1"><span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span></td>
-                                              <td className="px-2 py-1 font-mono text-gray-700">{m.dc}</td>
-                                              <td className="px-2 py-1 font-mono text-gray-700">{m.nh}</td>
-                                              <td className="px-2 py-1 font-mono text-gray-700">{m.sz}</td>
-                                              <td className="px-2 py-1 font-mono text-gray-600">{m.cidr || '-'}</td>
+                                              <td className="px-2 py-1"><span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${(m as unknown as Record<string,string>).dc_location === 'NGDC' ? 'bg-green-100 text-green-700' : (m as unknown as Record<string,string>).dc_location === 'Legacy' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>{(m as unknown as Record<string,string>).dc_location || 'N/A'}</span></td>
+                                              <td className="px-2 py-1 font-mono text-gray-700">{m.dc || (m as unknown as Record<string,string>).legacy_dc || '-'}</td>
+                                              <td className="px-2 py-1 font-mono text-gray-700">{m.nh || '-'}</td>
+                                              <td className="px-2 py-1 font-mono text-gray-700">{m.sz || '-'}</td>
+                                              <td className="px-2 py-1 font-mono text-gray-600">{m.cidr || (m as unknown as Record<string,string>).legacy_cidr || '-'}</td>
                                               <td className="px-2 py-1"><span className={`px-1.5 py-0.5 text-[10px] rounded-full ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span></td>
                                               <td className="px-2 py-1 text-gray-500 max-w-[120px] truncate">{m.notes || '-'}</td>
                                               <td className="px-2 py-1"><div className="flex gap-1">

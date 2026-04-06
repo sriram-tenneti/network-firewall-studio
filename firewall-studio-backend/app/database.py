@@ -5671,3 +5671,591 @@ async def get_data_summary_by_env() -> list[dict[str, Any]]:
         env_counts[env]["studio"] += 1
 
     return [{"environment": k, **v, "total": sum(v.values())} for k, v in sorted(env_counts.items())]
+
+
+# ============================================================
+# Partial Migration Architecture
+# ============================================================
+
+# --------------- P1/P2: App Migration Summary ---------------
+
+async def get_app_migration_summary() -> list[dict[str, Any]]:
+    """Return per-app migration summary based on dc_location of each component.
+
+    For every distinct app_id in app_dc_mappings, compute:
+      - total_components, ngdc_count, legacy_count
+      - pct_migrated  (0-100)
+      - migration_scenario: Full NGDC | Full Legacy | Partial (Src NGDC/Dst Legacy) | Mixed
+      - components: list of {component, dc_location, dc/legacy_dc, ...}
+    """
+    mappings = _load("app_dc_mappings") or []
+    apps: dict[str, list[dict[str, Any]]] = {}
+    for m in mappings:
+        aid = str(m.get("app_id", ""))
+        if aid:
+            apps.setdefault(aid, []).append(m)
+
+    result: list[dict[str, Any]] = []
+    for app_id, comps in sorted(apps.items()):
+        ngdc = [c for c in comps if c.get("dc_location") == "NGDC"]
+        legacy = [c for c in comps if c.get("dc_location") == "Legacy"]
+        total = len(comps)
+        ngdc_count = len(ngdc)
+        legacy_count = len(legacy)
+        pct = round(ngdc_count / total * 100) if total else 0
+
+        if legacy_count == 0:
+            scenario = "Full NGDC"
+        elif ngdc_count == 0:
+            scenario = "Full Legacy"
+        else:
+            scenario = "Partial"
+
+        result.append({
+            "app_id": app_id,
+            "app_distributed_id": comps[0].get("app_distributed_id", ""),
+            "total_components": total,
+            "ngdc_count": ngdc_count,
+            "legacy_count": legacy_count,
+            "pct_migrated": pct,
+            "migration_scenario": scenario,
+            "components": [
+                {
+                    "component": c.get("component", ""),
+                    "dc_location": c.get("dc_location", ""),
+                    "dc": c.get("dc", ""),
+                    "nh": c.get("nh", ""),
+                    "sz": c.get("sz", ""),
+                    "legacy_dc": c.get("legacy_dc", ""),
+                    "legacy_cidr": c.get("legacy_cidr", ""),
+                    "cidr": c.get("cidr", ""),
+                    "status": c.get("status", ""),
+                    "notes": c.get("notes", ""),
+                }
+                for c in comps
+            ],
+        })
+    return result
+
+
+async def get_app_migration_status(app_id: str) -> dict[str, Any] | None:
+    """Return migration status for a single app by app_id."""
+    summaries = await get_app_migration_summary()
+    return next((s for s in summaries if s["app_id"] == app_id), None)
+
+
+# --------------- P3: Rule Endpoint Classification ---------------
+
+async def classify_rule_endpoints(rule_data: dict[str, Any]) -> dict[str, Any]:
+    """Classify a rule's source and destination as NGDC or Legacy.
+
+    Looks up the source/destination app+component in app_dc_mappings to
+    determine dc_location for each side.  Returns one of five scenarios:
+      NGDC-to-NGDC | Legacy-to-Legacy | NGDC-to-Legacy | Legacy-to-NGDC | Unknown
+
+    Also returns the Heritage DC matrix direction needed for cross-DC validation.
+    """
+    mappings = _load("app_dc_mappings") or []
+
+    src_app = str(rule_data.get("source_app", rule_data.get("application", "")))
+    dst_app = str(rule_data.get("destination_app", rule_data.get("dst_application", "")))
+    src_component = str(rule_data.get("source_component", ""))
+    dst_component = str(rule_data.get("destination_component", ""))
+    src_ip = str(rule_data.get("source", rule_data.get("rule_source", "")))
+    dst_ip = str(rule_data.get("destination", rule_data.get("rule_destination", "")))
+
+    def _lookup_dc_location(app: str, component: str, ip: str) -> str:
+        """Resolve dc_location for an endpoint.  Priority: app+component match,
+        then app-only match, then IP/CIDR overlap."""
+        if app:
+            app_maps = [m for m in mappings
+                        if str(m.get("app_id", "")).upper() == app.upper()]
+            if component:
+                comp_match = [m for m in app_maps
+                              if str(m.get("component", "")).upper() == component.upper()]
+                if comp_match:
+                    return str(comp_match[0].get("dc_location", "Unknown"))
+            if app_maps:
+                # If no component specified, use majority dc_location
+                locs = [m.get("dc_location", "") for m in app_maps]
+                ngdc_ct = sum(1 for l in locs if l == "NGDC")
+                leg_ct = sum(1 for l in locs if l == "Legacy")
+                return "NGDC" if ngdc_ct >= leg_ct else "Legacy"
+
+        # Fallback: check CIDR overlap
+        if ip:
+            for m in mappings:
+                cidr = m.get("cidr", "")
+                legacy_cidr = m.get("legacy_cidr", "")
+                if cidr and ip.split("/")[0] in cidr:
+                    return "NGDC"
+                if legacy_cidr and ip.split("/")[0] in legacy_cidr:
+                    return "Legacy"
+        return "Unknown"
+
+    src_loc = _lookup_dc_location(src_app, src_component, src_ip)
+    dst_loc = _lookup_dc_location(dst_app, dst_component, dst_ip)
+
+    if src_loc == "NGDC" and dst_loc == "NGDC":
+        scenario = "NGDC-to-NGDC"
+        heritage_direction = ""
+    elif src_loc == "Legacy" and dst_loc == "Legacy":
+        scenario = "Legacy-to-Legacy"
+        heritage_direction = "Heritage-to-Heritage"
+    elif src_loc == "NGDC" and dst_loc == "Legacy":
+        scenario = "NGDC-to-Legacy"
+        heritage_direction = "NGDC-to-Heritage"
+    elif src_loc == "Legacy" and dst_loc == "NGDC":
+        scenario = "Legacy-to-NGDC"
+        heritage_direction = "Heritage-to-NGDC"
+    else:
+        scenario = "Unknown"
+        heritage_direction = ""
+
+    is_cross_dc = scenario in ("NGDC-to-Legacy", "Legacy-to-NGDC")
+    return {
+        "source_dc_location": src_loc,
+        "destination_dc_location": dst_loc,
+        "scenario": scenario,
+        "is_cross_dc": is_cross_dc,
+        "heritage_direction": heritage_direction,
+        "requires_heritage_matrix": is_cross_dc,
+    }
+
+
+# --------------- P4: Cross-DC LDF Boundaries ---------------
+
+async def determine_cross_dc_boundaries(
+    rule_data: dict[str, Any],
+) -> dict[str, Any]:
+    """Extended LDF analysis for cross-DC (NGDC ↔ Legacy) flows.
+
+    Unlike intra-NGDC flows that use NH/SZ segmentation, cross-DC flows
+    require a DC interconnect / WAN traversal plus the NGDC-side FW device.
+    """
+    classification = await classify_rule_endpoints(rule_data)
+    scenario = classification["scenario"]
+
+    if scenario == "NGDC-to-NGDC":
+        # Delegate to standard LDF
+        src_nh = rule_data.get("source_nh", "")
+        src_sz = rule_data.get("source_sz", rule_data.get("source_zone", ""))
+        dst_nh = rule_data.get("destination_nh", "")
+        dst_sz = rule_data.get("destination_sz", rule_data.get("destination_zone", ""))
+        base = await determine_firewall_boundaries(src_nh, src_sz, dst_nh, dst_sz)
+        base["classification"] = classification
+        return base
+
+    if scenario == "Legacy-to-Legacy":
+        return {
+            "boundaries": 0,
+            "flow_rule": "LDF-CROSS-01",
+            "devices": [],
+            "requires_egress": False,
+            "requires_ingress": False,
+            "classification": classification,
+            "note": "Legacy-to-Legacy: flat heritage network, no NGDC firewall boundaries.",
+        }
+
+    # Cross-DC scenarios (NGDC-to-Legacy or Legacy-to-NGDC)
+    ngdc_nh = rule_data.get("source_nh", "") if classification["source_dc_location"] == "NGDC" else rule_data.get("destination_nh", "")
+    ngdc_sz = (rule_data.get("source_sz", rule_data.get("source_zone", ""))
+               if classification["source_dc_location"] == "NGDC"
+               else rule_data.get("destination_sz", rule_data.get("destination_zone", "")))
+    ngdc_sz_upper = (ngdc_sz or "").upper()
+
+    # NGDC side may need a segmentation FW device
+    ngdc_dev = _find_device(ngdc_nh, ngdc_sz_upper) if ngdc_nh and ngdc_sz_upper else None
+    devs: list[dict[str, Any]] = []
+
+    if ngdc_dev:
+        direction = "egress" if classification["source_dc_location"] == "NGDC" else "ingress"
+        devs.append({
+            "role": f"ngdc_{direction}",
+            "direction": direction,
+            "device_id": ngdc_dev["device_id"],
+            "device_name": ngdc_dev["name"],
+            "nh": ngdc_nh,
+            "sz": ngdc_sz_upper,
+        })
+
+    # DC interconnect device (virtual)
+    devs.append({
+        "role": "dc_interconnect",
+        "direction": "cross-dc",
+        "device_id": "DCI-VIRTUAL-001",
+        "device_name": "DC Interconnect (NGDC ↔ Legacy)",
+        "nh": "",
+        "sz": "",
+    })
+
+    flow_rule = "LDF-CROSS-02" if scenario == "NGDC-to-Legacy" else "LDF-CROSS-03"
+    return {
+        "boundaries": len(devs),
+        "flow_rule": flow_rule,
+        "devices": devs,
+        "requires_egress": classification["source_dc_location"] == "NGDC",
+        "requires_ingress": classification["destination_dc_location"] == "NGDC",
+        "classification": classification,
+        "note": (f"Cross-DC flow ({scenario}): traffic traverses "
+                 f"{'NGDC ' + ngdc_nh + ' ' + ngdc_sz_upper + ' FW + ' if ngdc_dev else ''}"
+                 f"DC interconnect to reach {'Legacy' if scenario == 'NGDC-to-Legacy' else 'NGDC'} side."),
+    }
+
+
+# --------------- P5: Heritage DC Birthright Validation ---------------
+
+async def validate_birthright_cross_dc(rule_data: dict[str, Any]) -> dict[str, Any]:
+    """Validate a cross-DC rule against the Heritage DC matrix.
+
+    For NGDC-to-Legacy or Legacy-to-NGDC flows, checks the bidirectional
+    Heritage DC matrix.  Falls back to standard validate_birthright for
+    intra-NGDC flows.
+    """
+    classification = await classify_rule_endpoints(rule_data)
+    scenario = classification["scenario"]
+
+    if scenario == "NGDC-to-NGDC":
+        base = await validate_birthright(rule_data)
+        base["classification"] = classification
+        return base
+
+    if scenario == "Legacy-to-Legacy":
+        return {
+            "compliant": True,
+            "environment": rule_data.get("environment", "Production"),
+            "matrix_used": "Heritage DC",
+            "violations": [],
+            "warnings": [],
+            "permitted": [{"matrix": "Heritage DC", "rule": "Legacy ↔ Legacy",
+                           "action": "Permitted",
+                           "reason": "Intra-heritage traffic is flat, permitted by default"}],
+            "firewall_devices_needed": [],
+            "firewall_path_info": [],
+            "firewall_request_required": False,
+            "classification": classification,
+            "summary": "Compliant (Heritage DC) - Legacy-to-Legacy, no segmentation",
+        }
+
+    # Cross-DC: look up Heritage DC matrix
+    heritage_matrix = _load("heritage_dc_matrix") or []
+    direction = classification["heritage_direction"]
+
+    # Determine the NGDC-side SZ
+    ngdc_sz = ""
+    if classification["source_dc_location"] == "NGDC":
+        ngdc_sz = rule_data.get("source_sz", rule_data.get("source_zone", ""))
+    else:
+        ngdc_sz = rule_data.get("destination_sz", rule_data.get("destination_zone", ""))
+    ngdc_sz_upper = (ngdc_sz or "").upper()
+
+    violations: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+    permitted: list[dict[str, str]] = []
+
+    matched = False
+    for entry in heritage_matrix:
+        e_dir = entry.get("direction", "")
+        e_ngdc_zone = entry.get("new_dc_zone", "")
+        if e_dir == direction and (e_ngdc_zone == ngdc_sz_upper or e_ngdc_zone == "Default"):
+            matched = True
+            action = entry.get("action", "")
+            reason = entry.get("reason", "")
+            rule_desc = f"{direction}: Heritage ↔ {ngdc_sz_upper or 'Any'}"
+
+            if "Blocked" in action and "Exception" not in action:
+                violations.append({"matrix": "Heritage DC", "rule": rule_desc,
+                                   "action": action, "reason": reason})
+            elif "Exception" in action or "Blocked" in action:
+                warnings.append({"matrix": "Heritage DC", "rule": rule_desc,
+                                 "action": action, "reason": reason})
+            else:
+                permitted.append({"matrix": "Heritage DC", "rule": rule_desc,
+                                  "action": action, "reason": reason})
+
+    if not matched:
+        warnings.append({"matrix": "Heritage DC", "rule": f"{direction}: Heritage ↔ {ngdc_sz_upper}",
+                          "action": "No Match",
+                          "reason": "No Heritage DC matrix entry found for this flow direction/zone"})
+
+    is_compliant = len(violations) == 0
+    return {
+        "compliant": is_compliant,
+        "environment": rule_data.get("environment", "Production"),
+        "matrix_used": "Heritage DC",
+        "violations": violations,
+        "warnings": warnings,
+        "permitted": permitted,
+        "firewall_devices_needed": [],
+        "firewall_path_info": [],
+        "firewall_request_required": len(warnings) > 0,
+        "classification": classification,
+        "summary": (
+            f"{'Compliant' if is_compliant else 'Non-Compliant'} (Heritage DC) - "
+            f"{scenario}: {len(violations)} violations, {len(warnings)} warnings, "
+            f"{len(permitted)} permitted"
+        ),
+    }
+
+
+# --------------- P6: Hybrid Compilation ---------------
+
+async def compile_hybrid_rule(rule_id: str, vendor: str = "generic") -> dict[str, Any] | None:
+    """Compile a rule that spans NGDC and Legacy infrastructure.
+
+    For cross-DC rules, generates:
+      - NGDC-side compiled rule (with NH/SZ naming standards)
+      - Legacy-side compiled rule (flat, no NH/SZ)
+      - DC interconnect rule (if applicable)
+    """
+    rule = await get_rule(rule_id)
+    if not rule:
+        legacy_rules = _load("legacy_rules") or []
+        rule = next((r for r in legacy_rules if r.get("id") == rule_id), None)
+    if not rule:
+        return None
+
+    classification = await classify_rule_endpoints(rule)
+    scenario = classification["scenario"]
+
+    if scenario == "NGDC-to-NGDC":
+        # Delegate to standard compilation
+        return await compile_egress_ingress(rule_id, vendor)
+
+    src = rule.get("source", rule.get("rule_source", ""))
+    dst = rule.get("destination", rule.get("rule_destination", ""))
+    action = rule.get("action", rule.get("rule_action", "permit"))
+    protocol = rule.get("protocol", rule.get("rule_protocol", "tcp"))
+    port = rule.get("port", rule.get("rule_port", ""))
+    app_id = str(rule.get("application", ""))
+    rule_name = rule.get("name", rule.get("rule_name", f"rule-{rule_id[:8]}"))
+
+    compiled_rules: list[dict[str, Any]] = []
+    now = _now()
+
+    # NGDC-side rule
+    ngdc_rule: dict[str, Any] = {
+        "id": f"hybrid-ngdc-{rule_id[:8]}",
+        "parent_rule_id": rule_id,
+        "side": "NGDC",
+        "compiled_at": now,
+        "vendor": vendor,
+        "rule_name": f"ngdc-{rule_name}",
+        "source": src if classification["source_dc_location"] == "NGDC" else f"dci-{dst}",
+        "destination": dst if classification["destination_dc_location"] == "NGDC" else f"dci-{src}",
+        "action": action,
+        "protocol": protocol,
+        "port": port,
+        "application": app_id,
+    }
+    # Add NGDC naming if available
+    if classification["source_dc_location"] == "NGDC":
+        ngdc_rule["source_nh"] = rule.get("source_nh", rule.get("nh", ""))
+        ngdc_rule["source_sz"] = rule.get("source_sz", rule.get("source_zone", ""))
+    if classification["destination_dc_location"] == "NGDC":
+        ngdc_rule["destination_nh"] = rule.get("destination_nh", rule.get("dst_nh", ""))
+        ngdc_rule["destination_sz"] = rule.get("destination_sz", rule.get("destination_zone", ""))
+    compiled_rules.append(ngdc_rule)
+
+    # Legacy-side rule (flat, no NH/SZ segmentation)
+    legacy_rule: dict[str, Any] = {
+        "id": f"hybrid-legacy-{rule_id[:8]}",
+        "parent_rule_id": rule_id,
+        "side": "Legacy",
+        "compiled_at": now,
+        "vendor": vendor,
+        "rule_name": f"leg-{rule_name}",
+        "source": src if classification["source_dc_location"] == "Legacy" else f"dci-{src}",
+        "destination": dst if classification["destination_dc_location"] == "Legacy" else f"dci-{dst}",
+        "action": action,
+        "protocol": protocol,
+        "port": port,
+        "application": app_id,
+        "note": "Legacy DC - flat zone, no NH/SZ segmentation",
+    }
+    compiled_rules.append(legacy_rule)
+
+    # DC Interconnect rule
+    dci_rule: dict[str, Any] = {
+        "id": f"hybrid-dci-{rule_id[:8]}",
+        "parent_rule_id": rule_id,
+        "side": "DC-Interconnect",
+        "compiled_at": now,
+        "vendor": vendor,
+        "rule_name": f"dci-{rule_name}",
+        "source": src,
+        "destination": dst,
+        "action": action,
+        "protocol": protocol,
+        "port": port,
+        "note": f"DC interconnect permit for {scenario} flow",
+    }
+    compiled_rules.append(dci_rule)
+
+    return {
+        "rule_id": rule_id,
+        "scenario": scenario,
+        "classification": classification,
+        "compiled_rules": compiled_rules,
+        "compiled_at": now,
+        "vendor": vendor,
+        "note": f"Hybrid compilation: {len(compiled_rules)} rules generated for {scenario} flow",
+    }
+
+
+# --------------- P7: Migration Lifecycle Extensions ---------------
+
+PARTIAL_MIGRATION_STATUSES = [
+    "Not Started",
+    "In Progress",
+    "Partially Migrated",
+    "Completed",
+    "Heritage Dependency",
+    "Rollback",
+]
+
+PARTIAL_MIGRATION_TRANSITIONS: dict[str, list[str]] = {
+    "Not Started": ["In Progress"],
+    "In Progress": ["Partially Migrated", "Completed", "Rollback"],
+    "Partially Migrated": ["In Progress", "Completed", "Heritage Dependency"],
+    "Completed": [],
+    "Heritage Dependency": ["In Progress", "Partially Migrated"],
+    "Rollback": ["Not Started", "In Progress"],
+}
+
+
+async def get_app_lifecycle_status(app_id: str) -> dict[str, Any]:
+    """Derive the migration lifecycle status for an app based on its
+    component-level dc_location values.
+
+    Returns the computed status and valid transitions.
+    """
+    summary = await get_app_migration_status(app_id)
+    if not summary:
+        return {"app_id": app_id, "status": "Unknown", "transitions": []}
+
+    scenario = summary["migration_scenario"]
+    pct = summary["pct_migrated"]
+
+    if scenario == "Full NGDC":
+        status = "Completed"
+    elif scenario == "Full Legacy":
+        status = "Not Started"
+    elif pct > 0:
+        status = "Partially Migrated"
+    else:
+        status = "Not Started"
+
+    transitions = PARTIAL_MIGRATION_TRANSITIONS.get(status, [])
+    return {
+        "app_id": app_id,
+        "status": status,
+        "pct_migrated": pct,
+        "scenario": scenario,
+        "transitions": transitions,
+        "total_components": summary["total_components"],
+        "ngdc_count": summary["ngdc_count"],
+        "legacy_count": summary["legacy_count"],
+    }
+
+
+async def transition_app_migration_status(
+    app_id: str, new_status: str,
+) -> dict[str, Any]:
+    """Transition an app's migration lifecycle status.
+
+    Updates the dc_location of components as needed based on status change.
+    """
+    current = await get_app_lifecycle_status(app_id)
+    current_status = current.get("status", "Unknown")
+    valid = PARTIAL_MIGRATION_TRANSITIONS.get(current_status, [])
+
+    if new_status not in valid:
+        return {
+            "success": False,
+            "error": f"Cannot transition from '{current_status}' to '{new_status}'. "
+                     f"Valid transitions: {valid}",
+        }
+
+    # Record lifecycle event
+    _record_lifecycle(
+        entity_type="app_migration",
+        entity_id=app_id,
+        action=f"status_transition: {current_status} → {new_status}",
+        details={"from": current_status, "to": new_status},
+    )
+
+    return {
+        "success": True,
+        "app_id": app_id,
+        "previous_status": current_status,
+        "new_status": new_status,
+        "message": f"App {app_id} transitioned from {current_status} to {new_status}",
+    }
+
+
+# --------------- P9: Legacy Group Naming ---------------
+
+def generate_legacy_group_name(
+    app_id: str, legacy_dc: str, component: str, suffix: str = "",
+) -> str:
+    """Generate a group name for Legacy-side components in hybrid scenarios.
+
+    Format: leg-{APP}-{LEGACY_DC}-{COMP}[-{suffix}]
+    """
+    parts = ["leg", app_id.upper()]
+    if legacy_dc:
+        # Shorten DC_LEGACY_A -> LGA, DC_LEGACY_B -> LGB, etc.
+        short_dc = legacy_dc.replace("DC_LEGACY_", "LG")
+        parts.append(short_dc)
+    if component:
+        parts.append(component.upper())
+    name = "-".join(parts)
+    if suffix:
+        name += f"-{suffix}"
+    return name
+
+
+async def generate_hybrid_group_names(app_id: str) -> dict[str, Any]:
+    """Generate group names for all components of an app in hybrid scenarios.
+
+    Returns NGDC-standard names for NGDC components and leg- names for Legacy.
+    """
+    summary = await get_app_migration_status(app_id)
+    if not summary:
+        return {"app_id": app_id, "groups": [], "error": "App not found"}
+
+    naming = _load("naming_standards") or {}
+    ngdc_pattern = naming.get("group_pattern", "grp-{APP}-{NH}-{SZ}-{Component}")
+
+    groups: list[dict[str, Any]] = []
+    for comp in summary["components"]:
+        component = comp["component"]
+        dc_loc = comp["dc_location"]
+
+        if dc_loc == "NGDC":
+            nh = comp.get("nh", "")
+            sz = comp.get("sz", "")
+            name = ngdc_pattern.replace("{APP}", app_id.upper())
+            name = name.replace("{NH}", nh)
+            name = name.replace("{SZ}", sz)
+            name = name.replace("{Component}", component.upper())
+            groups.append({
+                "component": component,
+                "dc_location": "NGDC",
+                "group_name": name,
+                "nh": nh,
+                "sz": sz,
+                "dc": comp.get("dc", ""),
+            })
+        else:
+            legacy_dc = comp.get("legacy_dc", "")
+            name = generate_legacy_group_name(app_id, legacy_dc, component)
+            groups.append({
+                "component": component,
+                "dc_location": "Legacy",
+                "group_name": name,
+                "legacy_dc": legacy_dc,
+            })
+
+    return {"app_id": app_id, "scenario": summary["migration_scenario"], "groups": groups}
