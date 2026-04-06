@@ -6,6 +6,7 @@ import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled } from '@/lib/api';
+import { autoCreateLegacyGroupsFromRules } from '@/lib/legacyGroupAutoCreate';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
 import type { LegacyRule, CompiledRule, RuleDelta, FirewallGroup, Application } from '@/types';
@@ -522,6 +523,7 @@ export default function FirewallManagementPage() {
   const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
   const [showLegacyGroupsModal, setShowLegacyGroupsModal] = useState(false);
   const [allApplications, setAllApplications] = useState<Application[]>([]);
+  const [autoGroupStatus, setAutoGroupStatus] = useState<{ groupsCreated: number; nestedGroupsCreated: number; membersAdded: number } | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedExportApps, setSelectedExportApps] = useState<Set<string>>(new Set());
   // Resource-based modify state
@@ -539,6 +541,19 @@ export default function FirewallManagementPage() {
       setRules(rulesData);
       setApplications(appsData);
       setAllApplications(appsData);
+      // Auto-create Legacy Groups from imported rules (with members & nesting)
+      // Runs in background — best-effort, won't block page load
+      if (rulesData.length > 0) {
+        autoCreateLegacyGroupsFromRules(rulesData).then(result => {
+          if (result.groupsCreated > 0 || result.nestedGroupsCreated > 0) {
+            setAutoGroupStatus({
+              groupsCreated: result.groupsCreated,
+              nestedGroupsCreated: result.nestedGroupsCreated,
+              membersAdded: result.membersAdded,
+            });
+          }
+        }).catch(() => { /* best-effort */ });
+      }
     } catch {
       showNotification('Failed to load data', 'error');
     }
@@ -867,6 +882,24 @@ export default function FirewallManagementPage() {
           </button>
         </div>
       </div>
+
+      {/* Auto-created Legacy Groups notification */}
+      {autoGroupStatus && (
+        <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-amber-800">Legacy Groups Auto-Created: </span>
+            <span className="text-xs text-amber-700">
+              {autoGroupStatus.groupsCreated} group(s)
+              {autoGroupStatus.nestedGroupsCreated > 0 && `, ${autoGroupStatus.nestedGroupsCreated} nested sub-group(s)`}
+              {autoGroupStatus.membersAdded > 0 && `, ${autoGroupStatus.membersAdded} member(s) associated`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowLegacyGroupsModal(true)} className="text-xs font-medium text-amber-700 hover:text-amber-900 underline">View Groups</button>
+            <button onClick={() => setAutoGroupStatus(null)} className="text-xs text-gray-400 hover:text-gray-600">Dismiss</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[

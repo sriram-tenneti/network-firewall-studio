@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules, isHideSeedEnabled } from '@/lib/api';
+import { autoCreateLegacyGroupsFromRules } from '@/lib/legacyGroupAutoCreate';
 import type { FirewallRule, LegacyRule } from '@/types';
 
 interface ImportedApp {
@@ -53,6 +54,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
   const [rulesAppFilter, setRulesAppFilter] = useState<string>('');
   const [rulesSearchQuery, setRulesSearchQuery] = useState<string>('');
   const [clearing, setClearing] = useState(false);
+  const [autoGroupResult, setAutoGroupResult] = useState<{ groupsCreated: number; nestedGroupsCreated: number; membersAdded: number } | null>(null);
 
   // NFR import state (for ngdc-import-rules context)
   const [nfrRules, setNfrRules] = useState<FirewallRule[]>([]);
@@ -168,6 +170,18 @@ export default function DataImportPage({ context }: DataImportPageProps) {
       if (!isNGDCMappings) {
         loadImportedApps();
         loadImportedRules();
+        // Auto-create Legacy Groups from imported rules (with members & nesting)
+        try {
+          const importedRulesForGroups = await getLegacyRules();
+          const groupResult = await autoCreateLegacyGroupsFromRules(importedRulesForGroups);
+          if (groupResult.groupsCreated > 0 || groupResult.nestedGroupsCreated > 0) {
+            setAutoGroupResult({
+              groupsCreated: groupResult.groupsCreated,
+              nestedGroupsCreated: groupResult.nestedGroupsCreated,
+              membersAdded: groupResult.membersAdded,
+            });
+          }
+        } catch { /* Auto-group creation is best-effort */ }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');
@@ -471,6 +485,18 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             )}
             {Number(result.added || result.imported || 0) === 0 && Number(result.parsed_rows || 0) === 0 && (
               <p className="text-xs text-red-600 mt-2 font-medium">The file could not be read. If it has IRM/DRM protection, open it in Excel and Save As CSV (.csv), then re-import.</p>
+            )}
+            {/* Auto-created Legacy Groups notification */}
+            {autoGroupResult && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <h4 className="text-xs font-semibold text-amber-800 mb-1">Legacy Groups Auto-Created</h4>
+                <p className="text-xs text-amber-700">
+                  <strong>{autoGroupResult.groupsCreated}</strong> group(s) created
+                  {autoGroupResult.nestedGroupsCreated > 0 && <>, <strong>{autoGroupResult.nestedGroupsCreated}</strong> nested sub-group(s)</>}
+                  {autoGroupResult.membersAdded > 0 && <>, <strong>{autoGroupResult.membersAdded}</strong> member(s) associated</>}.
+                  View them in <strong>Firewall Management &gt; Legacy Groups</strong>.
+                </p>
+              </div>
             )}
             {Number(result.added || result.imported || 0) === 0 && Number(result.parsed_rows || 0) > 0 && (
               <p className="text-xs text-amber-600 mt-2">All {String(result.parsed_rows)} rows were duplicates of existing rules. Use "Clear All &amp; Re-import" to start fresh.</p>
