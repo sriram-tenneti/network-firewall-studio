@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../shared/Modal';
-import type { FirewallRule, Application, BirthrightValidation } from '@/types';
-import { validateBirthright } from '@/lib/api';
+import type { FirewallRule, Application, BirthrightValidation, FirewallGroup } from '@/types';
+import { validateBirthright, getGroups, getFilteredNhSzDc } from '@/lib/api';
 import { autoPrefix } from '@/lib/utils';
 
 interface RuleConflict {
@@ -119,6 +119,10 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [validatingBR, setValidatingBR] = useState(false);
 
+  // App-filtered groups and SZs
+  const [appGroups, setAppGroups] = useState<FirewallGroup[]>([]);
+  const [appFilteredSZs, setAppFilteredSZs] = useState<string[]>([]);
+
   useEffect(() => {
     if (rule && mode === 'edit') {
       setForm({
@@ -153,6 +157,30 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
     }
     setShowConflicts(false);
   }, [rule, mode, isOpen]);
+
+  // Load groups for selected application
+  useEffect(() => {
+    if (!form.application) {
+      setAppGroups([]);
+      return;
+    }
+    getGroups(form.application)
+      .then(groups => setAppGroups(groups))
+      .catch(() => setAppGroups([]));
+  }, [form.application]);
+
+  // Load app-filtered SZs when application or environment changes
+  useEffect(() => {
+    if (!form.application || !form.environment) {
+      setAppFilteredSZs([]);
+      return;
+    }
+    getFilteredNhSzDc(form.environment, form.application)
+      .then(data => {
+        setAppFilteredSZs(data.security_zones.map(sz => sz.code || sz.name));
+      })
+      .catch(() => setAppFilteredSZs([]));
+  }, [form.application, form.environment]);
 
   const conflicts = useMemo(() => {
     if (existingRules.length === 0) return [];
@@ -277,17 +305,43 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Source (Group/IP)</label>
-            <input className={inputClass} placeholder="e.g. grp-APP01-NH01-STD-src" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })} />
+            {appGroups.length > 0 ? (
+              <>
+                <select className={inputClass} value={form.source} onChange={e => setForm({ ...form, source: e.target.value })}>
+                  <option value="">Select Source Group</option>
+                  {appGroups.map(g => (
+                    <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
+                  ))}
+                  {form.source && !appGroups.find(g => g.name === form.source) && (
+                    <option value={form.source}>{form.source} (custom)</option>
+                  )}
+                </select>
+                <input className={inputClass + ' mt-1'} placeholder="Or type custom source..." value={!appGroups.find(g => g.name === form.source) ? form.source : ''} onChange={e => setForm({ ...form, source: e.target.value })} />
+              </>
+            ) : (
+              <input className={inputClass} placeholder="e.g. grp-APP01-NH01-STD-src" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })} />
+            )}
           </div>
           <div>
             <label className={labelClass}>Source Zone</label>
             <select className={inputClass} value={form.source_zone} onChange={e => setForm({ ...form, source_zone: e.target.value })}>
               <option value="">Select Zone</option>
-              <option value="Standard">Standard</option>
-              <option value="CCS">CCS</option>
-              <option value="CDE">CDE</option>
-              <option value="CPA">CPA</option>
-              <option value="PSE">PSE</option>
+              {appFilteredSZs.length > 0 ? (
+                appFilteredSZs.map(sz => (
+                  <option key={sz} value={sz}>{sz}</option>
+                ))
+              ) : (
+                <>
+                  <option value="Standard">Standard</option>
+                  <option value="CCS">CCS</option>
+                  <option value="CDE">CDE</option>
+                  <option value="CPA">CPA</option>
+                  <option value="PSE">PSE</option>
+                </>
+              )}
+              {form.source_zone && appFilteredSZs.length > 0 && !appFilteredSZs.includes(form.source_zone) && (
+                <option value={form.source_zone}>{form.source_zone} (current)</option>
+              )}
             </select>
           </div>
         </div>
@@ -295,17 +349,43 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Destination (Group/IP)</label>
-            <input className={inputClass} placeholder="e.g. grp-APP01-NH01-STD-dst" value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })} />
+            {appGroups.length > 0 ? (
+              <>
+                <select className={inputClass} value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })}>
+                  <option value="">Select Destination Group</option>
+                  {appGroups.map(g => (
+                    <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
+                  ))}
+                  {form.destination && !appGroups.find(g => g.name === form.destination) && (
+                    <option value={form.destination}>{form.destination} (custom)</option>
+                  )}
+                </select>
+                <input className={inputClass + ' mt-1'} placeholder="Or type custom destination..." value={!appGroups.find(g => g.name === form.destination) ? form.destination : ''} onChange={e => setForm({ ...form, destination: e.target.value })} />
+              </>
+            ) : (
+              <input className={inputClass} placeholder="e.g. grp-APP01-NH01-STD-dst" value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })} />
+            )}
           </div>
           <div>
             <label className={labelClass}>Destination Zone</label>
             <select className={inputClass} value={form.destination_zone} onChange={e => setForm({ ...form, destination_zone: e.target.value })}>
               <option value="">Select Zone</option>
-              <option value="Standard">Standard</option>
-              <option value="CCS">CCS</option>
-              <option value="CDE">CDE</option>
-              <option value="CPA">CPA</option>
-              <option value="PSE">PSE</option>
+              {appFilteredSZs.length > 0 ? (
+                appFilteredSZs.map(sz => (
+                  <option key={sz} value={sz}>{sz}</option>
+                ))
+              ) : (
+                <>
+                  <option value="Standard">Standard</option>
+                  <option value="CCS">CCS</option>
+                  <option value="CDE">CDE</option>
+                  <option value="CPA">CPA</option>
+                  <option value="PSE">PSE</option>
+                </>
+              )}
+              {form.destination_zone && appFilteredSZs.length > 0 && !appFilteredSZs.includes(form.destination_zone) && (
+                <option value={form.destination_zone}>{form.destination_zone} (current)</option>
+              )}
             </select>
           </div>
         </div>

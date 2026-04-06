@@ -295,7 +295,7 @@ export function DesignStudioPage() {
             <option value="Pre-Production">Pre-Production</option>
           </select>
           <button onClick={() => groupModal.open()} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-md hover:bg-indigo-100">
-            Manage Groups
+            App Groups
           </button>
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Rules</button>

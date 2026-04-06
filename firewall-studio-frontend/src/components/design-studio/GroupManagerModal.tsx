@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
-import { getGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings, getAffectedRules, submitGroupPolicyChanges } from '@/lib/api';
+import { getGroups, createGroup, addGroupMember, removeGroupMember, getAppDCMappings, getAffectedRules, submitGroupPolicyChanges, provisionGroups } from '@/lib/api';
 import type { FirewallGroup, GroupMember } from '@/types';
 import { autoPrefix } from '@/lib/utils';
 
@@ -29,6 +29,11 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [pendingChanges, setPendingChanges] = useState<{ type: string; detail: string; delta?: Record<string, unknown> }[]>([]);
   const [submittingPolicy, setSubmittingPolicy] = useState(false);
   const [policySubmitResult, setPolicySubmitResult] = useState<string | null>(null);
+
+  // Group deployment to firewall device
+  const [deploying, setDeploying] = useState(false);
+  const [deployResult, setDeployResult] = useState<string | null>(null);
+  const [deployVendor, setDeployVendor] = useState('palo_alto');
 
   // Inline members for group creation (Issue #5)
   const [createMembers, setCreateMembers] = useState<{ type: GroupMember['type']; value: string; description: string }[]>([]);
@@ -266,6 +271,34 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     }
   };
 
+  // Classify group as NGDC or Legacy based on naming standard: grp-{APP}-{NH}-{SZ}-{Component}
+  const classifyGroup = (g: FirewallGroup): 'NGDC' | 'Legacy' | 'Unknown' => {
+    const name = g.name || '';
+    // NGDC naming standard: grp-{APP}-{NH}-{SZ}-{Component}
+    const ngdcPattern = /^grp-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+/;
+    if (ngdcPattern.test(name) && g.nh && g.sz && g.subtype) return 'NGDC';
+    // Legacy groups often come from imports without structured naming
+    if ((g as unknown as Record<string, unknown>).type === 'migration' || !g.nh || !g.sz) return 'Legacy';
+    return ngdcPattern.test(name) ? 'NGDC' : 'Legacy';
+  };
+
+  // Deploy group changes to firewall device
+  const handleDeployGroups = async () => {
+    const appId = filterAppId || selectedGroup?.app_id;
+    if (!appId) return;
+    setDeploying(true);
+    try {
+      const result = await provisionGroups(appId, deployVendor);
+      const count = (result as Record<string, unknown>).groups_deployed || 0;
+      setDeployResult(`Deployed ${count} group(s) to ${deployVendor} device`);
+    } catch {
+      setDeployResult('Failed to deploy groups to firewall device');
+    } finally {
+      setDeploying(false);
+      setTimeout(() => setDeployResult(null), 5000);
+    }
+  };
+
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
 
   return (
@@ -447,6 +480,14 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium truncate">{g.name}</span>
+                    {(() => {
+                      const cls = classifyGroup(g);
+                      return cls === 'NGDC'
+                        ? <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-blue-100 text-blue-700">NGDC</span>
+                        : cls === 'Legacy'
+                        ? <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-amber-100 text-amber-700">Legacy</span>
+                        : null;
+                    })()}
                     {(g as unknown as Record<string, unknown>).type === 'migration' && (
                       <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">migrated</span>
                     )}
@@ -468,7 +509,17 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
           {selectedGroup ? (
             <>
               <div className="mb-4">
-                <h3 className="text-sm font-semibold text-gray-800">{selectedGroup.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-gray-800">{selectedGroup.name}</h3>
+                  {(() => {
+                    const cls = classifyGroup(selectedGroup);
+                    return cls === 'NGDC'
+                      ? <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-blue-100 text-blue-700">NGDC</span>
+                      : cls === 'Legacy'
+                      ? <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-amber-100 text-amber-700">Legacy</span>
+                      : null;
+                  })()}
+                </div>
                 <p className="text-xs text-gray-500 mt-1">{selectedGroup.description}</p>
                 <div className="flex gap-3 mt-2 text-xs text-gray-500">
                   <span>App: {selectedGroup.app_id}</span>
@@ -566,6 +617,38 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       {policySubmitResult && (
         <div className={`mt-2 p-2 rounded text-xs font-medium ${policySubmitResult.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
           {policySubmitResult}
+        </div>
+      )}
+
+      {/* Deploy groups to firewall device */}
+      {(filterAppId || selectedGroup) && (
+        <div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-indigo-800">Deploy Groups as Firewall Policy</p>
+              <p className="text-xs text-indigo-600 mt-0.5">Push group definitions to firewall device for {filterAppId || selectedGroup?.app_id || 'selected app'}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={deployVendor} onChange={e => setDeployVendor(e.target.value)} className="px-2 py-1 text-xs border border-indigo-300 rounded-md bg-white">
+                <option value="palo_alto">Palo Alto</option>
+                <option value="checkpoint">Check Point</option>
+                <option value="fortigate">FortiGate</option>
+                <option value="generic">Generic</option>
+              </select>
+              <button
+                onClick={handleDeployGroups}
+                disabled={deploying}
+                className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {deploying ? 'Deploying...' : 'Deploy to Device'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deployResult && (
+        <div className={`mt-2 p-2 rounded text-xs font-medium ${deployResult.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {deployResult}
         </div>
       )}
 
