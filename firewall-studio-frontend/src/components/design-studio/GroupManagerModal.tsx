@@ -30,6 +30,12 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [submittingPolicy, setSubmittingPolicy] = useState(false);
   const [policySubmitResult, setPolicySubmitResult] = useState<string | null>(null);
 
+  // Compile group as device policy (like rule compile)
+  const [compileVendor, setCompileVendor] = useState('palo_alto');
+  const [compiledPolicy, setCompiledPolicy] = useState<string | null>(null);
+  const [compiling, setCompiling] = useState(false);
+  const [copiedPolicy, setCopiedPolicy] = useState(false);
+
   // Inline members for group creation (Issue #5)
   const [createMembers, setCreateMembers] = useState<{ type: GroupMember['type']; value: string; description: string }[]>([]);
   const [createMemberType, setCreateMemberType] = useState<GroupMember['type']>('ip');
@@ -133,7 +139,14 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
         const gEnv = (g as unknown as Record<string, string>).environment;
         return !gEnv || gEnv === forEnv;
       }) : data;
-      setGroups(filtered);
+      // Deduplicate groups by name — keep first occurrence
+      const seen = new Set<string>();
+      const deduped = filtered.filter(g => {
+        if (seen.has(g.name)) return false;
+        seen.add(g.name);
+        return true;
+      });
+      setGroups(deduped);
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -263,6 +276,171 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     } finally {
       setSubmittingPolicy(false);
       setTimeout(() => setPolicySubmitResult(null), 5000);
+    }
+  };
+
+  // Classify group as NGDC or Legacy based on naming standard: grp-{APP}-{NH}-{SZ}-{Component}
+  const classifyGroup = (g: FirewallGroup): 'NGDC' | 'Legacy' | 'Unknown' => {
+    const name = g.name || '';
+    // NGDC naming standard: grp-{APP}-{NH}-{SZ}-{Component}
+    const ngdcPattern = /^grp-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+/;
+    if (ngdcPattern.test(name) && g.nh && g.sz && g.subtype) return 'NGDC';
+    // Legacy groups often come from imports without structured naming
+    if ((g as unknown as Record<string, unknown>).type === 'migration' || !g.nh || !g.sz) return 'Legacy';
+    return ngdcPattern.test(name) ? 'NGDC' : 'Legacy';
+  };
+
+  // Compile group as vendor-specific device policy (like rule compile)
+  const generateGroupPolicy = (group: FirewallGroup, vendor: string): string => {
+    const members = (group.members || []);
+    const ips = members.filter(m => m.type === 'ip').map(m => m.value);
+    const subnets = members.filter(m => m.type === 'subnet' || m.type === 'cidr').map(m => m.value);
+    const ranges = members.filter(m => m.type === 'range').map(m => m.value);
+    const nestedGroups = members.filter(m => m.type === 'group').map(m => m.value);
+
+    switch (vendor) {
+      case 'palo_alto': {
+        let policy = `# Palo Alto PAN-OS Address Group Configuration\n`;
+        policy += `# Group: ${group.name}\n`;
+        policy += `# Generated: ${new Date().toISOString()}\n\n`;
+        // Individual address objects
+        for (const ip of ips) {
+          policy += `set address ${ip.replace(/\./g, '_')} ip-netmask ${ip}/32\n`;
+        }
+        for (const subnet of subnets) {
+          const objName = subnet.replace(/[\/\.]/g, '_');
+          policy += `set address ${objName} ip-netmask ${subnet}\n`;
+        }
+        for (const range of ranges) {
+          const objName = range.replace(/[\.\-]/g, '_');
+          policy += `set address ${objName} ip-range ${range}\n`;
+        }
+        policy += `\n# Address Group\n`;
+        const allMembers = [
+          ...ips.map(ip => ip.replace(/\./g, '_')),
+          ...subnets.map(s => s.replace(/[\/\.]/g, '_')),
+          ...ranges.map(r => r.replace(/[\.\-]/g, '_')),
+          ...nestedGroups,
+        ];
+        policy += `set address-group ${group.name} static [ ${allMembers.join(' ')} ]\n`;
+        if (group.description) {
+          policy += `set address-group ${group.name} description "${group.description}"\n`;
+        }
+        return policy;
+      }
+      case 'checkpoint': {
+        let policy = `# Check Point SmartConsole CLI (mgmt_cli) Configuration\n`;
+        policy += `# Group: ${group.name}\n`;
+        policy += `# Generated: ${new Date().toISOString()}\n\n`;
+        for (const ip of ips) {
+          policy += `mgmt_cli add host name "${ip}" ip-address "${ip}"\n`;
+        }
+        for (const subnet of subnets) {
+          const [net, mask] = subnet.split('/');
+          policy += `mgmt_cli add network name "${subnet.replace(/[\/\.]/g, '_')}" subnet "${net}" mask-length "${mask}"\n`;
+        }
+        for (const range of ranges) {
+          const [start, end] = range.split('-');
+          policy += `mgmt_cli add address-range name "${range.replace(/[\.\-]/g, '_')}" ip-address-first "${start}" ip-address-last "${end}"\n`;
+        }
+        policy += `\nmgmt_cli add group name "${group.name}"\n`;
+        for (const ip of ips) {
+          policy += `mgmt_cli set group name "${group.name}" members.add "${ip}"\n`;
+        }
+        for (const subnet of subnets) {
+          policy += `mgmt_cli set group name "${group.name}" members.add "${subnet.replace(/[\/\.]/g, '_')}"\n`;
+        }
+        for (const range of ranges) {
+          policy += `mgmt_cli set group name "${group.name}" members.add "${range.replace(/[\.\-]/g, '_')}"\n`;
+        }
+        for (const ng of nestedGroups) {
+          policy += `mgmt_cli set group name "${group.name}" members.add "${ng}"\n`;
+        }
+        policy += `\nmgmt_cli publish\n`;
+        return policy;
+      }
+      case 'fortigate': {
+        let policy = `# FortiGate CLI Configuration\n`;
+        policy += `# Group: ${group.name}\n`;
+        policy += `# Generated: ${new Date().toISOString()}\n\n`;
+        for (const ip of ips) {
+          policy += `config firewall address\n  edit "${ip}"\n    set type ipmask\n    set subnet ${ip}/32\n  next\nend\n\n`;
+        }
+        for (const subnet of subnets) {
+          const objName = subnet.replace(/[\/\.]/g, '_');
+          policy += `config firewall address\n  edit "${objName}"\n    set type ipmask\n    set subnet ${subnet}\n  next\nend\n\n`;
+        }
+        for (const range of ranges) {
+          const [start, end] = range.split('-');
+          const objName = range.replace(/[\.\-]/g, '_');
+          policy += `config firewall address\n  edit "${objName}"\n    set type iprange\n    set start-ip ${start}\n    set end-ip ${end}\n  next\nend\n\n`;
+        }
+        policy += `config firewall addrgrp\n  edit "${group.name}"\n`;
+        const fgMembers = [
+          ...ips,
+          ...subnets.map(s => s.replace(/[\/\.]/g, '_')),
+          ...ranges.map(r => r.replace(/[\.\-]/g, '_')),
+          ...nestedGroups,
+        ];
+        policy += `    set member ${fgMembers.map(m => `"${m}"`).join(' ')}\n`;
+        if (group.description) {
+          policy += `    set comment "${group.description}"\n`;
+        }
+        policy += `  next\nend\n`;
+        return policy;
+      }
+      default: {
+        let policy = `# Generic Firewall Group Configuration\n`;
+        policy += `# Group: ${group.name}\n`;
+        policy += `# App: ${group.app_id} | NH: ${group.nh} | SZ: ${group.sz} | Component: ${group.subtype}\n`;
+        policy += `# Description: ${group.description || 'N/A'}\n`;
+        policy += `# Generated: ${new Date().toISOString()}\n`;
+        policy += `# Members: ${members.length}\n\n`;
+        policy += `GROUP_NAME=${group.name}\n`;
+        policy += `GROUP_TYPE=address-group\n\n`;
+        policy += `# Member Objects\n`;
+        for (const m of members) {
+          policy += `MEMBER type=${m.type} value=${m.value}${m.description ? ` desc="${m.description}"` : ''}\n`;
+        }
+        if (nestedGroups.length > 0) {
+          policy += `\n# Nested Groups\n`;
+          for (const ng of nestedGroups) {
+            policy += `NESTED_GROUP=${ng}\n`;
+          }
+        }
+        return policy;
+      }
+    }
+  };
+
+  const handleCompileGroup = () => {
+    if (!selectedGroup) return;
+    setCompiling(true);
+    setCopiedPolicy(false);
+    // Simulate compilation delay for UX
+    setTimeout(() => {
+      const policy = generateGroupPolicy(selectedGroup, compileVendor);
+      setCompiledPolicy(policy);
+      setCompiling(false);
+    }, 300);
+  };
+
+  const handleCopyPolicy = async () => {
+    if (!compiledPolicy) return;
+    try {
+      await navigator.clipboard.writeText(compiledPolicy);
+      setCopiedPolicy(true);
+      setTimeout(() => setCopiedPolicy(false), 3000);
+    } catch {
+      // Fallback for non-HTTPS contexts
+      const textarea = document.createElement('textarea');
+      textarea.value = compiledPolicy;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopiedPolicy(true);
+      setTimeout(() => setCopiedPolicy(false), 3000);
     }
   };
 
@@ -447,6 +625,14 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium truncate">{g.name}</span>
+                    {(() => {
+                      const cls = classifyGroup(g);
+                      return cls === 'NGDC'
+                        ? <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-blue-100 text-blue-700">NGDC</span>
+                        : cls === 'Legacy'
+                        ? <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-amber-100 text-amber-700">Legacy</span>
+                        : null;
+                    })()}
                     {(g as unknown as Record<string, unknown>).type === 'migration' && (
                       <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">migrated</span>
                     )}
@@ -468,7 +654,17 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
           {selectedGroup ? (
             <>
               <div className="mb-4">
-                <h3 className="text-sm font-semibold text-gray-800">{selectedGroup.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-gray-800">{selectedGroup.name}</h3>
+                  {(() => {
+                    const cls = classifyGroup(selectedGroup);
+                    return cls === 'NGDC'
+                      ? <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-blue-100 text-blue-700">NGDC</span>
+                      : cls === 'Legacy'
+                      ? <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-amber-100 text-amber-700">Legacy</span>
+                      : null;
+                  })()}
+                </div>
                 <p className="text-xs text-gray-500 mt-1">{selectedGroup.description}</p>
                 <div className="flex gap-3 mt-2 text-xs text-gray-500">
                   <span>App: {selectedGroup.app_id}</span>
@@ -566,6 +762,55 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       {policySubmitResult && (
         <div className={`mt-2 p-2 rounded text-xs font-medium ${policySubmitResult.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
           {policySubmitResult}
+        </div>
+      )}
+
+      {/* Compile group as device policy */}
+      {selectedGroup && (
+        <div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-xs font-semibold text-indigo-800">Compile Group Policy</p>
+              <p className="text-xs text-indigo-600 mt-0.5">Generate device-specific policy for <span className="font-mono font-semibold">{selectedGroup.name}</span></p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={compileVendor} onChange={e => { setCompileVendor(e.target.value); setCompiledPolicy(null); setCopiedPolicy(false); }} className="px-2 py-1 text-xs border border-indigo-300 rounded-md bg-white">
+                <option value="palo_alto">Palo Alto PAN-OS</option>
+                <option value="checkpoint">Check Point SmartConsole</option>
+                <option value="fortigate">FortiGate CLI</option>
+                <option value="generic">Generic</option>
+              </select>
+              <button
+                onClick={handleCompileGroup}
+                disabled={compiling}
+                className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {compiling ? 'Compiling...' : 'Compile'}
+              </button>
+            </div>
+          </div>
+          {compiledPolicy && (
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-semibold text-indigo-700 uppercase">
+                  {compileVendor === 'palo_alto' ? 'PAN-OS' : compileVendor === 'checkpoint' ? 'SmartConsole CLI' : compileVendor === 'fortigate' ? 'FortiGate CLI' : 'Generic'} Output
+                </span>
+                <button
+                  onClick={handleCopyPolicy}
+                  className={`px-3 py-1 text-[10px] font-medium rounded-md border transition-colors ${
+                    copiedPolicy
+                      ? 'bg-green-100 text-green-700 border-green-300'
+                      : 'bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-100'
+                  }`}
+                >
+                  {copiedPolicy ? 'Copied!' : 'Copy to Clipboard'}
+                </button>
+              </div>
+              <pre className="bg-gray-900 text-green-400 text-[11px] font-mono p-3 rounded-md overflow-x-auto max-h-[200px] overflow-y-auto whitespace-pre leading-relaxed">
+                {compiledPolicy}
+              </pre>
+            </div>
+          )}
         </div>
       )}
 
