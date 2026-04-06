@@ -1134,7 +1134,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Neighbourhoods</h2>
-                  <p className="text-xs text-gray-500 mt-1">Manage neighbourhood definitions with CIDR ranges, metadata, and environment assignments. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
+                  <p className="text-xs text-gray-500 mt-1">Manage neighbourhood definitions with metadata and environment assignments. CIDR ranges are resolved at the SZ level per (DC, NH, SZ) — expand any NH row to see the breakdown. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white" value={nhEnvFilter} onChange={e => setNhEnvFilter(e.target.value)}>
@@ -1150,7 +1150,7 @@ export default function SettingsPage() {
               {showAddNh && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
                   <h3 className="text-sm font-semibold text-blue-800">Add New Neighbourhood</h3>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <input className={inp} placeholder="NH ID (e.g. NH01)" value={String(newNhForm.nh_id || '')} onChange={e => setNewNhForm({ ...newNhForm, nh_id: e.target.value })} />
                     <input className={inp} placeholder="Name" value={String(newNhForm.name || '')} onChange={e => setNewNhForm({ ...newNhForm, name: e.target.value })} />
                     <select className={inp} value={String(newNhForm.environment || 'Production')} onChange={e => setNewNhForm({ ...newNhForm, environment: e.target.value })}>
@@ -1158,7 +1158,6 @@ export default function SettingsPage() {
                       <option value="Pre-Production">Pre-Production</option>
                       <option value="Non-Production">Non-Production</option>
                     </select>
-                    <input className={inp} placeholder="CIDR (e.g. 10.1.0.0/16)" value={String(newNhForm.cidr || '')} onChange={e => setNewNhForm({ ...newNhForm, cidr: e.target.value })} />
                     <input className={inp} placeholder="Description" value={String(newNhForm.description || '')} onChange={e => setNewNhForm({ ...newNhForm, description: e.target.value })} />
                   </div>
                   <div className="flex gap-2 mt-2">
@@ -1175,7 +1174,7 @@ export default function SettingsPage() {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">NH ID</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Environment</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CIDR Range</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">SZ CIDR Entries</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -1202,9 +1201,7 @@ export default function SettingsPage() {
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(nh.environment) === 'Production' ? 'bg-green-100 text-green-800' : String(nh.environment) === 'Pre-Production' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{String(nh.environment || 'N/A')}</span>}</td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {isEditing ? <input className={inp} value={String(editNhForm.cidr || '')} onChange={e => setEditNhForm({ ...editNhForm, cidr: e.target.value })} /> : (
-                              <span className="text-gray-500">{nhSzEntries.length > 0 ? `${nhSzEntries.length} SZ entries` : String(nh.cidr || nh.cidr_range || '—')}</span>
-                            )}
+                            <span className="text-gray-500">{nhSzEntries.length > 0 ? `${nhSzEntries.length} SZ entries` : '—'}</span>
                           </td>
                           <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editNhForm.description || '')} onChange={e => setEditNhForm({ ...editNhForm, description: e.target.value })} /> : String(nh.description || '—')}</td>
                           <td className="px-3 py-2">
@@ -1215,7 +1212,7 @@ export default function SettingsPage() {
                               </div>
                             ) : (
                               <div className="flex gap-1">
-                                <button onClick={() => { setEditingNhId(nhId); setEditNhForm({ name: nh.name, environment: nh.environment, cidr: nh.cidr || nh.cidr_range, description: nh.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => { setEditingNhId(nhId); setEditNhForm({ name: nh.name, environment: nh.environment, description: nh.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
                                 <button onClick={() => handleDeleteNh(nhId)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
                               </div>
                             )}
@@ -1286,7 +1283,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Security Zones</h2>
-                  <p className="text-xs text-gray-500 mt-1">Manage security zone definitions with risk levels, PCI scope, fabric, VRF prefix, and CIDR ranges. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
+                  <p className="text-xs text-gray-500 mt-1">Manage security zone definitions with risk levels, PCI scope, fabric, and VRF prefix. CIDR is resolved at the (DC, NH, SZ) level in App Management. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
                 </div>
                 <button onClick={() => setShowAddSz(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add SZ</button>
               </div>
@@ -1306,7 +1303,6 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-4 gap-2">
                     <input className={inp} placeholder="VRF Prefix (e.g. VRF-STD)" value={String(newSzForm.vrf_prefix || '')} onChange={e => setNewSzForm({ ...newSzForm, vrf_prefix: e.target.value })} />
-                    <input className={inp} placeholder="CIDR (e.g. 10.1.0.0/16)" value={String(newSzForm.cidr || '')} onChange={e => setNewSzForm({ ...newSzForm, cidr: e.target.value })} />
                     <input className={inp} placeholder="Description" value={String(newSzForm.description || '')} onChange={e => setNewSzForm({ ...newSzForm, description: e.target.value })} />
                     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!newSzForm.pci_scope} onChange={e => setNewSzForm({ ...newSzForm, pci_scope: e.target.checked })} className="rounded border-gray-300 text-indigo-600" /> PCI Scope</label>
                   </div>
@@ -1327,7 +1323,6 @@ export default function SettingsPage() {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">PCI</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fabric</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">VRF Prefix</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CIDR</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
@@ -1351,7 +1346,6 @@ export default function SettingsPage() {
                             </select>
                           ) : String(sz.fabric || '—')}</td>
                           <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '—')}</td>
-                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editSzForm.cidr || '')} onChange={e => setEditSzForm({ ...editSzForm, cidr: e.target.value })} /> : String(sz.cidr || sz.cidr_range || '—')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1360,7 +1354,7 @@ export default function SettingsPage() {
                               </div>
                             ) : (
                               <div className="flex gap-1">
-                                <button onClick={() => { setEditingSzCode(code); setEditSzForm({ name: sz.name, risk_level: sz.risk_level, pci_scope: sz.pci_scope, fabric: sz.fabric, vrf_prefix: sz.vrf_prefix, cidr: sz.cidr || sz.cidr_range, description: sz.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => { setEditingSzCode(code); setEditSzForm({ name: sz.name, risk_level: sz.risk_level, pci_scope: sz.pci_scope, fabric: sz.fabric, vrf_prefix: sz.vrf_prefix, description: sz.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
                                 <button onClick={() => handleDeleteSz(code)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
                               </div>
                             )}
@@ -1369,7 +1363,7 @@ export default function SettingsPage() {
                       );
                     })}
                     {securityZones.length === 0 && (
-                      <tr><td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">No security zones found. Click &quot;+ Add SZ&quot; to create one.</td></tr>
+                      <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-500">No security zones found. Click &quot;+ Add SZ&quot; to create one.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1394,14 +1388,13 @@ export default function SettingsPage() {
               {showAddDc && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
                   <h3 className="text-sm font-semibold text-blue-800">Add New Data Center</h3>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <input className={inp} placeholder="DC ID / Code" value={String(newDcForm.dc_id || '')} onChange={e => setNewDcForm({ ...newDcForm, dc_id: e.target.value })} />
                     <input className={inp} placeholder="Name" value={String(newDcForm.name || '')} onChange={e => setNewDcForm({ ...newDcForm, name: e.target.value })} />
                     <input className={inp} placeholder="Region" value={String(newDcForm.region || '')} onChange={e => setNewDcForm({ ...newDcForm, region: e.target.value })} />
                     <select className={inp} value={String(newDcForm.status || 'Active')} onChange={e => setNewDcForm({ ...newDcForm, status: e.target.value })}>
                       <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option>
                     </select>
-                    <input className={inp} placeholder="CIDR (e.g. 10.0.0.0/8)" value={String(newDcForm.cidr || '')} onChange={e => setNewDcForm({ ...newDcForm, cidr: e.target.value })} />
                   </div>
                   <input className={`${inp} w-full`} placeholder="Description" value={String(newDcForm.description || '')} onChange={e => setNewDcForm({ ...newDcForm, description: e.target.value })} />
                   <div className="flex gap-2 mt-2">
@@ -1419,7 +1412,6 @@ export default function SettingsPage() {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Region</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CIDR</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -1438,7 +1430,6 @@ export default function SettingsPage() {
                               <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option>
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(dc.status) === 'Active' ? 'bg-green-100 text-green-800' : String(dc.status) === 'Planned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{String(dc.status || 'Active')}</span>}</td>
-                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editDcForm.cidr || '')} onChange={e => setEditDcForm({ ...editDcForm, cidr: e.target.value })} /> : String(dc.cidr || dc.cidr_range || '—')}</td>
                           <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String(dc.description || '—')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
@@ -1448,7 +1439,7 @@ export default function SettingsPage() {
                               </div>
                             ) : (
                               <div className="flex gap-1">
-                                <button onClick={() => { setEditingDcId(dcId); setEditDcForm({ dc_id: dc.dc_id || dc.code, name: dc.name, region: dc.region, status: dc.status, cidr: dc.cidr || dc.cidr_range, description: dc.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => { setEditingDcId(dcId); setEditDcForm({ dc_id: dc.dc_id || dc.code, name: dc.name, region: dc.region, status: dc.status, description: dc.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
                                 <button onClick={() => handleDeleteDc(dcId)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
                               </div>
                             )}
@@ -1457,7 +1448,7 @@ export default function SettingsPage() {
                       );
                     })}
                     {ngdcDatacenters.length === 0 && (
-                      <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-500">No data centers found. Click &quot;+ Add DC&quot; to create one.</td></tr>
+                      <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-500">No data centers found. Click &quot;+ Add DC&quot; to create one.</td></tr>
                     )}
                   </tbody>
                 </table>
