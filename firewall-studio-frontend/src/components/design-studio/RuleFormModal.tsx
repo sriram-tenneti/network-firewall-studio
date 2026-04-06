@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../shared/Modal';
 import type { FirewallRule, Application, BirthrightValidation, FirewallGroup } from '@/types';
-import { validateBirthright, getGroups, getFilteredNhSzDc } from '@/lib/api';
-import { autoPrefix } from '@/lib/utils';
+import { validateBirthright, getGroups, getFilteredNhSzDc, submitGroupPolicyChanges } from '@/lib/api';
+import { autoPrefix, isNgdcGroupName } from '@/lib/utils';
 
 interface RuleConflict {
   type: 'exact_duplicate' | 'birthright_ngdc' | 'legacy_passthrough' | 'port_overlap';
@@ -158,14 +158,14 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
     setShowConflicts(false);
   }, [rule, mode, isOpen]);
 
-  // Load groups for selected application
+  // Load NGDC groups for selected application (Studio only shows NGDC-standard groups)
   useEffect(() => {
     if (!form.application) {
       setAppGroups([]);
       return;
     }
     getGroups(form.application)
-      .then(groups => setAppGroups(groups))
+      .then(groups => setAppGroups(groups.filter(g => isNgdcGroupName(g.name))))
       .catch(() => setAppGroups([]));
   }, [form.application]);
 
@@ -348,7 +348,7 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={labelClass}>Destination (Group/IP)</label>
+            <label className={labelClass}>Destination Group</label>
             {appGroups.length > 0 ? (
               <>
                 <select className={inputClass} value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })}>
@@ -357,13 +357,18 @@ export function RuleFormModal({ isOpen, onClose, onSave, rule, applications, mod
                     <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
                   ))}
                   {form.destination && !appGroups.find(g => g.name === form.destination) && (
-                    <option value={form.destination}>{form.destination} (custom)</option>
+                    <option value={form.destination}>{form.destination} (current)</option>
                   )}
                 </select>
-                <input className={inputClass + ' mt-1'} placeholder="Or type custom destination..." value={!appGroups.find(g => g.name === form.destination) ? form.destination : ''} onChange={e => setForm({ ...form, destination: e.target.value })} />
+                <p className="text-[10px] text-gray-400 mt-0.5">Destination must be an existing NGDC group for this app</p>
               </>
             ) : (
-              <input className={inputClass} placeholder="e.g. grp-APP01-NH01-STD-dst" value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })} />
+              <>
+                <select className={inputClass} value={form.destination} disabled>
+                  <option value="">No NGDC groups available</option>
+                </select>
+                <p className="text-[10px] text-amber-500 mt-0.5">Create groups in App Groups (Manage Groups) first</p>
+              </>
             )}
           </div>
           <div>

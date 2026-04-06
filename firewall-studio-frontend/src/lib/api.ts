@@ -25,6 +25,7 @@ import type {
   BirthrightValidation,
   NhSecurityZone,
 } from '@/types';
+import { isLegacyGroupName } from '@/lib/nestingParser';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -60,14 +61,14 @@ interface RawBackendRule {
 }
 
 function parseSourceConfig(src: string, srcZone: string, port: string): SourceConfig {
-  const isGroup = src.startsWith('grp-');
-  const isServer = src.startsWith('svr-');
+  const isGroup = src.startsWith('grp-') || isLegacyGroupName(src);
+  const isServer = src.startsWith('svr-') || src.startsWith('gsvr-');
   const isRange = src.startsWith('rng-');
   const isCidr = /\/\d+$/.test(src);
 
   if (isGroup || isServer || isRange) {
     return {
-      source_type: 'Group',
+      source_type: isGroup ? 'Group' : isRange ? 'Range' : 'Server',
       ip_address: null,
       cidr: null,
       group_name: src,
@@ -104,14 +105,14 @@ function parseDestConfig(dst: string, dstZone: string, port: string): Destinatio
     security_zone: dstZone,
     dest_ip: /^\d/.test(dst) ? dst : null,
     ports: port,
-    is_predefined: dst.startsWith('grp-'),
+    is_predefined: dst.startsWith('grp-') || isLegacyGroupName(dst),
   };
 }
 
 export function transformRule(raw: RawBackendRule): FirewallRule {
   const src = raw.source;
-  const isNamingValid = src.startsWith('grp-') || src.startsWith('svr-') || src.startsWith('rng-');
-  const dstNamingValid = raw.destination.startsWith('grp-') || raw.destination.startsWith('svr-') || raw.destination.startsWith('rng-');
+  const isNamingValid = src.startsWith('grp-') || src.startsWith('svr-') || src.startsWith('rng-') || isLegacyGroupName(src);
+  const dstNamingValid = raw.destination.startsWith('grp-') || raw.destination.startsWith('svr-') || raw.destination.startsWith('rng-') || isLegacyGroupName(raw.destination);
   return {
     id: raw.rule_id,
     rule_id: raw.rule_id,
