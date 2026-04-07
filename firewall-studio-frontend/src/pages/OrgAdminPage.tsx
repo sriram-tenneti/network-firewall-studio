@@ -11,8 +11,9 @@ import {
   createPredefinedDestination, updatePredefinedDestination, deletePredefinedDestination,
   createEnvironment, deleteEnvironment,
   updateOrgConfig, createPolicyEntry, deletePolicyEntry,
+  submitPolicyChange, getPolicyChanges,
 } from '@/lib/api';
-import { Building2, Shield, Server, MapPin, Globe, Settings, Network, Plus, Trash2, Edit2, Save, X, ChevronRight } from 'lucide-react';
+import { Building2, Shield, Server, MapPin, Globe, Settings, Network, Plus, Trash2, Edit2, Save, X, ChevronRight, Clock, CheckCircle, XCircle, SendHorizonal } from 'lucide-react';
 
 type TabKey = 'neighbourhoods' | 'security-zones' | 'applications' | 'ngdc-dcs' | 'legacy-dcs' | 'destinations' | 'environments' | 'policy-matrix' | 'org-config';
 
@@ -120,6 +121,8 @@ export function OrgAdminPage() {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [orgConfig, setOrgConfig] = useState<Record<string, unknown>>({});
   const [saveMsg, setSaveMsg] = useState('');
+  const [policyChanges, setPolicyChanges] = useState<Record<string, unknown>[]>([]);
+  const [policyComment, setPolicyComment] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -134,7 +137,11 @@ export function OrgAdminPage() {
         case 'legacy-dcs': setData(await getLegacyDatacenters() as unknown as Record<string, unknown>[]); break;
         case 'destinations': setData(await getPredefinedDestinations() as unknown as Record<string, unknown>[]); break;
         case 'environments': setData(await getEnvironments() as unknown as Record<string, unknown>[]); break;
-        case 'policy-matrix': setData(await getPolicyMatrix()); break;
+        case 'policy-matrix': {
+          setData(await getPolicyMatrix());
+          setPolicyChanges(await getPolicyChanges());
+          break;
+        }
         case 'org-config': {
           const cfg = await getOrgConfig();
           setOrgConfig(cfg);
@@ -161,7 +168,15 @@ export function OrgAdminPage() {
         case 'environments': await deleteEnvironment(id); break;
         case 'policy-matrix': {
           const parts = id.split('::');
-          await deletePolicyEntry(parts[0], parts[1]);
+          const orig = data.find(d => d.source_zone === parts[0] && d.dest_zone === parts[1]);
+          await submitPolicyChange({
+            change_type: 'delete',
+            policy_data: { source_zone: parts[0], dest_zone: parts[1] },
+            original_data: orig ? { ...orig } : { source_zone: parts[0], dest_zone: parts[1] },
+            comments: 'Delete policy entry',
+          });
+          setSaveMsg('Delete submitted for review');
+          setTimeout(() => setSaveMsg(''), 3000);
           break;
         }
       }
@@ -205,6 +220,18 @@ export function OrgAdminPage() {
           case 'ngdc-dcs': await updateNGDCDatacenter(String(formData.code), formData); break;
           case 'legacy-dcs': await updateLegacyDatacenter(String(formData.code), formData); break;
           case 'destinations': await updatePredefinedDestination(String(formData.name), formData); break;
+          case 'policy-matrix': {
+            await submitPolicyChange({
+              change_type: 'modify',
+              policy_data: formData,
+              original_data: editItem,
+              comments: policyComment || 'Modify policy entry',
+            });
+            setPolicyComment('');
+            setSaveMsg('Policy modification submitted for review');
+            setTimeout(() => setSaveMsg(''), 3000);
+            break;
+          }
         }
       } else {
         switch (activeTab) {
@@ -215,7 +242,17 @@ export function OrgAdminPage() {
           case 'legacy-dcs': await createLegacyDatacenter(formData); break;
           case 'destinations': await createPredefinedDestination(formData); break;
           case 'environments': await createEnvironment(formData); break;
-          case 'policy-matrix': await createPolicyEntry(formData); break;
+          case 'policy-matrix': {
+            await submitPolicyChange({
+              change_type: 'add',
+              policy_data: formData,
+              comments: policyComment || 'New policy entry',
+            });
+            setPolicyComment('');
+            setSaveMsg('Policy change submitted for review');
+            setTimeout(() => setSaveMsg(''), 3000);
+            break;
+          }
         }
       }
       setShowForm(false);
@@ -373,9 +410,20 @@ export function OrgAdminPage() {
             </div>
           ))}
         </div>
+        {activeTab === 'policy-matrix' && (
+          <div className="col-span-2 mt-2">
+            <label className="text-xs font-medium text-slate-500">Review Comment</label>
+            <input type="text" value={policyComment} onChange={e => setPolicyComment(e.target.value)}
+              placeholder="Reason for this policy change..." className="w-full rounded border px-2 py-1.5 text-sm" />
+          </div>
+        )}
         <div className="mt-3 flex justify-end gap-2">
           <button onClick={() => setShowForm(false)} className="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button onClick={handleSave} className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-500 flex items-center gap-1"><Save className="h-3.5 w-3.5" />Save</button>
+          {activeTab === 'policy-matrix' ? (
+            <button onClick={handleSave} className="rounded bg-amber-600 px-3 py-1.5 text-sm text-white hover:bg-amber-500 flex items-center gap-1"><SendHorizonal className="h-3.5 w-3.5" />Submit for Review</button>
+          ) : (
+            <button onClick={handleSave} className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-500 flex items-center gap-1"><Save className="h-3.5 w-3.5" />Save</button>
+          )}
         </div>
       </div>
     );
@@ -461,9 +509,64 @@ export function OrgAdminPage() {
               columns={getColumns()}
               data={activeTab === 'policy-matrix' ? data.map(d => ({ ...d, _deleteId: policyDeleteId(d) })) : data}
               onDelete={id => handleDelete(activeTab === 'policy-matrix' ? id : id)}
-              onEdit={activeTab !== 'environments' && activeTab !== 'policy-matrix' ? handleEdit : undefined}
+              onEdit={activeTab !== 'environments' ? handleEdit : undefined}
               idField={activeTab === 'policy-matrix' ? '_deleteId' : getIdField()}
             />
+            {activeTab === 'policy-matrix' && policyChanges.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-slate-700 mb-3 flex items-center gap-2"><Clock className="h-5 w-5 text-amber-500" />Policy Change Requests</h3>
+                <div className="overflow-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b">
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">ID</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Type</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Source → Dest</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Action</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Status</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Submitted</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Comments</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {policyChanges.map((pc, i) => {
+                        const pd = (pc.policy_data || {}) as Record<string, unknown>;
+                        const status = String(pc.status || '');
+                        return (
+                          <tr key={i} className="border-b hover:bg-slate-50">
+                            <td className="px-3 py-2 font-mono text-xs text-slate-500">{String(pc.id || '')}</td>
+                            <td className="px-3 py-2">
+                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                pc.change_type === 'add' ? 'bg-green-100 text-green-700' :
+                                pc.change_type === 'modify' ? 'bg-blue-100 text-blue-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>{String(pc.change_type || '').toUpperCase()}</span>
+                            </td>
+                            <td className="px-3 py-2">{String(pd.source_zone || '')} → {String(pd.dest_zone || '')}</td>
+                            <td className="px-3 py-2">{String(pd.default_action || '')}</td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium ${
+                                status === 'Approved' ? 'bg-green-100 text-green-700' :
+                                status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                {status === 'Approved' ? <CheckCircle className="h-3 w-3" /> :
+                                 status === 'Rejected' ? <XCircle className="h-3 w-3" /> :
+                                 <Clock className="h-3 w-3" />}
+                                {status}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-500">{String(pc.submitted_at || '').slice(0, 16)}</td>
+                            <td className="px-3 py-2 text-xs text-slate-500">{String(pc.comments || '')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {saveMsg && <div className="mt-3 text-sm text-amber-600 font-medium flex items-center gap-1"><Clock className="h-4 w-4" />{saveMsg}</div>}
           </>
         )}
       </div>
