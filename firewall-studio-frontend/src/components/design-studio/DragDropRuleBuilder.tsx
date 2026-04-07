@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
+import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup } from '@/types';
 import * as api from '@/lib/api';
-import { autoPrefix } from '@/lib/utils';
+import { autoPrefix, isNgdcGroupName } from '@/lib/utils';
 
 interface DragDropRuleBuilderProps {
   applications: Application[];
@@ -89,6 +89,27 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const [dstDCs, setDstDCs] = useState<NGDCDataCenter[]>([]);
   const [loadingDst, setLoadingDst] = useState(false);
 
+  // NGDC groups for source and destination apps
+  const [srcAppGroups, setSrcAppGroups] = useState<FirewallGroup[]>([]);
+  const [dstAppGroups, setDstAppGroups] = useState<FirewallGroup[]>([]);
+
+  // Load source app groups
+  useEffect(() => {
+    if (!form.application) { setSrcAppGroups([]); return; }
+    api.getGroups(form.application)
+      .then(groups => setSrcAppGroups(groups.filter(g => isNgdcGroupName(g.name))))
+      .catch(() => setSrcAppGroups([]));
+  }, [form.application]);
+
+  // Load destination app groups
+  useEffect(() => {
+    const dstApp = form.dst_application || form.application;
+    if (!dstApp) { setDstAppGroups([]); return; }
+    api.getGroups(dstApp)
+      .then(groups => setDstAppGroups(groups.filter(g => isNgdcGroupName(g.name))))
+      .catch(() => setDstAppGroups([]));
+  }, [form.dst_application, form.application]);
+
   const loadSrcData = useCallback(async (env: string, appId: string) => {
     if (!env) return;
     setLoadingSrc(true);
@@ -163,16 +184,42 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
     return unique.length > 0 ? unique : FALLBACK_DATACENTERS;
   }, [srcDCs, dstDCs]);
 
-  const srcName = useMemo(() => {
+  // Filter groups by NH and SZ — match groups whose name contains the NH and SZ codes
+  const srcFilteredGroups = useMemo(() => {
+    if (!form.src_nh && !form.src_sz) return srcAppGroups;
+    return srcAppGroups.filter(g => {
+      const name = g.name.toLowerCase();
+      const matchNh = !form.src_nh || name.includes(form.src_nh.toLowerCase());
+      const matchSz = !form.src_sz || name.includes(form.src_sz.toLowerCase());
+      return matchNh && matchSz;
+    });
+  }, [srcAppGroups, form.src_nh, form.src_sz]);
+
+  const dstFilteredGroups = useMemo(() => {
+    if (!form.dst_nh && !form.dst_sz) return dstAppGroups;
+    return dstAppGroups.filter(g => {
+      const name = g.name.toLowerCase();
+      const matchNh = !form.dst_nh || name.includes(form.dst_nh.toLowerCase());
+      const matchSz = !form.dst_sz || name.includes(form.dst_sz.toLowerCase());
+      return matchNh && matchSz;
+    });
+  }, [dstAppGroups, form.dst_nh, form.dst_sz]);
+
+  // Generate the standard group name for "create new" option
+  const srcSuggestedName = useMemo(() => {
     if (!form.application || !form.src_nh || !form.src_sz) return '';
     return `grp-${form.application}-${form.src_nh}-${form.src_sz}-${form.src_subtype}`;
   }, [form.application, form.src_nh, form.src_sz, form.src_subtype]);
 
-  const dstName = useMemo(() => {
+  const dstSuggestedName = useMemo(() => {
     const dstApp = form.dst_application || form.application;
     if (!dstApp || !form.dst_nh || !form.dst_sz) return '';
     return `grp-${dstApp}-${form.dst_nh}-${form.dst_sz}-${form.dst_subtype}`;
   }, [form.application, form.dst_application, form.dst_nh, form.dst_sz, form.dst_subtype]);
+
+  // Keep srcName/dstName for backward compat — resolve from form.source/form.destination or suggested
+  const srcName = form.src_custom || srcSuggestedName;
+  const dstName = form.dst_custom || dstSuggestedName;
 
   const effectivePort = form.port === 'custom' ? form.customPort : form.port;
 
@@ -353,20 +400,42 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                     </select>
                   </div>
                   <div>
-                    <label className={lbl}>Subtype</label>
-                    <select className={sel} value={form.src_subtype} onChange={e => upd('src_subtype', e.target.value)}>
-                      {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
-                    </select>
-                  </div>
-                  {srcName && (
-                    <div className="p-2 bg-white border border-blue-200 rounded-lg">
-                      <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Generated Name</div>
-                      <code className="text-xs font-mono text-blue-700 break-all">{srcName}</code>
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-[10px] text-gray-500">Or override with custom name:</label>
-                    <input className={sel + ' mt-1'} placeholder="e.g. grp-APP01-NH01-GEN-APP" value={form.src_custom} onChange={e => upd('src_custom', e.target.value)} />
+                    <label className={lbl}>Source Group</label>
+                    {srcFilteredGroups.length > 0 ? (
+                      <>
+                        <select className={sel} value={form.src_custom} onChange={e => upd('src_custom', e.target.value)}>
+                          <option value="">Select Existing Group...</option>
+                          {srcFilteredGroups.map(g => (
+                            <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{srcFilteredGroups.length} group(s) match {form.src_nh && `NH: ${form.src_nh}`}{form.src_nh && form.src_sz && ', '}{form.src_sz && `SZ: ${form.src_sz}`}</p>
+                      </>
+                    ) : form.application && form.src_nh && form.src_sz ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-700 font-medium mb-1">No NGDC groups found for {form.application} in {form.src_nh}/{form.src_sz}</p>
+                        <p className="text-[10px] text-amber-600 mb-2">Create one in <strong>App Groups (Manage Groups)</strong> first, or pick a subtype to auto-name:</p>
+                        <select className={sel + ' mb-2'} value={form.src_subtype} onChange={e => { upd('src_subtype', e.target.value); upd('src_custom', ''); }}>
+                          {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                        </select>
+                        {srcSuggestedName && (
+                          <button onClick={() => upd('src_custom', srcSuggestedName)}
+                            className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
+                            Use: <code className="font-mono text-amber-700">{srcSuggestedName}</code>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <select className={sel} disabled>
+                        <option value="">Select NH &amp; SZ first...</option>
+                      </select>
+                    )}
+                    {form.src_custom && (
+                      <div className="mt-1 p-2 bg-white border border-blue-200 rounded-lg">
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Selected Group</div>
+                        <code className="text-xs font-mono text-blue-700 break-all">{form.src_custom}</code>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -417,20 +486,42 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                     </select>
                   </div>
                   <div>
-                    <label className={lbl}>Subtype</label>
-                    <select className={sel} value={form.dst_subtype} onChange={e => upd('dst_subtype', e.target.value)}>
-                      {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
-                    </select>
-                  </div>
-                  {dstName && (
-                    <div className="p-2 bg-white border border-emerald-200 rounded-lg">
-                      <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Generated Name</div>
-                      <code className="text-xs font-mono text-emerald-700 break-all">{dstName}</code>
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-[10px] text-gray-500">Or override with custom name:</label>
-                    <input className={sel + ' mt-1'} placeholder="e.g. grp-APP01-NH02-CCS-DB" value={form.dst_custom} onChange={e => upd('dst_custom', e.target.value)} />
+                    <label className={lbl}>Destination Group</label>
+                    {dstFilteredGroups.length > 0 ? (
+                      <>
+                        <select className={sel} value={form.dst_custom} onChange={e => upd('dst_custom', e.target.value)}>
+                          <option value="">Select Existing Group...</option>
+                          {dstFilteredGroups.map(g => (
+                            <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{dstFilteredGroups.length} group(s) match {form.dst_nh && `NH: ${form.dst_nh}`}{form.dst_nh && form.dst_sz && ', '}{form.dst_sz && `SZ: ${form.dst_sz}`}</p>
+                      </>
+                    ) : (form.dst_application || form.application) && form.dst_nh && form.dst_sz ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-700 font-medium mb-1">No NGDC groups found for {form.dst_application || form.application} in {form.dst_nh}/{form.dst_sz}</p>
+                        <p className="text-[10px] text-amber-600 mb-2">Create one in <strong>App Groups (Manage Groups)</strong> first, or pick a subtype to auto-name:</p>
+                        <select className={sel + ' mb-2'} value={form.dst_subtype} onChange={e => { upd('dst_subtype', e.target.value); upd('dst_custom', ''); }}>
+                          {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                        </select>
+                        {dstSuggestedName && (
+                          <button onClick={() => upd('dst_custom', dstSuggestedName)}
+                            className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
+                            Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <select className={sel} disabled>
+                        <option value="">Select NH &amp; SZ first...</option>
+                      </select>
+                    )}
+                    {form.dst_custom && (
+                      <div className="mt-1 p-2 bg-white border border-emerald-200 rounded-lg">
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Selected Group</div>
+                        <code className="text-xs font-mono text-emerald-700 break-all">{form.dst_custom}</code>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
