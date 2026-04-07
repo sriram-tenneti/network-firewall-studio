@@ -14,7 +14,8 @@ from app.database import (
     create_predefined_destination, update_predefined_destination, delete_predefined_destination,
     create_environment, delete_environment,
     update_org_config, update_naming_standards,
-    create_policy_entry, delete_policy_entry,
+    create_policy_entry, delete_policy_entry, update_policy_entry,
+    get_policy_changes, create_policy_change, approve_policy_change, reject_policy_change,
     create_chg_request,
     get_groups, get_group, create_group, update_group, delete_group,
     add_group_member, remove_group_member,
@@ -579,11 +580,59 @@ async def create_policy(data: dict):
     return await create_policy_entry(data)
 
 
+@router.put("/policy-matrix/{source_zone}/{dest_zone}")
+async def update_policy(source_zone: str, dest_zone: str, data: dict):
+    result = await update_policy_entry(source_zone, dest_zone, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Policy entry not found")
+    return result
+
+
 @router.delete("/policy-matrix/{source_zone}/{dest_zone}")
 async def delete_policy(source_zone: str, dest_zone: str):
     if not await delete_policy_entry(source_zone, dest_zone):
         raise HTTPException(status_code=404, detail="Policy entry not found")
     return {"message": "Policy entry deleted"}
+
+
+# ---- Policy Change Review Workflow ----
+
+@router.get("/policy-changes")
+async def list_policy_changes(status: str | None = None):
+    return await get_policy_changes(status)
+
+
+@router.post("/policy-changes")
+async def submit_policy_change(data: dict):
+    """Submit a policy matrix change for review.
+    data: { change_type: 'add'|'modify'|'delete', policy_data: {...}, original_data?: {...}, comments?: str, linked_rule_id?: str }
+    """
+    change_type = data.get("change_type", "add")
+    policy_data = data.get("policy_data", {})
+    original_data = data.get("original_data")
+    comments = data.get("comments", "")
+    linked_rule_id = data.get("linked_rule_id")
+    return await create_policy_change(change_type, policy_data, original_data, comments, linked_rule_id)
+
+
+@router.post("/policy-changes/{change_id}/approve")
+async def approve_policy(change_id: str, data: dict | None = None):
+    notes = (data or {}).get("notes", "")
+    result = await approve_policy_change(change_id, notes)
+    if not result:
+        raise HTTPException(status_code=404, detail="Policy change not found")
+    return result
+
+
+@router.post("/policy-changes/{change_id}/reject")
+async def reject_policy(change_id: str, data: dict | None = None):
+    notes = (data or {}).get("notes", "")
+    if not notes:
+        raise HTTPException(status_code=400, detail="Rejection notes are required")
+    result = await reject_policy_change(change_id, notes)
+    if not result:
+        raise HTTPException(status_code=404, detail="Policy change not found")
+    return result
 
 
 # ---- CRUD: Groups ----

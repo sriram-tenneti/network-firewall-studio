@@ -1947,6 +1947,168 @@ async def delete_policy_entry(source_zone: str, dest_zone: str) -> bool:
     return True
 
 
+async def update_policy_entry(source_zone: str, dest_zone: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    items = _load("policy_matrix") or []
+    for item in items:
+        if item.get("source_zone") == source_zone and item.get("dest_zone") == dest_zone:
+            item.update(updates)
+            _save("policy_matrix", items)
+            return item
+    return None
+
+
+# ============================================================
+# Policy Change Review Workflow
+# ============================================================
+
+async def get_policy_changes(status: str | None = None) -> list[dict[str, Any]]:
+    changes = _load("policy_changes") or []
+    if status:
+        changes = [c for c in changes if c.get("status") == status]
+    return changes
+
+
+async def create_policy_change(
+    change_type: str,
+    policy_data: dict[str, Any],
+    original_data: dict[str, Any] | None = None,
+    comments: str = "",
+    linked_rule_id: str | None = None,
+) -> dict[str, Any]:
+    """Submit a policy change for review. change_type: add, modify, delete."""
+    changes = _load("policy_changes") or []
+    now = _now()
+    change_id = f"POL-{_id()}"
+
+    # Build delta for modify changes
+    delta: dict[str, Any] = {"added": {}, "removed": {}, "changed": {}}
+    if change_type == "modify" and original_data:
+        for key in set(list(policy_data.keys()) + list(original_data.keys())):
+            old_val = original_data.get(key, "")
+            new_val = policy_data.get(key, "")
+            if str(old_val) != str(new_val):
+                delta["changed"][key] = {"from": str(old_val), "to": str(new_val)}
+    elif change_type == "add":
+        delta["added"] = {k: [str(v)] for k, v in policy_data.items()}
+    elif change_type == "delete" and original_data:
+        delta["removed"] = {k: [str(v)] for k, v in original_data.items()}
+
+    change = {
+        "id": change_id,
+        "change_type": change_type,
+        "policy_data": dict(policy_data),
+        "original_data": dict(original_data) if original_data else None,
+        "delta": delta,
+        "status": "Pending",
+        "requestor": "sns_user",
+        "reviewer": None,
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments,
+        "review_notes": None,
+        "linked_rule_id": linked_rule_id,
+    }
+    changes.append(change)
+    _save("policy_changes", changes)
+
+    # Also create a review entry so it appears in the Review & Approval page
+    reviews = _load("reviews") or []
+    review_id = f"REV-{_id()}"
+    src_zone = policy_data.get("source_zone", "")
+    dst_zone = policy_data.get("dest_zone", "")
+    action = policy_data.get("default_action", "")
+    review = {
+        "id": review_id,
+        "rule_id": change_id,
+        "rule_name": f"Policy: {src_zone} → {dst_zone}",
+        "request_type": f"policy_{change_type}",
+        "module": "org-admin",
+        "requestor": "sns_user",
+        "reviewer": None,
+        "status": "Pending",
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments,
+        "review_notes": None,
+        "policy_change_id": change_id,
+        "linked_rule_id": linked_rule_id,
+        "delta": delta,
+        "rule_summary": {
+            "application": "Policy Matrix",
+            "source": src_zone,
+            "destination": dst_zone,
+            "ports": action,
+            "environment": policy_data.get("description", ""),
+        },
+    }
+    reviews.append(review)
+    _save("reviews", reviews)
+    return change
+
+
+async def approve_policy_change(change_id: str, notes: str = "") -> dict[str, Any] | None:
+    changes = _load("policy_changes") or []
+    now = _now()
+    for c in changes:
+        if c.get("id") == change_id:
+            c["status"] = "Approved"
+            c["reviewed_at"] = now
+            c["review_notes"] = notes
+            c["reviewer"] = "sns_user"
+            _save("policy_changes", changes)
+
+            # Apply the actual change to the policy matrix
+            ct = c.get("change_type")
+            pd = c.get("policy_data", {})
+            if ct == "add":
+                await create_policy_entry(pd)
+            elif ct == "modify":
+                src_z = pd.get("source_zone", "")
+                dst_z = pd.get("dest_zone", "")
+                await update_policy_entry(src_z, dst_z, pd)
+            elif ct == "delete":
+                orig = c.get("original_data") or pd
+                src_z = orig.get("source_zone", "")
+                dst_z = orig.get("dest_zone", "")
+                await delete_policy_entry(src_z, dst_z)
+
+            # Update linked review status
+            reviews = _load("reviews") or []
+            for r in reviews:
+                if r.get("policy_change_id") == change_id:
+                    r["status"] = "Approved"
+                    r["reviewed_at"] = now
+                    r["review_notes"] = notes
+                    r["reviewer"] = "sns_user"
+            _save("reviews", reviews)
+            return c
+    return None
+
+
+async def reject_policy_change(change_id: str, notes: str = "") -> dict[str, Any] | None:
+    changes = _load("policy_changes") or []
+    now = _now()
+    for c in changes:
+        if c.get("id") == change_id:
+            c["status"] = "Rejected"
+            c["reviewed_at"] = now
+            c["review_notes"] = notes
+            c["reviewer"] = "sns_user"
+            _save("policy_changes", changes)
+
+            # Update linked review status
+            reviews = _load("reviews") or []
+            for r in reviews:
+                if r.get("policy_change_id") == change_id:
+                    r["status"] = "Rejected"
+                    r["reviewed_at"] = now
+                    r["review_notes"] = notes
+                    r["reviewer"] = "sns_user"
+            _save("reviews", reviews)
+            return c
+    return None
+
+
 async def create_predefined_destination(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("predefined_destinations") or []
     items.append(dict(data))
@@ -2464,7 +2626,10 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             review_module = r.get("module", "studio")
             # If this review is linked to a rule modification, approve it too
             mod_id = r.get("modification_id")
-            if mod_id:
+            pol_id = r.get("policy_change_id")
+            if pol_id:
+                await approve_policy_change(pol_id, notes)
+            elif mod_id:
                 await approve_rule_modification(mod_id, notes)
             elif r.get("request_type") == "migration":
                 # Migration review: update the legacy rule's statuses
@@ -2501,7 +2666,10 @@ async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
             review_module = r.get("module", "studio")
             # If this review is linked to a rule modification, reject it too
             mod_id = r.get("modification_id")
-            if mod_id:
+            pol_id = r.get("policy_change_id")
+            if pol_id:
+                await reject_policy_change(pol_id, notes)
+            elif mod_id:
                 await reject_rule_modification(mod_id, notes)
             else:
                 rule_id = r.get("rule_id")

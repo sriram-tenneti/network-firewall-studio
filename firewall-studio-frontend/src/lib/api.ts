@@ -291,8 +291,28 @@ export const updateOrgConfig = (data: Record<string, unknown>) =>
 export const getPolicyMatrix = () => fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix');
 export const createPolicyEntry = (data: Record<string, unknown>) =>
   fetchJSON<Record<string, unknown>>('/api/reference/policy-matrix', { method: 'POST', body: JSON.stringify(data) });
+export const updatePolicyEntry = (sourceZone: string, destZone: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/policy-matrix/${sourceZone}/${destZone}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deletePolicyEntry = (sourceZone: string, destZone: string) =>
   fetchJSON<{ message: string }>(`/api/reference/policy-matrix/${sourceZone}/${destZone}`, { method: 'DELETE' });
+
+// Policy Change Review Workflow
+export const getPolicyChanges = (status?: string) => {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/policy-changes${qs}`);
+};
+export const submitPolicyChange = (data: {
+  change_type: 'add' | 'modify' | 'delete';
+  policy_data: Record<string, unknown>;
+  original_data?: Record<string, unknown>;
+  comments?: string;
+  linked_rule_id?: string;
+}) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/policy-changes', { method: 'POST', body: JSON.stringify(data) });
+export const approvePolicyChange = (changeId: string, notes?: string) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/policy-changes/${changeId}/approve`, { method: 'POST', body: JSON.stringify({ notes: notes || '' }) });
+export const rejectPolicyChange = (changeId: string, notes: string) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/policy-changes/${changeId}/reject`, { method: 'POST', body: JSON.stringify({ notes }) });
 
 // CRUD: Neighbourhoods
 export const createNeighbourhood = (data: Record<string, unknown>) =>
