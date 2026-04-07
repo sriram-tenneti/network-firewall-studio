@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../shared/Modal';
 import type { FirewallRule, Application, BirthrightValidation, FirewallGroup } from '@/types';
-import { validateBirthright, getGroups, getFilteredNhSzDc, submitGroupPolicyChanges } from '@/lib/api';
+import { validateBirthright, getGroups, getFilteredNhSzDc } from '@/lib/api';
 import { autoPrefix, isNgdcGroupName } from '@/lib/utils';
 
 interface RuleConflict {

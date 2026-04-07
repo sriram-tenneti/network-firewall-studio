@@ -28,7 +28,6 @@ export function DesignStudioPage() {
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
   const [editingDraftRule, setEditingDraftRule] = useState<FirewallRule | null>(null);
 
-  const editModal = useModal<FirewallRule>();
   const detailModal = useModal<FirewallRule>();
   const modifyModal = useModal<FirewallRule>();
   const compilerModal = useModal<string>();
@@ -84,17 +83,6 @@ export function DesignStudioPage() {
     Approved: rules.filter(r => r.status === 'Approved' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
     Deployed: rules.filter(r => r.status === 'Deployed' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
     Certified: rules.filter(r => r.status === 'Certified' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
-  };
-
-  const handleEdit = async (data: Record<string, string | boolean>) => {
-    if (!editModal.data) return;
-    try {
-      await api.updateRule(editModal.data.rule_id, data);
-      showNotification('Rule updated successfully', 'success');
-      loadData();
-    } catch {
-      showNotification('Failed to update rule', 'error');
-    }
   };
 
   const handleModify = async (ruleId: string, changes: RuleModification) => {
@@ -368,7 +356,7 @@ export function DesignStudioPage() {
         isOpen={detailModal.isOpen}
         onClose={detailModal.close}
         rule={detailModal.data}
-        onEdit={() => { if (detailModal.data) { detailModal.close(); editModal.open(detailModal.data); } }}
+        onEdit={() => { if (detailModal.data) { detailModal.close(); setEditingDraftRule(detailModal.data); setViewMode('builder'); } }}
         onCompile={() => { if (detailModal.data) { detailModal.close(); compilerModal.open(detailModal.data.rule_id); } }}
         onSubmitReview={() => { if (detailModal.data) { handleSubmitReview(detailModal.data.rule_id); } }}
       />

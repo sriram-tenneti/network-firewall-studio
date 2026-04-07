@@ -157,6 +157,13 @@ export const updateRule = (ruleId: string, data: Partial<{
   source: SourceConfig;
   destination: DestinationConfig;
   owner: string;
+  application: string;
+  environment: string;
+  datacenter: string;
+  description: string;
+  source_nh: string;
+  destination_nh: string;
+  dst_application: string;
 }>) =>
   fetchJSON<FirewallRule>(`/api/rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) });
 
