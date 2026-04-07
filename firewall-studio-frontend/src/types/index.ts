@@ -6,7 +6,7 @@ export type MigrationStatus = 'Auto-Mapped' | 'Needs Review' | 'New Group' | 'Co
 export type RuleLifecycleStatus = 'Submitted' | 'In Progress' | 'Approved' | 'Rejected' | 'Deployed';
 export type RuleMigrationStatus = 'Not Migrated' | 'Migrated';
 export type MappingStatus = 'Automapped' | 'Needs Review' | 'Blocked';
-export type SourceType = 'Single IP' | 'Subnet' | 'Range' | 'Group';
+export type SourceType = 'Single IP' | 'Subnet' | 'Range' | 'Group' | 'Server';
 
 export interface SourceConfig {
   source_type: SourceType;

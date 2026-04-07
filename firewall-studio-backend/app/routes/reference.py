@@ -675,6 +675,19 @@ async def update_legacy_rule_endpoint(rule_id: str, data: dict):
     return result
 
 
+@router.post("/legacy-rules/bulk-update-app-id")
+async def bulk_update_app_id_endpoint(data: dict):
+    """Bulk-update app_distributed_id (and optionally app_name) for selected legacy rules."""
+    from app.database import bulk_update_legacy_rule_app_id
+    rule_ids = data.get("rule_ids", [])
+    app_distributed_id = data.get("app_distributed_id", "")
+    app_name = data.get("app_name", "") or None
+    if not rule_ids or not app_distributed_id:
+        raise HTTPException(status_code=400, detail="rule_ids and app_distributed_id are required")
+    count = await bulk_update_legacy_rule_app_id(rule_ids, app_distributed_id, app_name)
+    return {"updated": count, "app_distributed_id": app_distributed_id}
+
+
 @router.delete("/legacy-rules/clear-all")
 async def clear_all_legacy_rules_endpoint():
     """Delete non-migrated legacy rules for a fresh re-import. Preserves migrated/in-progress rules and all mappings."""

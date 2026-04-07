@@ -30,6 +30,7 @@ from app.seed_data import (
     SEED_POLICY_MATRIX as _SD_POLICY,
     SEED_ORG_CONFIG as _SD_ORG,
     SEED_GROUPS as _SD_GROUPS,
+    SEED_LEGACY_GROUPS as _SD_LEGACY_GROUPS,
     SEED_LEGACY_RULES as _SD_LEGACY_RULES,
     SEED_IP_MAPPINGS as _SD_IP_MAPPINGS,
     SEED_FIREWALL_DEVICES as _SD_FW_DEVICES,
@@ -291,6 +292,7 @@ SEED_PREPROD_MATRIX = _SD_PP_MTX
 SEED_POLICY_MATRIX = _SD_POLICY
 SEED_ORG_CONFIG = _SD_ORG
 SEED_GROUPS = _SD_GROUPS
+SEED_LEGACY_GROUPS = _SD_LEGACY_GROUPS
 SEED_LEGACY_RULES = _SD_LEGACY_RULES
 SEED_IP_MAPPINGS = _SD_IP_MAPPINGS
 SEED_MIGRATIONS = _sd_build_migrations()
@@ -612,6 +614,7 @@ async def seed_database() -> None:
     _save("migration_mappings", deepcopy(SEED_MIGRATION_MAPPINGS))
     _save("chg_requests", deepcopy(SEED_CHG_REQUESTS))
     _save("groups", deepcopy(SEED_GROUPS))
+    _save("legacy_groups", deepcopy(SEED_LEGACY_GROUPS))
     _save("legacy_rules", deepcopy(SEED_LEGACY_RULES))
     _save("ip_mappings", deepcopy(SEED_IP_MAPPINGS))
     _save("firewall_devices", deepcopy(_SD_FW_DEVICES))
@@ -781,6 +784,36 @@ async def update_legacy_rule(rule_id: str, data: dict[str, Any]) -> dict[str, An
             _save("legacy_rules", rules)
             return r
     return None
+
+
+async def bulk_update_legacy_rule_app_id(
+    rule_ids: list[str],
+    app_distributed_id: str,
+    app_name: str | None = None,
+) -> int:
+    """Bulk-update app_distributed_id (and optionally app_name) for a list of legacy rules.
+
+    If app_name is not provided, tries to auto-populate from existing rules
+    that already have the given app_distributed_id.
+    Returns the number of rules updated.
+    """
+    rules = _load("legacy_rules") or []
+    # Auto-lookup app_name from existing rules if not provided
+    if not app_name:
+        for r in rules:
+            if r.get("app_distributed_id") == app_distributed_id and r.get("app_name"):
+                app_name = r["app_name"]
+                break
+    updated = 0
+    for r in rules:
+        if r["id"] in rule_ids:
+            r["app_distributed_id"] = app_distributed_id
+            if app_name:
+                r["app_name"] = app_name
+            updated += 1
+    if updated:
+        _save("legacy_rules", rules)
+    return updated
 
 
 async def delete_legacy_rule(rule_id: str) -> bool:
