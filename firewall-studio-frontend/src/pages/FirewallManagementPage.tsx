@@ -664,11 +664,13 @@ export default function FirewallManagementPage() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (selectedRuleIds.size === filteredRules.length) {
+  const toggleSelectAll = (visibleIds?: string[]) => {
+    // visibleIds comes from DataTable's internal search/filter — use it when available
+    const ids = visibleIds || filteredRules.map(r => r.id);
+    if (selectedRuleIds.size === ids.length && ids.every(id => selectedRuleIds.has(id))) {
       setSelectedRuleIds(new Set());
     } else {
-      setSelectedRuleIds(new Set(filteredRules.map(r => r.id)));
+      setSelectedRuleIds(new Set(ids));
     }
   };
 

@@ -19,7 +19,7 @@ interface DataTableProps<T> {
   searchFields?: string[];
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
-  onSelectAll?: () => void;
+  onSelectAll?: (visibleIds?: string[]) => void;
   onRowClick?: (item: T) => void;
   onRowDoubleClick?: (item: T) => void;
   pageSize?: number;
@@ -188,7 +188,7 @@ export function DataTable<T extends Record<string, any>>({
                 <th className={`${headPad} w-10`}>
                   <input type="checkbox" checked={allSelected || false}
                     ref={el => { if (el) el.indeterminate = someSelected || false; }}
-                    onChange={onSelectAll}
+                    onChange={() => onSelectAll?.(sortedData.map(item => String(item[keyField])))}
                     className="rounded border-slate-400 text-blue-600 focus:ring-blue-500" />
                 </th>
               )}
