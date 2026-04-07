@@ -4,8 +4,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-// RuleFormModal kept only for editing existing draft rules
-import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
+// RuleFormModal no longer used — draft editing uses full DragDropRuleBuilder
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
 import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
@@ -27,6 +26,7 @@ export function DesignStudioPage() {
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
+  const [editingDraftRule, setEditingDraftRule] = useState<FirewallRule | null>(null);
 
   const editModal = useModal<FirewallRule>();
   const detailModal = useModal<FirewallRule>();
@@ -224,7 +224,7 @@ export function DesignStudioPage() {
             <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
             {canEdit && (
               <>
-                <button onClick={() => editModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
+                <button onClick={() => { setEditingDraftRule(row); setViewMode('builder'); }} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
               </>
             )}
             {canSubmit && (
@@ -323,7 +323,18 @@ export function DesignStudioPage() {
 
       {viewMode === 'builder' ? (
         <div className="bg-white border rounded-lg shadow-sm p-4">
-          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
+          {editingDraftRule && (
+            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+              <span className="text-sm font-semibold text-amber-800">Editing Draft Rule: {editingDraftRule.rule_id}</span>
+              <button onClick={() => { setEditingDraftRule(null); setViewMode('table'); }} className="text-xs font-medium text-amber-600 hover:text-amber-800">Cancel Edit</button>
+            </div>
+          )}
+          <DragDropRuleBuilder
+            applications={applications}
+            onRuleCreated={loadData}
+            editRule={editingDraftRule}
+            onEditComplete={() => { setEditingDraftRule(null); setViewMode('table'); }}
+          />
         </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">
@@ -352,7 +363,6 @@ export function DesignStudioPage() {
       )}
 
       {/* Modals */}
-      <RuleFormModal isOpen={editModal.isOpen} onClose={editModal.close} onSave={handleEdit} rule={editModal.data} applications={applications} mode="edit" existingRules={rules} />
 
       <RuleDetailModal
         isOpen={detailModal.isOpen}

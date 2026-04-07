@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup } from '@/types';
+import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup, FirewallRule } from '@/types';
 import * as api from '@/lib/api';
 import { autoPrefix, isNgdcGroupName } from '@/lib/utils';
 
 interface DragDropRuleBuilderProps {
   applications: Application[];
   onRuleCreated: () => void;
+  editRule?: FirewallRule | null;
+  onEditComplete?: () => void;
 }
 
 // Fallback static data (used while API data loads)
@@ -65,17 +67,48 @@ const COMMON_PORTS = [
   { value: '3389', label: 'RDP (3389)' },
 ];
 
-export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRuleBuilderProps) {
+export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onEditComplete }: DragDropRuleBuilderProps) {
+  const isEditMode = !!editRule;
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [draftCreatedMsg, setDraftCreatedMsg] = useState('');
-  const [form, setForm] = useState({
+
+  const buildDefaultForm = () => ({
     application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
     src_component: '', dst_component: '',
     src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
     dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
     port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
   });
+
+  const [form, setForm] = useState(buildDefaultForm);
+
+  // Pre-populate form when editing a draft rule
+  useEffect(() => {
+    if (!editRule) return;
+    const src = editRule.source;
+    const dst = editRule.destination;
+    const srcGroup = (src?.group_name || src?.ip_address || src?.cidr || '') as string;
+    const dstGroup = (dst?.name || dst?.dest_ip || '') as string;
+    const srcSz = (src?.security_zone || '') as string;
+    const dstSz = (dst?.security_zone || '') as string;
+    const srcNh = (src?.neighbourhood || '') as string;
+    const ports = (src?.ports || dst?.ports || '') as string;
+    // Try to find dst_application from the rule (stored as extra field)
+    const ruleAny = editRule as unknown as Record<string, string>;
+    const dstApp = ruleAny.dst_application || '';
+    const dstNh = ruleAny.destination_nh || '';
+    setForm({
+      application: editRule.application || '',
+      dst_application: dstApp,
+      environment: editRule.environment || 'Production',
+      datacenter: editRule.datacenter || 'ALPHA_NGDC',
+      src_component: '', dst_component: '',
+      src_nh: srcNh, src_sz: srcSz, src_subtype: 'APP', src_custom: srcGroup,
+      dst_nh: dstNh, dst_sz: dstSz, dst_subtype: 'APP', dst_custom: dstGroup,
+      port: ports || '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
+    });
+  }, [editRule]);
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [validatingBR, setValidatingBR] = useState(false);
 
@@ -195,80 +228,87 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.environment, form.dst_application, form.application, loadDstData]);
 
-  // Filter NHs/SZs based on selected component from app_dc_mappings
-  const srcNeighbourhoods = useMemo(() => {
-    if (form.src_component && form.application) {
-      const nhSet = new Set<string>();
-      for (const m of appDcMappings) {
-        const mr = m as Record<string, string>;
-        const mid = mr.app_distributed_id || mr.app_id;
-        if (mid === form.application && mr.component === form.src_component && mr.nh) {
-          nhSet.add(mr.nh);
-        }
+  // Helper: collect NH ids from app_dc_mappings for a given app (and optionally component)
+  const collectMappingNHs = useCallback((appId: string, component?: string) => {
+    const nhSet = new Set<string>();
+    for (const m of appDcMappings) {
+      const mr = m as Record<string, string>;
+      const mid = mr.app_distributed_id || mr.app_id;
+      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+          (!component || mr.component === component) && mr.nh) {
+        nhSet.add(mr.nh);
       }
+    }
+    return nhSet;
+  }, [appDcMappings]);
+
+  const collectMappingSZs = useCallback((appId: string, component?: string) => {
+    const szSet = new Set<string>();
+    for (const m of appDcMappings) {
+      const mr = m as Record<string, string>;
+      const mid = mr.app_distributed_id || mr.app_id;
+      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+          (!component || mr.component === component) && mr.sz) {
+        szSet.add(mr.sz);
+      }
+    }
+    return szSet;
+  }, [appDcMappings]);
+
+  // Filter NHs/SZs based on selected component from app_dc_mappings
+  // When no component is selected but the app has mappings, use ALL component NHs/SZs
+  // instead of falling back to app-level defaults (which may be stale)
+  const srcNeighbourhoods = useMemo(() => {
+    if (form.application) {
+      const nhSet = collectMappingNHs(form.application, form.src_component || undefined);
       if (nhSet.size > 0) {
         const filtered = srcNHs.filter(nh => nhSet.has(nh.nh_id));
         if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
+        // NHs not in srcNHs (API response) — build from fallback list
+        return FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
       }
     }
     return srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
-  }, [srcNHs, form.src_component, form.application, appDcMappings]);
+  }, [srcNHs, form.src_component, form.application, collectMappingNHs]);
 
   const srcZones = useMemo(() => {
-    if (form.src_component && form.application) {
-      const szSet = new Set<string>();
-      for (const m of appDcMappings) {
-        const mr = m as Record<string, string>;
-        const mid = mr.app_distributed_id || mr.app_id;
-        if (mid === form.application && mr.component === form.src_component && mr.sz) {
-          szSet.add(mr.sz);
-        }
-      }
+    if (form.application) {
+      const szSet = collectMappingSZs(form.application, form.src_component || undefined);
       if (szSet.size > 0) {
         const filtered = srcSZs.filter(sz => szSet.has(sz.code));
         if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
+        // SZs not in srcSZs — return raw codes
+        return Array.from(szSet).map(code => ({ code, name: code }));
       }
     }
     return srcSZs.length > 0 ? srcSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
-  }, [srcSZs, form.src_component, form.application, appDcMappings]);
+  }, [srcSZs, form.src_component, form.application, collectMappingSZs]);
 
   const dstNeighbourhoods = useMemo(() => {
     const dstApp = form.dst_application || form.application;
-    if (form.dst_component && dstApp) {
-      const nhSet = new Set<string>();
-      for (const m of appDcMappings) {
-        const mr = m as Record<string, string>;
-        const mid = mr.app_distributed_id || mr.app_id;
-        if (mid === dstApp && mr.component === form.dst_component && mr.nh) {
-          nhSet.add(mr.nh);
-        }
-      }
+    if (dstApp) {
+      const nhSet = collectMappingNHs(dstApp, form.dst_component || undefined);
       if (nhSet.size > 0) {
         const filtered = dstNHs.filter(nh => nhSet.has(nh.nh_id));
         if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
+        return FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
       }
     }
     return dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
-  }, [dstNHs, form.dst_component, form.dst_application, form.application, appDcMappings]);
+  }, [dstNHs, form.dst_component, form.dst_application, form.application, collectMappingNHs]);
 
   const dstZones = useMemo(() => {
     const dstApp = form.dst_application || form.application;
-    if (form.dst_component && dstApp) {
-      const szSet = new Set<string>();
-      for (const m of appDcMappings) {
-        const mr = m as Record<string, string>;
-        const mid = mr.app_distributed_id || mr.app_id;
-        if (mid === dstApp && mr.component === form.dst_component && mr.sz) {
-          szSet.add(mr.sz);
-        }
-      }
+    if (dstApp) {
+      const szSet = collectMappingSZs(dstApp, form.dst_component || undefined);
       if (szSet.size > 0) {
         const filtered = dstSZs.filter(sz => szSet.has(sz.code));
         if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
+        return Array.from(szSet).map(code => ({ code, name: code }));
       }
     }
     return dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
-  }, [dstSZs, form.dst_component, form.dst_application, form.application, appDcMappings]);
+  }, [dstSZs, form.dst_component, form.dst_application, form.application, collectMappingSZs]);
 
   const datacenters = useMemo(() => {
     const all = [...srcDCs, ...dstDCs];
@@ -356,24 +396,34 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
     try {
       const finalSrc = form.src_custom ? autoPrefix(form.src_custom.trim(), 'group') : srcName;
       const finalDst = form.dst_custom ? autoPrefix(form.dst_custom.trim(), 'group') : dstName;
-      await api.createRule({
-        application: form.application, environment: form.environment, datacenter: form.datacenter,
-        source: finalSrc, source_zone: form.src_sz,
-        destination: finalDst, destination_zone: form.dst_sz,
-        port: effectivePort, protocol: form.protocol, action: form.action,
-        description: form.description, is_group_to_group: true,
-        source_nh: form.src_nh, destination_nh: form.dst_nh,
-        dst_application: form.dst_application || undefined,
-      });
-      onRuleCreated();
-      setDraftCreatedMsg(`Rule created successfully! Status: DRAFT. The rule must be submitted for review before it becomes active.`);
-      setStep(1);
-      setForm({ application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
-        src_component: '', dst_component: '',
-        src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
-        dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
-        port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '' });
-      setBirthrightResult(null);
+      if (isEditMode && editRule) {
+        // Update existing draft rule
+        await api.updateRule(editRule.rule_id, {
+          application: form.application, environment: form.environment, datacenter: form.datacenter,
+          source: { source_type: 'Group', ip_address: null, cidr: null, group_name: finalSrc, ports: effectivePort, neighbourhood: form.src_nh, security_zone: form.src_sz },
+          destination: { name: finalDst, security_zone: form.dst_sz, dest_ip: null, ports: effectivePort, is_predefined: false },
+          description: form.description,
+          source_nh: form.src_nh, destination_nh: form.dst_nh,
+          dst_application: form.dst_application || undefined,
+        });
+        onRuleCreated();
+        if (onEditComplete) onEditComplete();
+      } else {
+        await api.createRule({
+          application: form.application, environment: form.environment, datacenter: form.datacenter,
+          source: finalSrc, source_zone: form.src_sz,
+          destination: finalDst, destination_zone: form.dst_sz,
+          port: effectivePort, protocol: form.protocol, action: form.action,
+          description: form.description, is_group_to_group: true,
+          source_nh: form.src_nh, destination_nh: form.dst_nh,
+          dst_application: form.dst_application || undefined,
+        });
+        onRuleCreated();
+        setDraftCreatedMsg(`Rule created successfully! Status: DRAFT. The rule must be submitted for review before it becomes active.`);
+        setStep(1);
+        setForm(buildDefaultForm());
+        setBirthrightResult(null);
+      }
     } catch { /* handled by parent */ }
     setSubmitting(false);
   };
@@ -877,7 +927,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
               </button>
               <button onClick={handleSubmit} disabled={!canSubmit || submitting}
                 className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
-                {submitting ? 'Creating...' : isBirthrightPermitted ? 'Already Permitted (Cannot Create)' : 'Create Firewall Rule'}
+                {submitting ? (isEditMode ? 'Updating...' : 'Creating...') : isBirthrightPermitted ? 'Already Permitted (Cannot Create)' : isEditMode ? 'Update Firewall Rule' : 'Create Firewall Rule'}
               </button>
             </div>
           </div>
