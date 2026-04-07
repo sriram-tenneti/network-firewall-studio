@@ -758,7 +758,7 @@ SEED_PREDEFINED_DESTINATIONS = [
 
 SEED_NAMING_STANDARDS = [
     {"pattern": "grp-{APP}-{NH}-{SZ}-{TIER}", "type": "group",
-     "example": "grp-CRM-NH02-CDE-APP", "description": "Group naming: grp-AppID-NH-SZ-Tier"},
+     "example": "grp-AD-1001-NH02-CDE-APP", "description": "Group naming: grp-AppID-NH-SZ-Tier"},
     {"pattern": "svr-{IP}", "type": "server",
      "example": "svr-10.1.1.10", "description": "Individual server/IP: svr-x.x.x.x"},
     {"pattern": "rng-{START_IP}-{END_OCTET}", "type": "range",
@@ -1205,318 +1205,318 @@ SEED_GROUPS = [
     # ================================================================
 
     # --- CRM: Source NH02/STD, Destination NH02/GEN ---
-    {"name": "grp-CRM-NH02-STD-WEB", "app_id": "CRM", "nh": "NH02", "sz": "STD", "subtype": "WEB",
+    {"name": "grp-AD-1001-NH02-STD-WEB", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "STD", "subtype": "WEB",
      "description": "CRM Web Servers", "members": [
         {"type": "ip", "value": "svr-10.50.1.10", "description": "CRM Web 1"},
         {"type": "ip", "value": "svr-10.50.1.11", "description": "CRM Web 2"},
      ]},
-    {"name": "grp-CRM-NH02-STD-APP", "app_id": "CRM", "nh": "NH02", "sz": "STD", "subtype": "APP",
+    {"name": "grp-AD-1001-NH02-STD-APP", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "STD", "subtype": "APP",
      "description": "CRM Application Servers", "members": [
         {"type": "ip", "value": "svr-10.50.1.20", "description": "CRM App 1"},
         {"type": "ip", "value": "svr-10.50.1.21", "description": "CRM App 2"},
         {"type": "ip", "value": "svr-10.50.1.22", "description": "CRM App 3"},
      ]},
-    {"name": "grp-CRM-NH02-STD-BAT", "app_id": "CRM", "nh": "NH02", "sz": "STD", "subtype": "BAT",
+    {"name": "grp-AD-1001-NH02-STD-BAT", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "STD", "subtype": "BAT",
      "description": "CRM Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.50.1.40", "description": "CRM Batch 1"},
      ]},
-    {"name": "grp-CRM-NH02-GEN-DB", "app_id": "CRM", "nh": "NH02", "sz": "GEN", "subtype": "DB",
+    {"name": "grp-AD-1001-NH02-GEN-DB", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "GEN", "subtype": "DB",
      "description": "CRM Database Cluster", "members": [
         {"type": "ip", "value": "svr-10.50.1.30", "description": "CRM DB Primary"},
         {"type": "ip", "value": "svr-10.50.1.31", "description": "CRM DB Standby"},
      ]},
-    {"name": "grp-CRM-NH02-GEN-MQ", "app_id": "CRM", "nh": "NH02", "sz": "GEN", "subtype": "MQ",
+    {"name": "grp-AD-1001-NH02-GEN-MQ", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "GEN", "subtype": "MQ",
      "description": "CRM Message Queue", "members": [
         {"type": "ip", "value": "svr-10.50.1.42", "description": "CRM MQ 1"},
         {"type": "ip", "value": "svr-10.50.1.43", "description": "CRM MQ 2"},
      ]},
 
     # --- HRM: Source NH01/GEN, Destination NH01/STD ---
-    {"name": "grp-HRM-NH01-GEN-WEB", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
+    {"name": "grp-AD-1002-NH01-GEN-WEB", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
      "description": "HRM Web Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.130", "description": "HRM Web 1"},
         {"type": "ip", "value": "svr-10.0.2.131", "description": "HRM Web 2"},
      ]},
-    {"name": "grp-HRM-NH01-GEN-APP", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-AD-1002-NH01-GEN-APP", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "GEN", "subtype": "APP",
      "description": "HRM Application Servers", "members": [
         {"type": "ip", "value": "svr-10.0.2.140", "description": "HRM App 1"},
         {"type": "ip", "value": "svr-10.0.2.141", "description": "HRM App 2"},
         {"type": "ip", "value": "svr-10.0.2.142", "description": "HRM App 3"},
      ]},
-    {"name": "grp-HRM-NH01-GEN-BAT", "app_id": "HRM", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
+    {"name": "grp-AD-1002-NH01-GEN-BAT", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
      "description": "HRM Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.0.2.160", "description": "HRM Batch 1"},
      ]},
-    {"name": "grp-HRM-NH01-STD-DB", "app_id": "HRM", "nh": "NH01", "sz": "STD", "subtype": "DB",
+    {"name": "grp-AD-1002-NH01-STD-DB", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "STD", "subtype": "DB",
      "description": "HRM Database", "members": [
         {"type": "ip", "value": "svr-10.0.2.150", "description": "HRM DB Primary"},
         {"type": "ip", "value": "svr-10.0.2.151", "description": "HRM DB Replica"},
      ]},
-    {"name": "grp-HRM-NH01-STD-MQ", "app_id": "HRM", "nh": "NH01", "sz": "STD", "subtype": "MQ",
+    {"name": "grp-AD-1002-NH01-STD-MQ", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "STD", "subtype": "MQ",
      "description": "HRM Message Queue", "members": [
         {"type": "ip", "value": "svr-10.0.2.162", "description": "HRM MQ 1"},
         {"type": "ip", "value": "svr-10.0.2.163", "description": "HRM MQ 2"},
      ]},
 
     # --- TRD: Source NH06/CDE, Destination NH07/CPA ---
-    {"name": "grp-TRD-NH06-CDE-WEB", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
+    {"name": "grp-AD-1003-NH06-CDE-WEB", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
      "description": "TRD Web Frontend", "members": [
         {"type": "ip", "value": "svr-172.16.20.10", "description": "TRD Web 1"},
         {"type": "ip", "value": "svr-172.16.20.11", "description": "TRD Web 2"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-APP", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-AD-1003-NH06-CDE-APP", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH06", "sz": "CDE", "subtype": "APP",
      "description": "TRD Application Servers", "members": [
         {"type": "ip", "value": "svr-172.16.20.20", "description": "TRD App 1"},
         {"type": "ip", "value": "svr-172.16.20.21", "description": "TRD App 2"},
         {"type": "ip", "value": "svr-172.16.20.22", "description": "TRD App 3"},
      ]},
-    {"name": "grp-TRD-NH06-CDE-BAT", "app_id": "TRD", "nh": "NH06", "sz": "CDE", "subtype": "BAT",
+    {"name": "grp-AD-1003-NH06-CDE-BAT", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH06", "sz": "CDE", "subtype": "BAT",
      "description": "TRD Batch Processing", "members": [
         {"type": "ip", "value": "svr-172.16.20.50", "description": "TRD Batch 1"},
      ]},
-    {"name": "grp-TRD-NH07-CPA-DB", "app_id": "TRD", "nh": "NH07", "sz": "CPA", "subtype": "DB",
+    {"name": "grp-AD-1003-NH07-CPA-DB", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH07", "sz": "CPA", "subtype": "DB",
      "description": "TRD Database Cluster", "members": [
         {"type": "ip", "value": "svr-10.6.1.30", "description": "TRD DB Primary"},
         {"type": "ip", "value": "svr-10.6.1.31", "description": "TRD DB Standby"},
      ]},
-    {"name": "grp-TRD-NH07-CPA-MQ", "app_id": "TRD", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
+    {"name": "grp-AD-1003-NH07-CPA-MQ", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
      "description": "TRD Message Queue", "members": [
         {"type": "ip", "value": "svr-10.6.1.40", "description": "TRD MQ Broker 1"},
         {"type": "ip", "value": "svr-10.6.1.41", "description": "TRD MQ Broker 2"},
      ]},
 
     # --- PAY: Source NH08/CCS, Destination NH07/CDE ---
-    {"name": "grp-PAY-NH08-CCS-WEB", "app_id": "PAY", "nh": "NH08", "sz": "CCS", "subtype": "WEB",
+    {"name": "grp-AD-1004-NH08-CCS-WEB", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH08", "sz": "CCS", "subtype": "WEB",
      "description": "PAY Web Portal", "members": [
         {"type": "ip", "value": "svr-10.50.8.10", "description": "PAY Web 1"},
         {"type": "ip", "value": "svr-10.50.8.11", "description": "PAY Web 2"},
      ]},
-    {"name": "grp-PAY-NH08-CCS-APP", "app_id": "PAY", "nh": "NH08", "sz": "CCS", "subtype": "APP",
+    {"name": "grp-AD-1004-NH08-CCS-APP", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH08", "sz": "CCS", "subtype": "APP",
      "description": "PAY Transaction Processors", "members": [
         {"type": "ip", "value": "svr-10.50.8.20", "description": "PAY App 1"},
         {"type": "ip", "value": "svr-10.50.8.21", "description": "PAY App 2"},
         {"type": "ip", "value": "svr-10.50.8.22", "description": "PAY App 3"},
      ]},
-    {"name": "grp-PAY-NH08-CCS-BAT", "app_id": "PAY", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
+    {"name": "grp-AD-1004-NH08-CCS-BAT", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
      "description": "PAY Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.50.8.50", "description": "PAY Batch 1"},
      ]},
-    {"name": "grp-PAY-NH07-CDE-DB", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-AD-1004-NH07-CDE-DB", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH07", "sz": "CDE", "subtype": "DB",
      "description": "PAY Database (PCI CDE)", "members": [
         {"type": "ip", "value": "svr-10.50.7.30", "description": "PAY DB Primary"},
         {"type": "ip", "value": "svr-10.50.7.31", "description": "PAY DB Standby"},
      ]},
-    {"name": "grp-PAY-NH07-CDE-MQ", "app_id": "PAY", "nh": "NH07", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-AD-1004-NH07-CDE-MQ", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH07", "sz": "CDE", "subtype": "MQ",
      "description": "PAY Message Queue", "members": [
         {"type": "ip", "value": "svr-10.50.7.40", "description": "PAY MQ 1"},
         {"type": "ip", "value": "svr-10.50.7.41", "description": "PAY MQ 2"},
      ]},
 
     # --- INS: Source NH04/STD, Destination NH14/PAA ---
-    {"name": "grp-INS-NH04-STD-WEB", "app_id": "INS", "nh": "NH04", "sz": "STD", "subtype": "WEB",
+    {"name": "grp-AD-1005-NH04-STD-WEB", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH04", "sz": "STD", "subtype": "WEB",
      "description": "INS Web Portal", "members": [
         {"type": "ip", "value": "svr-10.3.1.130", "description": "INS Web 1"},
         {"type": "ip", "value": "svr-10.3.1.131", "description": "INS Web 2"},
      ]},
-    {"name": "grp-INS-NH04-STD-APP", "app_id": "INS", "nh": "NH04", "sz": "STD", "subtype": "APP",
+    {"name": "grp-AD-1005-NH04-STD-APP", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH04", "sz": "STD", "subtype": "APP",
      "description": "INS Application Servers", "members": [
         {"type": "ip", "value": "svr-10.3.1.140", "description": "INS App 1"},
         {"type": "ip", "value": "svr-10.3.1.141", "description": "INS App 2"},
         {"type": "ip", "value": "svr-10.3.1.142", "description": "INS App 3"},
      ]},
-    {"name": "grp-INS-NH04-STD-BAT", "app_id": "INS", "nh": "NH04", "sz": "STD", "subtype": "BAT",
+    {"name": "grp-AD-1005-NH04-STD-BAT", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH04", "sz": "STD", "subtype": "BAT",
      "description": "INS Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.3.1.160", "description": "INS Batch 1"},
      ]},
-    {"name": "grp-INS-NH14-PAA-DB", "app_id": "INS", "nh": "NH14", "sz": "PAA", "subtype": "DB",
+    {"name": "grp-AD-1005-NH14-PAA-DB", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH14", "sz": "PAA", "subtype": "DB",
      "description": "INS Database", "members": [
         {"type": "ip", "value": "svr-10.70.4.30", "description": "INS DB Primary"},
         {"type": "ip", "value": "svr-10.70.4.31", "description": "INS DB Standby"},
      ]},
-    {"name": "grp-INS-NH14-PAA-MQ", "app_id": "INS", "nh": "NH14", "sz": "PAA", "subtype": "MQ",
+    {"name": "grp-AD-1005-NH14-PAA-MQ", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH14", "sz": "PAA", "subtype": "MQ",
      "description": "INS Message Queue", "members": [
         {"type": "ip", "value": "svr-10.70.4.40", "description": "INS MQ 1"},
         {"type": "ip", "value": "svr-10.70.4.41", "description": "INS MQ 2"},
      ]},
 
     # --- KYC: Source NH05/CCS, Destination NH05/CDE ---
-    {"name": "grp-KYC-NH05-CCS-WEB", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "WEB",
+    {"name": "grp-AD-1006-NH05-CCS-WEB", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CCS", "subtype": "WEB",
      "description": "KYC Web Interface", "members": [
         {"type": "ip", "value": "svr-10.4.1.130", "description": "KYC Web 1"},
         {"type": "ip", "value": "svr-10.4.1.131", "description": "KYC Web 2"},
      ]},
-    {"name": "grp-KYC-NH05-CCS-APP", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "APP",
+    {"name": "grp-AD-1006-NH05-CCS-APP", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CCS", "subtype": "APP",
      "description": "KYC Application", "members": [
         {"type": "ip", "value": "svr-10.4.1.140", "description": "KYC App 1"},
         {"type": "ip", "value": "svr-10.4.1.141", "description": "KYC App 2"},
         {"type": "ip", "value": "svr-10.4.1.142", "description": "KYC App 3"},
      ]},
-    {"name": "grp-KYC-NH05-CCS-BAT", "app_id": "KYC", "nh": "NH05", "sz": "CCS", "subtype": "BAT",
+    {"name": "grp-AD-1006-NH05-CCS-BAT", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CCS", "subtype": "BAT",
      "description": "KYC Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.4.1.160", "description": "KYC Batch 1"},
      ]},
-    {"name": "grp-KYC-NH05-CDE-DB", "app_id": "KYC", "nh": "NH05", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-AD-1006-NH05-CDE-DB", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CDE", "subtype": "DB",
      "description": "KYC Database", "members": [
         {"type": "ip", "value": "svr-10.4.2.10", "description": "KYC DB Primary"},
         {"type": "ip", "value": "svr-10.4.2.11", "description": "KYC DB Replica"},
      ]},
-    {"name": "grp-KYC-NH05-CDE-MQ", "app_id": "KYC", "nh": "NH05", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-AD-1006-NH05-CDE-MQ", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CDE", "subtype": "MQ",
      "description": "KYC Message Queue", "members": [
         {"type": "ip", "value": "svr-10.4.2.20", "description": "KYC MQ 1"},
         {"type": "ip", "value": "svr-10.4.2.21", "description": "KYC MQ 2"},
      ]},
 
     # --- FRD: Source NH02/CDE, Destination NH02/Swift ---
-    {"name": "grp-FRD-NH02-CDE-WEB", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "WEB",
+    {"name": "grp-AD-1007-NH02-CDE-WEB", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "CDE", "subtype": "WEB",
      "description": "FRD Web Interface", "members": [
         {"type": "ip", "value": "svr-10.1.1.110", "description": "FRD Web 1"},
         {"type": "ip", "value": "svr-10.1.1.111", "description": "FRD Web 2"},
      ]},
-    {"name": "grp-FRD-NH02-CDE-APP", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "APP",
+    {"name": "grp-AD-1007-NH02-CDE-APP", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "CDE", "subtype": "APP",
      "description": "FRD Detection Engine", "members": [
         {"type": "ip", "value": "svr-10.1.1.50", "description": "FRD Engine 1"},
         {"type": "ip", "value": "svr-10.1.1.51", "description": "FRD Engine 2"},
         {"type": "ip", "value": "svr-10.1.1.52", "description": "FRD Engine 3"},
      ]},
-    {"name": "grp-FRD-NH02-CDE-BAT", "app_id": "FRD", "nh": "NH02", "sz": "CDE", "subtype": "BAT",
+    {"name": "grp-AD-1007-NH02-CDE-BAT", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "CDE", "subtype": "BAT",
      "description": "FRD Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.1.1.60", "description": "FRD Batch 1"},
      ]},
-    {"name": "grp-FRD-NH02-Swift-DB", "app_id": "FRD", "nh": "NH02", "sz": "Swift", "subtype": "DB",
+    {"name": "grp-AD-1007-NH02-Swift-DB", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "Swift", "subtype": "DB",
      "description": "FRD Database (PCI CDE)", "members": [
         {"type": "ip", "value": "svr-10.1.2.20", "description": "FRD DB Primary"},
         {"type": "ip", "value": "svr-10.1.2.21", "description": "FRD DB Standby"},
      ]},
-    {"name": "grp-FRD-NH02-Swift-MQ", "app_id": "FRD", "nh": "NH02", "sz": "Swift", "subtype": "MQ",
+    {"name": "grp-AD-1007-NH02-Swift-MQ", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "Swift", "subtype": "MQ",
      "description": "FRD Event Stream", "members": [
         {"type": "ip", "value": "svr-10.1.1.55", "description": "FRD Kafka 1"},
         {"type": "ip", "value": "svr-10.1.1.56", "description": "FRD Kafka 2"},
      ]},
 
     # --- LND: Source NH09/GEN, Destination NH09/CPA ---
-    {"name": "grp-LND-NH09-GEN-WEB", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "WEB",
+    {"name": "grp-AD-1008-NH09-GEN-WEB", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "GEN", "subtype": "WEB",
      "description": "LND Web Portal", "members": [
         {"type": "ip", "value": "svr-10.8.1.130", "description": "LND Web 1"},
         {"type": "ip", "value": "svr-10.8.1.131", "description": "LND Web 2"},
      ]},
-    {"name": "grp-LND-NH09-GEN-APP", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "APP",
+    {"name": "grp-AD-1008-NH09-GEN-APP", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "GEN", "subtype": "APP",
      "description": "LND Loan Engine", "members": [
         {"type": "ip", "value": "svr-10.8.1.140", "description": "LND App 1"},
         {"type": "ip", "value": "svr-10.8.1.141", "description": "LND App 2"},
         {"type": "ip", "value": "svr-10.8.1.142", "description": "LND App 3"},
      ]},
-    {"name": "grp-LND-NH09-GEN-BAT", "app_id": "LND", "nh": "NH09", "sz": "GEN", "subtype": "BAT",
+    {"name": "grp-AD-1008-NH09-GEN-BAT", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "GEN", "subtype": "BAT",
      "description": "LND Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.8.1.160", "description": "LND Batch 1"},
      ]},
-    {"name": "grp-LND-NH09-CPA-DB", "app_id": "LND", "nh": "NH09", "sz": "CPA", "subtype": "DB",
+    {"name": "grp-AD-1008-NH09-CPA-DB", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "CPA", "subtype": "DB",
      "description": "LND Database", "members": [
         {"type": "ip", "value": "svr-10.8.2.30", "description": "LND DB Primary"},
         {"type": "ip", "value": "svr-10.8.2.31", "description": "LND DB Standby"},
      ]},
-    {"name": "grp-LND-NH09-CPA-MQ", "app_id": "LND", "nh": "NH09", "sz": "CPA", "subtype": "MQ",
+    {"name": "grp-AD-1008-NH09-CPA-MQ", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "CPA", "subtype": "MQ",
      "description": "LND Message Queue", "members": [
         {"type": "ip", "value": "svr-10.8.2.40", "description": "LND MQ 1"},
         {"type": "ip", "value": "svr-10.8.2.41", "description": "LND MQ 2"},
      ]},
 
     # --- WLT: Source NH14/PAA (WEB), NH10/PAA (APP/BAT), Destination NH10/3PY ---
-    {"name": "grp-WLT-NH14-PAA-WEB", "app_id": "WLT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+    {"name": "grp-AD-1009-NH14-PAA-WEB", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
      "description": "WLT Web Interface", "members": [
         {"type": "ip", "value": "svr-10.70.1.100", "description": "WLT Web 1"},
         {"type": "ip", "value": "svr-10.70.1.101", "description": "WLT Web 2"},
      ]},
-    {"name": "grp-WLT-NH10-PAA-APP", "app_id": "WLT", "nh": "NH10", "sz": "PAA", "subtype": "APP",
+    {"name": "grp-AD-1009-NH10-PAA-APP", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "PAA", "subtype": "APP",
      "description": "WLT Portfolio Engine", "members": [
         {"type": "ip", "value": "svr-10.9.1.20", "description": "WLT App 1"},
         {"type": "ip", "value": "svr-10.9.1.21", "description": "WLT App 2"},
         {"type": "ip", "value": "svr-10.9.1.22", "description": "WLT App 3"},
      ]},
-    {"name": "grp-WLT-NH10-PAA-BAT", "app_id": "WLT", "nh": "NH10", "sz": "PAA", "subtype": "BAT",
+    {"name": "grp-AD-1009-NH10-PAA-BAT", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "PAA", "subtype": "BAT",
      "description": "WLT Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.9.1.50", "description": "WLT Batch 1"},
      ]},
-    {"name": "grp-WLT-NH10-3PY-DB", "app_id": "WLT", "nh": "NH10", "sz": "3PY", "subtype": "DB",
+    {"name": "grp-AD-1009-NH10-3PY-DB", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "3PY", "subtype": "DB",
      "description": "WLT Database (PCI CDE)", "members": [
         {"type": "ip", "value": "svr-10.9.1.30", "description": "WLT DB Primary"},
         {"type": "ip", "value": "svr-10.9.1.31", "description": "WLT DB Replica"},
      ]},
-    {"name": "grp-WLT-NH10-3PY-MQ", "app_id": "WLT", "nh": "NH10", "sz": "3PY", "subtype": "MQ",
+    {"name": "grp-AD-1009-NH10-3PY-MQ", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "3PY", "subtype": "MQ",
      "description": "WLT Message Queue", "members": [
         {"type": "ip", "value": "svr-10.9.1.40", "description": "WLT MQ 1"},
         {"type": "ip", "value": "svr-10.9.1.41", "description": "WLT MQ 2"},
      ]},
 
     # --- CBK: Source NH08/CPA, Destination NH08/CDE ---
-    {"name": "grp-CBK-NH08-CPA-WEB", "app_id": "CBK", "nh": "NH08", "sz": "CPA", "subtype": "WEB",
+    {"name": "grp-AD-1010-NH08-CPA-WEB", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CPA", "subtype": "WEB",
      "description": "CBK Web Portal", "members": [
         {"type": "ip", "value": "svr-10.7.1.10", "description": "CBK Web 1"},
         {"type": "ip", "value": "svr-10.7.1.11", "description": "CBK Web 2"},
      ]},
-    {"name": "grp-CBK-NH08-CPA-APP", "app_id": "CBK", "nh": "NH08", "sz": "CPA", "subtype": "APP",
+    {"name": "grp-AD-1010-NH08-CPA-APP", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CPA", "subtype": "APP",
      "description": "CBK Core Engine", "members": [
         {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK App 1"},
         {"type": "ip", "value": "svr-10.7.1.21", "description": "CBK App 2"},
         {"type": "ip", "value": "svr-10.7.1.22", "description": "CBK App 3"},
      ]},
-    {"name": "grp-CBK-NH08-CPA-BAT", "app_id": "CBK", "nh": "NH08", "sz": "CPA", "subtype": "BAT",
+    {"name": "grp-AD-1010-NH08-CPA-BAT", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CPA", "subtype": "BAT",
      "description": "CBK Batch Processing", "members": [
         {"type": "ip", "value": "svr-10.7.1.50", "description": "CBK Batch 1"},
      ]},
-    {"name": "grp-CBK-NH08-CDE-DB", "app_id": "CBK", "nh": "NH08", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-AD-1010-NH08-CDE-DB", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CDE", "subtype": "DB",
      "description": "CBK Database Cluster", "members": [
         {"type": "ip", "value": "svr-10.7.2.30", "description": "CBK DB Primary"},
         {"type": "ip", "value": "svr-10.7.2.31", "description": "CBK DB Standby"},
      ]},
-    {"name": "grp-CBK-NH08-CDE-MQ", "app_id": "CBK", "nh": "NH08", "sz": "CDE", "subtype": "MQ",
+    {"name": "grp-AD-1010-NH08-CDE-MQ", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CDE", "subtype": "MQ",
      "description": "CBK Message Bus", "members": [
         {"type": "ip", "value": "svr-10.7.2.40", "description": "CBK MQ 1"},
         {"type": "ip", "value": "svr-10.7.2.41", "description": "CBK MQ 2"},
      ]},
 
     # --- SHARED: Cross-app infrastructure groups ---
-    {"name": "grp-SHARED-NH14-PSE-API", "app_id": "SHARED", "nh": "NH14", "sz": "PSE", "subtype": "API",
+    {"name": "grp-AD-SHARED-NH14-PSE-API", "app_id": "SHARED", "app_distributed_id": "AD-SHARED", "nh": "NH14", "sz": "PSE", "subtype": "API",
      "description": "DMZ API Gateway (External)", "members": [
         {"type": "ip", "value": "svr-10.70.1.10", "description": "DMZ API 1"},
         {"type": "ip", "value": "svr-10.70.1.11", "description": "DMZ API 2"},
      ]},
-    {"name": "grp-SHARED-NH01-UC-MON", "app_id": "SHARED", "nh": "NH01", "sz": "UC", "subtype": "MON",
+    {"name": "grp-AD-SHARED-NH01-UC-MON", "app_id": "SHARED", "app_distributed_id": "AD-SHARED", "nh": "NH01", "sz": "UC", "subtype": "MON",
      "description": "Monitoring Agents", "members": [
         {"type": "ip", "value": "svr-10.80.1.100", "description": "Monitor Agent 1"},
         {"type": "ip", "value": "svr-10.80.1.101", "description": "Monitor Agent 2"},
      ]},
 
     # --- EPT — Enterprise Portal (NH14/PAA WEB, NH01/CCS APP/API) ---
-    {"name": "grp-EPT-NH14-PAA-WEB", "app_id": "EPT", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+    {"name": "grp-AD-1011-NH14-PAA-WEB", "app_id": "EPT", "app_distributed_id": "AD-1011", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
      "description": "EPT Web Frontend (PAA zone)", "members": [
         {"type": "ip", "value": "svr-10.70.1.20", "description": "EPT Web 1"},
         {"type": "ip", "value": "svr-10.70.1.21", "description": "EPT Web 2"},
      ]},
-    {"name": "grp-EPT-NH01-CCS-APP", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "APP",
+    {"name": "grp-AD-1011-NH01-CCS-APP", "app_id": "EPT", "app_distributed_id": "AD-1011", "nh": "NH01", "sz": "CCS", "subtype": "APP",
      "description": "EPT App Backend", "members": [
         {"type": "ip", "value": "svr-10.0.1.10", "description": "EPT App 1"},
         {"type": "ip", "value": "svr-10.0.1.11", "description": "EPT App 2"},
      ]},
-    {"name": "grp-EPT-NH01-CCS-API", "app_id": "EPT", "nh": "NH01", "sz": "CCS", "subtype": "API",
+    {"name": "grp-AD-1011-NH01-CCS-API", "app_id": "EPT", "app_distributed_id": "AD-1011", "nh": "NH01", "sz": "CCS", "subtype": "API",
      "description": "EPT API Gateway", "members": [
         {"type": "ip", "value": "svr-10.0.1.16", "description": "EPT API 1"},
      ]},
 
     # --- MBK — Mobile Banking (NH14/PAA WEB, NH07/CPA APP/API, NH07/CDE DB) ---
-    {"name": "grp-MBK-NH14-PAA-WEB", "app_id": "MBK", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
+    {"name": "grp-AD-1012-NH14-PAA-WEB", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
      "description": "MBK Mobile Web", "members": [
         {"type": "ip", "value": "svr-10.70.1.30", "description": "MBK Web 1"},
      ]},
-    {"name": "grp-MBK-NH07-CPA-APP", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "APP",
+    {"name": "grp-AD-1012-NH07-CPA-APP", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH07", "sz": "CPA", "subtype": "APP",
      "description": "MBK App Engine", "members": [
         {"type": "ip", "value": "svr-10.6.1.168", "description": "MBK App 1"},
         {"type": "ip", "value": "svr-10.6.1.169", "description": "MBK App 2"},
      ]},
-    {"name": "grp-MBK-NH07-CDE-DB", "app_id": "MBK", "nh": "NH07", "sz": "CDE", "subtype": "DB",
+    {"name": "grp-AD-1012-NH07-CDE-DB", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH07", "sz": "CDE", "subtype": "DB",
      "description": "MBK Database", "members": [
         {"type": "ip", "value": "svr-10.6.1.16", "description": "MBK DB Primary"},
      ]},
-    {"name": "grp-MBK-NH07-CPA-API", "app_id": "MBK", "nh": "NH07", "sz": "CPA", "subtype": "API",
+    {"name": "grp-AD-1012-NH07-CPA-API", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH07", "sz": "CPA", "subtype": "API",
      "description": "MBK API Gateway", "members": [
         {"type": "ip", "value": "svr-10.6.1.184", "description": "MBK API 1"},
      ]},
@@ -2036,17 +2036,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("CRM", "DC_LEGACY_A", "GAMMA_NGDC", [
             # Source IPs (STD zone)
-            ("10.25.1.10", "svr-10.50.1.10", "grp-CRM-NH02-STD-WEB", "CRM Web 1", "NH02", "STD"),
-            ("10.25.1.11", "svr-10.50.1.11", "grp-CRM-NH02-STD-WEB", "CRM Web 2", "NH02", "STD"),
-            ("10.25.2.10", "svr-10.50.1.20", "grp-CRM-NH02-STD-APP", "CRM App 1", "NH02", "STD"),
-            ("10.25.2.11", "svr-10.50.1.21", "grp-CRM-NH02-STD-APP", "CRM App 2", "NH02", "STD"),
-            ("10.25.2.12", "svr-10.50.1.22", "grp-CRM-NH02-STD-APP", "CRM App 3", "NH02", "STD"),
-            ("10.25.5.10", "svr-10.50.1.40", "grp-CRM-NH02-STD-BAT", "CRM Batch 1", "NH02", "STD"),
+            ("10.25.1.10", "svr-10.50.1.10", "grp-AD-1001-NH02-STD-WEB", "CRM Web 1", "NH02", "STD"),
+            ("10.25.1.11", "svr-10.50.1.11", "grp-AD-1001-NH02-STD-WEB", "CRM Web 2", "NH02", "STD"),
+            ("10.25.2.10", "svr-10.50.1.20", "grp-AD-1001-NH02-STD-APP", "CRM App 1", "NH02", "STD"),
+            ("10.25.2.11", "svr-10.50.1.21", "grp-AD-1001-NH02-STD-APP", "CRM App 2", "NH02", "STD"),
+            ("10.25.2.12", "svr-10.50.1.22", "grp-AD-1001-NH02-STD-APP", "CRM App 3", "NH02", "STD"),
+            ("10.25.5.10", "svr-10.50.1.40", "grp-AD-1001-NH02-STD-BAT", "CRM Batch 1", "NH02", "STD"),
             # Destination IPs (GEN zone)
-            ("10.25.3.10", "svr-10.50.1.30", "grp-CRM-NH02-GEN-DB", "CRM DB Primary", "NH02", "GEN"),
-            ("10.25.3.11", "svr-10.50.1.31", "grp-CRM-NH02-GEN-DB", "CRM DB Standby", "NH02", "GEN"),
-            ("10.25.4.10", "svr-10.50.1.42", "grp-CRM-NH02-GEN-MQ", "CRM MQ 1", "NH02", "GEN"),
-            ("10.25.4.11", "svr-10.50.1.43", "grp-CRM-NH02-GEN-MQ", "CRM MQ 2", "NH02", "GEN"),
+            ("10.25.3.10", "svr-10.50.1.30", "grp-AD-1001-NH02-GEN-DB", "CRM DB Primary", "NH02", "GEN"),
+            ("10.25.3.11", "svr-10.50.1.31", "grp-AD-1001-NH02-GEN-DB", "CRM DB Standby", "NH02", "GEN"),
+            ("10.25.4.10", "svr-10.50.1.42", "grp-AD-1001-NH02-GEN-MQ", "CRM MQ 1", "NH02", "GEN"),
+            ("10.25.4.11", "svr-10.50.1.43", "grp-AD-1001-NH02-GEN-MQ", "CRM MQ 2", "NH02", "GEN"),
         ]),
         # ================================================================
         # HRM: DC_LEGACY_B, src_zone=GEN, dst_zone=STD
@@ -2054,17 +2054,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("HRM", "DC_LEGACY_B", "ALPHA_NGDC", [
             # Source IPs (GEN zone)
-            ("10.26.1.10", "svr-10.0.2.130", "grp-HRM-NH01-GEN-WEB", "HRM Web 1", "NH01", "GEN"),
-            ("10.26.1.11", "svr-10.0.2.131", "grp-HRM-NH01-GEN-WEB", "HRM Web 2", "NH01", "GEN"),
-            ("10.26.2.10", "svr-10.0.2.140", "grp-HRM-NH01-GEN-APP", "HRM App 1", "NH01", "GEN"),
-            ("10.26.2.11", "svr-10.0.2.141", "grp-HRM-NH01-GEN-APP", "HRM App 2", "NH01", "GEN"),
-            ("10.26.2.12", "svr-10.0.2.142", "grp-HRM-NH01-GEN-APP", "HRM App 3", "NH01", "GEN"),
-            ("10.26.5.10", "svr-10.0.2.160", "grp-HRM-NH01-GEN-BAT", "HRM Batch 1", "NH01", "GEN"),
+            ("10.26.1.10", "svr-10.0.2.130", "grp-AD-1002-NH01-GEN-WEB", "HRM Web 1", "NH01", "GEN"),
+            ("10.26.1.11", "svr-10.0.2.131", "grp-AD-1002-NH01-GEN-WEB", "HRM Web 2", "NH01", "GEN"),
+            ("10.26.2.10", "svr-10.0.2.140", "grp-AD-1002-NH01-GEN-APP", "HRM App 1", "NH01", "GEN"),
+            ("10.26.2.11", "svr-10.0.2.141", "grp-AD-1002-NH01-GEN-APP", "HRM App 2", "NH01", "GEN"),
+            ("10.26.2.12", "svr-10.0.2.142", "grp-AD-1002-NH01-GEN-APP", "HRM App 3", "NH01", "GEN"),
+            ("10.26.5.10", "svr-10.0.2.160", "grp-AD-1002-NH01-GEN-BAT", "HRM Batch 1", "NH01", "GEN"),
             # Destination IPs (STD zone)
-            ("10.26.3.10", "svr-10.0.2.150", "grp-HRM-NH01-STD-DB", "HRM DB Primary", "NH01", "STD"),
-            ("10.26.3.11", "svr-10.0.2.151", "grp-HRM-NH01-STD-DB", "HRM DB Replica", "NH01", "STD"),
-            ("10.26.4.10", "svr-10.0.2.162", "grp-HRM-NH01-STD-MQ", "HRM MQ 1", "NH01", "STD"),
-            ("10.26.4.11", "svr-10.0.2.163", "grp-HRM-NH01-STD-MQ", "HRM MQ 2", "NH01", "STD"),
+            ("10.26.3.10", "svr-10.0.2.150", "grp-AD-1002-NH01-STD-DB", "HRM DB Primary", "NH01", "STD"),
+            ("10.26.3.11", "svr-10.0.2.151", "grp-AD-1002-NH01-STD-DB", "HRM DB Replica", "NH01", "STD"),
+            ("10.26.4.10", "svr-10.0.2.162", "grp-AD-1002-NH01-STD-MQ", "HRM MQ 1", "NH01", "STD"),
+            ("10.26.4.11", "svr-10.0.2.163", "grp-AD-1002-NH01-STD-MQ", "HRM MQ 2", "NH01", "STD"),
         ]),
         # ================================================================
         # TRD: DC_LEGACY_C, src_zone=CDE, dst_zone=CPA
@@ -2072,17 +2072,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("TRD", "DC_LEGACY_C", "BETA_NGDC", [
             # Source IPs (CDE zone, NH06)
-            ("10.27.1.10", "svr-172.16.20.10", "grp-TRD-NH06-CDE-WEB", "TRD Web 1", "NH06", "CDE"),
-            ("10.27.1.11", "svr-172.16.20.11", "grp-TRD-NH06-CDE-WEB", "TRD Web 2", "NH06", "CDE"),
-            ("10.27.2.10", "svr-172.16.20.20", "grp-TRD-NH06-CDE-APP", "TRD App 1", "NH06", "CDE"),
-            ("10.27.2.11", "svr-172.16.20.21", "grp-TRD-NH06-CDE-APP", "TRD App 2", "NH06", "CDE"),
-            ("10.27.2.12", "svr-172.16.20.22", "grp-TRD-NH06-CDE-APP", "TRD App 3", "NH06", "CDE"),
-            ("10.27.5.10", "svr-172.16.20.50", "grp-TRD-NH06-CDE-BAT", "TRD Batch 1", "NH06", "CDE"),
+            ("10.27.1.10", "svr-172.16.20.10", "grp-AD-1003-NH06-CDE-WEB", "TRD Web 1", "NH06", "CDE"),
+            ("10.27.1.11", "svr-172.16.20.11", "grp-AD-1003-NH06-CDE-WEB", "TRD Web 2", "NH06", "CDE"),
+            ("10.27.2.10", "svr-172.16.20.20", "grp-AD-1003-NH06-CDE-APP", "TRD App 1", "NH06", "CDE"),
+            ("10.27.2.11", "svr-172.16.20.21", "grp-AD-1003-NH06-CDE-APP", "TRD App 2", "NH06", "CDE"),
+            ("10.27.2.12", "svr-172.16.20.22", "grp-AD-1003-NH06-CDE-APP", "TRD App 3", "NH06", "CDE"),
+            ("10.27.5.10", "svr-172.16.20.50", "grp-AD-1003-NH06-CDE-BAT", "TRD Batch 1", "NH06", "CDE"),
             # Destination IPs (CPA zone, NH07)
-            ("10.27.3.10", "svr-10.6.1.30", "grp-TRD-NH07-CPA-DB", "TRD DB Primary", "NH07", "CPA"),
-            ("10.27.3.11", "svr-10.6.1.31", "grp-TRD-NH07-CPA-DB", "TRD DB Standby", "NH07", "CPA"),
-            ("10.27.4.10", "svr-10.6.1.40", "grp-TRD-NH07-CPA-MQ", "TRD MQ Broker 1", "NH07", "CPA"),
-            ("10.27.4.11", "svr-10.6.1.41", "grp-TRD-NH07-CPA-MQ", "TRD MQ Broker 2", "NH07", "CPA"),
+            ("10.27.3.10", "svr-10.6.1.30", "grp-AD-1003-NH07-CPA-DB", "TRD DB Primary", "NH07", "CPA"),
+            ("10.27.3.11", "svr-10.6.1.31", "grp-AD-1003-NH07-CPA-DB", "TRD DB Standby", "NH07", "CPA"),
+            ("10.27.4.10", "svr-10.6.1.40", "grp-AD-1003-NH07-CPA-MQ", "TRD MQ Broker 1", "NH07", "CPA"),
+            ("10.27.4.11", "svr-10.6.1.41", "grp-AD-1003-NH07-CPA-MQ", "TRD MQ Broker 2", "NH07", "CPA"),
         ]),
         # ================================================================
         # PAY: DC_LEGACY_A, src_zone=CCS, dst_zone=CDE
@@ -2090,17 +2090,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("PAY", "DC_LEGACY_A", "GAMMA_NGDC", [
             # Source IPs (CCS zone, NH08)
-            ("10.25.1.10", "svr-10.50.8.10", "grp-PAY-NH08-CCS-WEB", "PAY Web 1", "NH08", "CCS"),
-            ("10.25.1.11", "svr-10.50.8.11", "grp-PAY-NH08-CCS-WEB", "PAY Web 2", "NH08", "CCS"),
-            ("10.25.2.10", "svr-10.50.8.20", "grp-PAY-NH08-CCS-APP", "PAY App 1", "NH08", "CCS"),
-            ("10.25.2.11", "svr-10.50.8.21", "grp-PAY-NH08-CCS-APP", "PAY App 2", "NH08", "CCS"),
-            ("10.25.2.12", "svr-10.50.8.22", "grp-PAY-NH08-CCS-APP", "PAY App 3", "NH08", "CCS"),
+            ("10.25.1.10", "svr-10.50.8.10", "grp-AD-1004-NH08-CCS-WEB", "PAY Web 1", "NH08", "CCS"),
+            ("10.25.1.11", "svr-10.50.8.11", "grp-AD-1004-NH08-CCS-WEB", "PAY Web 2", "NH08", "CCS"),
+            ("10.25.2.10", "svr-10.50.8.20", "grp-AD-1004-NH08-CCS-APP", "PAY App 1", "NH08", "CCS"),
+            ("10.25.2.11", "svr-10.50.8.21", "grp-AD-1004-NH08-CCS-APP", "PAY App 2", "NH08", "CCS"),
+            ("10.25.2.12", "svr-10.50.8.22", "grp-AD-1004-NH08-CCS-APP", "PAY App 3", "NH08", "CCS"),
             # Destination IPs (CDE zone, NH07)
-            ("10.25.3.10", "svr-10.50.7.30", "grp-PAY-NH07-CDE-DB", "PAY DB Primary", "NH07", "CDE"),
-            ("10.25.3.11", "svr-10.50.7.31", "grp-PAY-NH07-CDE-DB", "PAY DB Standby", "NH07", "CDE"),
-            ("10.25.4.10", "svr-10.50.7.40", "grp-PAY-NH07-CDE-MQ", "PAY MQ 1", "NH07", "CDE"),
-            ("10.25.4.11", "svr-10.50.7.41", "grp-PAY-NH07-CDE-MQ", "PAY MQ 2", "NH07", "CDE"),
-            ("10.25.5.10", "svr-10.50.8.50", "grp-PAY-NH08-CCS-BAT", "PAY Batch 1", "NH08", "CCS"),
+            ("10.25.3.10", "svr-10.50.7.30", "grp-AD-1004-NH07-CDE-DB", "PAY DB Primary", "NH07", "CDE"),
+            ("10.25.3.11", "svr-10.50.7.31", "grp-AD-1004-NH07-CDE-DB", "PAY DB Standby", "NH07", "CDE"),
+            ("10.25.4.10", "svr-10.50.7.40", "grp-AD-1004-NH07-CDE-MQ", "PAY MQ 1", "NH07", "CDE"),
+            ("10.25.4.11", "svr-10.50.7.41", "grp-AD-1004-NH07-CDE-MQ", "PAY MQ 2", "NH07", "CDE"),
+            ("10.25.5.10", "svr-10.50.8.50", "grp-AD-1004-NH08-CCS-BAT", "PAY Batch 1", "NH08", "CCS"),
         ]),
         # ================================================================
         # INS: DC_LEGACY_D, src_zone=STD, dst_zone=PAA
@@ -2108,17 +2108,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("INS", "DC_LEGACY_D", "ALPHA_NGDC", [
             # Source IPs (STD zone, NH04)
-            ("10.28.1.10", "svr-10.3.1.130", "grp-INS-NH04-STD-WEB", "INS Web 1", "NH04", "STD"),
-            ("10.28.1.11", "svr-10.3.1.131", "grp-INS-NH04-STD-WEB", "INS Web 2", "NH04", "STD"),
-            ("10.28.2.10", "svr-10.3.1.140", "grp-INS-NH04-STD-APP", "INS App 1", "NH04", "STD"),
-            ("10.28.2.11", "svr-10.3.1.141", "grp-INS-NH04-STD-APP", "INS App 2", "NH04", "STD"),
-            ("10.28.2.12", "svr-10.3.1.142", "grp-INS-NH04-STD-APP", "INS App 3", "NH04", "STD"),
-            ("10.28.5.10", "svr-10.3.1.160", "grp-INS-NH04-STD-BAT", "INS Batch 1", "NH04", "STD"),
+            ("10.28.1.10", "svr-10.3.1.130", "grp-AD-1005-NH04-STD-WEB", "INS Web 1", "NH04", "STD"),
+            ("10.28.1.11", "svr-10.3.1.131", "grp-AD-1005-NH04-STD-WEB", "INS Web 2", "NH04", "STD"),
+            ("10.28.2.10", "svr-10.3.1.140", "grp-AD-1005-NH04-STD-APP", "INS App 1", "NH04", "STD"),
+            ("10.28.2.11", "svr-10.3.1.141", "grp-AD-1005-NH04-STD-APP", "INS App 2", "NH04", "STD"),
+            ("10.28.2.12", "svr-10.3.1.142", "grp-AD-1005-NH04-STD-APP", "INS App 3", "NH04", "STD"),
+            ("10.28.5.10", "svr-10.3.1.160", "grp-AD-1005-NH04-STD-BAT", "INS Batch 1", "NH04", "STD"),
             # Destination IPs (PAA zone, NH14)
-            ("10.28.3.10", "svr-10.70.4.30", "grp-INS-NH14-PAA-DB", "INS DB Primary", "NH14", "PAA"),
-            ("10.28.3.11", "svr-10.70.4.31", "grp-INS-NH14-PAA-DB", "INS DB Standby", "NH14", "PAA"),
-            ("10.28.4.10", "svr-10.70.4.40", "grp-INS-NH14-PAA-MQ", "INS MQ 1", "NH14", "PAA"),
-            ("10.28.4.11", "svr-10.70.4.41", "grp-INS-NH14-PAA-MQ", "INS MQ 2", "NH14", "PAA"),
+            ("10.28.3.10", "svr-10.70.4.30", "grp-AD-1005-NH14-PAA-DB", "INS DB Primary", "NH14", "PAA"),
+            ("10.28.3.11", "svr-10.70.4.31", "grp-AD-1005-NH14-PAA-DB", "INS DB Standby", "NH14", "PAA"),
+            ("10.28.4.10", "svr-10.70.4.40", "grp-AD-1005-NH14-PAA-MQ", "INS MQ 1", "NH14", "PAA"),
+            ("10.28.4.11", "svr-10.70.4.41", "grp-AD-1005-NH14-PAA-MQ", "INS MQ 2", "NH14", "PAA"),
         ]),
         # ================================================================
         # KYC: DC_LEGACY_F, src_zone=CCS, dst_zone=CDE
@@ -2126,17 +2126,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("KYC", "DC_LEGACY_F", "ALPHA_NGDC", [
             # Source IPs (CCS zone, NH05)
-            ("10.30.1.10", "svr-10.4.1.130", "grp-KYC-NH05-CCS-WEB", "KYC Web 1", "NH05", "CCS"),
-            ("10.30.1.11", "svr-10.4.1.131", "grp-KYC-NH05-CCS-WEB", "KYC Web 2", "NH05", "CCS"),
-            ("10.30.2.10", "svr-10.4.1.140", "grp-KYC-NH05-CCS-APP", "KYC App 1", "NH05", "CCS"),
-            ("10.30.2.11", "svr-10.4.1.141", "grp-KYC-NH05-CCS-APP", "KYC App 2", "NH05", "CCS"),
-            ("10.30.2.12", "svr-10.4.1.142", "grp-KYC-NH05-CCS-APP", "KYC App 3", "NH05", "CCS"),
+            ("10.30.1.10", "svr-10.4.1.130", "grp-AD-1006-NH05-CCS-WEB", "KYC Web 1", "NH05", "CCS"),
+            ("10.30.1.11", "svr-10.4.1.131", "grp-AD-1006-NH05-CCS-WEB", "KYC Web 2", "NH05", "CCS"),
+            ("10.30.2.10", "svr-10.4.1.140", "grp-AD-1006-NH05-CCS-APP", "KYC App 1", "NH05", "CCS"),
+            ("10.30.2.11", "svr-10.4.1.141", "grp-AD-1006-NH05-CCS-APP", "KYC App 2", "NH05", "CCS"),
+            ("10.30.2.12", "svr-10.4.1.142", "grp-AD-1006-NH05-CCS-APP", "KYC App 3", "NH05", "CCS"),
             # Destination IPs (CDE zone, NH05)
-            ("10.30.3.10", "svr-10.4.2.10", "grp-KYC-NH05-CDE-DB", "KYC DB Primary", "NH05", "CDE"),
-            ("10.30.3.11", "svr-10.4.2.11", "grp-KYC-NH05-CDE-DB", "KYC DB Standby", "NH05", "CDE"),
-            ("10.30.4.10", "svr-10.4.2.20", "grp-KYC-NH05-CDE-MQ", "KYC MQ 1", "NH05", "CDE"),
-            ("10.30.4.11", "svr-10.4.2.21", "grp-KYC-NH05-CDE-MQ", "KYC MQ 2", "NH05", "CDE"),
-            ("10.30.5.10", "svr-10.4.1.160", "grp-KYC-NH05-CCS-BAT", "KYC Batch 1", "NH05", "CCS"),
+            ("10.30.3.10", "svr-10.4.2.10", "grp-AD-1006-NH05-CDE-DB", "KYC DB Primary", "NH05", "CDE"),
+            ("10.30.3.11", "svr-10.4.2.11", "grp-AD-1006-NH05-CDE-DB", "KYC DB Standby", "NH05", "CDE"),
+            ("10.30.4.10", "svr-10.4.2.20", "grp-AD-1006-NH05-CDE-MQ", "KYC MQ 1", "NH05", "CDE"),
+            ("10.30.4.11", "svr-10.4.2.21", "grp-AD-1006-NH05-CDE-MQ", "KYC MQ 2", "NH05", "CDE"),
+            ("10.30.5.10", "svr-10.4.1.160", "grp-AD-1006-NH05-CCS-BAT", "KYC Batch 1", "NH05", "CCS"),
         ]),
         # ================================================================
         # FRD: DC_LEGACY_E, src_zone=CDE, dst_zone=Swift
@@ -2144,17 +2144,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("FRD", "DC_LEGACY_E", "ALPHA_NGDC", [
             # Source IPs (CDE zone, NH02)
-            ("10.29.1.10", "svr-10.1.1.110", "grp-FRD-NH02-CDE-WEB", "FRD Web 1", "NH02", "CDE"),
-            ("10.29.1.11", "svr-10.1.1.111", "grp-FRD-NH02-CDE-WEB", "FRD Web 2", "NH02", "CDE"),
-            ("10.29.2.10", "svr-10.1.1.50", "grp-FRD-NH02-CDE-APP", "FRD Engine 1", "NH02", "CDE"),
-            ("10.29.2.11", "svr-10.1.1.51", "grp-FRD-NH02-CDE-APP", "FRD Engine 2", "NH02", "CDE"),
-            ("10.29.2.12", "svr-10.1.1.52", "grp-FRD-NH02-CDE-APP", "FRD Engine 3", "NH02", "CDE"),
-            ("10.29.5.10", "svr-10.1.1.60", "grp-FRD-NH02-CDE-BAT", "FRD Batch 1", "NH02", "CDE"),
+            ("10.29.1.10", "svr-10.1.1.110", "grp-AD-1007-NH02-CDE-WEB", "FRD Web 1", "NH02", "CDE"),
+            ("10.29.1.11", "svr-10.1.1.111", "grp-AD-1007-NH02-CDE-WEB", "FRD Web 2", "NH02", "CDE"),
+            ("10.29.2.10", "svr-10.1.1.50", "grp-AD-1007-NH02-CDE-APP", "FRD Engine 1", "NH02", "CDE"),
+            ("10.29.2.11", "svr-10.1.1.51", "grp-AD-1007-NH02-CDE-APP", "FRD Engine 2", "NH02", "CDE"),
+            ("10.29.2.12", "svr-10.1.1.52", "grp-AD-1007-NH02-CDE-APP", "FRD Engine 3", "NH02", "CDE"),
+            ("10.29.5.10", "svr-10.1.1.60", "grp-AD-1007-NH02-CDE-BAT", "FRD Batch 1", "NH02", "CDE"),
             # Destination IPs (Swift zone, NH02)
-            ("10.29.3.10", "svr-10.1.2.20", "grp-FRD-NH02-Swift-DB", "FRD DB Primary", "NH02", "Swift"),
-            ("10.29.3.11", "svr-10.1.2.21", "grp-FRD-NH02-Swift-DB", "FRD DB Standby", "NH02", "Swift"),
-            ("10.29.4.10", "svr-10.1.1.55", "grp-FRD-NH02-Swift-MQ", "FRD Kafka 1", "NH02", "Swift"),
-            ("10.29.4.11", "svr-10.1.1.56", "grp-FRD-NH02-Swift-MQ", "FRD Kafka 2", "NH02", "Swift"),
+            ("10.29.3.10", "svr-10.1.2.20", "grp-AD-1007-NH02-Swift-DB", "FRD DB Primary", "NH02", "Swift"),
+            ("10.29.3.11", "svr-10.1.2.21", "grp-AD-1007-NH02-Swift-DB", "FRD DB Standby", "NH02", "Swift"),
+            ("10.29.4.10", "svr-10.1.1.55", "grp-AD-1007-NH02-Swift-MQ", "FRD Kafka 1", "NH02", "Swift"),
+            ("10.29.4.11", "svr-10.1.1.56", "grp-AD-1007-NH02-Swift-MQ", "FRD Kafka 2", "NH02", "Swift"),
         ]),
         # ================================================================
         # LND: DC_LEGACY_D, src_zone=GEN, dst_zone=CPA
@@ -2162,17 +2162,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("LND", "DC_LEGACY_D", "ALPHA_NGDC", [
             # Source IPs (GEN zone, NH09)
-            ("10.28.1.10", "svr-10.8.1.130", "grp-LND-NH09-GEN-WEB", "LND Web 1", "NH09", "GEN"),
-            ("10.28.1.11", "svr-10.8.1.131", "grp-LND-NH09-GEN-WEB", "LND Web 2", "NH09", "GEN"),
-            ("10.28.2.10", "svr-10.8.1.140", "grp-LND-NH09-GEN-APP", "LND App 1", "NH09", "GEN"),
-            ("10.28.2.11", "svr-10.8.1.141", "grp-LND-NH09-GEN-APP", "LND App 2", "NH09", "GEN"),
-            ("10.28.2.12", "svr-10.8.1.142", "grp-LND-NH09-GEN-APP", "LND App 3", "NH09", "GEN"),
-            ("10.28.5.10", "svr-10.8.1.160", "grp-LND-NH09-GEN-BAT", "LND Batch 1", "NH09", "GEN"),
+            ("10.28.1.10", "svr-10.8.1.130", "grp-AD-1008-NH09-GEN-WEB", "LND Web 1", "NH09", "GEN"),
+            ("10.28.1.11", "svr-10.8.1.131", "grp-AD-1008-NH09-GEN-WEB", "LND Web 2", "NH09", "GEN"),
+            ("10.28.2.10", "svr-10.8.1.140", "grp-AD-1008-NH09-GEN-APP", "LND App 1", "NH09", "GEN"),
+            ("10.28.2.11", "svr-10.8.1.141", "grp-AD-1008-NH09-GEN-APP", "LND App 2", "NH09", "GEN"),
+            ("10.28.2.12", "svr-10.8.1.142", "grp-AD-1008-NH09-GEN-APP", "LND App 3", "NH09", "GEN"),
+            ("10.28.5.10", "svr-10.8.1.160", "grp-AD-1008-NH09-GEN-BAT", "LND Batch 1", "NH09", "GEN"),
             # Destination IPs (CPA zone, NH09)
-            ("10.28.3.10", "svr-10.8.2.30", "grp-LND-NH09-CPA-DB", "LND DB Primary", "NH09", "CPA"),
-            ("10.28.3.11", "svr-10.8.2.31", "grp-LND-NH09-CPA-DB", "LND DB Standby", "NH09", "CPA"),
-            ("10.28.4.10", "svr-10.8.2.40", "grp-LND-NH09-CPA-MQ", "LND MQ 1", "NH09", "CPA"),
-            ("10.28.4.11", "svr-10.8.2.41", "grp-LND-NH09-CPA-MQ", "LND MQ 2", "NH09", "CPA"),
+            ("10.28.3.10", "svr-10.8.2.30", "grp-AD-1008-NH09-CPA-DB", "LND DB Primary", "NH09", "CPA"),
+            ("10.28.3.11", "svr-10.8.2.31", "grp-AD-1008-NH09-CPA-DB", "LND DB Standby", "NH09", "CPA"),
+            ("10.28.4.10", "svr-10.8.2.40", "grp-AD-1008-NH09-CPA-MQ", "LND MQ 1", "NH09", "CPA"),
+            ("10.28.4.11", "svr-10.8.2.41", "grp-AD-1008-NH09-CPA-MQ", "LND MQ 2", "NH09", "CPA"),
         ]),
         # ================================================================
         # WLT: DC_LEGACY_B, src_zone=PAA, dst_zone=3PY
@@ -2180,17 +2180,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("WLT", "DC_LEGACY_B", "ALPHA_NGDC", [
             # Source IPs (PAA zone, NH14)
-            ("10.26.1.10", "svr-10.70.1.100", "grp-WLT-NH14-PAA-WEB", "WLT Web 1", "NH14", "PAA"),
-            ("10.26.1.11", "svr-10.70.1.101", "grp-WLT-NH14-PAA-WEB", "WLT Web 2", "NH14", "PAA"),
-            ("10.26.2.10", "svr-10.9.1.20", "grp-WLT-NH10-PAA-APP", "WLT App 1", "NH10", "PAA"),
-            ("10.26.2.11", "svr-10.9.1.21", "grp-WLT-NH10-PAA-APP", "WLT App 2", "NH10", "PAA"),
-            ("10.26.2.12", "svr-10.9.1.22", "grp-WLT-NH10-PAA-APP", "WLT App 3", "NH10", "PAA"),
+            ("10.26.1.10", "svr-10.70.1.100", "grp-AD-1009-NH14-PAA-WEB", "WLT Web 1", "NH14", "PAA"),
+            ("10.26.1.11", "svr-10.70.1.101", "grp-AD-1009-NH14-PAA-WEB", "WLT Web 2", "NH14", "PAA"),
+            ("10.26.2.10", "svr-10.9.1.20", "grp-AD-1009-NH10-PAA-APP", "WLT App 1", "NH10", "PAA"),
+            ("10.26.2.11", "svr-10.9.1.21", "grp-AD-1009-NH10-PAA-APP", "WLT App 2", "NH10", "PAA"),
+            ("10.26.2.12", "svr-10.9.1.22", "grp-AD-1009-NH10-PAA-APP", "WLT App 3", "NH10", "PAA"),
             # Destination IPs (3PY zone, NH10)
-            ("10.26.3.10", "svr-10.9.1.30", "grp-WLT-NH10-3PY-DB", "WLT DB Primary", "NH10", "3PY"),
-            ("10.26.3.11", "svr-10.9.1.31", "grp-WLT-NH10-3PY-DB", "WLT DB Standby", "NH10", "3PY"),
-            ("10.26.4.10", "svr-10.9.1.40", "grp-WLT-NH10-3PY-MQ", "WLT MQ 1", "NH10", "3PY"),
-            ("10.26.4.11", "svr-10.9.1.41", "grp-WLT-NH10-3PY-MQ", "WLT MQ 2", "NH10", "3PY"),
-            ("10.26.5.10", "svr-10.9.1.50", "grp-WLT-NH10-PAA-BAT", "WLT Batch 1", "NH10", "PAA"),
+            ("10.26.3.10", "svr-10.9.1.30", "grp-AD-1009-NH10-3PY-DB", "WLT DB Primary", "NH10", "3PY"),
+            ("10.26.3.11", "svr-10.9.1.31", "grp-AD-1009-NH10-3PY-DB", "WLT DB Standby", "NH10", "3PY"),
+            ("10.26.4.10", "svr-10.9.1.40", "grp-AD-1009-NH10-3PY-MQ", "WLT MQ 1", "NH10", "3PY"),
+            ("10.26.4.11", "svr-10.9.1.41", "grp-AD-1009-NH10-3PY-MQ", "WLT MQ 2", "NH10", "3PY"),
+            ("10.26.5.10", "svr-10.9.1.50", "grp-AD-1009-NH10-PAA-BAT", "WLT Batch 1", "NH10", "PAA"),
         ]),
         # ================================================================
         # CBK: DC_LEGACY_A, src_zone=CPA, dst_zone=CDE
@@ -2198,17 +2198,17 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("CBK", "DC_LEGACY_A", "ALPHA_NGDC", [
             # Source IPs (CPA zone, NH08)
-            ("10.25.1.10", "svr-10.7.1.10", "grp-CBK-NH08-CPA-WEB", "CBK Web 1", "NH08", "CPA"),
-            ("10.25.1.11", "svr-10.7.1.11", "grp-CBK-NH08-CPA-WEB", "CBK Web 2", "NH08", "CPA"),
-            ("10.25.2.10", "svr-10.7.1.20", "grp-CBK-NH08-CPA-APP", "CBK App 1", "NH08", "CPA"),
-            ("10.25.2.11", "svr-10.7.1.21", "grp-CBK-NH08-CPA-APP", "CBK App 2", "NH08", "CPA"),
-            ("10.25.2.12", "svr-10.7.1.22", "grp-CBK-NH08-CPA-APP", "CBK App 3", "NH08", "CPA"),
-            ("10.25.5.10", "svr-10.7.1.50", "grp-CBK-NH08-CPA-BAT", "CBK Batch 1", "NH08", "CPA"),
+            ("10.25.1.10", "svr-10.7.1.10", "grp-AD-1010-NH08-CPA-WEB", "CBK Web 1", "NH08", "CPA"),
+            ("10.25.1.11", "svr-10.7.1.11", "grp-AD-1010-NH08-CPA-WEB", "CBK Web 2", "NH08", "CPA"),
+            ("10.25.2.10", "svr-10.7.1.20", "grp-AD-1010-NH08-CPA-APP", "CBK App 1", "NH08", "CPA"),
+            ("10.25.2.11", "svr-10.7.1.21", "grp-AD-1010-NH08-CPA-APP", "CBK App 2", "NH08", "CPA"),
+            ("10.25.2.12", "svr-10.7.1.22", "grp-AD-1010-NH08-CPA-APP", "CBK App 3", "NH08", "CPA"),
+            ("10.25.5.10", "svr-10.7.1.50", "grp-AD-1010-NH08-CPA-BAT", "CBK Batch 1", "NH08", "CPA"),
             # Destination IPs (CDE zone, NH08)
-            ("10.25.3.10", "svr-10.7.2.30", "grp-CBK-NH08-CDE-DB", "CBK DB Primary", "NH08", "CDE"),
-            ("10.25.3.11", "svr-10.7.2.31", "grp-CBK-NH08-CDE-DB", "CBK DB Standby", "NH08", "CDE"),
-            ("10.25.4.10", "svr-10.7.2.40", "grp-CBK-NH08-CDE-MQ", "CBK MQ 1", "NH08", "CDE"),
-            ("10.25.4.11", "svr-10.7.2.41", "grp-CBK-NH08-CDE-MQ", "CBK MQ 2", "NH08", "CDE"),
+            ("10.25.3.10", "svr-10.7.2.30", "grp-AD-1010-NH08-CDE-DB", "CBK DB Primary", "NH08", "CDE"),
+            ("10.25.3.11", "svr-10.7.2.31", "grp-AD-1010-NH08-CDE-DB", "CBK DB Standby", "NH08", "CDE"),
+            ("10.25.4.10", "svr-10.7.2.40", "grp-AD-1010-NH08-CDE-MQ", "CBK MQ 1", "NH08", "CDE"),
+            ("10.25.4.11", "svr-10.7.2.41", "grp-AD-1010-NH08-CDE-MQ", "CBK MQ 2", "NH08", "CDE"),
         ]),
         # ================================================================
         # Shared / Cross-app IPs (PSE zone, UC zone)
@@ -2217,11 +2217,11 @@ def _build_ip_mappings() -> list[dict[str, Any]]:
         # ================================================================
         ("SHARED", "SHARED", "ALPHA_NGDC", [
             # PSE zone destinations (used by all apps Rule 4)
-            ("10.70.1.10", "svr-10.70.1.10", "grp-SHARED-NH14-PSE-API", "DMZ API 1", "NH14", "PSE"),
-            ("10.70.1.11", "svr-10.70.1.11", "grp-SHARED-NH14-PSE-API", "DMZ API 2", "NH14", "PSE"),
+            ("10.70.1.10", "svr-10.70.1.10", "grp-AD-SHARED-NH14-PSE-API", "DMZ API 1", "NH14", "PSE"),
+            ("10.70.1.11", "svr-10.70.1.11", "grp-AD-SHARED-NH14-PSE-API", "DMZ API 2", "NH14", "PSE"),
             # UC zone monitoring sources (used by all apps Rule 6)
-            ("10.80.1.100", "svr-10.80.1.100", "grp-SHARED-NH01-UC-MON", "Monitor Agent 1", "NH01", "UC"),
-            ("10.80.1.101", "svr-10.80.1.101", "grp-SHARED-NH01-UC-MON", "Monitor Agent 2", "NH01", "UC"),
+            ("10.80.1.100", "svr-10.80.1.100", "grp-AD-SHARED-NH01-UC-MON", "Monitor Agent 1", "NH01", "UC"),
+            ("10.80.1.101", "svr-10.80.1.101", "grp-AD-SHARED-NH01-UC-MON", "Monitor Agent 2", "NH01", "UC"),
         ]),
     ]
 
@@ -2343,8 +2343,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": (now + timedelta(days=-34)).isoformat(),
          "comments": "CRM web-to-app HTTPS connectivity within NH02/CDE",
          "review_notes": "Approved - intra-NH/SZ traffic, LDF-002 compliant",
-         "rule_summary": {"application": "CRM", "source": "grp-CRM-NH02-CDE-WEB",
-                          "destination": "grp-CRM-NH02-CDE-APP", "ports": "TCP 443",
+         "rule_summary": {"application": "CRM", "source": "grp-AD-1001-NH02-CDE-WEB",
+                          "destination": "grp-AD-1001-NH02-CDE-APP", "ports": "TCP 443",
                           "environment": "Production"},
          "delta": None},
         # 2. Pending modification - TRD source IP added (R-3006)
@@ -2356,8 +2356,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": None,
          "comments": "Adding new app server svr-10.5.1.83 to TRD App group",
          "review_notes": None,
-         "rule_summary": {"application": "TRD", "source": "grp-TRD-NH06-CDE-APP",
-                          "destination": "grp-TRD-NH06-CDE-DB", "ports": "TCP 1521",
+         "rule_summary": {"application": "TRD", "source": "grp-AD-1003-NH06-CDE-APP",
+                          "destination": "grp-AD-1003-NH06-CDE-DB", "ports": "TCP 1521",
                           "environment": "Production"},
          "delta": {"added": {"rule_source": ["svr-10.5.1.83"]},
                    "removed": {}, "changed": {}}},
@@ -2370,8 +2370,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": (now + timedelta(days=-103)).isoformat(),
          "comments": "Payment message queue connectivity within NH07/CPA",
          "review_notes": "Approved - PCI controls verified, CPA zone compliance confirmed",
-         "rule_summary": {"application": "PAY", "source": "grp-PAY-NH07-CPA-APP",
-                          "destination": "grp-PAY-NH07-CPA-MQ", "ports": "TCP 5672",
+         "rule_summary": {"application": "PAY", "source": "grp-AD-1004-NH07-CPA-APP",
+                          "destination": "grp-AD-1004-NH07-CPA-MQ", "ports": "TCP 5672",
                           "environment": "Production"},
          "delta": None},
         # 4. Rejected rule - HRM GEN to CRM CDE cross-zone blocked
@@ -2383,8 +2383,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": (now + timedelta(days=-6)).isoformat(),
          "comments": "HRM needs access to CRM database for employee data sync",
          "review_notes": "REJECTED: GEN to CDE cross-zone traffic blocked per NGDC Prod Policy Matrix.",
-         "rule_summary": {"application": "HRM", "source": "grp-HRM-NH01-GEN-APP",
-                          "destination": "grp-CRM-NH02-CDE-DB", "ports": "TCP 1521",
+         "rule_summary": {"application": "HRM", "source": "grp-AD-1002-NH01-GEN-APP",
+                          "destination": "grp-AD-1001-NH02-CDE-DB", "ports": "TCP 1521",
                           "environment": "Production"},
          "delta": None},
         # 5. Pending migration review - FRD legacy to NGDC
@@ -2396,8 +2396,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": None,
          "comments": "Auto-generated migration from DC_LEGACY_E to ALPHA_NGDC with 1-1 IP mappings",
          "review_notes": None,
-         "rule_summary": {"application": "FRD", "source": "grp-FRD-NH02-CDE-APP",
-                          "destination": "grp-FRD-NH02-CDE-DB", "ports": "TCP 1521\nTCP 1433",
+         "rule_summary": {"application": "FRD", "source": "grp-AD-1007-NH02-CDE-APP",
+                          "destination": "grp-AD-1007-NH02-CDE-DB", "ports": "TCP 1521\nTCP 1433",
                           "environment": "Production"},
          "delta": {"added": {}, "removed": {},
                    "changed": {"rule_source": {"from": "10.29.2.10\n10.29.2.11", "to": "svr-10.1.2.10\nsvr-10.1.2.11"},
@@ -2413,8 +2413,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": (now + timedelta(days=-14)).isoformat(),
          "comments": "Adding new CBK API endpoint svr-10.7.1.41 to API group",
          "review_notes": "Approved - same NH08/CCS, intra-zone permitted",
-         "rule_summary": {"application": "CBK", "source": "grp-CBK-NH08-CCS-API",
-                          "destination": "grp-CBK-NH08-CCS-APP", "ports": "TCP 8443",
+         "rule_summary": {"application": "CBK", "source": "grp-AD-1010-NH08-CCS-API",
+                          "destination": "grp-AD-1010-NH08-CCS-APP", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": {"added": {"rule_source": ["svr-10.7.1.41"]},
                    "removed": {}, "changed": {}}},
@@ -2427,8 +2427,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": None,
          "comments": "CRM (NH02/CDE) needs to reach WLT (NH10/CDE) for portfolio data - LDF-004.",
          "review_notes": None,
-         "rule_summary": {"application": "CRM", "source": "grp-CRM-NH02-CDE-APP",
-                          "destination": "grp-WLT-NH10-CDE-API", "ports": "TCP 8443",
+         "rule_summary": {"application": "CRM", "source": "grp-AD-1001-NH02-CDE-APP",
+                          "destination": "grp-AD-1009-NH10-CDE-API", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": None},
         # 8. Rejected - EPT PAA to CRM CDE blocked
@@ -2440,8 +2440,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": (now + timedelta(days=-4)).isoformat(),
          "comments": "Enterprise Portal needs direct CRM database access",
          "review_notes": "REJECTED: PAA to CDE direct DB access blocked per policy. Use API tier instead.",
-         "rule_summary": {"application": "EPT", "source": "grp-EPT-NH01-PAA-APP",
-                          "destination": "grp-CRM-NH02-CDE-DB", "ports": "TCP 1521",
+         "rule_summary": {"application": "EPT", "source": "grp-AD-1011-NH01-PAA-APP",
+                          "destination": "grp-AD-1001-NH02-CDE-DB", "ports": "TCP 1521",
                           "environment": "Production"},
          "delta": None},
         # 9. Pending modification - LND service port change (R-3021)
@@ -2453,8 +2453,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": None,
          "comments": "Changing from Oracle to PostgreSQL - updating port from 1521 to 5432",
          "review_notes": None,
-         "rule_summary": {"application": "LND", "source": "grp-LND-NH09-CCS-BAT",
-                          "destination": "grp-LND-NH09-CCS-DB", "ports": "TCP 5432",
+         "rule_summary": {"application": "LND", "source": "grp-AD-1008-NH09-CCS-BAT",
+                          "destination": "grp-AD-1008-NH09-CCS-DB", "ports": "TCP 5432",
                           "environment": "Production"},
          "delta": {"added": {}, "removed": {},
                    "changed": {"rule_service": {"from": "TCP 1521", "to": "TCP 5432"}}}},
@@ -2467,8 +2467,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": (now + timedelta(days=-11)).isoformat(),
          "comments": "Insurance needs KYC validation - both in GEN zone, LDF-001",
          "review_notes": "Approved - GEN to GEN cross-NH permitted per policy matrix (0 FW boundaries)",
-         "rule_summary": {"application": "INS", "source": "grp-INS-NH04-GEN-APP",
-                          "destination": "grp-KYC-NH05-GEN-API", "ports": "TCP 8443",
+         "rule_summary": {"application": "INS", "source": "grp-AD-1005-NH04-GEN-APP",
+                          "destination": "grp-AD-1006-NH05-GEN-API", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": None},
         # 11. Approved - CBK to PAY cross-zone (R-3039, LDF-003)
@@ -2480,8 +2480,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": (now + timedelta(days=-7)).isoformat(),
          "comments": "Core Banking needs Payment API for settlement - CCS to CPA cross-zone",
          "review_notes": "Approved - LDF-003 compliant, 1 FW boundary (egress NH08-CCS)",
-         "rule_summary": {"application": "CBK", "source": "grp-CBK-NH08-CCS-APP",
-                          "destination": "grp-PAY-NH07-CPA-API", "ports": "TCP 8443",
+         "rule_summary": {"application": "CBK", "source": "grp-AD-1010-NH08-CCS-APP",
+                          "destination": "grp-AD-1004-NH07-CPA-API", "ports": "TCP 8443",
                           "environment": "Production"},
          "delta": None},
         # 12. Pending migration - HRM legacy
@@ -2493,8 +2493,8 @@ def build_seed_reviews() -> list[dict[str, Any]]:
          "reviewed_at": None,
          "comments": "Auto-generated migration from DC_LEGACY_B to ALPHA_NGDC",
          "review_notes": None,
-         "rule_summary": {"application": "HRM", "source": "grp-HRM-NH01-GEN-APP",
-                          "destination": "grp-HRM-NH01-GEN-DB", "ports": "TCP 5432",
+         "rule_summary": {"application": "HRM", "source": "grp-AD-1002-NH01-GEN-APP",
+                          "destination": "grp-AD-1002-NH01-GEN-DB", "ports": "TCP 5432",
                           "environment": "Production"},
          "delta": {"added": {}, "removed": {},
                    "changed": {"rule_source": {"from": "10.26.2.10\n10.26.2.11", "to": "svr-10.0.2.140\nsvr-10.0.2.141"},
