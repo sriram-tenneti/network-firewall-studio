@@ -2,7 +2,8 @@
 
 All reference data constants are defined here and imported by database.py.
 Comprehensive test data for multiple apps, environments, firewall devices.
-IP naming: svr-xx.xx.xx.xx for IPs, rng-xx.xx.xx.xx-xy for ranges.
+NGDC groups use standardised grp-{APP}-{NH}-{SZ}-{COMP} naming with svr- prefixed IPs.
+Legacy rules use bare IPs and varied non-standardised legacy group names.
 Each app has multiple components (WEB, APP, DB, MQ, BAT, API) across zones within its NH.
 """
 
@@ -1524,14 +1525,274 @@ SEED_GROUPS = [
 
 
 # ============================================================
-# Legacy Rules (using legacy IP addresses, for migration)
+# Legacy Groups — varied, non-standardised names (no svr-/rng-/grp- prefixes).
+# These represent how groups look in legacy firewalls before migration.
+# Includes nested combinations (groups containing other groups).
+# ============================================================
+
+SEED_LEGACY_GROUPS: list[dict[str, Any]] = [
+    # --- CRM legacy groups (varied naming: project code style) ---
+    {"name": "CRM_WebFarm", "app_id": "CRM", "description": "CRM Web Server Farm",
+     "members": [
+        {"type": "ip", "value": "10.25.1.10", "description": "CRM Web Primary"},
+        {"type": "ip", "value": "10.25.1.11", "description": "CRM Web Secondary"},
+     ]},
+    {"name": "CRM_AppCluster", "app_id": "CRM", "description": "CRM Application Cluster",
+     "members": [
+        {"type": "ip", "value": "10.25.2.10", "description": "CRM App Node A"},
+        {"type": "ip", "value": "10.25.2.11", "description": "CRM App Node B"},
+        {"type": "ip", "value": "10.25.2.12", "description": "CRM App Node C"},
+     ]},
+    {"name": "CRM-DB-Servers", "app_id": "CRM", "description": "CRM Database Servers",
+     "members": [
+        {"type": "ip", "value": "10.25.3.10", "description": "CRM Oracle Primary"},
+        {"type": "ip", "value": "10.25.3.11", "description": "CRM Oracle Standby"},
+     ]},
+    {"name": "CRM Batch Jobs", "app_id": "CRM", "description": "CRM Batch Processing Server",
+     "members": [
+        {"type": "ip", "value": "10.25.5.10", "description": "CRM Nightly Batch"},
+     ]},
+    # Nested: CRM_AllServers contains CRM_WebFarm + CRM_AppCluster
+    {"name": "CRM_AllServers", "app_id": "CRM", "description": "All CRM Front-end Servers",
+     "members": [
+        {"type": "group", "value": "CRM_WebFarm", "description": "Web Tier"},
+        {"type": "group", "value": "CRM_AppCluster", "description": "App Tier"},
+     ]},
+
+    # --- HRM legacy groups (dash-separated style) ---
+    {"name": "hr-web-pool", "app_id": "HRM", "description": "HR Web Server Pool",
+     "members": [
+        {"type": "ip", "value": "10.26.1.10", "description": "HR Web 1"},
+        {"type": "ip", "value": "10.26.1.11", "description": "HR Web 2"},
+     ]},
+    {"name": "hr-app-servers", "app_id": "HRM", "description": "HR Application Layer",
+     "members": [
+        {"type": "ip", "value": "10.26.2.10", "description": "HR Middleware 1"},
+        {"type": "ip", "value": "10.26.2.11", "description": "HR Middleware 2"},
+        {"type": "ip", "value": "10.26.2.12", "description": "HR Middleware 3"},
+     ]},
+    {"name": "hr-database", "app_id": "HRM", "description": "HR SQL Databases",
+     "members": [
+        {"type": "ip", "value": "10.26.3.10", "description": "HR DB Master"},
+        {"type": "ip", "value": "10.26.3.11", "description": "HR DB Replica"},
+     ]},
+    {"name": "hr-batch-node", "app_id": "HRM", "description": "HR Batch Processing",
+     "members": [
+        {"type": "ip", "value": "10.26.5.10", "description": "HR Nightly ETL"},
+     ]},
+
+    # --- TRD legacy groups (camelCase style) ---
+    {"name": "tradingWebFrontend", "app_id": "TRD", "description": "Trading Web Frontend Servers",
+     "members": [
+        {"type": "ip", "value": "10.27.1.10", "description": "Trading Web A"},
+        {"type": "ip", "value": "10.27.1.11", "description": "Trading Web B"},
+     ]},
+    {"name": "tradingEnginePool", "app_id": "TRD", "description": "Trading Engine Servers",
+     "members": [
+        {"type": "ip", "value": "10.27.2.10", "description": "Engine Alpha"},
+        {"type": "ip", "value": "10.27.2.11", "description": "Engine Beta"},
+        {"type": "ip", "value": "10.27.2.12", "description": "Engine Gamma"},
+     ]},
+    {"name": "tradingDB", "app_id": "TRD", "description": "Trading Database Tier",
+     "members": [
+        {"type": "ip", "value": "10.27.3.10", "description": "TRD Oracle Primary"},
+        {"type": "ip", "value": "10.27.3.11", "description": "TRD Oracle Standby"},
+     ]},
+    {"name": "tradingMQ", "app_id": "TRD", "description": "Trading Message Bus",
+     "members": [
+        {"type": "ip", "value": "10.27.4.10", "description": "Kafka Broker 1"},
+        {"type": "ip", "value": "10.27.4.11", "description": "Kafka Broker 2"},
+     ]},
+    # Nested: tradingBackend = tradingEnginePool + tradingDB + tradingMQ
+    {"name": "tradingBackend", "app_id": "TRD", "description": "All Trading Backend Systems",
+     "members": [
+        {"type": "group", "value": "tradingEnginePool", "description": "Compute Tier"},
+        {"type": "group", "value": "tradingDB", "description": "Data Tier"},
+        {"type": "group", "value": "tradingMQ", "description": "Messaging Tier"},
+     ]},
+
+    # --- PAY legacy groups (descriptive phrase style) ---
+    {"name": "Payment Web Servers", "app_id": "PAY", "description": "Payment gateway web tier",
+     "members": [
+        {"type": "ip", "value": "10.25.1.10", "description": "Pay Web Primary"},
+        {"type": "ip", "value": "10.25.1.11", "description": "Pay Web Secondary"},
+     ]},
+    {"name": "Payment Processors", "app_id": "PAY", "description": "Payment transaction processors",
+     "members": [
+        {"type": "ip", "value": "10.25.2.10", "description": "Processor Node 1"},
+        {"type": "ip", "value": "10.25.2.11", "description": "Processor Node 2"},
+        {"type": "ip", "value": "10.25.2.12", "description": "Processor Node 3"},
+     ]},
+    {"name": "Payment DB Cluster", "app_id": "PAY", "description": "Payment database cluster",
+     "members": [
+        {"type": "ip", "value": "10.25.3.10", "description": "Pay DB Primary"},
+        {"type": "ip", "value": "10.25.3.11", "description": "Pay DB Standby"},
+     ]},
+    {"name": "Payment MQ Bus", "app_id": "PAY", "description": "Payment message queue brokers",
+     "members": [
+        {"type": "ip", "value": "10.25.4.10", "description": "AMQP Broker 1"},
+        {"type": "ip", "value": "10.25.4.11", "description": "AMQP Broker 2"},
+     ]},
+
+    # --- INS legacy groups (abbreviation style) ---
+    {"name": "INS.WEB", "app_id": "INS", "description": "Insurance Portal Web",
+     "members": [
+        {"type": "ip", "value": "10.28.1.10", "description": "INS Web Node 1"},
+        {"type": "ip", "value": "10.28.1.11", "description": "INS Web Node 2"},
+     ]},
+    {"name": "INS.APP", "app_id": "INS", "description": "Insurance Application Servers",
+     "members": [
+        {"type": "ip", "value": "10.28.2.10", "description": "INS Middleware 1"},
+        {"type": "ip", "value": "10.28.2.11", "description": "INS Middleware 2"},
+        {"type": "ip", "value": "10.28.2.12", "description": "INS Middleware 3"},
+     ]},
+    {"name": "INS.DATABASE", "app_id": "INS", "description": "Insurance Database Tier",
+     "members": [
+        {"type": "ip", "value": "10.28.3.10", "description": "INS DB Primary"},
+        {"type": "ip", "value": "10.28.3.11", "description": "INS DB Standby"},
+     ]},
+
+    # --- KYC legacy groups (underscore with project code) ---
+    {"name": "KYC_PORTAL_WEB", "app_id": "KYC", "description": "KYC Portal Web Servers",
+     "members": [
+        {"type": "ip", "value": "10.30.1.10", "description": "KYC Web 1"},
+        {"type": "ip", "value": "10.30.1.11", "description": "KYC Web 2"},
+     ]},
+    {"name": "KYC_SCREENING_ENGINE", "app_id": "KYC", "description": "KYC Screening Application",
+     "members": [
+        {"type": "ip", "value": "10.30.2.10", "description": "Screening Node 1"},
+        {"type": "ip", "value": "10.30.2.11", "description": "Screening Node 2"},
+        {"type": "ip", "value": "10.30.2.12", "description": "Screening Node 3"},
+     ]},
+    {"name": "KYC_DATA_STORE", "app_id": "KYC", "description": "KYC Database",
+     "members": [
+        {"type": "ip", "value": "10.30.3.10", "description": "KYC DB Master"},
+        {"type": "ip", "value": "10.30.3.11", "description": "KYC DB Standby"},
+     ]},
+
+    # --- FRD legacy groups (mixed style — spaces + codes) ---
+    {"name": "Fraud Detection Web", "app_id": "FRD", "description": "Fraud Detection Web Interface",
+     "members": [
+        {"type": "ip", "value": "10.29.1.10", "description": "FRD Web Node A"},
+        {"type": "ip", "value": "10.29.1.11", "description": "FRD Web Node B"},
+     ]},
+    {"name": "FRD ML Engine", "app_id": "FRD", "description": "Fraud ML Detection Engine",
+     "members": [
+        {"type": "ip", "value": "10.29.2.10", "description": "ML Engine 1"},
+        {"type": "ip", "value": "10.29.2.11", "description": "ML Engine 2"},
+        {"type": "ip", "value": "10.29.2.12", "description": "ML Engine 3"},
+     ]},
+    {"name": "FRD-Oracle-DB", "app_id": "FRD", "description": "Fraud Oracle Database",
+     "members": [
+        {"type": "ip", "value": "10.29.3.10", "description": "FRD DB Primary"},
+        {"type": "ip", "value": "10.29.3.11", "description": "FRD DB Standby"},
+     ]},
+    {"name": "FRD Kafka Cluster", "app_id": "FRD", "description": "Fraud Kafka Event Stream",
+     "members": [
+        {"type": "ip", "value": "10.29.4.10", "description": "Kafka Broker 1"},
+        {"type": "ip", "value": "10.29.4.11", "description": "Kafka Broker 2"},
+     ]},
+
+    # --- LND legacy groups (dotted notation) ---
+    {"name": "lending.web", "app_id": "LND", "description": "Lending Portal Web Tier",
+     "members": [
+        {"type": "ip", "value": "10.28.1.10", "description": "Lending Web 1"},
+        {"type": "ip", "value": "10.28.1.11", "description": "Lending Web 2"},
+     ]},
+    {"name": "lending.engine", "app_id": "LND", "description": "Lending Calculation Engine",
+     "members": [
+        {"type": "ip", "value": "10.28.2.10", "description": "Calc Engine 1"},
+        {"type": "ip", "value": "10.28.2.11", "description": "Calc Engine 2"},
+        {"type": "ip", "value": "10.28.2.12", "description": "Calc Engine 3"},
+     ]},
+    {"name": "lending.datastore", "app_id": "LND", "description": "Lending Database",
+     "members": [
+        {"type": "ip", "value": "10.28.3.10", "description": "LND DB Primary"},
+        {"type": "ip", "value": "10.28.3.11", "description": "LND DB Standby"},
+     ]},
+
+    # --- WLT legacy groups (mixed abbreviation) ---
+    {"name": "WM-Portal-Web", "app_id": "WLT", "description": "Wealth Mgmt Web Portal",
+     "members": [
+        {"type": "ip", "value": "10.26.1.10", "description": "WM Web 1"},
+        {"type": "ip", "value": "10.26.1.11", "description": "WM Web 2"},
+     ]},
+    {"name": "WM Portfolio Svc", "app_id": "WLT", "description": "Wealth Portfolio Service",
+     "members": [
+        {"type": "ip", "value": "10.26.2.10", "description": "Portfolio Svc A"},
+        {"type": "ip", "value": "10.26.2.11", "description": "Portfolio Svc B"},
+        {"type": "ip", "value": "10.26.2.12", "description": "Portfolio Svc C"},
+     ]},
+    {"name": "WM-DB", "app_id": "WLT", "description": "Wealth Management Database",
+     "members": [
+        {"type": "ip", "value": "10.26.3.10", "description": "WM DB Primary"},
+        {"type": "ip", "value": "10.26.3.11", "description": "WM DB Standby"},
+     ]},
+
+    # --- CBK legacy groups (ticket/project code style) ---
+    {"name": "CBK-ONLINE-WEB", "app_id": "CBK", "description": "Core Banking Online Web",
+     "members": [
+        {"type": "ip", "value": "10.25.1.10", "description": "CBK Web 1"},
+        {"type": "ip", "value": "10.25.1.11", "description": "CBK Web 2"},
+     ]},
+    {"name": "CBK Core Engine", "app_id": "CBK", "description": "Core Banking Engine Servers",
+     "members": [
+        {"type": "ip", "value": "10.25.2.10", "description": "Core Engine 1"},
+        {"type": "ip", "value": "10.25.2.11", "description": "Core Engine 2"},
+        {"type": "ip", "value": "10.25.2.12", "description": "Core Engine 3"},
+     ]},
+    {"name": "CBK_DB_CLUSTER", "app_id": "CBK", "description": "Core Banking Oracle RAC",
+     "members": [
+        {"type": "ip", "value": "10.25.3.10", "description": "Oracle RAC Node 1"},
+        {"type": "ip", "value": "10.25.3.11", "description": "Oracle RAC Node 2"},
+     ]},
+    {"name": "CBK MQ Fabric", "app_id": "CBK", "description": "Core Banking MQ Fabric",
+     "members": [
+        {"type": "ip", "value": "10.25.4.10", "description": "MQ Broker 1"},
+        {"type": "ip", "value": "10.25.4.11", "description": "MQ Broker 2"},
+     ]},
+    # Nested: CBK-ALL-BACKEND = CBK Core Engine + CBK_DB_CLUSTER + CBK MQ Fabric
+    {"name": "CBK-ALL-BACKEND", "app_id": "CBK", "description": "All Core Banking Backend Systems",
+     "members": [
+        {"type": "group", "value": "CBK Core Engine", "description": "Compute"},
+        {"type": "group", "value": "CBK_DB_CLUSTER", "description": "Data"},
+        {"type": "group", "value": "CBK MQ Fabric", "description": "Messaging"},
+     ]},
+
+    # --- Shared / Cross-app legacy groups ---
+    {"name": "DMZ API Gateway", "app_id": "SHARED", "description": "External DMZ API Endpoints",
+     "members": [
+        {"type": "ip", "value": "10.70.1.10", "description": "DMZ API Gateway 1"},
+        {"type": "ip", "value": "10.70.1.11", "description": "DMZ API Gateway 2"},
+     ]},
+    {"name": "Monitoring Agents", "app_id": "SHARED", "description": "Zabbix/SNMP Monitoring",
+     "members": [
+        {"type": "ip", "value": "10.80.1.100", "description": "Zabbix Agent 1"},
+        {"type": "ip", "value": "10.80.1.101", "description": "Zabbix Agent 2"},
+     ]},
+    # Nested: Infrastructure_ALL = DMZ API Gateway + Monitoring Agents
+    {"name": "Infrastructure_ALL", "app_id": "SHARED", "description": "All Shared Infrastructure",
+     "members": [
+        {"type": "group", "value": "DMZ API Gateway", "description": "DMZ Tier"},
+        {"type": "group", "value": "Monitoring Agents", "description": "Monitoring Tier"},
+     ]},
+]
+
+
+# ============================================================
+# Legacy Rules (using bare IPs — no svr-/rng- prefixes, for migration)
 # Each app has rules for Production, Non-Production, Pre-Production
+# Legacy rules reference varied non-standardised group names.
 # ============================================================
 
 SEED_LEGACY_RULES: list[dict[str, Any]] = []
 
 def _build_legacy_rules() -> list[dict[str, Any]]:
-    """Build comprehensive legacy rules for all apps across environments."""
+    """Build comprehensive legacy rules for all apps across environments.
+
+    Legacy rules use bare IP addresses (no svr-/rng- prefixes) and reference
+    varied non-standardised legacy group names in expanded views.
+    """
     rules: list[dict[str, Any]] = []
     seq = 1000
 
@@ -1577,21 +1838,44 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
     dc_ip = {"DC_LEGACY_A": "10.25", "DC_LEGACY_B": "10.26", "DC_LEGACY_C": "10.27",
              "DC_LEGACY_D": "10.28", "DC_LEGACY_E": "10.29", "DC_LEGACY_F": "10.30"}
 
+    # Varied legacy group names per app (non-standardised — each app uses different naming)
+    legacy_groups: dict[str, dict[str, str]] = {
+        "CRM": {"web": "CRM_WebFarm", "app": "CRM_AppCluster", "db": "CRM-DB-Servers",
+                 "batch": "CRM Batch Jobs", "all_src": "CRM_AllServers"},
+        "HRM": {"web": "hr-web-pool", "app": "hr-app-servers", "db": "hr-database",
+                 "batch": "hr-batch-node"},
+        "TRD": {"web": "tradingWebFrontend", "app": "tradingEnginePool", "db": "tradingDB",
+                 "mq": "tradingMQ", "all_dst": "tradingBackend"},
+        "PAY": {"web": "Payment Web Servers", "app": "Payment Processors",
+                 "db": "Payment DB Cluster", "mq": "Payment MQ Bus"},
+        "INS": {"web": "INS.WEB", "app": "INS.APP", "db": "INS.DATABASE"},
+        "KYC": {"web": "KYC_PORTAL_WEB", "app": "KYC_SCREENING_ENGINE", "db": "KYC_DATA_STORE"},
+        "FRD": {"web": "Fraud Detection Web", "app": "FRD ML Engine",
+                 "db": "FRD-Oracle-DB", "mq": "FRD Kafka Cluster"},
+        "LND": {"web": "lending.web", "app": "lending.engine", "db": "lending.datastore"},
+        "WLT": {"web": "WM-Portal-Web", "app": "WM Portfolio Svc", "db": "WM-DB"},
+        "CBK": {"web": "CBK-ONLINE-WEB", "app": "CBK Core Engine",
+                 "db": "CBK_DB_CLUSTER", "mq": "CBK MQ Fabric", "all_dst": "CBK-ALL-BACKEND"},
+    }
+
     for app_id, app_name, dist_id, legacy_dc, envs in app_configs:
         base = dc_ip[legacy_dc]
+        grp = legacy_groups[app_id]
         for env_name, (policy, inventory, src_zone, dst_zone) in envs.items():
-            # Rule 1: WEB -> APP (HTTPS)
+            # Rule 1: WEB -> APP (HTTPS)  — uses legacy group names in expanded
             seq += 1
+            web_grp = grp.get("web", f"{app_id}-Web")
+            app_grp = grp.get("app", f"{app_id}-App")
             rules.append({
                 "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": False, "rule_action": "Accept",
-                "rule_source": f"svr-{base}.1.10\nsvr-{base}.1.11",
-                "rule_source_expanded": f"svr-{base}.1.10\n  {base}.1.10 (Web Server 1)\nsvr-{base}.1.11\n  {base}.1.11 (Web Server 2)",
+                "rule_source": f"{web_grp}",
+                "rule_source_expanded": f"{web_grp}\n  {base}.1.10\n  {base}.1.11",
                 "rule_source_zone": src_zone,
-                "rule_destination": f"svr-{base}.2.10\nsvr-{base}.2.11\nsvr-{base}.2.12",
-                "rule_destination_expanded": f"svr-{base}.2.10\n  {base}.2.10 (App Server 1)\nsvr-{base}.2.11\n  {base}.2.11 (App Server 2)\nsvr-{base}.2.12\n  {base}.2.12 (App Server 3)",
+                "rule_destination": f"{app_grp}",
+                "rule_destination_expanded": f"{app_grp}\n  {base}.2.10\n  {base}.2.11\n  {base}.2.12",
                 "rule_destination_zone": dst_zone,
                 "rule_service": "tcp/443",
                 "rule_service_expanded": "tcp/443 (HTTPS)",
@@ -1600,35 +1884,37 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
             })
             # Rule 2: APP -> DB (Oracle/SQL)
             seq += 1
+            db_grp = grp.get("db", f"{app_id}-DB")
             rules.append({
                 "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": False, "rule_action": "Accept",
-                "rule_source": f"svr-{base}.2.10\nsvr-{base}.2.11\nsvr-{base}.2.12",
-                "rule_source_expanded": f"svr-{base}.2.10\n  {base}.2.10 (App 1)\nsvr-{base}.2.11\n  {base}.2.11 (App 2)\nsvr-{base}.2.12\n  {base}.2.12 (App 3)",
+                "rule_source": f"{app_grp}",
+                "rule_source_expanded": f"{app_grp}\n  {base}.2.10\n  {base}.2.11\n  {base}.2.12",
                 "rule_source_zone": src_zone,
-                "rule_destination": f"svr-{base}.3.10\nsvr-{base}.3.11",
-                "rule_destination_expanded": f"svr-{base}.3.10\n  {base}.3.10 (DB Primary)\nsvr-{base}.3.11\n  {base}.3.11 (DB Standby)",
+                "rule_destination": f"{db_grp}",
+                "rule_destination_expanded": f"{db_grp}\n  {base}.3.10\n  {base}.3.11",
                 "rule_destination_zone": dst_zone,
                 "rule_service": "tcp/1521\ntcp/1433",
                 "rule_service_expanded": "tcp/1521 (Oracle)\ntcp/1433 (SQL Server)",
                 "is_standard": True, "rn": 2, "rc": 1,
                 "migration_status": "Not Started",
             })
-            # Rule 3: APP -> MQ (if app has MQ)
-            if app_id in ("TRD", "PAY", "FRD", "CBK"):
+            # Rule 3: APP -> MQ (if app has MQ group)
+            if "mq" in grp:
                 seq += 1
+                mq_grp = grp["mq"]
                 rules.append({
                     "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
                     "app_name": app_name, "inventory_item": inventory,
                     "policy_name": policy, "environment": env_name,
                     "rule_global": False, "rule_action": "Accept",
-                    "rule_source": f"svr-{base}.2.10\nsvr-{base}.2.11",
-                    "rule_source_expanded": f"svr-{base}.2.10\n  App 1\nsvr-{base}.2.11\n  App 2",
+                    "rule_source": f"{app_grp}",
+                    "rule_source_expanded": f"{app_grp}\n  {base}.2.10\n  {base}.2.11",
                     "rule_source_zone": src_zone,
-                    "rule_destination": f"svr-{base}.4.10\nsvr-{base}.4.11",
-                    "rule_destination_expanded": f"svr-{base}.4.10\n  MQ Broker 1\nsvr-{base}.4.11\n  MQ Broker 2",
+                    "rule_destination": f"{mq_grp}",
+                    "rule_destination_expanded": f"{mq_grp}\n  {base}.4.10\n  {base}.4.11",
                     "rule_destination_zone": dst_zone,
                     "rule_service": "tcp/5672\ntcp/9092",
                     "rule_service_expanded": "tcp/5672 (AMQP)\ntcp/9092 (Kafka)",
@@ -1642,11 +1928,11 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": False, "rule_action": "Accept",
-                "rule_source": f"svr-{base}.2.10",
-                "rule_source_expanded": f"svr-{base}.2.10\n  App Server 1",
+                "rule_source": f"{base}.2.10",
+                "rule_source_expanded": f"{base}.2.10",
                 "rule_source_zone": src_zone,
-                "rule_destination": "svr-10.70.1.10\nsvr-10.70.1.11",
-                "rule_destination_expanded": "svr-10.70.1.10\n  DMZ API 1\nsvr-10.70.1.11\n  DMZ API 2",
+                "rule_destination": "DMZ API Gateway",
+                "rule_destination_expanded": "DMZ API Gateway\n  10.70.1.10\n  10.70.1.11",
                 "rule_destination_zone": "PSE",
                 "rule_service": "tcp/443\ntcp/8443",
                 "rule_service_expanded": "tcp/443 (HTTPS)\ntcp/8443 (Alt HTTPS)",
@@ -1654,42 +1940,64 @@ def _build_legacy_rules() -> list[dict[str, Any]]:
                 "migration_status": "Not Started",
             })
             # Rule 5: Batch -> DB
-            if app_id in ("CRM", "HRM", "TRD", "INS", "LND", "CBK"):
+            if "batch" in grp:
                 seq += 1
+                bat_grp = grp["batch"]
                 rules.append({
                     "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
                     "app_name": app_name, "inventory_item": inventory,
                     "policy_name": policy, "environment": env_name,
                     "rule_global": False, "rule_action": "Accept",
-                    "rule_source": f"svr-{base}.5.10",
-                    "rule_source_expanded": f"svr-{base}.5.10\n  Batch Server 1",
+                    "rule_source": f"{bat_grp}",
+                    "rule_source_expanded": f"{bat_grp}\n  {base}.5.10",
                     "rule_source_zone": src_zone,
-                    "rule_destination": f"svr-{base}.3.10",
-                    "rule_destination_expanded": f"svr-{base}.3.10\n  DB Primary",
+                    "rule_destination": f"{db_grp}",
+                    "rule_destination_expanded": f"{db_grp}\n  {base}.3.10",
                     "rule_destination_zone": dst_zone,
                     "rule_service": "tcp/1521",
                     "rule_service_expanded": "tcp/1521 (Oracle)",
                     "is_standard": True, "rn": 5, "rc": 1,
                     "migration_status": "Not Started",
                 })
-            # Rule 6: Monitoring / Management access (range)
+            # Rule 6: Monitoring / Management access (range + IP)
             seq += 1
             rules.append({
                 "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
                 "app_name": app_name, "inventory_item": inventory,
                 "policy_name": policy, "environment": env_name,
                 "rule_global": True, "rule_action": "Accept",
-                "rule_source": "svr-10.80.1.100\nsvr-10.80.1.101",
-                "rule_source_expanded": "svr-10.80.1.100\n  Monitor Agent 1\nsvr-10.80.1.101\n  Monitor Agent 2",
+                "rule_source": "Monitoring Agents",
+                "rule_source_expanded": "Monitoring Agents\n  10.80.1.100\n  10.80.1.101",
                 "rule_source_zone": "UC",
-                "rule_destination": f"rng-{base}.1.10-12\nsvr-{base}.3.10",
-                "rule_destination_expanded": f"rng-{base}.1.10-12\n  Web/App range\nsvr-{base}.3.10\n  DB Primary",
+                "rule_destination": f"{base}.1.0/28\n{base}.3.10",
+                "rule_destination_expanded": f"{base}.1.0/28 (Web/App subnet)\n{base}.3.10 (DB Primary)",
                 "rule_destination_zone": dst_zone,
                 "rule_service": "tcp/161\ntcp/22\ntcp/10050",
                 "rule_service_expanded": "tcp/161 (SNMP)\ntcp/22 (SSH)\ntcp/10050 (Zabbix)",
                 "is_standard": True, "rn": 6, "rc": 1,
                 "migration_status": "Not Started",
             })
+            # Rule 7: Nested group rule — only for apps with nested groups
+            if "all_src" in grp or "all_dst" in grp:
+                seq += 1
+                nested_src = grp.get("all_src", web_grp)
+                nested_dst = grp.get("all_dst", db_grp)
+                rules.append({
+                    "id": f"LR-{seq}", "app_id": app_id, "app_distributed_id": dist_id,
+                    "app_name": app_name, "inventory_item": inventory,
+                    "policy_name": policy, "environment": env_name,
+                    "rule_global": False, "rule_action": "Accept",
+                    "rule_source": f"{nested_src}",
+                    "rule_source_expanded": f"{nested_src}\n  {web_grp}\n    {base}.1.10\n    {base}.1.11\n  {app_grp}\n    {base}.2.10\n    {base}.2.11\n    {base}.2.12" if "all_src" in grp else f"{nested_src}\n  {base}.1.10\n  {base}.1.11",
+                    "rule_source_zone": src_zone,
+                    "rule_destination": f"{nested_dst}",
+                    "rule_destination_expanded": f"{nested_dst}\n  {app_grp}\n    {base}.2.10\n    {base}.2.11\n    {base}.2.12\n  {db_grp}\n    {base}.3.10\n    {base}.3.11\n  {grp.get('mq', 'MQ')}\n    {base}.4.10\n    {base}.4.11" if "all_dst" in grp else f"{nested_dst}\n  {base}.3.10\n  {base}.3.11",
+                    "rule_destination_zone": dst_zone,
+                    "rule_service": "tcp/443\ntcp/1521\ntcp/5672",
+                    "rule_service_expanded": "tcp/443 (HTTPS)\ntcp/1521 (Oracle)\ntcp/5672 (AMQP)",
+                    "is_standard": True, "rn": 7, "rc": 1,
+                    "migration_status": "Not Started",
+                })
 
     return rules
 

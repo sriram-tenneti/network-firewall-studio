@@ -383,6 +383,12 @@ export const deleteLegacyRule = (ruleId: string) =>
 export const clearAllLegacyRules = () =>
   fetchJSON<{ message: string; deleted: number }>('/api/reference/legacy-rules/clear-all', { method: 'DELETE' });
 
+export const bulkUpdateLegacyRuleAppId = (ruleIds: string[], appDistributedId: string, appName?: string) =>
+  fetchJSON<{ updated: number; app_distributed_id: string }>('/api/reference/legacy-rules/bulk-update-app-id', {
+    method: 'POST',
+    body: JSON.stringify({ rule_ids: ruleIds, app_distributed_id: appDistributedId, app_name: appName || '' }),
+  });
+
 // JSON import for legacy rules
 export const importLegacyRulesJSON = async (file: File): Promise<{ added: number; duplicates: number; total: number }> => {
   const formData = new FormData();
