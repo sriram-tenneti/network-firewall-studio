@@ -68,14 +68,53 @@ const COMMON_PORTS = [
 export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRuleBuilderProps) {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [draftCreatedMsg, setDraftCreatedMsg] = useState('');
   const [form, setForm] = useState({
     application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+    src_component: '', dst_component: '',
     src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
     dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
     port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
   });
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [validatingBR, setValidatingBR] = useState(false);
+
+  // App DC Mappings for component-based NH/SZ filtering
+  const [appDcMappings, setAppDcMappings] = useState<Record<string, unknown>[]>([]);
+
+  // Load app DC mappings on mount
+  useEffect(() => {
+    api.getAppDCMappings()
+      .then(m => setAppDcMappings(m))
+      .catch(() => setAppDcMappings([]));
+  }, []);
+
+  // Derive available components for source app from app_dc_mappings
+  const srcComponents = useMemo(() => {
+    if (!form.application) return [] as string[];
+    const comps = new Set<string>();
+    for (const m of appDcMappings) {
+      const mid = (m as Record<string, string>).app_distributed_id || (m as Record<string, string>).app_id;
+      if (mid === form.application && (m as Record<string, string>).component) {
+        comps.add((m as Record<string, string>).component);
+      }
+    }
+    return Array.from(comps).sort();
+  }, [form.application, appDcMappings]);
+
+  // Derive available components for destination app
+  const dstComponents = useMemo(() => {
+    const dstApp = form.dst_application || form.application;
+    if (!dstApp) return [] as string[];
+    const comps = new Set<string>();
+    for (const m of appDcMappings) {
+      const mid = (m as Record<string, string>).app_distributed_id || (m as Record<string, string>).app_id;
+      if (mid === dstApp && (m as Record<string, string>).component) {
+        comps.add((m as Record<string, string>).component);
+      }
+    }
+    return Array.from(comps).sort();
+  }, [form.dst_application, form.application, appDcMappings]);
 
   // Source NH/SZ/DC from source app
   const [srcNHs, setSrcNHs] = useState<NeighbourhoodRegistry[]>([]);
@@ -156,22 +195,80 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.environment, form.dst_application, form.application, loadDstData]);
 
-  const srcNeighbourhoods = useMemo(() =>
-    srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS,
-    [srcNHs]
-  );
-  const srcZones = useMemo(() =>
-    srcSZs.length > 0 ? srcSZs.map(sz => ({ code: sz.code, name: sz.name })) : [],
-    [srcSZs]
-  );
-  const dstNeighbourhoods = useMemo(() =>
-    dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS,
-    [dstNHs]
-  );
-  const dstZones = useMemo(() =>
-    dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [],
-    [dstSZs]
-  );
+  // Filter NHs/SZs based on selected component from app_dc_mappings
+  const srcNeighbourhoods = useMemo(() => {
+    if (form.src_component && form.application) {
+      const nhSet = new Set<string>();
+      for (const m of appDcMappings) {
+        const mr = m as Record<string, string>;
+        const mid = mr.app_distributed_id || mr.app_id;
+        if (mid === form.application && mr.component === form.src_component && mr.nh) {
+          nhSet.add(mr.nh);
+        }
+      }
+      if (nhSet.size > 0) {
+        const filtered = srcNHs.filter(nh => nhSet.has(nh.nh_id));
+        if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
+      }
+    }
+    return srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
+  }, [srcNHs, form.src_component, form.application, appDcMappings]);
+
+  const srcZones = useMemo(() => {
+    if (form.src_component && form.application) {
+      const szSet = new Set<string>();
+      for (const m of appDcMappings) {
+        const mr = m as Record<string, string>;
+        const mid = mr.app_distributed_id || mr.app_id;
+        if (mid === form.application && mr.component === form.src_component && mr.sz) {
+          szSet.add(mr.sz);
+        }
+      }
+      if (szSet.size > 0) {
+        const filtered = srcSZs.filter(sz => szSet.has(sz.code));
+        if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
+      }
+    }
+    return srcSZs.length > 0 ? srcSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
+  }, [srcSZs, form.src_component, form.application, appDcMappings]);
+
+  const dstNeighbourhoods = useMemo(() => {
+    const dstApp = form.dst_application || form.application;
+    if (form.dst_component && dstApp) {
+      const nhSet = new Set<string>();
+      for (const m of appDcMappings) {
+        const mr = m as Record<string, string>;
+        const mid = mr.app_distributed_id || mr.app_id;
+        if (mid === dstApp && mr.component === form.dst_component && mr.nh) {
+          nhSet.add(mr.nh);
+        }
+      }
+      if (nhSet.size > 0) {
+        const filtered = dstNHs.filter(nh => nhSet.has(nh.nh_id));
+        if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
+      }
+    }
+    return dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
+  }, [dstNHs, form.dst_component, form.dst_application, form.application, appDcMappings]);
+
+  const dstZones = useMemo(() => {
+    const dstApp = form.dst_application || form.application;
+    if (form.dst_component && dstApp) {
+      const szSet = new Set<string>();
+      for (const m of appDcMappings) {
+        const mr = m as Record<string, string>;
+        const mid = mr.app_distributed_id || mr.app_id;
+        if (mid === dstApp && mr.component === form.dst_component && mr.sz) {
+          szSet.add(mr.sz);
+        }
+      }
+      if (szSet.size > 0) {
+        const filtered = dstSZs.filter(sz => szSet.has(sz.code));
+        if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
+      }
+    }
+    return dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
+  }, [dstSZs, form.dst_component, form.dst_application, form.application, appDcMappings]);
 
   const datacenters = useMemo(() => {
     const all = [...srcDCs, ...dstDCs];
@@ -255,6 +352,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
+    setDraftCreatedMsg('');
     try {
       const finalSrc = form.src_custom ? autoPrefix(form.src_custom.trim(), 'group') : srcName;
       const finalDst = form.dst_custom ? autoPrefix(form.dst_custom.trim(), 'group') : dstName;
@@ -268,8 +366,10 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
         dst_application: form.dst_application || undefined,
       });
       onRuleCreated();
+      setDraftCreatedMsg(`Rule created successfully! Status: DRAFT. The rule must be submitted for review before it becomes active.`);
       setStep(1);
       setForm({ application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+        src_component: '', dst_component: '',
         src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
         dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
         port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '' });
@@ -309,29 +409,60 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
       </div>
 
       <div className="p-6">
+        {/* Draft created banner */}
+        {draftCreatedMsg && (
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-3">
+            <span className="text-amber-600 text-lg font-bold">!</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">{draftCreatedMsg}</p>
+              <p className="text-xs text-amber-600 mt-1">Go to the Rules list to view, edit, or submit draft rules.</p>
+            </div>
+            <button onClick={() => setDraftCreatedMsg('')} className="ml-auto text-amber-500 hover:text-amber-700 text-sm font-bold">&times;</button>
+          </div>
+        )}
+
         {/* Step 1: Application & Environment */}
         {step === 1 && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-5">
               <div>
                 <label className={lbl}>Source Application</label>
-                <select className={sel} value={form.application} onChange={e => { upd('application', e.target.value); upd('src_nh', ''); upd('src_sz', ''); }}>
+                <select className={sel} value={form.application} onChange={e => { upd('application', e.target.value); upd('src_component', ''); upd('src_nh', ''); upd('src_sz', ''); }}>
                   <option value="">Select Source Application...</option>
                   {applications.map(app => (
                     <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">Populates source NH and SZ dropdowns</p>
+                <p className="text-[10px] text-gray-400 mt-1">Populates source component, NH and SZ dropdowns</p>
               </div>
               <div>
                 <label className={lbl}>Destination Application</label>
-                <select className={sel} value={form.dst_application} onChange={e => { upd('dst_application', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); }}>
+                <select className={sel} value={form.dst_application} onChange={e => { upd('dst_application', e.target.value); upd('dst_component', ''); upd('dst_nh', ''); upd('dst_sz', ''); }}>
                   <option value="">Same as Source / All</option>
                   {applications.map(app => (
                     <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">Populates destination NH and SZ dropdowns</p>
+                <p className="text-[10px] text-gray-400 mt-1">Populates destination component, NH and SZ dropdowns</p>
+              </div>
+            </div>
+            {/* Component selection - filters NHs and SZs */}
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className={lbl}>Source Component</label>
+                <select className={sel} value={form.src_component} onChange={e => { upd('src_component', e.target.value); upd('src_nh', ''); upd('src_sz', ''); }}>
+                  <option value="">All Components</option>
+                  {srcComponents.map(c => (<option key={c} value={c}>{c}</option>))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Filters source NHs and SZs per App Management mapping</p>
+              </div>
+              <div>
+                <label className={lbl}>Destination Component</label>
+                <select className={sel} value={form.dst_component} onChange={e => { upd('dst_component', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); }}>
+                  <option value="">All Components</option>
+                  {dstComponents.map(c => (<option key={c} value={c}>{c}</option>))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Filters destination NHs and SZs per App Management mapping</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-5">
@@ -356,8 +487,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <span className="text-sm text-blue-800 font-medium">
                   Building rule: <strong>{form.application}</strong>
+                  {form.src_component && <> ({form.src_component})</>}
                   {form.dst_application && form.dst_application !== form.application && (
-                    <> &rarr; <strong>{form.dst_application}</strong></>
+                    <> &rarr; <strong>{form.dst_application}</strong>{form.dst_component && <> ({form.dst_component})</>}</>
                   )}
                   {' '}in <strong>{form.environment}</strong> at <strong>{datacenters.find(d => d.code === form.datacenter)?.name}</strong>
                 </span>

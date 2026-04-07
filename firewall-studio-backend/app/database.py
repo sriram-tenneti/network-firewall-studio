@@ -793,20 +793,30 @@ async def bulk_update_legacy_rule_app_id(
 ) -> int:
     """Bulk-update app_distributed_id (and optionally app_name) for a list of legacy rules.
 
-    If app_name is not provided, tries to auto-populate from existing rules
-    that already have the given app_distributed_id.
+    If app_name is not provided, tries to auto-populate from the applications
+    table first, then from existing rules that already have the given
+    app_distributed_id.
     Returns the number of rules updated.
     """
     rules = _load("legacy_rules") or []
-    # Auto-lookup app_name from existing rules if not provided
+    # Auto-lookup app_name from applications table first
+    if not app_name:
+        apps = _load("applications") or []
+        for a in apps:
+            if a.get("app_distributed_id") == app_distributed_id:
+                app_name = a.get("name") or a.get("app_name")
+                break
+    # Fallback: lookup from existing rules
     if not app_name:
         for r in rules:
             if r.get("app_distributed_id") == app_distributed_id and r.get("app_name"):
                 app_name = r["app_name"]
                 break
+    # Use a set for O(1) lookup instead of list scan
+    rule_id_set = set(rule_ids)
     updated = 0
     for r in rules:
-        if r["id"] in rule_ids:
+        if r.get("id") in rule_id_set:
             r["app_distributed_id"] = app_distributed_id
             if app_name:
                 r["app_name"] = app_name

@@ -218,11 +218,24 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
   const handleAddGroupMember = (entryId: string) => {
     if (!newMemberValue.trim()) return;
     const memberPrefixed = autoPrefix(newMemberValue.trim(), newMemberType as 'ip' | 'subnet' | 'cidr' | 'group' | 'range');
-    onChange(entries.map(e => {
-      if (e.id !== entryId) return e;
-      const members = [...(e.groupMembers || []), { type: newMemberType, value: memberPrefixed }];
-      return { ...e, groupMembers: members, isModified: true };
-    }));
+    if (newMemberType === 'group') {
+      // When adding a group as member, check if it exists in appGroups
+      const matched = appGroups.find(g => g.name === memberPrefixed || g.name === newMemberValue.trim());
+      const children = matched
+        ? matched.members.map(m => ({ type: m.type, value: m.value }))
+        : []; // Empty children — user will add via sub-group UI
+      onChange(entries.map(e => {
+        if (e.id !== entryId) return e;
+        const members = [...(e.groupMembers || []), { type: 'group', value: matched?.name || memberPrefixed, children }];
+        return { ...e, groupMembers: members, isModified: true };
+      }));
+    } else {
+      onChange(entries.map(e => {
+        if (e.id !== entryId) return e;
+        const members = [...(e.groupMembers || []), { type: newMemberType, value: memberPrefixed }];
+        return { ...e, groupMembers: members, isModified: true };
+      }));
+    }
     setNewMemberValue('');
   };
 
@@ -392,6 +405,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                                 <option value="ip">IP (svr-)</option>
                                 <option value="subnet">Subnet (net-)</option>
                                 <option value="range">Range (rng-)</option>
+                                <option value="group">Group (grp-)</option>
                               </select>
                               <input type="text" value={subMemberValue} onChange={e => setSubMemberValue(e.target.value)} placeholder="10.0.1.5" className="flex-1 px-1.5 py-0.5 text-[10px] font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddSubGroupMember(entry.id, mi); }} />
                               <button onClick={() => handleAddSubGroupMember(entry.id, mi)} disabled={!subMemberValue.trim()} className="px-1.5 py-0.5 text-[10px] font-medium text-white bg-teal-600 rounded hover:bg-teal-700 disabled:bg-gray-300">Add</button>
@@ -413,15 +427,16 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                         <option value="ip">IP (svr-)</option>
                         <option value="subnet">Subnet (net-)</option>
                         <option value="range">Range (rng-)</option>
+                        <option value="group">Group (grp-)</option>
                       </select>
-                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
+                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'subnet' ? '10.0.1.0/24' : newMemberType === 'range' ? '10.0.1.1-10.0.1.50' : 'grp-APP-NH-SZ-comp'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
                       <button onClick={() => handleAddGroupMember(entry.id)} disabled={!newMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
                       <button onClick={() => setAddingMemberToGroup(null)} className="text-xs text-gray-500 hover:text-gray-700">Done</button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3 mt-1">
                       <button onClick={() => { setAddingMemberToGroup(entry.id); setNewMemberType('ip'); setNewMemberValue(''); }} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1">
-                        <span>+</span> Add IP / Subnet / Range
+                        <span>+</span> Add Member (IP / Subnet / Range / Group)
                       </button>
                       {addingChildGroupTo === entry.id ? (
                         <div className="flex gap-1.5 items-center bg-white border border-emerald-200 rounded p-1.5">
@@ -486,6 +501,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                   <option value="ip">IP (svr-)</option>
                   <option value="subnet">Subnet (net-)</option>
                   <option value="range">Range (rng-)</option>
+                  <option value="group">Group (grp-)</option>
                 </select>
                 <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)} placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
                 <button onClick={handleWizAddMember} disabled={!wizMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
