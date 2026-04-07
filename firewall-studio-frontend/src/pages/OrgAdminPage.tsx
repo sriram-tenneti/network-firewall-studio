@@ -10,7 +10,7 @@ import {
   createLegacyDatacenter, updateLegacyDatacenter, deleteLegacyDatacenter,
   createPredefinedDestination, updatePredefinedDestination, deletePredefinedDestination,
   createEnvironment, deleteEnvironment,
-  updateOrgConfig, createPolicyEntry, deletePolicyEntry,
+  updateOrgConfig,
   submitPolicyChange, getPolicyChanges,
 } from '@/lib/api';
 import { Building2, Shield, Server, MapPin, Globe, Settings, Network, Plus, Trash2, Edit2, Save, X, ChevronRight, Clock, CheckCircle, XCircle, SendHorizonal } from 'lucide-react';
