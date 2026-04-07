@@ -851,17 +851,6 @@ export default function FirewallManagementPage() {
   };
 
   const columns: Column<LegacyRule>[] = [
-    { key: 'id' as keyof LegacyRule, header: () => (
-        <input type="checkbox" checked={selectedRuleIds.size === filteredRules.length && filteredRules.length > 0}
-          onChange={toggleSelectAll} className="rounded border-gray-300 text-indigo-600" title="Select all" />
-      ), sortable: false, width: '36px',
-      render: (_, row) => (
-        <div onClick={e => e.stopPropagation()}>
-          <input type="checkbox" checked={selectedRuleIds.has(row.id)}
-            onChange={() => toggleSelectRule(row.id)} className="rounded border-gray-300 text-indigo-600" />
-        </div>
-      ),
-    },
     { key: 'id', header: 'Rule ID', sortable: true, width: '80px' },
     { key: 'app_id', header: 'App ID', sortable: true, width: '70px',
       render: (_, row) => <span className="text-xs">{String(row.app_id)}</span>,
@@ -1121,6 +1110,9 @@ export default function FirewallManagementPage() {
             emptyMessage="No rules found. Import rules via Data Import page."
             searchPlaceholder="Search by IP, group, app, rule ID, zone, service..."
             searchFields={['id', 'app_id', 'app_distributed_id', 'app_name', 'rule_source', 'rule_source_expanded', 'rule_destination', 'rule_destination_expanded', 'rule_source_zone', 'rule_destination_zone', 'rule_service', 'inventory_item']}
+            selectedIds={selectedRuleIds}
+            onSelect={toggleSelectRule}
+            onSelectAll={toggleSelectAll}
             onRowClick={(row) => detailModal.open(row)}
           />
         )}
