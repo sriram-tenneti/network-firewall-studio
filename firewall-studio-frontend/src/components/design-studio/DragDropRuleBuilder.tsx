@@ -1094,12 +1094,62 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   );
 
   /* eslint-disable @typescript-eslint/no-unused-vars */
-  /* ---------- Group auto-creation modal (Issue 5) ---------- */
+  /* ---------- Group auto-creation modal (Issue 5) + Policy Change Review ---------- */
+  const [groupPolicySubmitted, setGroupPolicySubmitted] = useState(false);
+  const [groupPolicyResult, setGroupPolicyResult] = useState<string | null>(null);
+  const [groupCompileVendor, setGroupCompileVendor] = useState('palo_alto');
+  const [groupCompiledPolicy, setGroupCompiledPolicy] = useState<string | null>(null);
+
+  // Generate device-specific compile output for a newly created group
+  const generateGroupCompile = (groupName: string, members: string[], vendor: string): string => {
+    const ts = new Date().toISOString();
+    switch (vendor) {
+      case 'palo_alto': {
+        let p = `# Palo Alto PAN-OS Address Group Configuration\n# Group: ${groupName}\n# Generated: ${ts}\n\n`;
+        for (const m of members) {
+          const objName = m.replace(/[./]/g, '_');
+          p += m.includes('/') ? `set address ${objName} ip-netmask ${m}\n` : `set address ${objName} ip-netmask ${m}/32\n`;
+        }
+        p += `\nset address-group ${groupName} static [ ${members.map(m => m.replace(/[./]/g, '_')).join(' ')} ]\nset address-group ${groupName} description "Auto-created for ${form.application}"\n`;
+        return p;
+      }
+      case 'checkpoint': {
+        let p = `# Check Point SmartConsole CLI\n# Group: ${groupName}\n# Generated: ${ts}\n\n`;
+        for (const m of members) {
+          const objName = m.replace(/[./]/g, '_');
+          p += m.includes('/') ? `add network name ${objName} subnet ${m.split('/')[0]} mask-length ${m.split('/')[1]}\n` : `add host name ${objName} ip-address ${m}\n`;
+        }
+        p += `\nadd group name ${groupName}\n`;
+        for (const m of members) p += `set group name ${groupName} members.add ${m.replace(/[./]/g, '_')}\n`;
+        return p;
+      }
+      case 'fortigate': {
+        let p = `# FortiGate CLI\n# Group: ${groupName}\n# Generated: ${ts}\n\nconfig firewall address\n`;
+        for (const m of members) {
+          const objName = m.replace(/[./]/g, '_');
+          p += `  edit "${objName}"\n    set type ${m.includes('/') ? 'ipmask' : 'ipmask'}\n    set subnet ${m.includes('/') ? m : m + '/32'}\n  next\n`;
+        }
+        p += `end\n\nconfig firewall addrgrp\n  edit "${groupName}"\n    set member ${members.map(m => `"${m.replace(/[./]/g, '_')}"`).join(' ')}\n    set comment "Auto-created for ${form.application}"\n  next\nend\n`;
+        return p;
+      }
+      default: {
+        let p = `# Generic Group Policy\n# Group: ${groupName}\n# Generated: ${ts}\n\nGROUP_NAME=${groupName}\nGROUP_TYPE=address-group\n\n`;
+        for (const m of members) p += `MEMBER type=${m.includes('/') ? 'subnet' : 'ip'} value=${m}\n`;
+        return p;
+      }
+    }
+  };
+
   const groupModal = showCreateGroupModal && (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <h3 className="text-lg font-bold text-gray-800">Create Group in App Groups</h3>
         <p className="text-sm text-gray-600">The group <code className="font-mono text-blue-700 bg-blue-50 px-1 rounded">{newGroupName}</code> does not exist. Create it now to continue.</p>
+        {/* Policy Change Notice */}
+        <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-xs font-semibold text-amber-800">Policy Change Review Required</p>
+          <p className="text-[10px] text-amber-600 mt-0.5">Creating this group will automatically submit a policy change for review &amp; approval. The compiled device policy will be generated for the selected vendor.</p>
+        </div>
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Group Name</label>
           <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50" value={newGroupName} readOnly />
@@ -1108,28 +1158,77 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Members (comma-separated IPs / CIDRs)</label>
           <textarea className="w-full px-3 py-2 border rounded-lg text-sm" rows={3} placeholder="e.g. 10.0.1.0/24, 10.0.2.5" value={newGroupMembers} onChange={e => setNewGroupMembers(e.target.value)} />
         </div>
+        {/* Compile device type selector */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Compile Preview (Device Type)</label>
+          <select className="w-full px-3 py-2 border rounded-lg text-sm" value={groupCompileVendor} onChange={e => { setGroupCompileVendor(e.target.value); setGroupCompiledPolicy(null); }}>
+            <option value="palo_alto">Palo Alto PAN-OS</option>
+            <option value="checkpoint">Check Point SmartConsole</option>
+            <option value="fortigate">FortiGate CLI</option>
+            <option value="generic">Generic</option>
+          </select>
+        </div>
+        {/* Preview compile output */}
+        {newGroupMembers.trim() && (
+          <div>
+            <button onClick={() => {
+              const members = newGroupMembers.split(',').map(m => m.trim()).filter(Boolean);
+              setGroupCompiledPolicy(generateGroupCompile(newGroupName, members, groupCompileVendor));
+            }} className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 mb-2">
+              Preview Compiled Policy
+            </button>
+            {groupCompiledPolicy && (
+              <pre className="bg-gray-900 text-green-400 text-[10px] font-mono p-3 rounded-lg overflow-x-auto max-h-[150px] overflow-y-auto whitespace-pre leading-relaxed">
+                {groupCompiledPolicy}
+              </pre>
+            )}
+          </div>
+        )}
+        {/* Policy submission result */}
+        {groupPolicyResult && (
+          <div className={`p-2 rounded text-xs font-medium ${groupPolicyResult.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+            {groupPolicyResult}
+          </div>
+        )}
         <div className="flex justify-end gap-3">
-          <button onClick={() => setShowCreateGroupModal(false)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button onClick={() => { setShowCreateGroupModal(false); setGroupCompiledPolicy(null); setGroupPolicyResult(null); setGroupPolicySubmitted(false); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
           <button disabled={creatingGroup} onClick={async () => {
             setCreatingGroup(true);
             try {
               const members = newGroupMembers.split(',').map(m => m.trim()).filter(Boolean);
-              await api.createAppGroup({
+              // Create the group via API
+              await api.createGroup({
                 name: newGroupName,
-                type: newGroupName.startsWith('grp-') ? 'group' : 'group',
                 app_id: form.application,
-                members: members,
+                nh: form.src_nh,
+                sz: form.src_sz,
+                subtype: form.src_component || form.src_subtype || '',
                 description: `Auto-created for ${form.application} in ${form.src_nh}/${form.src_sz}`,
+                members: members.map(m => ({ type: m.includes('/') ? 'subnet' : 'ip', value: m, description: '' })),
               });
+              // Submit policy change for review & approval
+              try {
+                const policyResult = await api.submitGroupPolicyChanges(
+                  newGroupName,
+                  'group_created',
+                  `Group ${newGroupName} created with ${members.length} member(s) for ${form.application}. Compiled for ${groupCompileVendor}.`,
+                  { added: { [`group:${newGroupName}`]: members }, removed: {}, changed: {},
+                    compile_vendor: groupCompileVendor,
+                    compiled_policy: generateGroupCompile(newGroupName, members, groupCompileVendor) }
+                );
+                setGroupPolicySubmitted(true);
+                setGroupPolicyResult(`Policy change submitted — ${policyResult.affected_rules} affected rule(s) sent for review`);
+              } catch {
+                setGroupPolicyResult('Group created but policy change submission failed — submit manually from Review page');
+              }
               upd('src_custom', newGroupName);
-              setShowCreateGroupModal(false);
-              // Refresh groups
-              try { const gs = await api.getAppGroups(); if (Array.isArray(gs)) { /* parent will refresh */ } } catch { /* ignore */ }
               onRuleCreated(); // trigger refresh
-            } catch { /* error handled */ }
+            } catch {
+              setGroupPolicyResult('Failed to create group — check for duplicates');
+            }
             setCreatingGroup(false);
           }} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-            {creatingGroup ? 'Creating...' : 'Create Group'}
+            {creatingGroup ? 'Creating & Submitting...' : 'Create Group & Submit for Review'}
           </button>
         </div>
       </div>

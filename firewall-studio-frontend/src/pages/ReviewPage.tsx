@@ -184,6 +184,8 @@ export default function ReviewPage(props: { context?: string }) {
           row.request_type === 'modify_rule' ? 'bg-amber-50 text-amber-700' :
           row.request_type === 'delete_rule' ? 'bg-red-50 text-red-700' :
           row.request_type === 'group_policy_change' ? 'bg-purple-50 text-purple-700' :
+          row.request_type === 'group_created' ? 'bg-violet-50 text-violet-700' :
+          row.request_type === 'group_member_change' ? 'bg-fuchsia-50 text-fuchsia-700' :
           row.request_type === 'policy_add' ? 'bg-teal-50 text-teal-700' :
           row.request_type === 'policy_modify' ? 'bg-indigo-50 text-indigo-700' :
           row.request_type === 'policy_delete' ? 'bg-rose-50 text-rose-700' :
