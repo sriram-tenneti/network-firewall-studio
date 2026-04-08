@@ -102,15 +102,19 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     const src = editRule.source;
     const dst = editRule.destination;
     const srcGroup = (src?.group_name || src?.ip_address || src?.cidr || '') as string;
-    const dstGroup = (dst?.name || dst?.dest_ip || '') as string;
+    // Destination group: could be stored as object {name, dest_ip, ...} or as plain string
+    const dstGroup = typeof dst === 'string' ? dst : (dst?.name || dst?.dest_ip || '') as string;
     const srcSz = (src?.security_zone || '') as string;
-    const dstSz = (dst?.security_zone || '') as string;
     const srcNh = (src?.neighbourhood || '') as string;
-    const ports = (src?.ports || dst?.ports || '') as string;
-    // Try to find dst_application from the rule (stored as extra field)
+    const ports = (src?.ports || (typeof dst === 'object' ? dst?.ports : '') || '') as string;
+    // Access rule-level fields that were persisted during creation/update
     const ruleAny = editRule as unknown as Record<string, string>;
     const dstApp = ruleAny.dst_application || '';
     const dstNh = ruleAny.destination_nh || '';
+    // Destination SZ: try rule-level destination_zone first, then from dst object
+    const dstSz = ruleAny.destination_zone || (typeof dst === 'object' ? (dst?.security_zone || '') as string : '') as string;
+    // Source NH: also check rule-level source_nh
+    const resolvedSrcNh = srcNh || ruleAny.source_nh || '';
     // Extract component from stored field or from group name
     const srcComp = ruleAny.src_component || extractComponentFromGroup(srcGroup);
     const dstComp = ruleAny.dst_component || extractComponentFromGroup(dstGroup);
@@ -120,9 +124,10 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
       environment: editRule.environment || 'Production',
       datacenter: editRule.datacenter || 'ALPHA_NGDC',
       src_component: srcComp, dst_component: dstComp,
-      src_nh: srcNh, src_sz: srcSz, src_subtype: srcComp || 'APP', src_custom: srcGroup,
+      src_nh: resolvedSrcNh, src_sz: srcSz, src_subtype: srcComp || 'APP', src_custom: srcGroup,
       dst_nh: dstNh, dst_sz: dstSz, dst_subtype: dstComp || 'APP', dst_custom: dstGroup,
-      port: ports || '443', customPort: '', protocol: 'TCP', action: 'Allow',
+      port: ports || '443', customPort: '', protocol: 'TCP',
+      action: ruleAny.action || 'Allow',
       description: editRule.description || '',
     });
   }, [editRule]);
