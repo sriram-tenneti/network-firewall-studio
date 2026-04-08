@@ -74,12 +74,19 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   const [draftCreatedMsg, setDraftCreatedMsg] = useState('');
 
   const buildDefaultForm = () => ({
-    application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+    application: '', dst_application: '', environment: 'Production', datacenter: '',
     src_component: '', dst_component: '',
+    src_dc: '', dst_dc: '',
     src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
     dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
     port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
   });
+
+  // State for group auto-creation modal (source only)
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
 
   const [form, setForm] = useState(buildDefaultForm);
 
@@ -122,7 +129,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
       application: editRule.application || '',
       dst_application: dstApp,
       environment: editRule.environment || 'Production',
-      datacenter: editRule.datacenter || 'ALPHA_NGDC',
+      datacenter: editRule.datacenter || '',
+      src_dc: (ruleAny.src_dc || editRule.datacenter || ''),
+      dst_dc: (ruleAny.dst_dc || editRule.datacenter || ''),
       src_component: srcComp, dst_component: dstComp,
       src_nh: resolvedSrcNh, src_sz: srcSz, src_subtype: srcComp || 'APP', src_custom: srcGroup,
       dst_nh: dstNh, dst_sz: dstSz, dst_subtype: dstComp || 'APP', dst_custom: dstGroup,
@@ -277,6 +286,49 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     return szSet;
   }, [appDcMappings]);
 
+  // Collect DCs from app_dc_mappings for a given app (and optionally component)
+  const collectMappingDCs = useCallback((appId: string, component?: string) => {
+    const dcSet = new Set<string>();
+    for (const m of appDcMappings) {
+      const mr = m as Record<string, string>;
+      const mid = mr.app_distributed_id || mr.app_id;
+      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+          (!component || mr.component === component)) {
+        if (mr.dc) dcSet.add(mr.dc);
+        if (mr.legacy_dc) dcSet.add(mr.legacy_dc);
+      }
+    }
+    return dcSet;
+  }, [appDcMappings]);
+
+  // Derive DCs from mappings for source app+component
+  const srcMappingDCs = useMemo(() => {
+    if (!form.application) return [] as { code: string; name: string; dc_type: string }[];
+    const dcSet = collectMappingDCs(form.application, form.src_component || undefined);
+    if (dcSet.size > 0) {
+      return Array.from(dcSet).map(dc => ({
+        code: dc, name: dc,
+        dc_type: dc.toUpperCase().includes('NGDC') ? 'NGDC' : 'Legacy'
+      }));
+    }
+    // Fallback to API-loaded DCs
+    return srcDCs.map(dc => ({ code: dc.code, name: dc.name, dc_type: 'NGDC' }));
+  }, [form.application, form.src_component, collectMappingDCs, srcDCs]);
+
+  // Derive DCs from mappings for destination app+component
+  const dstMappingDCs = useMemo(() => {
+    const dstApp = form.dst_application || form.application;
+    if (!dstApp) return [] as { code: string; name: string; dc_type: string }[];
+    const dcSet = collectMappingDCs(dstApp, form.dst_component || undefined);
+    if (dcSet.size > 0) {
+      return Array.from(dcSet).map(dc => ({
+        code: dc, name: dc,
+        dc_type: dc.toUpperCase().includes('NGDC') ? 'NGDC' : 'Legacy'
+      }));
+    }
+    return dstDCs.map(dc => ({ code: dc.code, name: dc.name, dc_type: 'NGDC' }));
+  }, [form.dst_application, form.application, form.dst_component, collectMappingDCs, dstDCs]);
+
   // Filter NHs/SZs based on selected component from app_dc_mappings
   // When no component is selected but the app has mappings, use ALL component NHs/SZs
   // instead of falling back to app-level defaults (which may be stale)
@@ -332,16 +384,16 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     return dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
   }, [dstSZs, form.dst_component, form.dst_application, form.application, collectMappingSZs]);
 
+  // Combined datacenter list for backward compat (uses mapping-derived DCs)
   const datacenters = useMemo(() => {
-    const all = [...srcDCs, ...dstDCs];
+    const all = [...srcMappingDCs, ...dstMappingDCs];
     const seen = new Set<string>();
     const unique: { code: string; name: string }[] = [];
     for (const dc of all) {
-      const key = dc.code;
-      if (!seen.has(key)) { seen.add(key); unique.push({ code: key, name: dc.name }); }
+      if (!seen.has(dc.code)) { seen.add(dc.code); unique.push({ code: dc.code, name: dc.name }); }
     }
     return unique.length > 0 ? unique : FALLBACK_DATACENTERS;
-  }, [srcDCs, dstDCs]);
+  }, [srcMappingDCs, dstMappingDCs]);
 
   // Filter groups by NH, SZ, AND component — match groups whose name contains the codes
   const srcFilteredGroups = useMemo(() => {
@@ -427,7 +479,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           source_zone: form.src_sz, destination_zone: form.dst_sz,
           source_sz: form.src_sz, destination_sz: form.dst_sz,
           source_nh: form.src_nh, destination_nh: form.dst_nh,
-          source_dc: form.datacenter, destination_dc: form.datacenter,
+          source_dc: form.src_dc || form.datacenter, destination_dc: form.dst_dc || form.datacenter,
           environment: form.environment,
         });
         setBirthrightResult(result);
@@ -435,14 +487,14 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
       setValidatingBR(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [form.src_sz, form.dst_sz, form.src_nh, form.dst_nh, form.datacenter, form.environment]);
+  }, [form.src_sz, form.dst_sz, form.src_nh, form.dst_nh, form.datacenter, form.environment, form.src_dc, form.dst_dc]);
 
   // Birthright already permitted = no FW rule needed, block submission
   const isBirthrightPermitted = birthrightResult
     && birthrightResult.compliant
     && !birthrightResult.firewall_request_required;
 
-  const canStep1 = form.application && form.environment && form.datacenter;
+  const canStep1 = form.application && form.environment && (form.src_dc || form.datacenter);
   const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz;
   const canStep3 = effectivePort && form.protocol;
   const canSubmit = canStep1 && canStep2 && canStep3 && !isBirthrightPermitted;
@@ -454,10 +506,11 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     try {
       const finalSrc = form.src_custom ? autoPrefix(form.src_custom.trim(), 'group') : srcName;
       const finalDst = form.dst_custom ? autoPrefix(form.dst_custom.trim(), 'group') : dstName;
+      const effectiveDc = form.src_dc || form.datacenter;
       if (isEditMode && editRule) {
         // Update existing draft rule — persist component info for future edits
         await api.updateRule(editRule.rule_id, {
-          application: form.application, environment: form.environment, datacenter: form.datacenter,
+          application: form.application, environment: form.environment, datacenter: effectiveDc,
           source: { source_type: 'Group', ip_address: null, cidr: null, group_name: finalSrc, ports: effectivePort, neighbourhood: form.src_nh, security_zone: form.src_sz },
           destination: { name: finalDst, security_zone: form.dst_sz, dest_ip: null, ports: effectivePort, is_predefined: false },
           description: form.description,
@@ -465,12 +518,14 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           dst_application: form.dst_application || undefined,
           src_component: form.src_component || undefined,
           dst_component: form.dst_component || undefined,
+          src_dc: form.src_dc || undefined,
+          dst_dc: form.dst_dc || undefined,
         });
         onRuleCreated();
         if (onEditComplete) onEditComplete();
       } else {
         await api.createRule({
-          application: form.application, environment: form.environment, datacenter: form.datacenter,
+          application: form.application, environment: form.environment, datacenter: effectiveDc,
           source: finalSrc, source_zone: form.src_sz,
           destination: finalDst, destination_zone: form.dst_sz,
           port: effectivePort, protocol: form.protocol, action: form.action,
@@ -479,6 +534,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           dst_application: form.dst_application || undefined,
           src_component: form.src_component || undefined,
           dst_component: form.dst_component || undefined,
+          src_dc: form.src_dc || undefined,
+          dst_dc: form.dst_dc || undefined,
         });
         onRuleCreated();
         setDraftCreatedMsg(`Rule created successfully! Status: DRAFT. The rule must be submitted for review before it becomes active.`);
@@ -505,7 +562,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     return 'bg-gray-300 text-white';
   };
 
-  return (
+  const mainContent = (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       {/* Step indicators */}
       <div className="flex border-b border-gray-200 bg-gray-50">
@@ -577,7 +634,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                 <p className="text-[10px] text-gray-400 mt-1">Filters destination NHs and SZs per App Management mapping</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-3 gap-5">
               <div>
                 <label className={lbl}>Environment</label>
                 <select className={sel} value={form.environment} onChange={e => { upd('environment', e.target.value); upd('src_nh', ''); upd('src_sz', ''); upd('dst_nh', ''); upd('dst_sz', ''); }}>
@@ -587,14 +644,39 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                 </select>
               </div>
               <div>
-                <label className={lbl}>Datacenter</label>
-                <select className={sel} value={form.datacenter} onChange={e => upd('datacenter', e.target.value)}>
-                  {datacenters.map(dc => (
+                <label className={lbl}>Source DC</label>
+                <select className={sel} value={form.src_dc} onChange={e => { upd('src_dc', e.target.value); upd('datacenter', e.target.value); }}>
+                  <option value="">Select Source DC...</option>
+                  {srcMappingDCs.map(dc => (
+                    <option key={dc.code} value={dc.code}>{dc.name} ({dc.dc_type})</option>
+                  ))}
+                  {srcMappingDCs.length === 0 && datacenters.map(dc => (
                     <option key={dc.code} value={dc.code}>{dc.name}</option>
                   ))}
                 </select>
+                <p className="text-[10px] text-gray-400 mt-1">Filtered by source app + component from Settings</p>
+              </div>
+              <div>
+                <label className={lbl}>Destination DC</label>
+                <select className={sel} value={form.dst_dc} onChange={e => upd('dst_dc', e.target.value)}>
+                  <option value="">Same as Source</option>
+                  {dstMappingDCs.map(dc => (
+                    <option key={dc.code} value={dc.code}>{dc.name} ({dc.dc_type})</option>
+                  ))}
+                  {dstMappingDCs.length === 0 && datacenters.map(dc => (
+                    <option key={dc.code} value={dc.code}>{dc.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Filtered by dest app + component from Settings</p>
               </div>
             </div>
+            {/* Cross-DC warning */}
+            {form.src_dc && form.dst_dc && form.src_dc !== form.dst_dc && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                <span className="text-amber-600 font-bold text-sm">!</span>
+                <span className="text-xs text-amber-700 font-medium">Cross-DC rule: Source DC <strong>{form.src_dc}</strong> &rarr; Destination DC <strong>{form.dst_dc}</strong>. Cross-DC birthright validation will be applied.</span>
+              </div>
+            )}
             {form.application && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <span className="text-sm text-blue-800 font-medium">
@@ -603,7 +685,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                   {form.dst_application && form.dst_application !== form.application && (
                     <> &rarr; <strong>{form.dst_application}</strong>{form.dst_component && <> ({form.dst_component})</>}</>
                   )}
-                  {' '}in <strong>{form.environment}</strong> at <strong>{datacenters.find(d => d.code === form.datacenter)?.name}</strong>
+                  {' '}in <strong>{form.environment}</strong>
+                  {form.src_dc && <> at <strong>{form.src_dc}</strong></>}
+                  {form.dst_dc && form.dst_dc !== form.src_dc && <> &rarr; <strong>{form.dst_dc}</strong></>}
                 </span>
               </div>
             )}
@@ -656,18 +740,22 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                         <p className="text-[10px] text-gray-400 mt-0.5">{srcFilteredGroups.length} group(s) match {form.src_nh && `NH: ${form.src_nh}`}{form.src_nh && form.src_sz && ', '}{form.src_sz && `SZ: ${form.src_sz}`}</p>
                       </>
                     ) : form.application && form.src_nh && form.src_sz ? (
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs text-amber-700 font-medium mb-1">No NGDC groups found for {form.application} in {form.src_nh}/{form.src_sz}</p>
-                        <p className="text-[10px] text-amber-600 mb-2">Create one in <strong>App Groups (Manage Groups)</strong> first, or pick a subtype to auto-name:</p>
+                      <div className="p-3 bg-red-50 border border-red-300 rounded-lg">
+                        <p className="text-xs text-red-700 font-bold mb-1">No source group exists for {form.application} in {form.src_nh}/{form.src_sz}</p>
+                        <p className="text-[10px] text-red-600 mb-2">A source group is required. Select component to generate name, then create the group:</p>
                         <select className={sel + ' mb-2'} value={form.src_subtype} onChange={e => { upd('src_subtype', e.target.value); upd('src_custom', ''); }}>
-                          {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                          {(srcComponents.length > 0 ? srcComponents : SUBTYPES.map(s => s.code)).map(c => (<option key={c} value={c}>{c}</option>))}
                         </select>
                         {srcSuggestedName && (
-                          <button onClick={() => upd('src_custom', srcSuggestedName)}
-                            className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
-                            Use: <code className="font-mono text-amber-700">{srcSuggestedName}</code>
-                          </button>
+                          <div className="space-y-1.5">
+                            <div className="px-2 py-1.5 text-xs bg-white border border-red-200 rounded font-mono text-red-700">{srcSuggestedName}</div>
+                            <button onClick={() => { setNewGroupName(srcSuggestedName); setNewGroupMembers(''); setShowCreateGroupModal(true); }}
+                              className="w-full px-3 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                              Create Group: {srcSuggestedName}
+                            </button>
+                          </div>
                         )}
+                        <p className="text-[10px] text-red-500 mt-2 font-semibold">Rule creation is blocked until a source group is created or selected.</p>
                       </div>
                     ) : (
                       <select className={sel} disabled>
@@ -743,17 +831,24 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                       </>
                     ) : (form.dst_application || form.application) && form.dst_nh && form.dst_sz ? (
                       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs text-amber-700 font-medium mb-1">No NGDC groups found for {form.dst_application || form.application} in {form.dst_nh}/{form.dst_sz}</p>
-                        <p className="text-[10px] text-amber-600 mb-2">Create one in <strong>App Groups (Manage Groups)</strong> first, or pick a subtype to auto-name:</p>
+                        <p className="text-xs text-amber-700 font-medium mb-1">No groups found for {form.dst_application || form.application} in {form.dst_nh}/{form.dst_sz}</p>
+                        <p className="text-[10px] text-amber-600 mb-2">You can still continue — select a component to generate the destination group name:</p>
                         <select className={sel + ' mb-2'} value={form.dst_subtype} onChange={e => { upd('dst_subtype', e.target.value); upd('dst_custom', ''); }}>
-                          {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                          {(dstComponents.length > 0 ? dstComponents : SUBTYPES.map(s => s.code)).map(c => (<option key={c} value={c}>{c}</option>))}
                         </select>
                         {dstSuggestedName && (
-                          <button onClick={() => upd('dst_custom', dstSuggestedName)}
-                            className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
-                            Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
-                          </button>
+                          <div className="space-y-1.5">
+                            <button onClick={() => upd('dst_custom', dstSuggestedName)}
+                              className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
+                              Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
+                            </button>
+                            <button onClick={() => { setNewGroupName(dstSuggestedName); setNewGroupMembers(''); setShowCreateGroupModal(true); }}
+                              className="w-full px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 rounded hover:bg-amber-200 transition-colors">
+                              Create Group in App Groups
+                            </button>
+                          </div>
                         )}
+                        <p className="text-[10px] text-amber-500 mt-1 italic">Warning: destination group does not exist yet. Rule will still be created.</p>
                       </div>
                     ) : (
                       <select className={sel} disabled>
@@ -996,5 +1091,55 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
         )}
       </div>
     </div>
+  );
+
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  /* ---------- Group auto-creation modal (Issue 5) ---------- */
+  const groupModal = showCreateGroupModal && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <h3 className="text-lg font-bold text-gray-800">Create Group in App Groups</h3>
+        <p className="text-sm text-gray-600">The group <code className="font-mono text-blue-700 bg-blue-50 px-1 rounded">{newGroupName}</code> does not exist. Create it now to continue.</p>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Group Name</label>
+          <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50" value={newGroupName} readOnly />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Members (comma-separated IPs / CIDRs)</label>
+          <textarea className="w-full px-3 py-2 border rounded-lg text-sm" rows={3} placeholder="e.g. 10.0.1.0/24, 10.0.2.5" value={newGroupMembers} onChange={e => setNewGroupMembers(e.target.value)} />
+        </div>
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setShowCreateGroupModal(false)} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button disabled={creatingGroup} onClick={async () => {
+            setCreatingGroup(true);
+            try {
+              const members = newGroupMembers.split(',').map(m => m.trim()).filter(Boolean);
+              await api.createAppGroup({
+                name: newGroupName,
+                type: newGroupName.startsWith('grp-') ? 'group' : 'group',
+                app_id: form.application,
+                members: members,
+                description: `Auto-created for ${form.application} in ${form.src_nh}/${form.src_sz}`,
+              });
+              upd('src_custom', newGroupName);
+              setShowCreateGroupModal(false);
+              // Refresh groups
+              try { const gs = await api.getAppGroups(); if (Array.isArray(gs)) { /* parent will refresh */ } } catch { /* ignore */ }
+              onRuleCreated(); // trigger refresh
+            } catch { /* error handled */ }
+            setCreatingGroup(false);
+          }} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {creatingGroup ? 'Creating...' : 'Create Group'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {groupModal}
+      {mainContent}
+    </>
   );
 }
