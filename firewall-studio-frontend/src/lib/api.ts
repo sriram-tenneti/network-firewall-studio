@@ -157,6 +157,13 @@ export const updateRule = (ruleId: string, data: Partial<{
   source: SourceConfig;
   destination: DestinationConfig;
   owner: string;
+  application: string;
+  environment: string;
+  datacenter: string;
+  description: string;
+  source_nh: string;
+  destination_nh: string;
+  dst_application: string;
 }>) =>
   fetchJSON<FirewallRule>(`/api/rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(data) });
 
@@ -284,8 +291,28 @@ export const updateOrgConfig = (data: Record<string, unknown>) =>
 export const getPolicyMatrix = () => fetchJSON<Record<string, unknown>[]>('/api/reference/policy-matrix');
 export const createPolicyEntry = (data: Record<string, unknown>) =>
   fetchJSON<Record<string, unknown>>('/api/reference/policy-matrix', { method: 'POST', body: JSON.stringify(data) });
+export const updatePolicyEntry = (sourceZone: string, destZone: string, data: Record<string, unknown>) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/policy-matrix/${sourceZone}/${destZone}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deletePolicyEntry = (sourceZone: string, destZone: string) =>
   fetchJSON<{ message: string }>(`/api/reference/policy-matrix/${sourceZone}/${destZone}`, { method: 'DELETE' });
+
+// Policy Change Review Workflow
+export const getPolicyChanges = (status?: string) => {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return fetchJSON<Record<string, unknown>[]>(`/api/reference/policy-changes${qs}`);
+};
+export const submitPolicyChange = (data: {
+  change_type: 'add' | 'modify' | 'delete';
+  policy_data: Record<string, unknown>;
+  original_data?: Record<string, unknown>;
+  comments?: string;
+  linked_rule_id?: string;
+}) =>
+  fetchJSON<Record<string, unknown>>('/api/reference/policy-changes', { method: 'POST', body: JSON.stringify(data) });
+export const approvePolicyChange = (changeId: string, notes?: string) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/policy-changes/${changeId}/approve`, { method: 'POST', body: JSON.stringify({ notes: notes || '' }) });
+export const rejectPolicyChange = (changeId: string, notes: string) =>
+  fetchJSON<Record<string, unknown>>(`/api/reference/policy-changes/${changeId}/reject`, { method: 'POST', body: JSON.stringify({ notes }) });
 
 // CRUD: Neighbourhoods
 export const createNeighbourhood = (data: Record<string, unknown>) =>
@@ -382,6 +409,22 @@ export const deleteLegacyRule = (ruleId: string) =>
 
 export const clearAllLegacyRules = () =>
   fetchJSON<{ message: string; deleted: number }>('/api/reference/legacy-rules/clear-all', { method: 'DELETE' });
+
+export const bulkUpdateLegacyRuleAppId = (
+  ruleIds: string[],
+  appDistributedId: string,
+  appName?: string,
+  extraFields?: Record<string, string>,
+) =>
+  fetchJSON<{ updated: number; app_distributed_id: string; app_found: boolean; fields_copied: string[] }>('/api/reference/legacy-rules/bulk-update-app-id', {
+    method: 'POST',
+    body: JSON.stringify({
+      rule_ids: ruleIds,
+      app_distributed_id: appDistributedId,
+      app_name: appName || '',
+      extra_fields: extraFields || undefined,
+    }),
+  });
 
 // JSON import for legacy rules
 export const importLegacyRulesJSON = async (file: File): Promise<{ added: number; duplicates: number; total: number }> => {

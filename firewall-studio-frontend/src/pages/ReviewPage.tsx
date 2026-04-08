@@ -6,7 +6,7 @@ import { Notification } from '@/components/shared/Notification';
 import { ApprovalModal } from '@/components/review/ApprovalModal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification } from '@/lib/api';
+import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification, approvePolicyChange, rejectPolicyChange } from '@/lib/api';
 import type { ReviewRequest, RuleModification } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
@@ -44,6 +44,7 @@ const CONTEXT_TO_MODULE: Record<string, string> = {
   'firewall-management': 'firewall-management',
   'design-studio': 'design-studio',
   'migration-studio': 'migration-studio',
+  'org-admin': 'org-admin',
 };
 
 export default function ReviewPage(props: { context?: string }) {
@@ -102,14 +103,19 @@ export default function ReviewPage(props: { context?: string }) {
 
   const handleApprove = async (reviewId: string, notes: string) => {
     try {
-      // Check if this is a rule modification (MOD-xxx) or a regular review
+      // Check if this is a rule modification (MOD-xxx), a policy change (POL-xxx), or a regular review
       const isModification = reviewId.startsWith('MOD-');
+      // Find the review to check if it's a policy change
+      const review = reviews.find(r => r.id === reviewId);
+      const isPolicyChange = review?.request_type?.startsWith('policy_');
       if (isModification) {
         await approveRuleModification(reviewId, notes);
         showNotification('Rule modification approved successfully', 'success');
+      } else if (isPolicyChange && review?.policy_change_id) {
+        await approvePolicyChange(String(review.policy_change_id), notes);
+        showNotification('Policy change approved and applied', 'success');
       } else {
         await approveReview(reviewId, notes);
-        // Backend approve_review now records lifecycle events automatically
         showNotification('Review approved successfully', 'success');
       }
       loadReviews();
@@ -121,9 +127,14 @@ export default function ReviewPage(props: { context?: string }) {
   const handleReject = async (reviewId: string, notes: string) => {
     try {
       const isModification = reviewId.startsWith('MOD-');
+      const review = reviews.find(r => r.id === reviewId);
+      const isPolicyChange = review?.request_type?.startsWith('policy_');
       if (isModification) {
         await rejectRuleModification(reviewId, notes);
         showNotification('Rule modification rejected', 'warning');
+      } else if (isPolicyChange && review?.policy_change_id) {
+        await rejectPolicyChange(String(review.policy_change_id), notes);
+        showNotification('Policy change rejected', 'warning');
       } else {
         await rejectReview(reviewId, notes);
         showNotification('Review rejected', 'warning');
@@ -174,6 +185,9 @@ export default function ReviewPage(props: { context?: string }) {
           row.request_type === 'modify_rule' ? 'bg-amber-50 text-amber-700' :
           row.request_type === 'delete_rule' ? 'bg-red-50 text-red-700' :
           row.request_type === 'group_policy_change' ? 'bg-purple-50 text-purple-700' :
+          row.request_type === 'policy_add' ? 'bg-teal-50 text-teal-700' :
+          row.request_type === 'policy_modify' ? 'bg-indigo-50 text-indigo-700' :
+          row.request_type === 'policy_delete' ? 'bg-rose-50 text-rose-700' :
           'bg-gray-50 text-gray-700'
         }`}>{row.request_type.replace(/_/g, ' ')}</span>
       ),
@@ -253,6 +267,7 @@ export default function ReviewPage(props: { context?: string }) {
               <option value="firewall-management">Firewall Management</option>
               <option value="design-studio">Design Studio</option>
               <option value="migration-studio">Migration Studio</option>
+              <option value="org-admin">Policy Matrix (Org Admin)</option>
             </select>
           )}
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"

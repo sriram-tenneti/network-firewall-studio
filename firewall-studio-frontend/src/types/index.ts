@@ -6,7 +6,7 @@ export type MigrationStatus = 'Auto-Mapped' | 'Needs Review' | 'New Group' | 'Co
 export type RuleLifecycleStatus = 'Submitted' | 'In Progress' | 'Approved' | 'Rejected' | 'Deployed';
 export type RuleMigrationStatus = 'Not Migrated' | 'Migrated';
 export type MappingStatus = 'Automapped' | 'Needs Review' | 'Blocked';
-export type SourceType = 'Single IP' | 'Subnet' | 'Range' | 'Group';
+export type SourceType = 'Single IP' | 'Subnet' | 'Range' | 'Group' | 'Server';
 
 export interface SourceConfig {
   source_type: SourceType;
@@ -259,7 +259,7 @@ export interface ReviewRequest {
   id: string;
   rule_id: string;
   rule_name: string;
-  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification' | 'group_policy_change';
+  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification' | 'group_policy_change' | 'policy_add' | 'policy_modify' | 'policy_delete';
   requestor: string;
   reviewer: string | null;
   status: 'Pending' | 'Approved' | 'Rejected' | 'Withdrawn';
@@ -269,7 +269,9 @@ export interface ReviewRequest {
   review_notes: string | null;
   modification_id?: string;
   delta?: RuleDelta;
-  module?: 'design-studio' | 'firewall-management' | 'migration-studio';
+  module?: 'design-studio' | 'firewall-management' | 'migration-studio' | 'org-admin';
+  policy_change_id?: string;
+  linked_rule_id?: string;
   rule_summary: {
     application: string;
     source: string;

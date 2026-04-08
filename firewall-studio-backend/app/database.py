@@ -30,6 +30,7 @@ from app.seed_data import (
     SEED_POLICY_MATRIX as _SD_POLICY,
     SEED_ORG_CONFIG as _SD_ORG,
     SEED_GROUPS as _SD_GROUPS,
+    SEED_LEGACY_GROUPS as _SD_LEGACY_GROUPS,
     SEED_LEGACY_RULES as _SD_LEGACY_RULES,
     SEED_IP_MAPPINGS as _SD_IP_MAPPINGS,
     SEED_FIREWALL_DEVICES as _SD_FW_DEVICES,
@@ -291,6 +292,7 @@ SEED_PREPROD_MATRIX = _SD_PP_MTX
 SEED_POLICY_MATRIX = _SD_POLICY
 SEED_ORG_CONFIG = _SD_ORG
 SEED_GROUPS = _SD_GROUPS
+SEED_LEGACY_GROUPS = _SD_LEGACY_GROUPS
 SEED_LEGACY_RULES = _SD_LEGACY_RULES
 SEED_IP_MAPPINGS = _SD_IP_MAPPINGS
 SEED_MIGRATIONS = _sd_build_migrations()
@@ -612,6 +614,7 @@ async def seed_database() -> None:
     _save("migration_mappings", deepcopy(SEED_MIGRATION_MAPPINGS))
     _save("chg_requests", deepcopy(SEED_CHG_REQUESTS))
     _save("groups", deepcopy(SEED_GROUPS))
+    _save("legacy_groups", deepcopy(SEED_LEGACY_GROUPS))
     _save("legacy_rules", deepcopy(SEED_LEGACY_RULES))
     _save("ip_mappings", deepcopy(SEED_IP_MAPPINGS))
     _save("firewall_devices", deepcopy(_SD_FW_DEVICES))
@@ -783,6 +786,93 @@ async def update_legacy_rule(rule_id: str, data: dict[str, Any]) -> dict[str, An
     return None
 
 
+async def bulk_update_legacy_rule_app_id(
+    rule_ids: list[str],
+    app_distributed_id: str,
+    app_name: str | None = None,
+    extra_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Bulk-update app_distributed_id (and optionally app_name) for a list of legacy rules.
+
+    If app_name is not provided, tries to auto-populate from the applications
+    table first, then from existing rules that already have the given
+    app_distributed_id.
+    Also copies related fields (policy_name, inventory_item, etc.) from
+    existing records of the new App Distributed ID — EXCEPT source, destination,
+    service, and their expansions (per Issue 5 spec).
+    Marks updated rules as user_modified to protect from re-import overwrite.
+    Returns dict with updated count and whether the app was found.
+    """
+    rules = _load("legacy_rules") or []
+    # Auto-lookup app_name and app_id from applications table first
+    app_found = False
+    app_id_from_table: str | None = None
+    if not app_name:
+        apps = _load("applications") or []
+        for a in apps:
+            if a.get("app_distributed_id") == app_distributed_id:
+                app_name = a.get("name") or a.get("app_name")
+                app_id_from_table = a.get("app_id")
+                app_found = True
+                break
+    # Fallback: lookup from existing rules that already have this app_distributed_id
+    # and collect related fields to copy
+    related_fields: dict[str, str] = {}
+    COPYABLE_FIELDS = [
+        "app_id", "app_name", "policy_name", "inventory_item",
+        "rule_source_zone", "rule_destination_zone", "rule_action",
+    ]
+    PROTECTED_FIELDS = [
+        "rule_source", "rule_destination", "rule_service",
+        "rule_source_expanded", "rule_destination_expanded", "rule_service_expanded",
+    ]
+    for r in rules:
+        if r.get("app_distributed_id") == app_distributed_id:
+            app_found = True
+            if not app_name and r.get("app_name"):
+                app_name = r["app_name"]
+            # Collect non-empty copyable fields from first matching rule
+            if not related_fields:
+                for f in COPYABLE_FIELDS:
+                    val = r.get(f)
+                    if val:
+                        related_fields[f] = str(val)
+            if app_name and related_fields:
+                break
+
+    # If we found app_id from the applications table, inject it into related_fields
+    if app_id_from_table and "app_id" not in related_fields:
+        related_fields["app_id"] = str(app_id_from_table)
+
+    # Apply any extra_fields provided by the caller (e.g. from popup)
+    if extra_fields:
+        for k, v in extra_fields.items():
+            if k not in PROTECTED_FIELDS and v:
+                related_fields[k] = str(v)
+
+    rule_id_set = set(rule_ids)
+    updated = 0
+    for r in rules:
+        if r.get("id") in rule_id_set:
+            r["app_distributed_id"] = app_distributed_id
+            if app_name:
+                r["app_name"] = app_name
+            # Also update app_id from the related_fields if available
+            if related_fields.get("app_id"):
+                r["app_id"] = related_fields["app_id"]
+            # Copy related fields from existing records (skip protected fields)
+            for f, val in related_fields.items():
+                if f not in PROTECTED_FIELDS:
+                    r[f] = val
+            # Mark as user-modified to protect from re-import overwrite
+            r["user_modified"] = True
+            r["user_modified_at"] = _now()
+            updated += 1
+    if updated:
+        _save("legacy_rules", rules)
+    return {"updated": updated, "app_found": app_found, "fields_copied": list(related_fields.keys())}
+
+
 async def delete_legacy_rule(rule_id: str) -> bool:
     rules = _load("legacy_rules") or []
     new_rules = [r for r in rules if r["id"] != rule_id]
@@ -864,9 +954,16 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         except (ValueError, IndexError):
             pass
 
+    # Build set of IDs for user-modified rules — these must not be overwritten (Issue 5)
+    user_modified_ids: set[str] = set()
+    for r in existing:
+        if r.get("user_modified"):
+            user_modified_ids.add(r.get("id", ""))
+
     added = 0
     duplicates = 0
     superseded_skipped = 0
+    user_modified_skipped = 0
     for rule in new_rules:
         fp = _rule_fingerprint(rule)
         if fp in existing_keys:
@@ -875,6 +972,24 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         if fp in superseded:
             superseded_skipped += 1
             duplicates += 1  # count as duplicate for the caller
+            continue
+        # Check if this rule would overwrite a user-modified rule (by matching app_distributed_id + source + dest)
+        # If so, skip it to protect the user's modifications
+        rule_app_id = rule.get("app_distributed_id", "")
+        rule_src = rule.get("rule_source", "")
+        rule_dst = rule.get("rule_destination", "")
+        skip_as_modified = False
+        if rule_app_id and user_modified_ids:
+            for er in existing:
+                if (er.get("id") in user_modified_ids and
+                    er.get("app_distributed_id") == rule_app_id and
+                    er.get("rule_source") == rule_src and
+                    er.get("rule_destination") == rule_dst):
+                    skip_as_modified = True
+                    break
+        if skip_as_modified:
+            user_modified_skipped += 1
+            duplicates += 1
             continue
         max_num += 1
         rule["id"] = f"LR-{max_num:05d}"
@@ -892,7 +1007,8 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         added += 1
 
     _save("legacy_rules", existing)
-    return {"added": added, "duplicates": duplicates, "superseded_skipped": superseded_skipped, "total": len(existing)}
+    return {"added": added, "duplicates": duplicates, "superseded_skipped": superseded_skipped,
+            "user_modified_skipped": user_modified_skipped, "total": len(existing)}
 
 
 async def get_migration_history() -> list[dict[str, Any]]:
@@ -1118,6 +1234,12 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now,
         "certified_date": None,
         "expiry_date": None,
+        # Persist extra context for draft editing (source/dest NH, app, component)
+        "source_nh": rule_data.get("source_nh", ""),
+        "destination_nh": rule_data.get("destination_nh", ""),
+        "dst_application": rule_data.get("dst_application", ""),
+        "src_component": rule_data.get("src_component", ""),
+        "dst_component": rule_data.get("dst_component", ""),
     }
     rules.append(rule)
     _save("firewall_rules", rules)
@@ -1904,6 +2026,168 @@ async def delete_policy_entry(source_zone: str, dest_zone: str) -> bool:
     return True
 
 
+async def update_policy_entry(source_zone: str, dest_zone: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    items = _load("policy_matrix") or []
+    for item in items:
+        if item.get("source_zone") == source_zone and item.get("dest_zone") == dest_zone:
+            item.update(updates)
+            _save("policy_matrix", items)
+            return item
+    return None
+
+
+# ============================================================
+# Policy Change Review Workflow
+# ============================================================
+
+async def get_policy_changes(status: str | None = None) -> list[dict[str, Any]]:
+    changes = _load("policy_changes") or []
+    if status:
+        changes = [c for c in changes if c.get("status") == status]
+    return changes
+
+
+async def create_policy_change(
+    change_type: str,
+    policy_data: dict[str, Any],
+    original_data: dict[str, Any] | None = None,
+    comments: str = "",
+    linked_rule_id: str | None = None,
+) -> dict[str, Any]:
+    """Submit a policy change for review. change_type: add, modify, delete."""
+    changes = _load("policy_changes") or []
+    now = _now()
+    change_id = f"POL-{_id()}"
+
+    # Build delta for modify changes
+    delta: dict[str, Any] = {"added": {}, "removed": {}, "changed": {}}
+    if change_type == "modify" and original_data:
+        for key in set(list(policy_data.keys()) + list(original_data.keys())):
+            old_val = original_data.get(key, "")
+            new_val = policy_data.get(key, "")
+            if str(old_val) != str(new_val):
+                delta["changed"][key] = {"from": str(old_val), "to": str(new_val)}
+    elif change_type == "add":
+        delta["added"] = {k: [str(v)] for k, v in policy_data.items()}
+    elif change_type == "delete" and original_data:
+        delta["removed"] = {k: [str(v)] for k, v in original_data.items()}
+
+    change = {
+        "id": change_id,
+        "change_type": change_type,
+        "policy_data": dict(policy_data),
+        "original_data": dict(original_data) if original_data else None,
+        "delta": delta,
+        "status": "Pending",
+        "requestor": "sns_user",
+        "reviewer": None,
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments,
+        "review_notes": None,
+        "linked_rule_id": linked_rule_id,
+    }
+    changes.append(change)
+    _save("policy_changes", changes)
+
+    # Also create a review entry so it appears in the Review & Approval page
+    reviews = _load("reviews") or []
+    review_id = f"REV-{_id()}"
+    src_zone = policy_data.get("source_zone", "")
+    dst_zone = policy_data.get("dest_zone", "")
+    action = policy_data.get("default_action", "")
+    review = {
+        "id": review_id,
+        "rule_id": change_id,
+        "rule_name": f"Policy: {src_zone} → {dst_zone}",
+        "request_type": f"policy_{change_type}",
+        "module": "org-admin",
+        "requestor": "sns_user",
+        "reviewer": None,
+        "status": "Pending",
+        "submitted_at": now,
+        "reviewed_at": None,
+        "comments": comments,
+        "review_notes": None,
+        "policy_change_id": change_id,
+        "linked_rule_id": linked_rule_id,
+        "delta": delta,
+        "rule_summary": {
+            "application": "Policy Matrix",
+            "source": src_zone,
+            "destination": dst_zone,
+            "ports": action,
+            "environment": policy_data.get("description", ""),
+        },
+    }
+    reviews.append(review)
+    _save("reviews", reviews)
+    return change
+
+
+async def approve_policy_change(change_id: str, notes: str = "") -> dict[str, Any] | None:
+    changes = _load("policy_changes") or []
+    now = _now()
+    for c in changes:
+        if c.get("id") == change_id:
+            c["status"] = "Approved"
+            c["reviewed_at"] = now
+            c["review_notes"] = notes
+            c["reviewer"] = "sns_user"
+            _save("policy_changes", changes)
+
+            # Apply the actual change to the policy matrix
+            ct = c.get("change_type")
+            pd = c.get("policy_data", {})
+            if ct == "add":
+                await create_policy_entry(pd)
+            elif ct == "modify":
+                src_z = pd.get("source_zone", "")
+                dst_z = pd.get("dest_zone", "")
+                await update_policy_entry(src_z, dst_z, pd)
+            elif ct == "delete":
+                orig = c.get("original_data") or pd
+                src_z = orig.get("source_zone", "")
+                dst_z = orig.get("dest_zone", "")
+                await delete_policy_entry(src_z, dst_z)
+
+            # Update linked review status
+            reviews = _load("reviews") or []
+            for r in reviews:
+                if r.get("policy_change_id") == change_id:
+                    r["status"] = "Approved"
+                    r["reviewed_at"] = now
+                    r["review_notes"] = notes
+                    r["reviewer"] = "sns_user"
+            _save("reviews", reviews)
+            return c
+    return None
+
+
+async def reject_policy_change(change_id: str, notes: str = "") -> dict[str, Any] | None:
+    changes = _load("policy_changes") or []
+    now = _now()
+    for c in changes:
+        if c.get("id") == change_id:
+            c["status"] = "Rejected"
+            c["reviewed_at"] = now
+            c["review_notes"] = notes
+            c["reviewer"] = "sns_user"
+            _save("policy_changes", changes)
+
+            # Update linked review status
+            reviews = _load("reviews") or []
+            for r in reviews:
+                if r.get("policy_change_id") == change_id:
+                    r["status"] = "Rejected"
+                    r["reviewed_at"] = now
+                    r["review_notes"] = notes
+                    r["reviewer"] = "sns_user"
+            _save("reviews", reviews)
+            return c
+    return None
+
+
 async def create_predefined_destination(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("predefined_destinations") or []
     items.append(dict(data))
@@ -2012,15 +2296,16 @@ async def get_group(name: str) -> dict[str, Any] | None:
     return None
 
 
-async def create_group(data: dict[str, Any]) -> dict[str, Any]:
+async def create_group(data: dict[str, Any], skip_prefix: bool = False) -> dict[str, Any]:
     groups = _load("groups") or []
-    # Auto-prefix group name if missing
-    if "name" in data:
+    # Auto-prefix group name if missing (skip for legacy groups imported as-is)
+    if "name" in data and not skip_prefix:
         data["name"] = _auto_prefix(data["name"], "group")
-    # Auto-prefix member values
-    for m in data.get("members", []):
-        if "value" in m:
-            m["value"] = _auto_prefix(m["value"], m.get("type", "ip"))
+    # Auto-prefix member values (skip for legacy imports)
+    if not skip_prefix:
+        for m in data.get("members", []):
+            if "value" in m:
+                m["value"] = _auto_prefix(m["value"], m.get("type", "ip"))
     data["created_at"] = _now()
     data["updated_at"] = _now()
     groups.append(dict(data))
@@ -2421,7 +2706,10 @@ async def approve_review(review_id: str, notes: str = "") -> dict[str, Any] | No
             review_module = r.get("module", "studio")
             # If this review is linked to a rule modification, approve it too
             mod_id = r.get("modification_id")
-            if mod_id:
+            pol_id = r.get("policy_change_id")
+            if pol_id:
+                await approve_policy_change(pol_id, notes)
+            elif mod_id:
                 await approve_rule_modification(mod_id, notes)
             elif r.get("request_type") == "migration":
                 # Migration review: update the legacy rule's statuses
@@ -2458,7 +2746,10 @@ async def reject_review(review_id: str, notes: str) -> dict[str, Any] | None:
             review_module = r.get("module", "studio")
             # If this review is linked to a rule modification, reject it too
             mod_id = r.get("modification_id")
-            if mod_id:
+            pol_id = r.get("policy_change_id")
+            if pol_id:
+                await reject_policy_change(pol_id, notes)
+            elif mod_id:
                 await reject_rule_modification(mod_id, notes)
             else:
                 rule_id = r.get("rule_id")

@@ -4,8 +4,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-// RuleFormModal kept only for editing existing draft rules
-import { RuleFormModal } from '@/components/design-studio/RuleFormModal';
+// RuleFormModal no longer used — draft editing uses full DragDropRuleBuilder
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
 import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
@@ -28,8 +27,8 @@ export function DesignStudioPage() {
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
+  const [editingDraftRule, setEditingDraftRule] = useState<FirewallRule | null>(null);
 
-  const editModal = useModal<FirewallRule>();
   const detailModal = useModal<FirewallRule>();
   const modifyModal = useModal<FirewallRule>();
   const compilerModal = useModal<string>();
@@ -85,17 +84,6 @@ export function DesignStudioPage() {
     Approved: rules.filter(r => r.status === 'Approved' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
     Deployed: rules.filter(r => r.status === 'Deployed' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
     Certified: rules.filter(r => r.status === 'Certified' && matchesApp(r) && (!selectedEnv || r.environment === selectedEnv)).length,
-  };
-
-  const handleEdit = async (data: Record<string, string | boolean>) => {
-    if (!editModal.data) return;
-    try {
-      await api.updateRule(editModal.data.rule_id, data);
-      showNotification('Rule updated successfully', 'success');
-      loadData();
-    } catch {
-      showNotification('Failed to update rule', 'error');
-    }
   };
 
   const handleModify = async (ruleId: string, changes: RuleModification) => {
@@ -225,7 +213,7 @@ export function DesignStudioPage() {
             <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
             {canEdit && (
               <>
-                <button onClick={() => editModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
+                <button onClick={() => { setEditingDraftRule(row); setViewMode('builder'); }} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
               </>
             )}
             {canSubmit && (
@@ -324,7 +312,18 @@ export function DesignStudioPage() {
 
       {viewMode === 'builder' ? (
         <div className="bg-white border rounded-lg shadow-sm p-4">
-          <DragDropRuleBuilder applications={applications} onRuleCreated={loadData} />
+          {editingDraftRule && (
+            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+              <span className="text-sm font-semibold text-amber-800">Editing Draft Rule: {editingDraftRule.rule_id}</span>
+              <button onClick={() => { setEditingDraftRule(null); setViewMode('table'); }} className="text-xs font-medium text-amber-600 hover:text-amber-800">Cancel Edit</button>
+            </div>
+          )}
+          <DragDropRuleBuilder
+            applications={applications}
+            onRuleCreated={loadData}
+            editRule={editingDraftRule}
+            onEditComplete={() => { setEditingDraftRule(null); setViewMode('table'); }}
+          />
         </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">
@@ -353,13 +352,12 @@ export function DesignStudioPage() {
       )}
 
       {/* Modals */}
-      <RuleFormModal isOpen={editModal.isOpen} onClose={editModal.close} onSave={handleEdit} rule={editModal.data} applications={applications} mode="edit" existingRules={rules} />
 
       <RuleDetailModal
         isOpen={detailModal.isOpen}
         onClose={detailModal.close}
         rule={detailModal.data}
-        onEdit={() => { if (detailModal.data) { detailModal.close(); editModal.open(detailModal.data); } }}
+        onEdit={() => { if (detailModal.data) { detailModal.close(); setEditingDraftRule(detailModal.data); setViewMode('builder'); } }}
         onCompile={() => { if (detailModal.data) { detailModal.close(); compilerModal.open(detailModal.data.rule_id); } }}
         onSubmitReview={() => { if (detailModal.data) { handleSubmitReview(detailModal.data.rule_id); } }}
       />

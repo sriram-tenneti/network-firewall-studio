@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter } from '@/types';
+import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup, FirewallRule } from '@/types';
 import * as api from '@/lib/api';
-import { autoPrefix } from '@/lib/utils';
+import { autoPrefix, isNgdcGroupName } from '@/lib/utils';
 
 interface DragDropRuleBuilderProps {
   applications: Application[];
   onRuleCreated: () => void;
+  editRule?: FirewallRule | null;
+  onEditComplete?: () => void;
 }
 
 // Fallback static data (used while API data loads)
@@ -65,17 +67,109 @@ const COMMON_PORTS = [
   { value: '3389', label: 'RDP (3389)' },
 ];
 
-export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRuleBuilderProps) {
+export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onEditComplete }: DragDropRuleBuilderProps) {
+  const isEditMode = !!editRule;
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
+  const [draftCreatedMsg, setDraftCreatedMsg] = useState('');
+
+  const buildDefaultForm = () => ({
     application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
+    src_component: '', dst_component: '',
     src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
     dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
     port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
   });
+
+  const [form, setForm] = useState(buildDefaultForm);
+
+  /** Try to extract the component code from an NGDC group name like grp-APP01-NH01-STD-WEB */
+  const extractComponentFromGroup = (groupName: string): string => {
+    if (!groupName) return '';
+    const parts = groupName.split('-');
+    // Pattern: grp-{app}-{nh}-{sz}-{component}
+    if (parts.length >= 5 && parts[0].toLowerCase() === 'grp') {
+      const candidate = parts[parts.length - 1].toUpperCase();
+      const knownComponents = ['APP', 'WEB', 'DB', 'BAT', 'MQ', 'API', 'LB', 'MON', 'MFR', 'SVC'];
+      if (knownComponents.includes(candidate)) return candidate;
+    }
+    return '';
+  };
+
+  // Pre-populate form when editing a draft rule
+  useEffect(() => {
+    if (!editRule) return;
+    const src = editRule.source;
+    const dst = editRule.destination;
+    const srcGroup = (src?.group_name || src?.ip_address || src?.cidr || '') as string;
+    // Destination group: could be stored as object {name, dest_ip, ...} or as plain string
+    const dstGroup = typeof dst === 'string' ? dst : (dst?.name || dst?.dest_ip || '') as string;
+    const srcSz = (src?.security_zone || '') as string;
+    const srcNh = (src?.neighbourhood || '') as string;
+    const ports = (src?.ports || (typeof dst === 'object' ? dst?.ports : '') || '') as string;
+    // Access rule-level fields that were persisted during creation/update
+    const ruleAny = editRule as unknown as Record<string, string>;
+    const dstApp = ruleAny.dst_application || '';
+    const dstNh = ruleAny.destination_nh || '';
+    // Destination SZ: try rule-level destination_zone first, then from dst object
+    const dstSz = ruleAny.destination_zone || (typeof dst === 'object' ? (dst?.security_zone || '') as string : '') as string;
+    // Source NH: also check rule-level source_nh
+    const resolvedSrcNh = srcNh || ruleAny.source_nh || '';
+    // Extract component from stored field or from group name
+    const srcComp = ruleAny.src_component || extractComponentFromGroup(srcGroup);
+    const dstComp = ruleAny.dst_component || extractComponentFromGroup(dstGroup);
+    setForm({
+      application: editRule.application || '',
+      dst_application: dstApp,
+      environment: editRule.environment || 'Production',
+      datacenter: editRule.datacenter || 'ALPHA_NGDC',
+      src_component: srcComp, dst_component: dstComp,
+      src_nh: resolvedSrcNh, src_sz: srcSz, src_subtype: srcComp || 'APP', src_custom: srcGroup,
+      dst_nh: dstNh, dst_sz: dstSz, dst_subtype: dstComp || 'APP', dst_custom: dstGroup,
+      port: ports || '443', customPort: '', protocol: 'TCP',
+      action: ruleAny.action || 'Allow',
+      description: editRule.description || '',
+    });
+  }, [editRule]);
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [validatingBR, setValidatingBR] = useState(false);
+
+  // App DC Mappings for component-based NH/SZ filtering
+  const [appDcMappings, setAppDcMappings] = useState<Record<string, unknown>[]>([]);
+
+  // Load app DC mappings on mount
+  useEffect(() => {
+    api.getAppDCMappings()
+      .then(m => setAppDcMappings(m))
+      .catch(() => setAppDcMappings([]));
+  }, []);
+
+  // Derive available components for source app from app_dc_mappings
+  const srcComponents = useMemo(() => {
+    if (!form.application) return [] as string[];
+    const comps = new Set<string>();
+    for (const m of appDcMappings) {
+      const mid = (m as Record<string, string>).app_distributed_id || (m as Record<string, string>).app_id;
+      if (mid === form.application && (m as Record<string, string>).component) {
+        comps.add((m as Record<string, string>).component);
+      }
+    }
+    return Array.from(comps).sort();
+  }, [form.application, appDcMappings]);
+
+  // Derive available components for destination app
+  const dstComponents = useMemo(() => {
+    const dstApp = form.dst_application || form.application;
+    if (!dstApp) return [] as string[];
+    const comps = new Set<string>();
+    for (const m of appDcMappings) {
+      const mid = (m as Record<string, string>).app_distributed_id || (m as Record<string, string>).app_id;
+      if (mid === dstApp && (m as Record<string, string>).component) {
+        comps.add((m as Record<string, string>).component);
+      }
+    }
+    return Array.from(comps).sort();
+  }, [form.dst_application, form.application, appDcMappings]);
 
   // Source NH/SZ/DC from source app
   const [srcNHs, setSrcNHs] = useState<NeighbourhoodRegistry[]>([]);
@@ -88,6 +182,27 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const [dstSZs, setDstSZs] = useState<SecurityZone[]>([]);
   const [dstDCs, setDstDCs] = useState<NGDCDataCenter[]>([]);
   const [loadingDst, setLoadingDst] = useState(false);
+
+  // NGDC groups for source and destination apps
+  const [srcAppGroups, setSrcAppGroups] = useState<FirewallGroup[]>([]);
+  const [dstAppGroups, setDstAppGroups] = useState<FirewallGroup[]>([]);
+
+  // Load source app groups
+  useEffect(() => {
+    if (!form.application) { setSrcAppGroups([]); return; }
+    api.getGroups(form.application)
+      .then(groups => setSrcAppGroups(groups.filter(g => isNgdcGroupName(g.name))))
+      .catch(() => setSrcAppGroups([]));
+  }, [form.application]);
+
+  // Load destination app groups
+  useEffect(() => {
+    const dstApp = form.dst_application || form.application;
+    if (!dstApp) { setDstAppGroups([]); return; }
+    api.getGroups(dstApp)
+      .then(groups => setDstAppGroups(groups.filter(g => isNgdcGroupName(g.name))))
+      .catch(() => setDstAppGroups([]));
+  }, [form.dst_application, form.application]);
 
   const loadSrcData = useCallback(async (env: string, appId: string) => {
     if (!env) return;
@@ -135,22 +250,87 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.environment, form.dst_application, form.application, loadDstData]);
 
-  const srcNeighbourhoods = useMemo(() =>
-    srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS,
-    [srcNHs]
-  );
-  const srcZones = useMemo(() =>
-    srcSZs.length > 0 ? srcSZs.map(sz => ({ code: sz.code, name: sz.name })) : [],
-    [srcSZs]
-  );
-  const dstNeighbourhoods = useMemo(() =>
-    dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS,
-    [dstNHs]
-  );
-  const dstZones = useMemo(() =>
-    dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [],
-    [dstSZs]
-  );
+  // Helper: collect NH ids from app_dc_mappings for a given app (and optionally component)
+  const collectMappingNHs = useCallback((appId: string, component?: string) => {
+    const nhSet = new Set<string>();
+    for (const m of appDcMappings) {
+      const mr = m as Record<string, string>;
+      const mid = mr.app_distributed_id || mr.app_id;
+      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+          (!component || mr.component === component) && mr.nh) {
+        nhSet.add(mr.nh);
+      }
+    }
+    return nhSet;
+  }, [appDcMappings]);
+
+  const collectMappingSZs = useCallback((appId: string, component?: string) => {
+    const szSet = new Set<string>();
+    for (const m of appDcMappings) {
+      const mr = m as Record<string, string>;
+      const mid = mr.app_distributed_id || mr.app_id;
+      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+          (!component || mr.component === component) && mr.sz) {
+        szSet.add(mr.sz);
+      }
+    }
+    return szSet;
+  }, [appDcMappings]);
+
+  // Filter NHs/SZs based on selected component from app_dc_mappings
+  // When no component is selected but the app has mappings, use ALL component NHs/SZs
+  // instead of falling back to app-level defaults (which may be stale)
+  const srcNeighbourhoods = useMemo(() => {
+    if (form.application) {
+      const nhSet = collectMappingNHs(form.application, form.src_component || undefined);
+      if (nhSet.size > 0) {
+        const filtered = srcNHs.filter(nh => nhSet.has(nh.nh_id));
+        if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
+        // NHs not in srcNHs (API response) — build from fallback list
+        return FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
+      }
+    }
+    return srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
+  }, [srcNHs, form.src_component, form.application, collectMappingNHs]);
+
+  const srcZones = useMemo(() => {
+    if (form.application) {
+      const szSet = collectMappingSZs(form.application, form.src_component || undefined);
+      if (szSet.size > 0) {
+        const filtered = srcSZs.filter(sz => szSet.has(sz.code));
+        if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
+        // SZs not in srcSZs — return raw codes
+        return Array.from(szSet).map(code => ({ code, name: code }));
+      }
+    }
+    return srcSZs.length > 0 ? srcSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
+  }, [srcSZs, form.src_component, form.application, collectMappingSZs]);
+
+  const dstNeighbourhoods = useMemo(() => {
+    const dstApp = form.dst_application || form.application;
+    if (dstApp) {
+      const nhSet = collectMappingNHs(dstApp, form.dst_component || undefined);
+      if (nhSet.size > 0) {
+        const filtered = dstNHs.filter(nh => nhSet.has(nh.nh_id));
+        if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
+        return FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
+      }
+    }
+    return dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
+  }, [dstNHs, form.dst_component, form.dst_application, form.application, collectMappingNHs]);
+
+  const dstZones = useMemo(() => {
+    const dstApp = form.dst_application || form.application;
+    if (dstApp) {
+      const szSet = collectMappingSZs(dstApp, form.dst_component || undefined);
+      if (szSet.size > 0) {
+        const filtered = dstSZs.filter(sz => szSet.has(sz.code));
+        if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
+        return Array.from(szSet).map(code => ({ code, name: code }));
+      }
+    }
+    return dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
+  }, [dstSZs, form.dst_component, form.dst_application, form.application, collectMappingSZs]);
 
   const datacenters = useMemo(() => {
     const all = [...srcDCs, ...dstDCs];
@@ -163,16 +343,78 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
     return unique.length > 0 ? unique : FALLBACK_DATACENTERS;
   }, [srcDCs, dstDCs]);
 
-  const srcName = useMemo(() => {
+  // Filter groups by NH, SZ, AND component — match groups whose name contains the codes
+  const srcFilteredGroups = useMemo(() => {
+    if (!form.src_nh && !form.src_sz && !form.src_component) return srcAppGroups;
+    return srcAppGroups.filter(g => {
+      const name = g.name.toLowerCase();
+      const matchNh = !form.src_nh || name.includes(form.src_nh.toLowerCase());
+      const matchSz = !form.src_sz || name.includes(form.src_sz.toLowerCase());
+      const matchComp = !form.src_component || name.includes(form.src_component.toLowerCase());
+      return matchNh && matchSz && matchComp;
+    });
+  }, [srcAppGroups, form.src_nh, form.src_sz, form.src_component]);
+
+  const dstFilteredGroups = useMemo(() => {
+    if (!form.dst_nh && !form.dst_sz && !form.dst_component) return dstAppGroups;
+    return dstAppGroups.filter(g => {
+      const name = g.name.toLowerCase();
+      const matchNh = !form.dst_nh || name.includes(form.dst_nh.toLowerCase());
+      const matchSz = !form.dst_sz || name.includes(form.dst_sz.toLowerCase());
+      const matchComp = !form.dst_component || name.includes(form.dst_component.toLowerCase());
+      return matchNh && matchSz && matchComp;
+    });
+  }, [dstAppGroups, form.dst_nh, form.dst_sz, form.dst_component]);
+
+  // Auto-populate NH/SZ when component is selected and there's only one option (Issue 1)
+  useEffect(() => {
+    if (!form.src_component || !form.application) return;
+    const nhSet = collectMappingNHs(form.application, form.src_component);
+    const szSet = collectMappingSZs(form.application, form.src_component);
+    // Auto-set NH if exactly one match
+    if (nhSet.size === 1 && !form.src_nh) {
+      const nh = Array.from(nhSet)[0];
+      setForm(prev => ({ ...prev, src_nh: nh }));
+    }
+    // Auto-set SZ if exactly one match
+    if (szSet.size === 1 && !form.src_sz) {
+      const sz = Array.from(szSet)[0];
+      setForm(prev => ({ ...prev, src_sz: sz }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.src_component, form.application, collectMappingNHs, collectMappingSZs]);
+
+  useEffect(() => {
+    const dstApp = form.dst_application || form.application;
+    if (!form.dst_component || !dstApp) return;
+    const nhSet = collectMappingNHs(dstApp, form.dst_component);
+    const szSet = collectMappingSZs(dstApp, form.dst_component);
+    if (nhSet.size === 1 && !form.dst_nh) {
+      const nh = Array.from(nhSet)[0];
+      setForm(prev => ({ ...prev, dst_nh: nh }));
+    }
+    if (szSet.size === 1 && !form.dst_sz) {
+      const sz = Array.from(szSet)[0];
+      setForm(prev => ({ ...prev, dst_sz: sz }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.dst_component, form.dst_application, form.application, collectMappingNHs, collectMappingSZs]);
+
+  // Generate the standard group name for "create new" option
+  const srcSuggestedName = useMemo(() => {
     if (!form.application || !form.src_nh || !form.src_sz) return '';
     return `grp-${form.application}-${form.src_nh}-${form.src_sz}-${form.src_subtype}`;
   }, [form.application, form.src_nh, form.src_sz, form.src_subtype]);
 
-  const dstName = useMemo(() => {
+  const dstSuggestedName = useMemo(() => {
     const dstApp = form.dst_application || form.application;
     if (!dstApp || !form.dst_nh || !form.dst_sz) return '';
     return `grp-${dstApp}-${form.dst_nh}-${form.dst_sz}-${form.dst_subtype}`;
   }, [form.application, form.dst_application, form.dst_nh, form.dst_sz, form.dst_subtype]);
+
+  // Keep srcName/dstName for backward compat — resolve from form.source/form.destination or suggested
+  const srcName = form.src_custom || srcSuggestedName;
+  const dstName = form.dst_custom || dstSuggestedName;
 
   const effectivePort = form.port === 'custom' ? form.customPort : form.port;
 
@@ -208,25 +450,42 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
+    setDraftCreatedMsg('');
     try {
       const finalSrc = form.src_custom ? autoPrefix(form.src_custom.trim(), 'group') : srcName;
       const finalDst = form.dst_custom ? autoPrefix(form.dst_custom.trim(), 'group') : dstName;
-      await api.createRule({
-        application: form.application, environment: form.environment, datacenter: form.datacenter,
-        source: finalSrc, source_zone: form.src_sz,
-        destination: finalDst, destination_zone: form.dst_sz,
-        port: effectivePort, protocol: form.protocol, action: form.action,
-        description: form.description, is_group_to_group: true,
-        source_nh: form.src_nh, destination_nh: form.dst_nh,
-        dst_application: form.dst_application || undefined,
-      });
-      onRuleCreated();
-      setStep(1);
-      setForm({ application: '', dst_application: '', environment: 'Production', datacenter: 'ALPHA_NGDC',
-        src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
-        dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
-        port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '' });
-      setBirthrightResult(null);
+      if (isEditMode && editRule) {
+        // Update existing draft rule — persist component info for future edits
+        await api.updateRule(editRule.rule_id, {
+          application: form.application, environment: form.environment, datacenter: form.datacenter,
+          source: { source_type: 'Group', ip_address: null, cidr: null, group_name: finalSrc, ports: effectivePort, neighbourhood: form.src_nh, security_zone: form.src_sz },
+          destination: { name: finalDst, security_zone: form.dst_sz, dest_ip: null, ports: effectivePort, is_predefined: false },
+          description: form.description,
+          source_nh: form.src_nh, destination_nh: form.dst_nh,
+          dst_application: form.dst_application || undefined,
+          src_component: form.src_component || undefined,
+          dst_component: form.dst_component || undefined,
+        });
+        onRuleCreated();
+        if (onEditComplete) onEditComplete();
+      } else {
+        await api.createRule({
+          application: form.application, environment: form.environment, datacenter: form.datacenter,
+          source: finalSrc, source_zone: form.src_sz,
+          destination: finalDst, destination_zone: form.dst_sz,
+          port: effectivePort, protocol: form.protocol, action: form.action,
+          description: form.description, is_group_to_group: true,
+          source_nh: form.src_nh, destination_nh: form.dst_nh,
+          dst_application: form.dst_application || undefined,
+          src_component: form.src_component || undefined,
+          dst_component: form.dst_component || undefined,
+        });
+        onRuleCreated();
+        setDraftCreatedMsg(`Rule created successfully! Status: DRAFT. The rule must be submitted for review before it becomes active.`);
+        setStep(1);
+        setForm(buildDefaultForm());
+        setBirthrightResult(null);
+      }
     } catch { /* handled by parent */ }
     setSubmitting(false);
   };
@@ -262,29 +521,60 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
       </div>
 
       <div className="p-6">
+        {/* Draft created banner */}
+        {draftCreatedMsg && (
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-3">
+            <span className="text-amber-600 text-lg font-bold">!</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">{draftCreatedMsg}</p>
+              <p className="text-xs text-amber-600 mt-1">Go to the Rules list to view, edit, or submit draft rules.</p>
+            </div>
+            <button onClick={() => setDraftCreatedMsg('')} className="ml-auto text-amber-500 hover:text-amber-700 text-sm font-bold">&times;</button>
+          </div>
+        )}
+
         {/* Step 1: Application & Environment */}
         {step === 1 && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-5">
               <div>
                 <label className={lbl}>Source Application</label>
-                <select className={sel} value={form.application} onChange={e => { upd('application', e.target.value); upd('src_nh', ''); upd('src_sz', ''); }}>
+                <select className={sel} value={form.application} onChange={e => { upd('application', e.target.value); upd('src_component', ''); upd('src_nh', ''); upd('src_sz', ''); }}>
                   <option value="">Select Source Application...</option>
                   {applications.map(app => (
                     <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">Populates source NH and SZ dropdowns</p>
+                <p className="text-[10px] text-gray-400 mt-1">Populates source component, NH and SZ dropdowns</p>
               </div>
               <div>
                 <label className={lbl}>Destination Application</label>
-                <select className={sel} value={form.dst_application} onChange={e => { upd('dst_application', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); }}>
+                <select className={sel} value={form.dst_application} onChange={e => { upd('dst_application', e.target.value); upd('dst_component', ''); upd('dst_nh', ''); upd('dst_sz', ''); }}>
                   <option value="">Same as Source / All</option>
                   {applications.map(app => (
                     <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">Populates destination NH and SZ dropdowns</p>
+                <p className="text-[10px] text-gray-400 mt-1">Populates destination component, NH and SZ dropdowns</p>
+              </div>
+            </div>
+            {/* Component selection - filters NHs and SZs */}
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className={lbl}>Source Component</label>
+                <select className={sel} value={form.src_component} onChange={e => { upd('src_component', e.target.value); upd('src_nh', ''); upd('src_sz', ''); }}>
+                  <option value="">All Components</option>
+                  {srcComponents.map(c => (<option key={c} value={c}>{c}</option>))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Filters source NHs and SZs per App Management mapping</p>
+              </div>
+              <div>
+                <label className={lbl}>Destination Component</label>
+                <select className={sel} value={form.dst_component} onChange={e => { upd('dst_component', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); }}>
+                  <option value="">All Components</option>
+                  {dstComponents.map(c => (<option key={c} value={c}>{c}</option>))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Filters destination NHs and SZs per App Management mapping</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-5">
@@ -309,8 +599,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <span className="text-sm text-blue-800 font-medium">
                   Building rule: <strong>{form.application}</strong>
+                  {form.src_component && <> ({form.src_component})</>}
                   {form.dst_application && form.dst_application !== form.application && (
-                    <> &rarr; <strong>{form.dst_application}</strong></>
+                    <> &rarr; <strong>{form.dst_application}</strong>{form.dst_component && <> ({form.dst_component})</>}</>
                   )}
                   {' '}in <strong>{form.environment}</strong> at <strong>{datacenters.find(d => d.code === form.datacenter)?.name}</strong>
                 </span>
@@ -353,20 +644,42 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                     </select>
                   </div>
                   <div>
-                    <label className={lbl}>Subtype</label>
-                    <select className={sel} value={form.src_subtype} onChange={e => upd('src_subtype', e.target.value)}>
-                      {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
-                    </select>
-                  </div>
-                  {srcName && (
-                    <div className="p-2 bg-white border border-blue-200 rounded-lg">
-                      <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Generated Name</div>
-                      <code className="text-xs font-mono text-blue-700 break-all">{srcName}</code>
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-[10px] text-gray-500">Or override with custom name:</label>
-                    <input className={sel + ' mt-1'} placeholder="e.g. grp-APP01-NH01-GEN-APP" value={form.src_custom} onChange={e => upd('src_custom', e.target.value)} />
+                    <label className={lbl}>Source Group</label>
+                    {srcFilteredGroups.length > 0 ? (
+                      <>
+                        <select className={sel} value={form.src_custom} onChange={e => upd('src_custom', e.target.value)}>
+                          <option value="">Select Existing Group...</option>
+                          {srcFilteredGroups.map(g => (
+                            <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{srcFilteredGroups.length} group(s) match {form.src_nh && `NH: ${form.src_nh}`}{form.src_nh && form.src_sz && ', '}{form.src_sz && `SZ: ${form.src_sz}`}</p>
+                      </>
+                    ) : form.application && form.src_nh && form.src_sz ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-700 font-medium mb-1">No NGDC groups found for {form.application} in {form.src_nh}/{form.src_sz}</p>
+                        <p className="text-[10px] text-amber-600 mb-2">Create one in <strong>App Groups (Manage Groups)</strong> first, or pick a subtype to auto-name:</p>
+                        <select className={sel + ' mb-2'} value={form.src_subtype} onChange={e => { upd('src_subtype', e.target.value); upd('src_custom', ''); }}>
+                          {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                        </select>
+                        {srcSuggestedName && (
+                          <button onClick={() => upd('src_custom', srcSuggestedName)}
+                            className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
+                            Use: <code className="font-mono text-amber-700">{srcSuggestedName}</code>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <select className={sel} disabled>
+                        <option value="">Select NH &amp; SZ first...</option>
+                      </select>
+                    )}
+                    {form.src_custom && (
+                      <div className="mt-1 p-2 bg-white border border-blue-200 rounded-lg">
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Selected Group</div>
+                        <code className="text-xs font-mono text-blue-700 break-all">{form.src_custom}</code>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -417,20 +730,42 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
                     </select>
                   </div>
                   <div>
-                    <label className={lbl}>Subtype</label>
-                    <select className={sel} value={form.dst_subtype} onChange={e => upd('dst_subtype', e.target.value)}>
-                      {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
-                    </select>
-                  </div>
-                  {dstName && (
-                    <div className="p-2 bg-white border border-emerald-200 rounded-lg">
-                      <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Generated Name</div>
-                      <code className="text-xs font-mono text-emerald-700 break-all">{dstName}</code>
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-[10px] text-gray-500">Or override with custom name:</label>
-                    <input className={sel + ' mt-1'} placeholder="e.g. grp-APP01-NH02-CCS-DB" value={form.dst_custom} onChange={e => upd('dst_custom', e.target.value)} />
+                    <label className={lbl}>Destination Group</label>
+                    {dstFilteredGroups.length > 0 ? (
+                      <>
+                        <select className={sel} value={form.dst_custom} onChange={e => upd('dst_custom', e.target.value)}>
+                          <option value="">Select Existing Group...</option>
+                          {dstFilteredGroups.map(g => (
+                            <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{dstFilteredGroups.length} group(s) match {form.dst_nh && `NH: ${form.dst_nh}`}{form.dst_nh && form.dst_sz && ', '}{form.dst_sz && `SZ: ${form.dst_sz}`}</p>
+                      </>
+                    ) : (form.dst_application || form.application) && form.dst_nh && form.dst_sz ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-700 font-medium mb-1">No NGDC groups found for {form.dst_application || form.application} in {form.dst_nh}/{form.dst_sz}</p>
+                        <p className="text-[10px] text-amber-600 mb-2">Create one in <strong>App Groups (Manage Groups)</strong> first, or pick a subtype to auto-name:</p>
+                        <select className={sel + ' mb-2'} value={form.dst_subtype} onChange={e => { upd('dst_subtype', e.target.value); upd('dst_custom', ''); }}>
+                          {SUBTYPES.map(s => (<option key={s.code} value={s.code}>{s.code} - {s.name}</option>))}
+                        </select>
+                        {dstSuggestedName && (
+                          <button onClick={() => upd('dst_custom', dstSuggestedName)}
+                            className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
+                            Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <select className={sel} disabled>
+                        <option value="">Select NH &amp; SZ first...</option>
+                      </select>
+                    )}
+                    {form.dst_custom && (
+                      <div className="mt-1 p-2 bg-white border border-emerald-200 rounded-lg">
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Selected Group</div>
+                        <code className="text-xs font-mono text-emerald-700 break-all">{form.dst_custom}</code>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -654,7 +989,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated }: DragDropRul
               </button>
               <button onClick={handleSubmit} disabled={!canSubmit || submitting}
                 className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
-                {submitting ? 'Creating...' : isBirthrightPermitted ? 'Already Permitted (Cannot Create)' : 'Create Firewall Rule'}
+                {submitting ? (isEditMode ? 'Updating...' : 'Creating...') : isBirthrightPermitted ? 'Already Permitted (Cannot Create)' : isEditMode ? 'Update Firewall Rule' : 'Create Firewall Rule'}
               </button>
             </div>
           </div>

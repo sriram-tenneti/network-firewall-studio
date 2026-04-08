@@ -5,7 +5,7 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled, submitGroupPolicyChanges } from '@/lib/api';
+import { getLegacyRules, createRuleModification, compileLegacyRule, getGroups, getApplications, isHideSeedEnabled, submitGroupPolicyChanges, bulkUpdateLegacyRuleAppId } from '@/lib/api';
 import { autoCreateLegacyGroupsFromRules } from '@/lib/legacyGroupAutoCreate';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
@@ -219,11 +219,24 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
   const handleAddGroupMember = (entryId: string) => {
     if (!newMemberValue.trim()) return;
     const memberPrefixed = autoPrefix(newMemberValue.trim(), newMemberType as 'ip' | 'subnet' | 'cidr' | 'group' | 'range');
-    onChange(entries.map(e => {
-      if (e.id !== entryId) return e;
-      const members = [...(e.groupMembers || []), { type: newMemberType, value: memberPrefixed }];
-      return { ...e, groupMembers: members, isModified: true };
-    }));
+    if (newMemberType === 'group') {
+      // When adding a group as member, check if it exists in appGroups
+      const matched = appGroups.find(g => g.name === memberPrefixed || g.name === newMemberValue.trim());
+      const children = matched
+        ? matched.members.map(m => ({ type: m.type, value: m.value }))
+        : []; // Empty children — user will add via sub-group UI
+      onChange(entries.map(e => {
+        if (e.id !== entryId) return e;
+        const members = [...(e.groupMembers || []), { type: 'group', value: matched?.name || memberPrefixed, children }];
+        return { ...e, groupMembers: members, isModified: true };
+      }));
+    } else {
+      onChange(entries.map(e => {
+        if (e.id !== entryId) return e;
+        const members = [...(e.groupMembers || []), { type: newMemberType, value: memberPrefixed }];
+        return { ...e, groupMembers: members, isModified: true };
+      }));
+    }
     setNewMemberValue('');
   };
 
@@ -393,6 +406,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                                 <option value="ip">IP (svr-)</option>
                                 <option value="subnet">Subnet (net-)</option>
                                 <option value="range">Range (rng-)</option>
+                                <option value="group">Group (grp-)</option>
                               </select>
                               <input type="text" value={subMemberValue} onChange={e => setSubMemberValue(e.target.value)} placeholder="10.0.1.5" className="flex-1 px-1.5 py-0.5 text-[10px] font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddSubGroupMember(entry.id, mi); }} />
                               <button onClick={() => handleAddSubGroupMember(entry.id, mi)} disabled={!subMemberValue.trim()} className="px-1.5 py-0.5 text-[10px] font-medium text-white bg-teal-600 rounded hover:bg-teal-700 disabled:bg-gray-300">Add</button>
@@ -414,15 +428,16 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                         <option value="ip">IP (svr-)</option>
                         <option value="subnet">Subnet (net-)</option>
                         <option value="range">Range (rng-)</option>
+                        <option value="group">Group (grp-)</option>
                       </select>
-                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
+                      <input type="text" value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)} placeholder={newMemberType === 'ip' ? '10.0.1.5' : newMemberType === 'subnet' ? '10.0.1.0/24' : newMemberType === 'range' ? '10.0.1.1-10.0.1.50' : 'grp-APP-NH-SZ-comp'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleAddGroupMember(entry.id); }} />
                       <button onClick={() => handleAddGroupMember(entry.id)} disabled={!newMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
                       <button onClick={() => setAddingMemberToGroup(null)} className="text-xs text-gray-500 hover:text-gray-700">Done</button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3 mt-1">
                       <button onClick={() => { setAddingMemberToGroup(entry.id); setNewMemberType('ip'); setNewMemberValue(''); }} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1">
-                        <span>+</span> Add IP / Subnet / Range
+                        <span>+</span> Add Member (IP / Subnet / Range / Group)
                       </button>
                       {addingChildGroupTo === entry.id ? (
                         <div className="flex gap-1.5 items-center bg-white border border-emerald-200 rounded p-1.5">
@@ -487,6 +502,7 @@ function ResourceEditor({ label, entries, onChange, appGroups, colorScheme }: {
                   <option value="ip">IP (svr-)</option>
                   <option value="subnet">Subnet (net-)</option>
                   <option value="range">Range (rng-)</option>
+                  <option value="group">Group (grp-)</option>
                 </select>
                 <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)} placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'subnet' ? '10.0.1.0/24' : '10.0.1.1-10.0.1.50'} className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded" onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
                 <button onClick={handleWizAddMember} disabled={!wizMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-gray-300">Add</button>
@@ -531,6 +547,22 @@ export default function FirewallManagementPage() {
   const [sourceEntries, setSourceEntries] = useState<ResourceEntry[]>([]);
   const [destEntries, setDestEntries] = useState<ResourceEntry[]>([]);
   const [serviceEntries, setServiceEntries] = useState<ResourceEntry[]>([]);
+  // Advanced filter state
+  const [advFilterSource, setAdvFilterSource] = useState('');
+  const [advFilterDest, setAdvFilterDest] = useState('');
+  const [advFilterGeneral, setAdvFilterGeneral] = useState('');
+  const [showAdvFilter, setShowAdvFilter] = useState(false);
+  // Bulk update App Distributed ID state
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
+  const [showBulkUpdatePanel, setShowBulkUpdatePanel] = useState(false);
+  const [bulkAppDistId, setBulkAppDistId] = useState('');
+  const [bulkAppName, setBulkAppName] = useState('');
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [autoLookedUpName, setAutoLookedUpName] = useState('');
+  // Issue 5: Missing details popup state
+  const [showMissingDetailsPopup, setShowMissingDetailsPopup] = useState(false);
+  const [missingExtraFields, setMissingExtraFields] = useState<Record<string, string>>({});
+  const [pendingBulkResult, setPendingBulkResult] = useState<{ updated: number; fields_copied: string[] } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -568,11 +600,117 @@ export default function FirewallManagementPage() {
     return true;
   });
 
-  const filteredRules = envFilteredRules.filter(r => {
-    if (activeTab === 'non_standard') return !r.is_standard;
-    if (activeTab === 'standard') return r.is_standard;
+  // Apply advanced filters on top of environment + tab filters
+  const advFilteredRules = envFilteredRules.filter(r => {
+    if (activeTab === 'non_standard' && r.is_standard) return false;
+    if (activeTab === 'standard' && !r.is_standard) return false;
+    const srcLower = advFilterSource.toLowerCase().trim();
+    const dstLower = advFilterDest.toLowerCase().trim();
+    const genLower = advFilterGeneral.toLowerCase().trim();
+    if (srcLower) {
+      const srcFields = [r.rule_source, r.rule_source_expanded, r.rule_source_zone].map(f => (f || '').toLowerCase());
+      if (!srcFields.some(f => f.includes(srcLower))) return false;
+    }
+    if (dstLower) {
+      const dstFields = [r.rule_destination, r.rule_destination_expanded, r.rule_destination_zone].map(f => (f || '').toLowerCase());
+      if (!dstFields.some(f => f.includes(dstLower))) return false;
+    }
+    if (genLower) {
+      const allFields = [
+        r.id, String(r.app_id), r.app_distributed_id, r.app_name,
+        r.rule_source, r.rule_source_expanded, r.rule_destination, r.rule_destination_expanded,
+        r.rule_source_zone, r.rule_destination_zone, r.rule_service, r.inventory_item,
+      ].map(f => (f || '').toLowerCase());
+      if (!allFields.some(f => f.includes(genLower))) return false;
+    }
     return true;
   });
+
+  const filteredRules = advFilteredRules;
+
+  // Auto-lookup app name when bulkAppDistId changes
+  const handleBulkAppDistIdChange = (val: string) => {
+    setBulkAppDistId(val);
+    setAutoLookedUpName('');
+    if (val.trim()) {
+      const existing = rules.find(r => r.app_distributed_id === val.trim() && r.app_name);
+      if (existing) {
+        setAutoLookedUpName(existing.app_name || '');
+        if (!bulkAppName) setBulkAppName(existing.app_name || '');
+      }
+    }
+  };
+
+  const handleBulkUpdate = async (extraFields?: Record<string, string>) => {
+    if (!bulkAppDistId.trim() || selectedRuleIds.size === 0) return;
+    setBulkUpdating(true);
+    try {
+      const result = await bulkUpdateLegacyRuleAppId(
+        Array.from(selectedRuleIds), bulkAppDistId.trim(), bulkAppName.trim() || undefined, extraFields
+      );
+      // Issue 5: If app not found, show popup for missing details
+      if (!result.app_found && !extraFields) {
+        setPendingBulkResult({ updated: result.updated, fields_copied: result.fields_copied });
+        setShowMissingDetailsPopup(true);
+        setBulkUpdating(false);
+        return;
+      }
+      const fieldsCopied = result.fields_copied.length > 0
+        ? ` (also updated: ${result.fields_copied.join(', ')})`
+        : '';
+      showNotification(`Updated ${result.updated} rule(s) with App Distributed ID: ${bulkAppDistId}${fieldsCopied}`, 'success');
+      setSelectedRuleIds(new Set());
+      setBulkAppDistId('');
+      setBulkAppName('');
+      setAutoLookedUpName('');
+      setShowBulkUpdatePanel(false);
+      setShowMissingDetailsPopup(false);
+      setMissingExtraFields({});
+      setPendingBulkResult(null);
+      loadData();
+    } catch {
+      showNotification('Failed to bulk update rules', 'error');
+    }
+    setBulkUpdating(false);
+  };
+
+  const handleMissingDetailsSubmit = () => {
+    setShowMissingDetailsPopup(false);
+    handleBulkUpdate(missingExtraFields);
+  };
+
+  const handleMissingDetailsSkip = () => {
+    setShowMissingDetailsPopup(false);
+    setMissingExtraFields({});
+    setPendingBulkResult(null);
+    if (pendingBulkResult && pendingBulkResult.updated > 0) {
+      showNotification(`Updated ${pendingBulkResult.updated} rule(s) with App Distributed ID: ${bulkAppDistId}`, 'success');
+      setSelectedRuleIds(new Set());
+      setBulkAppDistId('');
+      setBulkAppName('');
+      setAutoLookedUpName('');
+      setShowBulkUpdatePanel(false);
+      loadData();
+    }
+  };
+
+  const toggleSelectRule = (id: string) => {
+    setSelectedRuleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (visibleIds?: string[]) => {
+    // visibleIds comes from DataTable's internal search/filter — use it when available
+    const ids = visibleIds || filteredRules.map(r => r.id);
+    if (selectedRuleIds.size === ids.length && ids.every(id => selectedRuleIds.has(id))) {
+      setSelectedRuleIds(new Set());
+    } else {
+      setSelectedRuleIds(new Set(ids));
+    }
+  };
 
   const standardCount = envFilteredRules.filter(r => r.is_standard).length;
   const nonStandardCount = envFilteredRules.filter(r => !r.is_standard).length;
@@ -930,7 +1068,91 @@ export default function FirewallManagementPage() {
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-      <div className="mt-4">
+      {/* Advanced Filter Panel */}
+      <div className="mt-4 mb-3">
+        <button onClick={() => setShowAdvFilter(!showAdvFilter)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+          <span>{showAdvFilter ? 'Hide' : 'Show'} Advanced Filters</span>
+          <span className="text-[10px]">{showAdvFilter ? '\u25B2' : '\u25BC'}</span>
+          {(advFilterSource || advFilterDest || advFilterGeneral) && <span className="ml-1 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px]">Active</span>}
+        </button>
+        {showAdvFilter && (
+          <div className="mt-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Filter by Source (IP / Subnet / Group / Zone)</label>
+                <input type="text" value={advFilterSource} onChange={e => setAdvFilterSource(e.target.value)}
+                  placeholder="e.g. 10.25.1.10, CRM_WebFarm, STD..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Filter by Destination (IP / Subnet / Group / Zone)</label>
+                <input type="text" value={advFilterDest} onChange={e => setAdvFilterDest(e.target.value)}
+                  placeholder="e.g. 10.25.3.10, CRM-DB-Servers, GEN..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">General Search (any field)</label>
+                <input type="text" value={advFilterGeneral} onChange={e => setAdvFilterGeneral(e.target.value)}
+                  placeholder="e.g. AD-1001, Payment, tcp/443..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+              <span className="text-xs text-gray-500">{filteredRules.length} rule(s) match filters</span>
+              <button onClick={() => { setAdvFilterSource(''); setAdvFilterDest(''); setAdvFilterGeneral(''); }}
+                className="text-xs font-medium text-gray-600 hover:text-gray-800">Clear Filters</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bulk Update App Distributed ID Panel */}
+      {selectedRuleIds.size > 0 && (
+        <div className="mb-3 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-indigo-800">{selectedRuleIds.size} rule(s) selected</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowBulkUpdatePanel(!showBulkUpdatePanel)}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                {showBulkUpdatePanel ? 'Hide' : 'Update App Distributed ID'}
+              </button>
+              <button onClick={() => setSelectedRuleIds(new Set())}
+                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                Clear Selection
+              </button>
+            </div>
+          </div>
+          {showBulkUpdatePanel && (
+            <div className="mt-3 pt-3 border-t border-indigo-200">
+              <div className="grid grid-cols-3 gap-4 items-end">
+                <div>
+                  <label className="block text-xs font-medium text-indigo-700 mb-1">App Distributed ID *</label>
+                  <input type="text" value={bulkAppDistId} onChange={e => handleBulkAppDistIdChange(e.target.value)}
+                    placeholder="e.g. AD-1001"
+                    className="w-full px-3 py-2 text-sm border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white" />
+                  {autoLookedUpName && (
+                    <p className="mt-1 text-[10px] text-indigo-600">Auto-found: {autoLookedUpName}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-indigo-700 mb-1">App Name {autoLookedUpName ? '(auto-populated)' : '(optional)'}</label>
+                  <input type="text" value={bulkAppName} onChange={e => setBulkAppName(e.target.value)}
+                    placeholder="e.g. Customer Relationship Manager"
+                    className="w-full px-3 py-2 text-sm border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white" />
+                </div>
+                <div>
+                  <button onClick={() => handleBulkUpdate()} disabled={!bulkAppDistId.trim() || bulkUpdating}
+                    className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {bulkUpdating ? 'Updating...' : `Apply to ${selectedRuleIds.size} Rule(s)`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-2">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -944,6 +1166,9 @@ export default function FirewallManagementPage() {
             emptyMessage="No rules found. Import rules via Data Import page."
             searchPlaceholder="Search by IP, group, app, rule ID, zone, service..."
             searchFields={['id', 'app_id', 'app_distributed_id', 'app_name', 'rule_source', 'rule_source_expanded', 'rule_destination', 'rule_destination_expanded', 'rule_source_zone', 'rule_destination_zone', 'rule_service', 'inventory_item']}
+            selectedIds={selectedRuleIds}
+            onSelect={toggleSelectRule}
+            onSelectAll={toggleSelectAll}
             onRowClick={(row) => detailModal.open(row)}
           />
         )}
@@ -1275,6 +1500,72 @@ export default function FirewallManagementPage() {
         applications={allApplications.map(a => ({ app_id: a.app_id, app_distributed_id: a.app_distributed_id, name: a.name }))}
         environment={selectedEnv || undefined}
       />
+
+      {/* Issue 5: Missing Details Popup when App Distributed ID not found */}
+      {showMissingDetailsPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-amber-700 mb-2">App Not Found — Provide Additional Details</h3>
+            <p className="text-xs text-gray-600 mb-4">
+              No existing rules or applications match <strong>{bulkAppDistId}</strong>.
+              You can provide additional details below, or skip to apply just the App Distributed ID.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Policy Name</label>
+                <input type="text" value={missingExtraFields.policy_name || ''}
+                  onChange={e => setMissingExtraFields(prev => ({ ...prev, policy_name: e.target.value }))}
+                  placeholder="e.g. FW-PROD-ALPHA"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Inventory Item</label>
+                <input type="text" value={missingExtraFields.inventory_item || ''}
+                  onChange={e => setMissingExtraFields(prev => ({ ...prev, inventory_item: e.target.value }))}
+                  placeholder="e.g. INV-12345"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Source Zone</label>
+                  <input type="text" value={missingExtraFields.rule_source_zone || ''}
+                    onChange={e => setMissingExtraFields(prev => ({ ...prev, rule_source_zone: e.target.value }))}
+                    placeholder="e.g. Trust"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Destination Zone</label>
+                  <input type="text" value={missingExtraFields.rule_destination_zone || ''}
+                    onChange={e => setMissingExtraFields(prev => ({ ...prev, rule_destination_zone: e.target.value }))}
+                    placeholder="e.g. Untrust"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Rule Action</label>
+                <select value={missingExtraFields.rule_action || ''}
+                  onChange={e => setMissingExtraFields(prev => ({ ...prev, rule_action: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                  <option value="">-- Leave unchanged --</option>
+                  <option value="Allow">Allow</option>
+                  <option value="Deny">Deny</option>
+                  <option value="Drop">Drop</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5 pt-3 border-t">
+              <button onClick={handleMissingDetailsSkip}
+                className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                Skip — Apply ID Only
+              </button>
+              <button onClick={handleMissingDetailsSubmit}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700">
+                Apply with Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ModuleAssistant module="firewall-management" context={{ app_id: selectedApp, environment: selectedEnv }} />
     </div>

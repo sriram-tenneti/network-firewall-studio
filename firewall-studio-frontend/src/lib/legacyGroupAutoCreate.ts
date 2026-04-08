@@ -266,6 +266,7 @@ export async function autoCreateLegacyGroupsFromRules(
           app_id: group.appId,
           description: 'Legacy nested group auto-created from import',
           members: child.members.map(m => ({ type: m.type, value: m.value, description: '' })),
+          skip_prefix: true, // Legacy groups: keep name as-is, no grp- prefix
         });
         existingGroupNames.add(child.name);
         result.nestedGroupsCreated++;
@@ -311,6 +312,7 @@ export async function autoCreateLegacyGroupsFromRules(
         app_id: group.appId,
         description: 'Legacy group auto-created from import',
         members: allMembers,
+        skip_prefix: true, // Legacy groups: keep name as-is, no grp- prefix
       });
       existingGroupNames.add(group.name);
       result.groupsCreated++;
