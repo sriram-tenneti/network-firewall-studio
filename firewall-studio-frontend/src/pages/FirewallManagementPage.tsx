@@ -558,6 +558,10 @@ export default function FirewallManagementPage() {
   const [bulkAppName, setBulkAppName] = useState('');
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [autoLookedUpName, setAutoLookedUpName] = useState('');
+  // Issue 5: Missing details popup state
+  const [showMissingDetailsPopup, setShowMissingDetailsPopup] = useState(false);
+  const [missingExtraFields, setMissingExtraFields] = useState<Record<string, string>>({});
+  const [pendingBulkResult, setPendingBulkResult] = useState<{ updated: number; fields_copied: string[] } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -636,24 +640,57 @@ export default function FirewallManagementPage() {
     }
   };
 
-  const handleBulkUpdate = async () => {
+  const handleBulkUpdate = async (extraFields?: Record<string, string>) => {
     if (!bulkAppDistId.trim() || selectedRuleIds.size === 0) return;
     setBulkUpdating(true);
     try {
       const result = await bulkUpdateLegacyRuleAppId(
-        Array.from(selectedRuleIds), bulkAppDistId.trim(), bulkAppName.trim() || undefined
+        Array.from(selectedRuleIds), bulkAppDistId.trim(), bulkAppName.trim() || undefined, extraFields
       );
-      showNotification(`Updated ${result.updated} rule(s) with App Distributed ID: ${bulkAppDistId}`, 'success');
+      // Issue 5: If app not found, show popup for missing details
+      if (!result.app_found && !extraFields) {
+        setPendingBulkResult({ updated: result.updated, fields_copied: result.fields_copied });
+        setShowMissingDetailsPopup(true);
+        setBulkUpdating(false);
+        return;
+      }
+      const fieldsCopied = result.fields_copied.length > 0
+        ? ` (also updated: ${result.fields_copied.join(', ')})`
+        : '';
+      showNotification(`Updated ${result.updated} rule(s) with App Distributed ID: ${bulkAppDistId}${fieldsCopied}`, 'success');
+      setSelectedRuleIds(new Set());
+      setBulkAppDistId('');
+      setBulkAppName('');
+      setAutoLookedUpName('');
+      setShowBulkUpdatePanel(false);
+      setShowMissingDetailsPopup(false);
+      setMissingExtraFields({});
+      setPendingBulkResult(null);
+      loadData();
+    } catch {
+      showNotification('Failed to bulk update rules', 'error');
+    }
+    setBulkUpdating(false);
+  };
+
+  const handleMissingDetailsSubmit = () => {
+    setShowMissingDetailsPopup(false);
+    handleBulkUpdate(missingExtraFields);
+  };
+
+  const handleMissingDetailsSkip = () => {
+    setShowMissingDetailsPopup(false);
+    setMissingExtraFields({});
+    setPendingBulkResult(null);
+    if (pendingBulkResult && pendingBulkResult.updated > 0) {
+      showNotification(`Updated ${pendingBulkResult.updated} rule(s) with App Distributed ID: ${bulkAppDistId}`, 'success');
       setSelectedRuleIds(new Set());
       setBulkAppDistId('');
       setBulkAppName('');
       setAutoLookedUpName('');
       setShowBulkUpdatePanel(false);
       loadData();
-    } catch {
-      showNotification('Failed to bulk update rules', 'error');
     }
-    setBulkUpdating(false);
   };
 
   const toggleSelectRule = (id: string) => {
@@ -1103,7 +1140,7 @@ export default function FirewallManagementPage() {
                     className="w-full px-3 py-2 text-sm border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white" />
                 </div>
                 <div>
-                  <button onClick={handleBulkUpdate} disabled={!bulkAppDistId.trim() || bulkUpdating}
+                  <button onClick={() => handleBulkUpdate()} disabled={!bulkAppDistId.trim() || bulkUpdating}
                     className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     {bulkUpdating ? 'Updating...' : `Apply to ${selectedRuleIds.size} Rule(s)`}
                   </button>
@@ -1462,6 +1499,72 @@ export default function FirewallManagementPage() {
         applications={allApplications.map(a => ({ app_id: a.app_id, app_distributed_id: a.app_distributed_id, name: a.name }))}
         environment={selectedEnv || undefined}
       />
+
+      {/* Issue 5: Missing Details Popup when App Distributed ID not found */}
+      {showMissingDetailsPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-amber-700 mb-2">App Not Found — Provide Additional Details</h3>
+            <p className="text-xs text-gray-600 mb-4">
+              No existing rules or applications match <strong>{bulkAppDistId}</strong>.
+              You can provide additional details below, or skip to apply just the App Distributed ID.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Policy Name</label>
+                <input type="text" value={missingExtraFields.policy_name || ''}
+                  onChange={e => setMissingExtraFields(prev => ({ ...prev, policy_name: e.target.value }))}
+                  placeholder="e.g. FW-PROD-ALPHA"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Inventory Item</label>
+                <input type="text" value={missingExtraFields.inventory_item || ''}
+                  onChange={e => setMissingExtraFields(prev => ({ ...prev, inventory_item: e.target.value }))}
+                  placeholder="e.g. INV-12345"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Source Zone</label>
+                  <input type="text" value={missingExtraFields.rule_source_zone || ''}
+                    onChange={e => setMissingExtraFields(prev => ({ ...prev, rule_source_zone: e.target.value }))}
+                    placeholder="e.g. Trust"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Destination Zone</label>
+                  <input type="text" value={missingExtraFields.rule_destination_zone || ''}
+                    onChange={e => setMissingExtraFields(prev => ({ ...prev, rule_destination_zone: e.target.value }))}
+                    placeholder="e.g. Untrust"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Rule Action</label>
+                <select value={missingExtraFields.rule_action || ''}
+                  onChange={e => setMissingExtraFields(prev => ({ ...prev, rule_action: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                  <option value="">-- Leave unchanged --</option>
+                  <option value="Allow">Allow</option>
+                  <option value="Deny">Deny</option>
+                  <option value="Drop">Drop</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5 pt-3 border-t">
+              <button onClick={handleMissingDetailsSkip}
+                className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                Skip — Apply ID Only
+              </button>
+              <button onClick={handleMissingDetailsSubmit}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700">
+                Apply with Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

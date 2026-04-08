@@ -790,29 +790,60 @@ async def bulk_update_legacy_rule_app_id(
     rule_ids: list[str],
     app_distributed_id: str,
     app_name: str | None = None,
-) -> int:
+    extra_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Bulk-update app_distributed_id (and optionally app_name) for a list of legacy rules.
 
     If app_name is not provided, tries to auto-populate from the applications
     table first, then from existing rules that already have the given
     app_distributed_id.
-    Returns the number of rules updated.
+    Also copies related fields (policy_name, inventory_item, etc.) from
+    existing records of the new App Distributed ID — EXCEPT source, destination,
+    service, and their expansions (per Issue 5 spec).
+    Marks updated rules as user_modified to protect from re-import overwrite.
+    Returns dict with updated count and whether the app was found.
     """
     rules = _load("legacy_rules") or []
     # Auto-lookup app_name from applications table first
+    app_found = False
     if not app_name:
         apps = _load("applications") or []
         for a in apps:
             if a.get("app_distributed_id") == app_distributed_id:
                 app_name = a.get("name") or a.get("app_name")
+                app_found = True
                 break
-    # Fallback: lookup from existing rules
-    if not app_name:
-        for r in rules:
-            if r.get("app_distributed_id") == app_distributed_id and r.get("app_name"):
+    # Fallback: lookup from existing rules that already have this app_distributed_id
+    # and collect related fields to copy
+    related_fields: dict[str, str] = {}
+    COPYABLE_FIELDS = [
+        "app_name", "policy_name", "inventory_item",
+        "rule_source_zone", "rule_destination_zone", "rule_action",
+    ]
+    PROTECTED_FIELDS = [
+        "rule_source", "rule_destination", "rule_service",
+        "rule_source_expanded", "rule_destination_expanded", "rule_service_expanded",
+    ]
+    for r in rules:
+        if r.get("app_distributed_id") == app_distributed_id:
+            app_found = True
+            if not app_name and r.get("app_name"):
                 app_name = r["app_name"]
+            # Collect non-empty copyable fields from first matching rule
+            if not related_fields:
+                for f in COPYABLE_FIELDS:
+                    val = r.get(f)
+                    if val:
+                        related_fields[f] = str(val)
+            if app_name and related_fields:
                 break
-    # Use a set for O(1) lookup instead of list scan
+
+    # Apply any extra_fields provided by the caller (e.g. from popup)
+    if extra_fields:
+        for k, v in extra_fields.items():
+            if k not in PROTECTED_FIELDS and v:
+                related_fields[k] = str(v)
+
     rule_id_set = set(rule_ids)
     updated = 0
     for r in rules:
@@ -820,10 +851,17 @@ async def bulk_update_legacy_rule_app_id(
             r["app_distributed_id"] = app_distributed_id
             if app_name:
                 r["app_name"] = app_name
+            # Copy related fields from existing records (skip protected fields)
+            for f, val in related_fields.items():
+                if f not in PROTECTED_FIELDS:
+                    r[f] = val
+            # Mark as user-modified to protect from re-import overwrite
+            r["user_modified"] = True
+            r["user_modified_at"] = _now()
             updated += 1
     if updated:
         _save("legacy_rules", rules)
-    return updated
+    return {"updated": updated, "app_found": app_found, "fields_copied": list(related_fields.keys())}
 
 
 async def delete_legacy_rule(rule_id: str) -> bool:
@@ -907,9 +945,16 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         except (ValueError, IndexError):
             pass
 
+    # Build set of IDs for user-modified rules — these must not be overwritten (Issue 5)
+    user_modified_ids: set[str] = set()
+    for r in existing:
+        if r.get("user_modified"):
+            user_modified_ids.add(r.get("id", ""))
+
     added = 0
     duplicates = 0
     superseded_skipped = 0
+    user_modified_skipped = 0
     for rule in new_rules:
         fp = _rule_fingerprint(rule)
         if fp in existing_keys:
@@ -918,6 +963,24 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         if fp in superseded:
             superseded_skipped += 1
             duplicates += 1  # count as duplicate for the caller
+            continue
+        # Check if this rule would overwrite a user-modified rule (by matching app_distributed_id + source + dest)
+        # If so, skip it to protect the user's modifications
+        rule_app_id = rule.get("app_distributed_id", "")
+        rule_src = rule.get("rule_source", "")
+        rule_dst = rule.get("rule_destination", "")
+        skip_as_modified = False
+        if rule_app_id and user_modified_ids:
+            for er in existing:
+                if (er.get("id") in user_modified_ids and
+                    er.get("app_distributed_id") == rule_app_id and
+                    er.get("rule_source") == rule_src and
+                    er.get("rule_destination") == rule_dst):
+                    skip_as_modified = True
+                    break
+        if skip_as_modified:
+            user_modified_skipped += 1
+            duplicates += 1
             continue
         max_num += 1
         rule["id"] = f"LR-{max_num:05d}"
@@ -935,7 +998,8 @@ async def import_legacy_rules(new_rules: list[dict[str, Any]]) -> dict[str, int]
         added += 1
 
     _save("legacy_rules", existing)
-    return {"added": added, "duplicates": duplicates, "superseded_skipped": superseded_skipped, "total": len(existing)}
+    return {"added": added, "duplicates": duplicates, "superseded_skipped": superseded_skipped,
+            "user_modified_skipped": user_modified_skipped, "total": len(existing)}
 
 
 async def get_migration_history() -> list[dict[str, Any]]:
@@ -2217,15 +2281,16 @@ async def get_group(name: str) -> dict[str, Any] | None:
     return None
 
 
-async def create_group(data: dict[str, Any]) -> dict[str, Any]:
+async def create_group(data: dict[str, Any], skip_prefix: bool = False) -> dict[str, Any]:
     groups = _load("groups") or []
-    # Auto-prefix group name if missing
-    if "name" in data:
+    # Auto-prefix group name if missing (skip for legacy groups imported as-is)
+    if "name" in data and not skip_prefix:
         data["name"] = _auto_prefix(data["name"], "group")
-    # Auto-prefix member values
-    for m in data.get("members", []):
-        if "value" in m:
-            m["value"] = _auto_prefix(m["value"], m.get("type", "ip"))
+    # Auto-prefix member values (skip for legacy imports)
+    if not skip_prefix:
+        for m in data.get("members", []):
+            if "value" in m:
+                m["value"] = _auto_prefix(m["value"], m.get("type", "ip"))
     data["created_at"] = _now()
     data["updated_at"] = _now()
     groups.append(dict(data))

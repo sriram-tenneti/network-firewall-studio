@@ -83,6 +83,19 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
 
   const [form, setForm] = useState(buildDefaultForm);
 
+  /** Try to extract the component code from an NGDC group name like grp-APP01-NH01-STD-WEB */
+  const extractComponentFromGroup = (groupName: string): string => {
+    if (!groupName) return '';
+    const parts = groupName.split('-');
+    // Pattern: grp-{app}-{nh}-{sz}-{component}
+    if (parts.length >= 5 && parts[0].toLowerCase() === 'grp') {
+      const candidate = parts[parts.length - 1].toUpperCase();
+      const knownComponents = ['APP', 'WEB', 'DB', 'BAT', 'MQ', 'API', 'LB', 'MON', 'MFR', 'SVC'];
+      if (knownComponents.includes(candidate)) return candidate;
+    }
+    return '';
+  };
+
   // Pre-populate form when editing a draft rule
   useEffect(() => {
     if (!editRule) return;
@@ -98,15 +111,19 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     const ruleAny = editRule as unknown as Record<string, string>;
     const dstApp = ruleAny.dst_application || '';
     const dstNh = ruleAny.destination_nh || '';
+    // Extract component from stored field or from group name
+    const srcComp = ruleAny.src_component || extractComponentFromGroup(srcGroup);
+    const dstComp = ruleAny.dst_component || extractComponentFromGroup(dstGroup);
     setForm({
       application: editRule.application || '',
       dst_application: dstApp,
       environment: editRule.environment || 'Production',
       datacenter: editRule.datacenter || 'ALPHA_NGDC',
-      src_component: '', dst_component: '',
-      src_nh: srcNh, src_sz: srcSz, src_subtype: 'APP', src_custom: srcGroup,
-      dst_nh: dstNh, dst_sz: dstSz, dst_subtype: 'APP', dst_custom: dstGroup,
-      port: ports || '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
+      src_component: srcComp, dst_component: dstComp,
+      src_nh: srcNh, src_sz: srcSz, src_subtype: srcComp || 'APP', src_custom: srcGroup,
+      dst_nh: dstNh, dst_sz: dstSz, dst_subtype: dstComp || 'APP', dst_custom: dstGroup,
+      port: ports || '443', customPort: '', protocol: 'TCP', action: 'Allow',
+      description: editRule.description || '',
     });
   }, [editRule]);
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
@@ -321,26 +338,62 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     return unique.length > 0 ? unique : FALLBACK_DATACENTERS;
   }, [srcDCs, dstDCs]);
 
-  // Filter groups by NH and SZ — match groups whose name contains the NH and SZ codes
+  // Filter groups by NH, SZ, AND component — match groups whose name contains the codes
   const srcFilteredGroups = useMemo(() => {
-    if (!form.src_nh && !form.src_sz) return srcAppGroups;
+    if (!form.src_nh && !form.src_sz && !form.src_component) return srcAppGroups;
     return srcAppGroups.filter(g => {
       const name = g.name.toLowerCase();
       const matchNh = !form.src_nh || name.includes(form.src_nh.toLowerCase());
       const matchSz = !form.src_sz || name.includes(form.src_sz.toLowerCase());
-      return matchNh && matchSz;
+      const matchComp = !form.src_component || name.includes(form.src_component.toLowerCase());
+      return matchNh && matchSz && matchComp;
     });
-  }, [srcAppGroups, form.src_nh, form.src_sz]);
+  }, [srcAppGroups, form.src_nh, form.src_sz, form.src_component]);
 
   const dstFilteredGroups = useMemo(() => {
-    if (!form.dst_nh && !form.dst_sz) return dstAppGroups;
+    if (!form.dst_nh && !form.dst_sz && !form.dst_component) return dstAppGroups;
     return dstAppGroups.filter(g => {
       const name = g.name.toLowerCase();
       const matchNh = !form.dst_nh || name.includes(form.dst_nh.toLowerCase());
       const matchSz = !form.dst_sz || name.includes(form.dst_sz.toLowerCase());
-      return matchNh && matchSz;
+      const matchComp = !form.dst_component || name.includes(form.dst_component.toLowerCase());
+      return matchNh && matchSz && matchComp;
     });
-  }, [dstAppGroups, form.dst_nh, form.dst_sz]);
+  }, [dstAppGroups, form.dst_nh, form.dst_sz, form.dst_component]);
+
+  // Auto-populate NH/SZ when component is selected and there's only one option (Issue 1)
+  useEffect(() => {
+    if (!form.src_component || !form.application) return;
+    const nhSet = collectMappingNHs(form.application, form.src_component);
+    const szSet = collectMappingSZs(form.application, form.src_component);
+    // Auto-set NH if exactly one match
+    if (nhSet.size === 1 && !form.src_nh) {
+      const nh = Array.from(nhSet)[0];
+      setForm(prev => ({ ...prev, src_nh: nh }));
+    }
+    // Auto-set SZ if exactly one match
+    if (szSet.size === 1 && !form.src_sz) {
+      const sz = Array.from(szSet)[0];
+      setForm(prev => ({ ...prev, src_sz: sz }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.src_component, form.application, collectMappingNHs, collectMappingSZs]);
+
+  useEffect(() => {
+    const dstApp = form.dst_application || form.application;
+    if (!form.dst_component || !dstApp) return;
+    const nhSet = collectMappingNHs(dstApp, form.dst_component);
+    const szSet = collectMappingSZs(dstApp, form.dst_component);
+    if (nhSet.size === 1 && !form.dst_nh) {
+      const nh = Array.from(nhSet)[0];
+      setForm(prev => ({ ...prev, dst_nh: nh }));
+    }
+    if (szSet.size === 1 && !form.dst_sz) {
+      const sz = Array.from(szSet)[0];
+      setForm(prev => ({ ...prev, dst_sz: sz }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.dst_component, form.dst_application, form.application, collectMappingNHs, collectMappingSZs]);
 
   // Generate the standard group name for "create new" option
   const srcSuggestedName = useMemo(() => {
@@ -397,7 +450,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
       const finalSrc = form.src_custom ? autoPrefix(form.src_custom.trim(), 'group') : srcName;
       const finalDst = form.dst_custom ? autoPrefix(form.dst_custom.trim(), 'group') : dstName;
       if (isEditMode && editRule) {
-        // Update existing draft rule
+        // Update existing draft rule — persist component info for future edits
         await api.updateRule(editRule.rule_id, {
           application: form.application, environment: form.environment, datacenter: form.datacenter,
           source: { source_type: 'Group', ip_address: null, cidr: null, group_name: finalSrc, ports: effectivePort, neighbourhood: form.src_nh, security_zone: form.src_sz },
@@ -405,6 +458,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           description: form.description,
           source_nh: form.src_nh, destination_nh: form.dst_nh,
           dst_application: form.dst_application || undefined,
+          src_component: form.src_component || undefined,
+          dst_component: form.dst_component || undefined,
         });
         onRuleCreated();
         if (onEditComplete) onEditComplete();
@@ -417,6 +472,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           description: form.description, is_group_to_group: true,
           source_nh: form.src_nh, destination_nh: form.dst_nh,
           dst_application: form.dst_application || undefined,
+          src_component: form.src_component || undefined,
+          dst_component: form.dst_component || undefined,
         });
         onRuleCreated();
         setDraftCreatedMsg(`Rule created successfully! Status: DRAFT. The rule must be submitted for review before it becomes active.`);

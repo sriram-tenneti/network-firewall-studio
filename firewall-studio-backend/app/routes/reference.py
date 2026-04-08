@@ -655,7 +655,8 @@ async def get_group_endpoint(name: str):
 
 @router.post("/groups")
 async def create_new_group(data: dict):
-    return await create_group(data)
+    skip_prefix = data.pop("skip_prefix", False)
+    return await create_group(data, skip_prefix=skip_prefix)
 
 
 @router.put("/groups/{name:path}")
@@ -732,10 +733,12 @@ async def bulk_update_app_id_endpoint(data: dict):
         rule_ids = data.get("rule_ids", [])
         app_distributed_id = data.get("app_distributed_id", "")
         app_name = data.get("app_name", "") or None
+        extra_fields = data.get("extra_fields", None)
         if not rule_ids or not app_distributed_id:
             raise HTTPException(status_code=400, detail="rule_ids and app_distributed_id are required")
-        count = await bulk_update_legacy_rule_app_id(rule_ids, app_distributed_id, app_name)
-        return {"updated": count, "app_distributed_id": app_distributed_id}
+        result = await bulk_update_legacy_rule_app_id(rule_ids, app_distributed_id, app_name, extra_fields)
+        return {"updated": result["updated"], "app_distributed_id": app_distributed_id,
+                "app_found": result["app_found"], "fields_copied": result["fields_copied"]}
     except HTTPException:
         raise
     except Exception as e:
