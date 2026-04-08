@@ -804,20 +804,22 @@ async def bulk_update_legacy_rule_app_id(
     Returns dict with updated count and whether the app was found.
     """
     rules = _load("legacy_rules") or []
-    # Auto-lookup app_name from applications table first
+    # Auto-lookup app_name and app_id from applications table first
     app_found = False
+    app_id_from_table: str | None = None
     if not app_name:
         apps = _load("applications") or []
         for a in apps:
             if a.get("app_distributed_id") == app_distributed_id:
                 app_name = a.get("name") or a.get("app_name")
+                app_id_from_table = a.get("app_id")
                 app_found = True
                 break
     # Fallback: lookup from existing rules that already have this app_distributed_id
     # and collect related fields to copy
     related_fields: dict[str, str] = {}
     COPYABLE_FIELDS = [
-        "app_name", "policy_name", "inventory_item",
+        "app_id", "app_name", "policy_name", "inventory_item",
         "rule_source_zone", "rule_destination_zone", "rule_action",
     ]
     PROTECTED_FIELDS = [
@@ -838,6 +840,10 @@ async def bulk_update_legacy_rule_app_id(
             if app_name and related_fields:
                 break
 
+    # If we found app_id from the applications table, inject it into related_fields
+    if app_id_from_table and "app_id" not in related_fields:
+        related_fields["app_id"] = str(app_id_from_table)
+
     # Apply any extra_fields provided by the caller (e.g. from popup)
     if extra_fields:
         for k, v in extra_fields.items():
@@ -851,6 +857,9 @@ async def bulk_update_legacy_rule_app_id(
             r["app_distributed_id"] = app_distributed_id
             if app_name:
                 r["app_name"] = app_name
+            # Also update app_id from the related_fields if available
+            if related_fields.get("app_id"):
+                r["app_id"] = related_fields["app_id"]
             # Copy related fields from existing records (skip protected fields)
             for f, val in related_fields.items():
                 if f not in PROTECTED_FIELDS:
@@ -1225,6 +1234,12 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now,
         "certified_date": None,
         "expiry_date": None,
+        # Persist extra context for draft editing (source/dest NH, app, component)
+        "source_nh": rule_data.get("source_nh", ""),
+        "destination_nh": rule_data.get("destination_nh", ""),
+        "dst_application": rule_data.get("dst_application", ""),
+        "src_component": rule_data.get("src_component", ""),
+        "dst_component": rule_data.get("dst_component", ""),
     }
     rules.append(rule)
     _save("firewall_rules", rules)
