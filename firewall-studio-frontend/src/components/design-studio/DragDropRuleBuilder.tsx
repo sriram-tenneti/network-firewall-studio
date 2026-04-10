@@ -153,18 +153,31 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
       .catch(() => setAppDcMappings([]));
   }, []);
 
+  // Helper: check if a mapping belongs to a given appId
+  // The dropdown value is app_distributed_id (e.g. "APP01-NGDC"), but mappings may only
+  // store app_id (e.g. "APP01"). Also resolve via the applications list.
+  const mappingMatchesApp = useCallback((mr: Record<string, string>, appId: string): boolean => {
+    if (!appId) return false;
+    // Direct match on either field
+    if (mr.app_distributed_id === appId || mr.app_id === appId) return true;
+    // Resolve: if appId is an app_distributed_id, find the matching app_id from the applications list
+    const appObj = applications.find(a => (a.app_distributed_id || a.app_id) === appId);
+    if (appObj && mr.app_id === appObj.app_id) return true;
+    return false;
+  }, [applications]);
+
   // Derive available components for source app from app_dc_mappings
   const srcComponents = useMemo(() => {
     if (!form.application) return [] as string[];
     const comps = new Set<string>();
     for (const m of appDcMappings) {
-      const mid = (m as Record<string, string>).app_distributed_id || (m as Record<string, string>).app_id;
-      if (mid === form.application && (m as Record<string, string>).component) {
-        comps.add((m as Record<string, string>).component);
+      const mr = m as Record<string, string>;
+      if (mappingMatchesApp(mr, form.application) && mr.component) {
+        comps.add(mr.component);
       }
     }
     return Array.from(comps).sort();
-  }, [form.application, appDcMappings]);
+  }, [form.application, appDcMappings, mappingMatchesApp]);
 
   // Derive available components for destination app
   const dstComponents = useMemo(() => {
@@ -172,13 +185,13 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     if (!dstApp) return [] as string[];
     const comps = new Set<string>();
     for (const m of appDcMappings) {
-      const mid = (m as Record<string, string>).app_distributed_id || (m as Record<string, string>).app_id;
-      if (mid === dstApp && (m as Record<string, string>).component) {
-        comps.add((m as Record<string, string>).component);
+      const mr = m as Record<string, string>;
+      if (mappingMatchesApp(mr, dstApp) && mr.component) {
+        comps.add(mr.component);
       }
     }
     return Array.from(comps).sort();
-  }, [form.dst_application, form.application, appDcMappings]);
+  }, [form.dst_application, form.application, appDcMappings, mappingMatchesApp]);
 
   // Source NH/SZ/DC from source app
   const [srcNHs, setSrcNHs] = useState<NeighbourhoodRegistry[]>([]);
@@ -264,42 +277,39 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     const nhSet = new Set<string>();
     for (const m of appDcMappings) {
       const mr = m as Record<string, string>;
-      const mid = mr.app_distributed_id || mr.app_id;
-      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+      if (mappingMatchesApp(mr, appId) &&
           (!component || mr.component === component) && mr.nh) {
         nhSet.add(mr.nh);
       }
     }
     return nhSet;
-  }, [appDcMappings]);
+  }, [appDcMappings, mappingMatchesApp]);
 
   const collectMappingSZs = useCallback((appId: string, component?: string) => {
     const szSet = new Set<string>();
     for (const m of appDcMappings) {
       const mr = m as Record<string, string>;
-      const mid = mr.app_distributed_id || mr.app_id;
-      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+      if (mappingMatchesApp(mr, appId) &&
           (!component || mr.component === component) && mr.sz) {
         szSet.add(mr.sz);
       }
     }
     return szSet;
-  }, [appDcMappings]);
+  }, [appDcMappings, mappingMatchesApp]);
 
   // Collect DCs from app_dc_mappings for a given app (and optionally component)
   const collectMappingDCs = useCallback((appId: string, component?: string) => {
     const dcSet = new Set<string>();
     for (const m of appDcMappings) {
       const mr = m as Record<string, string>;
-      const mid = mr.app_distributed_id || mr.app_id;
-      if ((mid === appId || mr.app_id === appId || mr.app_distributed_id === appId) &&
+      if (mappingMatchesApp(mr, appId) &&
           (!component || mr.component === component)) {
         if (mr.dc) dcSet.add(mr.dc);
         if (mr.legacy_dc) dcSet.add(mr.legacy_dc);
       }
     }
     return dcSet;
-  }, [appDcMappings]);
+  }, [appDcMappings, mappingMatchesApp]);
 
   // Derive DCs from mappings for source app+component
   const srcMappingDCs = useMemo(() => {
@@ -360,29 +370,45 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
 
   const dstNeighbourhoods = useMemo(() => {
     const dstApp = form.dst_application || form.application;
+    let result: { id: string; name: string }[];
     if (dstApp) {
       const nhSet = collectMappingNHs(dstApp, form.dst_component || undefined);
       if (nhSet.size > 0) {
         const filtered = dstNHs.filter(nh => nhSet.has(nh.nh_id));
-        if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
-        return FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
+        result = filtered.length > 0 ? filtered.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
+      } else {
+        result = dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
       }
+    } else {
+      result = dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
     }
-    return dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
-  }, [dstNHs, form.dst_component, form.dst_application, form.application, collectMappingNHs]);
+    // Ensure the currently selected destination NH is always present (draft edit restoration)
+    if (form.dst_nh && !result.find(nh => nh.id === form.dst_nh)) {
+      result = [{ id: form.dst_nh, name: form.dst_nh }, ...result];
+    }
+    return result;
+  }, [dstNHs, form.dst_component, form.dst_application, form.application, form.dst_nh, collectMappingNHs]);
 
   const dstZones = useMemo(() => {
     const dstApp = form.dst_application || form.application;
+    let result: { code: string; name: string }[];
     if (dstApp) {
       const szSet = collectMappingSZs(dstApp, form.dst_component || undefined);
       if (szSet.size > 0) {
         const filtered = dstSZs.filter(sz => szSet.has(sz.code));
-        if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
-        return Array.from(szSet).map(code => ({ code, name: code }));
+        result = filtered.length > 0 ? filtered.map(sz => ({ code: sz.code, name: sz.name })) : Array.from(szSet).map(code => ({ code, name: code }));
+      } else {
+        result = dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
       }
+    } else {
+      result = dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
     }
-    return dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
-  }, [dstSZs, form.dst_component, form.dst_application, form.application, collectMappingSZs]);
+    // Ensure the currently selected destination SZ is always present (draft edit restoration)
+    if (form.dst_sz && !result.find(sz => sz.code === form.dst_sz)) {
+      result = [{ code: form.dst_sz, name: form.dst_sz }, ...result];
+    }
+    return result;
+  }, [dstSZs, form.dst_component, form.dst_application, form.application, form.dst_sz, collectMappingSZs]);
 
   // Combined datacenter list for backward compat (uses mapping-derived DCs)
   const datacenters = useMemo(() => {
@@ -495,7 +521,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     && !birthrightResult.firewall_request_required;
 
   const canStep1 = form.application && form.environment && (form.src_dc || form.datacenter);
-  const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz;
+  // Source group is required — rule creation is blocked until a source group is selected from App Groups
+  const srcGroupSelected = !!form.src_custom;
+  const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz && srcGroupSelected;
   const canStep3 = effectivePort && form.protocol;
   const canSubmit = canStep1 && canStep2 && canStep3 && !isBirthrightPermitted;
 
@@ -515,6 +543,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           destination: { name: finalDst, security_zone: form.dst_sz, dest_ip: null, ports: effectivePort, is_predefined: false },
           description: form.description,
           source_nh: form.src_nh, destination_nh: form.dst_nh,
+          // Persist destination_zone at rule level so draft edit can restore it
+          destination_zone: form.dst_sz,
+          source_zone: form.src_sz,
           dst_application: form.dst_application || undefined,
           src_component: form.src_component || undefined,
           dst_component: form.dst_component || undefined,
@@ -955,6 +986,13 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Source group required message */}
+            {form.src_nh && form.src_sz && !srcGroupSelected && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-xs font-semibold text-red-700">Source group is required to proceed. Please select or create a source group from App Groups above.</p>
               </div>
             )}
 
