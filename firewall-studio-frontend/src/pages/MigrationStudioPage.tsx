@@ -21,6 +21,7 @@ import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal'
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, Application } from '@/types';
 import { parseExpandedToDisplayLines } from '@/lib/nestingParser';
 import { isNgdcGroupName } from '@/lib/utils';
+import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
 import type { Column } from '@/components/shared/DataTable';
 
 function BirthrightPanel({ validation }: { validation: BirthrightValidation | null }) {
@@ -2296,6 +2297,8 @@ export function MigrationStudioPage() {
           </div>
         </div>
       </Modal>
+
+      <ModuleAssistant module="migration" context={{ app_id: selectedApp, environment: selectedEnv }} />
     </div>
   );
 }
