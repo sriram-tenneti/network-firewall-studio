@@ -878,10 +878,6 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                               className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
                               Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
                             </button>
-                            <button onClick={() => { setNewGroupName(dstSuggestedName); setNewGroupMembers([]); setCreateGroupForDst(true); setGroupPolicyResult(null); setGroupCompiledPolicy(null); setShowCreateGroupModal(true); }}
-                              className="w-full px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 rounded hover:bg-amber-200 transition-colors">
-                              Create Group in App Groups
-                            </button>
                           </div>
                         )}
                         <p className="text-[10px] text-amber-500 mt-1 italic">Warning: destination group does not exist yet. Rule will still be created.</p>
