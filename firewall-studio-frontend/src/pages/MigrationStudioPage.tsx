@@ -240,16 +240,20 @@ export function MigrationStudioPage() {
       .then(info => setAppMigrationInfo(info))
       .catch(() => setAppMigrationInfo(null));
     // Load Settings App Management mappings for this app (Issue 6 - dynamic DC/component data)
+    // Resolve selectedApp (which may be app_distributed_id) to also match by app_id
+    const appObj = applications.find(a => (a.app_distributed_id || a.app_id) === selectedApp);
+    const resolvedAppId = appObj?.app_id || '';
     getAppDCMappings()
       .then(all => {
         const forApp = (all || []).filter(m => {
           const mr = m as Record<string, string>;
-          return mr.app_id === selectedApp || mr.app_distributed_id === selectedApp;
+          return mr.app_id === selectedApp || mr.app_distributed_id === selectedApp
+            || (resolvedAppId && mr.app_id === resolvedAppId);
         }) as Record<string, string>[];
         setAppDcMappings(forApp);
       })
       .catch(() => setAppDcMappings([]));
-  }, [selectedApp]);
+  }, [selectedApp, applications]);
 
   const loadIPMappings = useCallback(async (appFilter?: string) => {
     setLoadingMappings(true);

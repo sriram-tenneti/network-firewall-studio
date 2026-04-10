@@ -292,7 +292,7 @@ export default function SettingsPage() {
       await api.createApplication(newAppForm as Record<string, unknown>);
       // Also create any component mappings added during app creation
       for (const mapping of newAppMappings) {
-        await api.createAppDCMapping({ ...mapping, app_id: newAppForm.app_id } as Record<string, unknown>);
+        await api.createAppDCMapping({ ...mapping, app_id: newAppForm.app_id, app_distributed_id: newAppForm.app_distributed_id || newAppForm.app_id } as Record<string, unknown>);
       }
       showNotification(`Application added${newAppMappings.length > 0 ? ` with ${newAppMappings.length} component mapping(s)` : ''}`, 'success');
       setShowAddApp(false);
@@ -405,7 +405,9 @@ export default function SettingsPage() {
 
   const handleAddMapping = async () => {
     try {
-      const data = { ...newMappingForm, app_id: selectedApp || newMappingForm.app_id };
+      // Include app_distributed_id so Studio/Migration can match by distributed ID
+      const appObj = applications.find(a => a.app_id === selectedApp);
+      const data = { ...newMappingForm, app_id: selectedApp || newMappingForm.app_id, app_distributed_id: appObj?.app_distributed_id || selectedApp || newMappingForm.app_id };
       await api.createAppDCMapping(data as Record<string, unknown>);
       setShowAddMapping(false);
       setNewMappingForm({ app_id: '', component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
@@ -417,7 +419,9 @@ export default function SettingsPage() {
   // Inline mapping handlers for All Applications table
   const handleInlineAddMapping = async (appId: string) => {
     try {
-      const data = { ...inlineNewMapping, app_id: appId };
+      // Include app_distributed_id so Studio/Migration can match by distributed ID
+      const appObj = applications.find(a => a.app_id === appId);
+      const data = { ...inlineNewMapping, app_id: appId, app_distributed_id: appObj?.app_distributed_id || appId };
       await api.createAppDCMapping(data as Record<string, unknown>);
       setInlineAddMapping(false);
       setInlineNewMapping({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
@@ -533,7 +537,8 @@ export default function SettingsPage() {
   const _handleNgdcAddComponent = async (appId: string) => {
     setNgdcSaving(true);
     try {
-      await api.createAppDCMapping({ app_id: appId, ...ngdcComponentForm, status: 'Active' });
+      const ngdcApp = ngdcImportedApps.find(a => a.app_id === appId);
+      await api.createAppDCMapping({ app_id: appId, app_distributed_id: ngdcApp?.app_distributed_id || appId, ...ngdcComponentForm, status: 'Active' });
       setNgdcComponentForm({component:'APP',dc:'ALPHA_NGDC',nh:'',sz:'',cidr:'',notes:''});
       setNgdcAddingForApp(null);
       loadNgdcApps();
