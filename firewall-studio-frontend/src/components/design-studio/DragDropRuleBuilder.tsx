@@ -85,8 +85,13 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   // State for group auto-creation modal (source only)
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupMembers, setNewGroupMembers] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState<{type: string; value: string}[]>([]);
   const [creatingGroup, setCreatingGroup] = useState(false);
+  // Wizard member-add row state
+  const [wizMemberType, setWizMemberType] = useState<string>('ip');
+  const [wizMemberValue, setWizMemberValue] = useState('');
+  /** Whether the modal was opened for a destination group (vs source) */
+  const [createGroupForDst, setCreateGroupForDst] = useState(false);
 
   const [form, setForm] = useState(buildDefaultForm);
 
@@ -780,7 +785,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                         {srcSuggestedName && (
                           <div className="space-y-1.5">
                             <div className="px-2 py-1.5 text-xs bg-white border border-red-200 rounded font-mono text-red-700">{srcSuggestedName}</div>
-                            <button onClick={() => { setNewGroupName(srcSuggestedName); setNewGroupMembers(''); setShowCreateGroupModal(true); }}
+                            <button onClick={() => { setNewGroupName(srcSuggestedName); setNewGroupMembers([]); setCreateGroupForDst(false); setGroupPolicyResult(null); setGroupCompiledPolicy(null); setShowCreateGroupModal(true); }}
                               className="w-full px-3 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
                               Create Group: {srcSuggestedName}
                             </button>
@@ -873,7 +878,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                               className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
                               Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
                             </button>
-                            <button onClick={() => { setNewGroupName(dstSuggestedName); setNewGroupMembers(''); setShowCreateGroupModal(true); }}
+                            <button onClick={() => { setNewGroupName(dstSuggestedName); setNewGroupMembers([]); setCreateGroupForDst(true); setGroupPolicyResult(null); setGroupCompiledPolicy(null); setShowCreateGroupModal(true); }}
                               className="w-full px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 rounded hover:bg-amber-200 transition-colors">
                               Create Group in App Groups
                             </button>
@@ -1178,6 +1183,18 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     }
   };
 
+  /** Helper: add a member row in the create-group wizard */
+  const handleWizAddMember = () => {
+    if (!wizMemberValue.trim()) return;
+    const prefixed = autoPrefix(wizMemberValue.trim(), wizMemberType as 'ip' | 'subnet' | 'cidr' | 'group' | 'range');
+    setNewGroupMembers(prev => [...prev, { type: wizMemberType, value: prefixed }]);
+    setWizMemberValue('');
+  };
+
+  /** Member-type display helpers */
+  const memberTypeLabel = (t: string) => t === 'cidr' || t === 'subnet' ? 'NET' : t === 'range' ? 'RNG' : t === 'group' ? 'GRP' : 'IP';
+  const memberTypeColor = (t: string) => t === 'cidr' || t === 'subnet' ? 'bg-purple-100 text-purple-700' : t === 'range' ? 'bg-orange-100 text-orange-700' : t === 'group' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700';
+
   const groupModal = showCreateGroupModal && (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
@@ -1188,13 +1205,35 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           <p className="text-xs font-semibold text-amber-800">Policy Change Review Required</p>
           <p className="text-[10px] text-amber-600 mt-0.5">Creating this group will automatically submit a policy change for review &amp; approval. The compiled device policy will be generated for the selected vendor.</p>
         </div>
+        {/* Editable group name */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Group Name</label>
-          <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50" value={newGroupName} readOnly />
+          <input className="w-full px-3 py-2 border rounded-lg text-sm font-mono" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="grp-APP01-NH01-STD-WEB" />
         </div>
+        {/* Members list with add/remove */}
         <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Members (comma-separated IPs / CIDRs)</label>
-          <textarea className="w-full px-3 py-2 border rounded-lg text-sm" rows={3} placeholder="e.g. 10.0.1.0/24, 10.0.2.5" value={newGroupMembers} onChange={e => setNewGroupMembers(e.target.value)} />
+          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Group Members (IPs / Subnets / Ranges)</label>
+          {newGroupMembers.length === 0 && <p className="text-xs text-amber-600 italic mb-2">Add at least one IP, subnet, or range to this group.</p>}
+          {newGroupMembers.map((m, mi) => (
+            <div key={mi} className="flex items-center gap-2 mb-1 px-2 py-1 bg-gray-50 rounded border border-gray-200">
+              <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${memberTypeColor(m.type)}`}>{memberTypeLabel(m.type)}</span>
+              <span className="font-mono text-xs flex-1">{m.value}</span>
+              <button onClick={() => setNewGroupMembers(prev => prev.filter((_, i) => i !== mi))} className="text-red-500 text-[10px] hover:text-red-700">Remove</button>
+            </div>
+          ))}
+          <div className="flex gap-1.5 items-center mt-2">
+            <select value={wizMemberType} onChange={e => setWizMemberType(e.target.value)} className="px-1.5 py-1 text-xs border border-gray-300 rounded">
+              <option value="ip">IP (svr-)</option>
+              <option value="subnet">Subnet (net-)</option>
+              <option value="range">Range (rng-)</option>
+              <option value="group">Group (grp-)</option>
+            </select>
+            <input type="text" value={wizMemberValue} onChange={e => setWizMemberValue(e.target.value)}
+              placeholder={wizMemberType === 'ip' ? '10.0.1.5' : wizMemberType === 'subnet' ? '10.0.1.0/24' : wizMemberType === 'range' ? '10.0.1.1-10.0.1.50' : 'grp-name'}
+              className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded"
+              onKeyDown={e => { if (e.key === 'Enter') handleWizAddMember(); }} />
+            <button onClick={handleWizAddMember} disabled={!wizMemberValue.trim()} className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:bg-gray-300">Add</button>
+          </div>
         </div>
         {/* Compile device type selector */}
         <div>
@@ -1207,11 +1246,11 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           </select>
         </div>
         {/* Preview compile output */}
-        {newGroupMembers.trim() && (
+        {newGroupMembers.length > 0 && (
           <div>
             <button onClick={() => {
-              const members = newGroupMembers.split(',').map(m => m.trim()).filter(Boolean);
-              setGroupCompiledPolicy(generateGroupCompile(newGroupName, members, groupCompileVendor));
+              const vals = newGroupMembers.map(m => m.value);
+              setGroupCompiledPolicy(generateGroupCompile(newGroupName, vals, groupCompileVendor));
             }} className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 mb-2">
               Preview Compiled Policy
             </button>
@@ -1229,44 +1268,52 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           </div>
         )}
         <div className="flex justify-end gap-3">
-          <button onClick={() => { setShowCreateGroupModal(false); setGroupCompiledPolicy(null); setGroupPolicyResult(null); setGroupPolicySubmitted(false); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
-          <button disabled={creatingGroup} onClick={async () => {
+          <button onClick={() => { setShowCreateGroupModal(false); setGroupCompiledPolicy(null); setGroupPolicyResult(null); setGroupPolicySubmitted(false); setCreateGroupForDst(false); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button disabled={creatingGroup || !newGroupName.trim() || newGroupMembers.length === 0} onClick={async () => {
             setCreatingGroup(true);
             try {
-              const members = newGroupMembers.split(',').map(m => m.trim()).filter(Boolean);
+              const nh = createGroupForDst ? form.dst_nh : form.src_nh;
+              const sz = createGroupForDst ? form.dst_sz : form.src_sz;
+              const comp = createGroupForDst ? (form.dst_component || form.dst_subtype || '') : (form.src_component || form.src_subtype || '');
               // Create the group via API
               await api.createGroup({
                 name: newGroupName,
                 app_id: form.application,
-                nh: form.src_nh,
-                sz: form.src_sz,
-                subtype: form.src_component || form.src_subtype || '',
-                description: `Auto-created for ${form.application} in ${form.src_nh}/${form.src_sz}`,
-                members: members.map(m => ({ type: m.includes('/') ? 'subnet' : 'ip', value: m, description: '' })),
+                nh,
+                sz,
+                subtype: comp,
+                description: `Created for ${form.application} in ${nh}/${sz}`,
+                members: newGroupMembers.map(m => ({ type: m.type, value: m.value, description: '' })),
               });
               // Submit policy change for review & approval
+              const memberVals = newGroupMembers.map(m => m.value);
               try {
                 const policyResult = await api.submitGroupPolicyChanges(
                   newGroupName,
                   'group_created',
-                  `Group ${newGroupName} created with ${members.length} member(s) for ${form.application}. Compiled for ${groupCompileVendor}.`,
-                  { added: { [`group:${newGroupName}`]: members }, removed: {}, changed: {},
+                  `Group ${newGroupName} created with ${newGroupMembers.length} member(s) for ${form.application}. Compiled for ${groupCompileVendor}.`,
+                  { added: { [`group:${newGroupName}`]: memberVals }, removed: {}, changed: {},
                     compile_vendor: groupCompileVendor,
-                    compiled_policy: generateGroupCompile(newGroupName, members, groupCompileVendor) }
+                    compiled_policy: generateGroupCompile(newGroupName, memberVals, groupCompileVendor) }
                 );
                 setGroupPolicySubmitted(true);
                 setGroupPolicyResult(`Policy change submitted — ${policyResult.affected_rules} affected rule(s) sent for review`);
               } catch {
                 setGroupPolicyResult('Group created but policy change submission failed — submit manually from Review page');
               }
-              upd('src_custom', newGroupName);
-              onRuleCreated(); // trigger refresh
+              // Select the newly created group in the appropriate field
+              if (createGroupForDst) {
+                upd('dst_custom', newGroupName);
+              } else {
+                upd('src_custom', newGroupName);
+              }
+              onRuleCreated(); // trigger refresh so the new group appears in dropdowns
             } catch {
               setGroupPolicyResult('Failed to create group — check for duplicates');
             }
             setCreatingGroup(false);
           }} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-            {creatingGroup ? 'Creating & Submitting...' : 'Create Group & Submit for Review'}
+            {creatingGroup ? 'Creating & Submitting...' : `Create Group with ${newGroupMembers.length} member${newGroupMembers.length !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
