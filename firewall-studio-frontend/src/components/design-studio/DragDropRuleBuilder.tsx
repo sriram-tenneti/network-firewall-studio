@@ -526,9 +526,10 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     && !birthrightResult.firewall_request_required;
 
   const canStep1 = form.application && form.environment && (form.src_dc || form.datacenter);
-  // Source group is required — rule creation is blocked until a source group is selected from App Groups
+  // Source and destination groups are required — rule creation is blocked until both are selected from App Groups
   const srcGroupSelected = !!form.src_custom;
-  const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz && srcGroupSelected;
+  const dstGroupSelected = !!form.dst_custom;
+  const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz && srcGroupSelected && dstGroupSelected;
   const canStep3 = effectivePort && form.protocol;
   const canSubmit = canStep1 && canStep2 && canStep3 && !isBirthrightPermitted;
 
@@ -866,21 +867,10 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                         <p className="text-[10px] text-gray-400 mt-0.5">{dstFilteredGroups.length} group(s) match {form.dst_nh && `NH: ${form.dst_nh}`}{form.dst_nh && form.dst_sz && ', '}{form.dst_sz && `SZ: ${form.dst_sz}`}</p>
                       </>
                     ) : (form.dst_application || form.application) && form.dst_nh && form.dst_sz ? (
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs text-amber-700 font-medium mb-1">No groups found for {form.dst_application || form.application} in {form.dst_nh}/{form.dst_sz}</p>
-                        <p className="text-[10px] text-amber-600 mb-2">You can still continue — select a component to generate the destination group name:</p>
-                        <select className={sel + ' mb-2'} value={form.dst_subtype} onChange={e => { upd('dst_subtype', e.target.value); upd('dst_custom', ''); }}>
-                          {(dstComponents.length > 0 ? dstComponents : SUBTYPES.map(s => s.code)).map(c => (<option key={c} value={c}>{c}</option>))}
-                        </select>
-                        {dstSuggestedName && (
-                          <div className="space-y-1.5">
-                            <button onClick={() => upd('dst_custom', dstSuggestedName)}
-                              className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
-                              Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
-                            </button>
-                          </div>
-                        )}
-                        <p className="text-[10px] text-amber-500 mt-1 italic">Warning: destination group does not exist yet. Rule will still be created.</p>
+                      <div className="p-3 bg-red-50 border border-red-300 rounded-lg">
+                        <p className="text-xs text-red-700 font-bold mb-1">No destination group exists for {form.dst_application || form.application} in {form.dst_nh}/{form.dst_sz}</p>
+                        <p className="text-[10px] text-red-600 mb-2">Please re-check your destination Application, Component, NH, and SZ selections. The destination group must already exist in App Groups before creating a firewall rule.</p>
+                        <p className="text-[10px] text-red-500 font-semibold">Rule creation is blocked until a valid destination group is selected.</p>
                       </div>
                     ) : (
                       <select className={sel} disabled>
