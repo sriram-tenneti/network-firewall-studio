@@ -138,18 +138,19 @@ export default function SettingsPage() {
   const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
 
   // Inline component editor in All Applications table
-  const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
-  const [inlineAddMapping, setInlineAddMapping] = useState(false);
+  const [_expandedAppId, _setExpandedAppId] = useState<string | null>(null);
+  const [_inlineAddMapping, setInlineAddMapping] = useState(false);
   const [inlineNewMapping, setInlineNewMapping] = useState<Partial<AppDCMapping>>({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
   const [inlineEditMappingId, setInlineEditMappingId] = useState<string | null>(null);
-  const [inlineEditForm, setInlineEditForm] = useState<Partial<AppDCMapping>>({});
+  const [inlineEditForm, _setInlineEditForm] = useState<Partial<AppDCMapping>>({});
 
   // New app component mappings (for Add New Application form)
-  const [newAppMappings, setNewAppMappings] = useState<Partial<AppDCMapping>[]>([]);
-  const [newAppMappingForm, setNewAppMappingForm] = useState<Partial<AppDCMapping>>({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
+  const [_newAppMappings, _setNewAppMappings] = useState<Partial<AppDCMapping>[]>([]);
+  const [_newAppMappingForm, _setNewAppMappingForm] = useState<Partial<AppDCMapping>>({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
   const [importingApps, setImportingApps] = useState(false);
   const [importResult, setImportResult] = useState<{ added: number; updated: number; skipped: number; total: number; overrides: { app_distributed_id: string; app_id: string }[] } | null>(null);
-  void importResult;
+  void importResult; void _expandedAppId; void _setExpandedAppId; void _inlineAddMapping; void _setInlineEditForm;
+  void _newAppMappings; void _newAppMappingForm; void _setNewAppMappingForm;
 
   // Edit states for Policy Matrix
   const [editingPolicyIdx, setEditingPolicyIdx] = useState<number | null>(null);
@@ -290,15 +291,9 @@ export default function SettingsPage() {
   const handleAddApp = async () => {
     try {
       await api.createApplication(newAppForm as Record<string, unknown>);
-      // Also create any component mappings added during app creation
-      for (const mapping of newAppMappings) {
-        await api.createAppDCMapping({ ...mapping, app_id: newAppForm.app_id, app_distributed_id: newAppForm.app_distributed_id || newAppForm.app_id } as Record<string, unknown>);
-      }
-      showNotification(`Application added${newAppMappings.length > 0 ? ` with ${newAppMappings.length} component mapping(s)` : ''}`, 'success');
+      showNotification('Application added', 'success');
       setShowAddApp(false);
-      setNewAppForm({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
-      setNewAppMappings([]);
-      setNewAppMappingForm({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
+      setNewAppForm({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '', has_ingress: false, egress_ip: '', ingress_ips: '', ingress_components: '' });
       loadRefData();
     } catch {
       showNotification('Failed to add application', 'error');
@@ -417,7 +412,8 @@ export default function SettingsPage() {
   };
 
   // Inline mapping handlers for All Applications table
-  const handleInlineAddMapping = async (appId: string) => {
+  void setInlineAddMapping; void inlineNewMapping; void setInlineEditMappingId; void inlineEditForm;
+  const _handleInlineAddMapping = async (appId: string) => {
     try {
       // Include app_distributed_id so Studio/Migration can match by distributed ID
       const appObj = applications.find(a => a.app_id === appId);
@@ -430,7 +426,8 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to add mapping', 'error'); }
   };
 
-  const handleInlineSaveMapping = async () => {
+  void _handleInlineAddMapping;
+  const _handleInlineSaveMapping = async () => {
     if (!inlineEditMappingId) return;
     try {
       await api.updateAppDCMapping(inlineEditMappingId, inlineEditForm as Record<string, unknown>);
@@ -440,7 +437,8 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to update mapping', 'error'); }
   };
 
-  const handleInlineDeleteMapping = async (id: string) => {
+  void _handleInlineSaveMapping;
+  const _handleInlineDeleteMapping = async (id: string) => {
     try {
       await api.deleteAppDCMapping(id);
       loadRefData();
@@ -448,6 +446,7 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to delete mapping', 'error'); }
   };
 
+  void _handleInlineDeleteMapping;
   const handleSaveMapping = async () => {
     if (!editingMappingId) return;
     try {
@@ -1444,7 +1443,7 @@ export default function SettingsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {[...ngdcDatacenters.map(d => ({ ...d, _dc_type: 'NGDC' })), ...legacyDatacenters.map(d => ({ ...d, _dc_type: 'Legacy' }))].map((dc, idx) => {
+                    {[...ngdcDatacenters.map(d => ({ ...d, _dc_type: 'NGDC' as string })), ...legacyDatacenters.map(d => ({ ...d, _dc_type: 'Legacy' as string }))].map((dc: Record<string, unknown>, idx) => {
                       const dcId = String(dc.dc_id || dc.code || idx);
                       const dcType = String(dc._dc_type || dc.dc_type || 'NGDC');
                       const isEditing = editingDcId === dcId;
@@ -1452,14 +1451,14 @@ export default function SettingsPage() {
                         <tr key={`${dcType}-${dcId}`} className="hover:bg-gray-50">
                           <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${dcType === 'NGDC' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{dcType}</span></td>
                           <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{isEditing ? <input className={inp} value={String(editDcForm.dc_id || '')} onChange={e => setEditDcForm({ ...editDcForm, dc_id: e.target.value })} /> : dcId}</td>
-                          <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editDcForm.name || '')} onChange={e => setEditDcForm({ ...editDcForm, name: e.target.value })} /> : String(dc.name || '')}</td>
-                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String(dc.region || '—')}</td>
+                          <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editDcForm.name || '')} onChange={e => setEditDcForm({ ...editDcForm, name: e.target.value })} /> : String((dc as Record<string, unknown>).name || '')}</td>
+                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String((dc as Record<string, unknown>).region || '—')}</td>
                           <td className="px-3 py-2">{isEditing ? (
                             <select className={inp} value={String(editDcForm.status || 'Active')} onChange={e => setEditDcForm({ ...editDcForm, status: e.target.value })}>
                               <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option><option value="Migrating">Migrating</option>
                             </select>
-                          ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(dc.status) === 'Active' ? 'bg-green-100 text-green-800' : String(dc.status) === 'Planned' ? 'bg-blue-100 text-blue-800' : String(dc.status) === 'Migrating' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800'}`}>{String(dc.status || 'Active')}</span>}</td>
-                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String(dc.description || '—')}</td>
+                          ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String((dc as Record<string, unknown>).status) === 'Active' ? 'bg-green-100 text-green-800' : String((dc as Record<string, unknown>).status) === 'Planned' ? 'bg-blue-100 text-blue-800' : String((dc as Record<string, unknown>).status) === 'Migrating' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800'}`}>{String((dc as Record<string, unknown>).status || 'Active')}</span>}</td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String((dc as Record<string, unknown>).description || '—')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1468,7 +1467,7 @@ export default function SettingsPage() {
                               </div>
                             ) : (
                               <div className="flex gap-1">
-                                <button onClick={() => { setEditingDcId(dcId); setEditDcForm({ dc_id: dc.dc_id || dc.code, name: dc.name, region: dc.region, status: dc.status, description: dc.description, dc_type: dcType }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => { setEditingDcId(dcId); setEditDcForm({ dc_id: (dc as Record<string, unknown>).dc_id as string || (dc as Record<string, unknown>).code as string, name: (dc as Record<string, unknown>).name as string, region: (dc as Record<string, unknown>).region as string, status: (dc as Record<string, unknown>).status as string, description: (dc as Record<string, unknown>).description as string, dc_type: dcType }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
                                 <button onClick={() => handleDeleteDc(dcId, dcType)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
                               </div>
                             )}
@@ -1548,49 +1547,35 @@ export default function SettingsPage() {
                   <input className={inp} placeholder="DCs (e.g. ALPHA_NGDC,BETA_NGDC)" value={newAppForm.dcs || ''} onChange={e => setNewAppForm({ ...newAppForm, dcs: e.target.value })} />
                   <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
-                {/* Component Mappings for new app */}
+                {/* Egress/Ingress Configuration */}
                 <div className="border border-blue-200 rounded-lg p-3 bg-white/60 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-semibold text-blue-800">Component Mappings ({newAppMappings.length})</h4>
+                  <h4 className="text-xs font-semibold text-blue-800">Egress / Ingress Configuration</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Egress IP (Source)</label>
+                      <input className={inp} placeholder="e.g. svr-10.50.1.10" value={newAppForm.egress_ip || ''} onChange={e => setNewAppForm({ ...newAppForm, egress_ip: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Has Ingress Clients?</label>
+                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md" value={newAppForm.has_ingress ? 'yes' : 'no'} onChange={e => setNewAppForm({ ...newAppForm, has_ingress: e.target.value === 'yes' })}>
+                        <option value="no">No</option>
+                        <option value="yes">Yes</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Ingress IPs (Destination VIPs/DBs)</label>
+                      <input className={inp} placeholder="e.g. svr-10.50.2.20,svr-10.50.2.21" value={newAppForm.ingress_ips || ''} onChange={e => setNewAppForm({ ...newAppForm, ingress_ips: e.target.value })} disabled={!newAppForm.has_ingress} />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-7 gap-2 items-center">
-                    <select className="px-2 py-1 text-xs border rounded" value={newAppMappingForm.component || 'APP'} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, component: e.target.value as AppDCMapping['component'] })}>
-                      {['WEB','APP','DB','MQ','BAT','API','LB','MON','MFR','SVC'].map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <select className="px-2 py-1 text-xs border rounded" value={newAppMappingForm.dc || 'ALPHA_NGDC'} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, dc: e.target.value })}>
-                      {ngdcDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (NGDC)</option>; })}
-                      {legacyDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (Legacy)</option>; })}
-                    </select>
-                    <input className="px-2 py-1 text-xs border rounded" placeholder="NH (e.g. NH02)" value={newAppMappingForm.nh || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, nh: e.target.value })} />
-                    <input className="px-2 py-1 text-xs border rounded" placeholder="SZ (e.g. CCS)" value={newAppMappingForm.sz || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, sz: e.target.value })} />
-                    <input className="px-2 py-1 text-xs border rounded font-mono" placeholder="CIDR" value={newAppMappingForm.cidr || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, cidr: e.target.value })} />
-                    <input className="px-2 py-1 text-xs border rounded" placeholder="Notes" value={newAppMappingForm.notes || ''} onChange={e => setNewAppMappingForm({ ...newAppMappingForm, notes: e.target.value })} />
-                    <button onClick={() => {
-                      if (!newAppMappingForm.component || !newAppMappingForm.sz) return;
-                      setNewAppMappings(prev => [...prev, { ...newAppMappingForm, status: 'Active' }]);
-                      setNewAppMappingForm({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
-                    }} disabled={!newAppMappingForm.component || !newAppMappingForm.sz}
-                      className="px-2 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-40">+ Add</button>
-                  </div>
-                  {newAppMappings.length > 0 && (
-                    <div className="mt-1 space-y-1">
-                      {newAppMappings.map((m, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs bg-indigo-50 px-2 py-1 rounded">
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span>
-                          <span className="font-mono text-gray-600">{m.dc}</span>
-                          <span className="font-mono text-gray-600">NH: {m.nh || '-'}</span>
-                          <span className="font-mono text-gray-700 font-medium">SZ: {m.sz}</span>
-                          <span className="font-mono text-gray-500">{m.cidr || ''}</span>
-                          <span className="text-gray-400 flex-1 truncate">{m.notes || ''}</span>
-                          <button onClick={() => setNewAppMappings(prev => prev.filter((_, i) => i !== idx))}
-                            className="px-1.5 py-0.5 text-[10px] text-red-600 hover:text-red-800">Remove</button>
-                        </div>
-                      ))}
+                  {newAppForm.has_ingress && (
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Ingress Components (for destination group naming)</label>
+                      <input className={inp} placeholder="e.g. DB,API,VIP (comma-separated)" value={newAppForm.ingress_components || ''} onChange={e => setNewAppForm({ ...newAppForm, ingress_components: e.target.value })} />
                     </div>
                   )}
                 </div>
                 <div className="flex justify-end gap-2">
-                  <button onClick={() => { setShowAddApp(false); setNewAppMappings([]); }} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                  <button onClick={() => { setShowAddApp(false); _setNewAppMappings([]); }} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
                   <button onClick={handleAddApp} disabled={!newAppForm.app_id || !newAppForm.name}
                     className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-40">Save</button>
                 </div>
@@ -1635,6 +1620,18 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label>
                         <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
                     </div>
+                    <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Egress IP (Source)</label>
+                        <input className={inp} placeholder="e.g. svr-10.50.1.10" value={editAppForm.egress_ip || ''} onChange={e => setEditAppForm({ ...editAppForm, egress_ip: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Has Ingress?</label>
+                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md" value={editAppForm.has_ingress ? 'yes' : 'no'} onChange={e => setEditAppForm({ ...editAppForm, has_ingress: e.target.value === 'yes' })}>
+                          <option value="no">No</option><option value="yes">Yes</option>
+                        </select></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress IPs</label>
+                        <input className={inp} placeholder="e.g. svr-10.50.2.20" value={editAppForm.ingress_ips || ''} onChange={e => setEditAppForm({ ...editAppForm, ingress_ips: e.target.value })} disabled={!editAppForm.has_ingress} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress Components</label>
+                        <input className={inp} placeholder="e.g. DB,API,VIP" value={editAppForm.ingress_components || ''} onChange={e => setEditAppForm({ ...editAppForm, ingress_components: e.target.value })} disabled={!editAppForm.has_ingress} /></div>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -1650,26 +1647,30 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.dcs || 'N/A'}</p></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.snow_sysid || 'N/A'}</p></div>
                     </div>
+                    <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Egress IP</label><p className="text-sm font-mono text-gray-800">{selectedAppData.egress_ip || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Has Ingress</label><p className="text-sm">{selectedAppData.has_ingress ? <span className="px-2 py-0.5 text-xs font-bold rounded bg-purple-100 text-purple-700">Yes</span> : <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500">No</span>}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress IPs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.ingress_ips || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress Components</label><p className="text-sm font-mono text-gray-800">{selectedAppData.ingress_components || 'N/A'}</p></div>
+                    </div>
                   </>
                 )}
               </div>
             )}
 
-            {/* DC/SZ Component Mappings for selected app */}
+            {/* DC/NH/SZ Mappings for selected app (simplified - no component) */}
             {selectedApp && (
               <div className="p-4 bg-white border border-gray-200 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-800">DC / NH / SZ Component Mappings ({selectedAppMappings.length})</h3>
+                  <h3 className="text-sm font-semibold text-gray-800">DC / NH / SZ Mappings ({selectedAppMappings.length})</h3>
                   <button onClick={() => { setShowAddMapping(true); setNewMappingForm({ ...newMappingForm, app_id: selectedApp }); }}
                     className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">+ Add Mapping</button>
                 </div>
                 {showAddMapping && (
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-                    <div className="grid grid-cols-7 gap-2">
-                      <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.component || 'APP'} onChange={e => setNewMappingForm({ ...newMappingForm, component: e.target.value as AppDCMapping['component'] })}>
-                        {['WEB','APP','DB','MQ','BAT','API','LB','MON','MFR','SVC'].map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                    <div className="grid grid-cols-6 gap-2">
                       <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.dc || ''} onChange={e => { const dc = e.target.value; const resolved = clientResolveCidr(dc, newMappingForm.nh || '', newMappingForm.sz || ''); setNewMappingForm({ ...newMappingForm, dc, cidr: resolved || newMappingForm.cidr || '' }); }}>
+                        <option value="">-- Select DC --</option>
                         {ngdcDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (NGDC)</option>; })}
                         {legacyDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (Legacy)</option>; })}
                       </select>
@@ -1693,7 +1694,6 @@ export default function SettingsPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50"><tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Component</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DC Location</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DC</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">NH</th>
@@ -1705,19 +1705,19 @@ export default function SettingsPage() {
                       </tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {selectedAppMappings.map(m => {
-                          const mid = m.id || `${m.app_id}-${m.component}-${m.dc}`;
+                          const mid = m.id || `${m.app_id}-${m.dc}-${m.nh}`;
                           if (editingMappingId === mid) {
                             return (
                               <tr key={mid} className="bg-blue-50">
-                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.component || ''} onChange={e => setEditMappingForm({ ...editMappingForm, component: e.target.value as AppDCMapping['component'] })}>
-                                  {['WEB','APP','DB','MQ','BAT','API','LB','MON','MFR','SVC'].map(c => <option key={c} value={c}>{c}</option>)}
+                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={(editMappingForm as Record<string,string>).dc_location || 'NGDC'} onChange={e => setEditMappingForm({ ...editMappingForm, dc_location: e.target.value } as typeof editMappingForm)}>
+                                  <option value="NGDC">NGDC</option><option value="Legacy">Legacy</option>
                                 </select></td>
                                 <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.dc || ''} onChange={e => setEditMappingForm({ ...editMappingForm, dc: e.target.value })}>
                                   {ngdcDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id}</option>; })}
                                   {legacyDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id}</option>; })}
                                 </select></td>
-                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" placeholder="NH02,NH14" value={editMappingForm.nh || ''} onChange={e => setEditMappingForm({ ...editMappingForm, nh: e.target.value })} title="Comma-separated NHs" /></td>
-                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" placeholder="CCS,PAA" value={editMappingForm.sz || ''} onChange={e => setEditMappingForm({ ...editMappingForm, sz: e.target.value })} title="Comma-separated SZs" /></td>
+                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" placeholder="NH02" value={editMappingForm.nh || ''} onChange={e => setEditMappingForm({ ...editMappingForm, nh: e.target.value })} /></td>
+                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" placeholder="CCS" value={editMappingForm.sz || ''} onChange={e => setEditMappingForm({ ...editMappingForm, sz: e.target.value })} /></td>
                                 <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded font-mono" value={editMappingForm.cidr || ''} onChange={e => setEditMappingForm({ ...editMappingForm, cidr: e.target.value })} /></td>
                                 <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.status || 'Active'} onChange={e => setEditMappingForm({ ...editMappingForm, status: e.target.value as AppDCMapping['status'] })}>
                                   <option value="Active">Active</option><option value="Inactive">Inactive</option>
@@ -1732,7 +1732,6 @@ export default function SettingsPage() {
                           }
                           return (
                             <tr key={mid} className="hover:bg-gray-50">
-                              <td className="px-3 py-2"><span className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span></td>
                               <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${(m as unknown as Record<string,string>).dc_location === 'NGDC' ? 'bg-green-100 text-green-700' : (m as unknown as Record<string,string>).dc_location === 'Legacy' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>{(m as unknown as Record<string,string>).dc_location || 'N/A'}</span></td>
                               <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.dc || (m as unknown as Record<string,string>).legacy_dc || '-'}</td>
                               <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.nh || '-'}</td>
@@ -1751,7 +1750,7 @@ export default function SettingsPage() {
                     </table>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400 italic">No component mappings yet. Click &quot;+ Add Mapping&quot; to define DC/NH/SZ placement for each component.</p>
+                  <p className="text-xs text-gray-400 italic">No DC/NH/SZ mappings yet. Click &quot;+ Add Mapping&quot; to define placement.</p>
                 )}
               </div>
             )}
@@ -1768,7 +1767,8 @@ export default function SettingsPage() {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App ID</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Distributed Id</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Components</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Has Ingress</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Egress IP</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Neighborhoods</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZs</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DCs</th>
@@ -1778,25 +1778,21 @@ export default function SettingsPage() {
                       <tbody className="divide-y divide-gray-100">
                         {applications.map(app => {
                           const isEditing = editingAppId === app.app_id;
-                          const isExpanded = expandedAppId === app.app_id;
-                          const appMappings = (appDCMappings || []).filter(m => m.app_id === app.app_id);
-                          const comps = [...new Set(appMappings.map(m => m.component))].sort();
                           return (
-                          <React.Fragment key={app.app_id}>
-                          <tr className={isEditing ? 'bg-blue-50' : isExpanded ? 'bg-indigo-50' : 'hover:bg-gray-50'}>
+                          <tr key={app.app_id} className={isEditing ? 'bg-blue-50' : 'hover:bg-gray-50'}>
                             <td className="px-3 py-2 font-mono text-xs font-semibold text-blue-700">{app.app_id}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.app_distributed_id ?? ''} onChange={e => setEditAppForm({ ...editAppForm, app_distributed_id: e.target.value })} /> : <span className="font-mono text-xs text-gray-700">{app.app_distributed_id || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.name || ''} onChange={e => setEditAppForm({ ...editAppForm, name: e.target.value })} /> : <span className="text-xs text-gray-800">{app.name}</span>}</td>
                             <td className="px-3 py-2">
-                              <button
-                                onClick={() => { setExpandedAppId(isExpanded ? null : app.app_id); setInlineAddMapping(false); setInlineEditMappingId(null); }}
-                                className="inline-flex items-center gap-1 text-xs font-mono text-indigo-700 hover:text-indigo-900 hover:underline cursor-pointer"
-                                title={isExpanded ? 'Collapse component mappings' : 'Expand to view/edit component mappings'}
-                              >
-                                <span className="text-[10px]">{isExpanded ? '\u25BC' : '\u25B6'}</span>
-                                {comps.length > 0 ? comps.join(', ') : <span className="text-gray-400 italic">+ Add</span>}
-                              </button>
+                              {isEditing ? (
+                                <select className="w-full px-2 py-1 text-xs border rounded" value={editAppForm.has_ingress ? 'yes' : 'no'} onChange={e => setEditAppForm({ ...editAppForm, has_ingress: e.target.value === 'yes' })}>
+                                  <option value="no">No</option><option value="yes">Yes</option>
+                                </select>
+                              ) : (
+                                app.has_ingress ? <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-purple-100 text-purple-700">Yes</span> : <span className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-500">No</span>
+                              )}
                             </td>
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.egress_ip || ''} onChange={e => setEditAppForm({ ...editAppForm, egress_ip: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.egress_ip || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.dcs || '-'}</span>}</td>
@@ -1819,107 +1815,6 @@ export default function SettingsPage() {
                               )}
                             </td>
                           </tr>
-                          {/* Expanded inline component mapping editor */}
-                          {isExpanded && (
-                            <tr>
-                              <td colSpan={9} className="px-4 py-3 bg-indigo-50/50 border-t border-indigo-100">
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <h4 className="text-xs font-semibold text-indigo-800">Component Mappings for {app.app_distributed_id || app.app_id} ({appMappings.length})</h4>
-                                    <button onClick={() => { setInlineAddMapping(true); setInlineNewMapping({ component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' }); }}
-                                      className="px-2 py-1 text-[11px] font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">+ Add Mapping</button>
-                                  </div>
-                                  {inlineAddMapping && (
-                                    <div className="grid grid-cols-8 gap-1 items-center bg-blue-50 p-2 rounded border border-blue-200">
-                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.component || 'APP'} onChange={e => setInlineNewMapping({ ...inlineNewMapping, component: e.target.value as AppDCMapping['component'] })}>
-                                        {['WEB','APP','DB','MQ','BAT','API','LB','MON','MFR','SVC'].map(c => <option key={c} value={c}>{c}</option>)}
-                                      </select>
-                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.dc || ''} onChange={e => { const dc = e.target.value; const resolved = clientResolveCidr(dc, inlineNewMapping.nh || '', inlineNewMapping.sz || ''); setInlineNewMapping({ ...inlineNewMapping, dc, cidr: resolved || inlineNewMapping.cidr || '' }); }}>
-                                        {ngdcDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (NGDC)</option>; })}
-                                        {legacyDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (Legacy)</option>; })}
-                                      </select>
-                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="NH (e.g. NH02)" value={inlineNewMapping.nh || ''} onChange={e => { const nh = e.target.value; const resolved = clientResolveCidr(inlineNewMapping.dc || '', nh, inlineNewMapping.sz || ''); setInlineNewMapping({ ...inlineNewMapping, nh, cidr: resolved || inlineNewMapping.cidr || '' }); }} />
-                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="SZ (e.g. CCS)" value={inlineNewMapping.sz || ''} onChange={e => { const sz = e.target.value; const resolved = clientResolveCidr(inlineNewMapping.dc || '', inlineNewMapping.nh || '', sz); setInlineNewMapping({ ...inlineNewMapping, sz, cidr: resolved || inlineNewMapping.cidr || '' }); }} />
-                                      <input className="px-1 py-1 text-[11px] border rounded font-mono" placeholder="CIDR (auto)" value={inlineNewMapping.cidr || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, cidr: e.target.value })} />
-                                      <select className="px-1 py-1 text-[11px] border rounded" value={inlineNewMapping.status || 'Active'} onChange={e => setInlineNewMapping({ ...inlineNewMapping, status: e.target.value as AppDCMapping['status'] })}>
-                                        <option value="Active">Active</option><option value="Inactive">Inactive</option>
-                                      </select>
-                                      <input className="px-1 py-1 text-[11px] border rounded" placeholder="Notes" value={inlineNewMapping.notes || ''} onChange={e => setInlineNewMapping({ ...inlineNewMapping, notes: e.target.value })} />
-                                      <div className="flex gap-1">
-                                        <button onClick={() => handleInlineAddMapping(app.app_id)} className="px-2 py-0.5 text-[11px] text-white bg-indigo-600 rounded hover:bg-indigo-700">Add</button>
-                                        <button onClick={() => setInlineAddMapping(false)} className="px-2 py-0.5 text-[11px] text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
-                                      </div>
-                                    </div>
-                                  )}
-                                  {appMappings.length > 0 ? (
-                                    <table className="w-full text-[11px]">
-                                      <thead className="bg-indigo-100/50"><tr>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Component</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">DC Location</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">DC</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">NH</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">SZ</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">CIDR</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Status</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Notes</th>
-                                        <th className="px-2 py-1 text-left font-medium text-indigo-700">Actions</th>
-                                      </tr></thead>
-                                      <tbody className="divide-y divide-indigo-100">
-                                        {appMappings.map(m => {
-                                          const mid = m.id || `${m.app_id}-${m.component}-${m.dc}`;
-                                          if (inlineEditMappingId === mid) {
-                                            return (
-                                              <tr key={mid} className="bg-blue-50">
-                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.component || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, component: e.target.value as AppDCMapping['component'] })}>
-                                                  {['WEB','APP','DB','MQ','BAT','API','LB','MON','MFR','SVC'].map(c => <option key={c} value={c}>{c}</option>)}
-                                                </select></td>
-                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.dc || ''} onChange={e => { const dc = e.target.value; const resolved = clientResolveCidr(dc, inlineEditForm.nh || '', inlineEditForm.sz || ''); setInlineEditForm({ ...inlineEditForm, dc, cidr: resolved || inlineEditForm.cidr || '' }); }}>
-                                                  {ngdcDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id}</option>; })}
-                                                  {legacyDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id}</option>; })}
-                                                </select></td>
-                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.nh || ''} onChange={e => { const nh = e.target.value; const resolved = clientResolveCidr(inlineEditForm.dc || '', nh, inlineEditForm.sz || ''); setInlineEditForm({ ...inlineEditForm, nh, cidr: resolved || inlineEditForm.cidr || '' }); }} /></td>
-                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.sz || ''} onChange={e => { const sz = e.target.value; const resolved = clientResolveCidr(inlineEditForm.dc || '', inlineEditForm.nh || '', sz); setInlineEditForm({ ...inlineEditForm, sz, cidr: resolved || inlineEditForm.cidr || '' }); }} /></td>
-                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded font-mono" value={inlineEditForm.cidr || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, cidr: e.target.value })} /></td>
-                                                <td className="px-2 py-1"><select className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.status || 'Active'} onChange={e => setInlineEditForm({ ...inlineEditForm, status: e.target.value as AppDCMapping['status'] })}>
-                                                  <option value="Active">Active</option><option value="Inactive">Inactive</option>
-                                                </select></td>
-                                                <td className="px-2 py-1"><input className="w-full px-1 py-0.5 text-[11px] border rounded" value={inlineEditForm.notes || ''} onChange={e => setInlineEditForm({ ...inlineEditForm, notes: e.target.value })} /></td>
-                                                <td className="px-2 py-1"><div className="flex gap-1">
-                                                  <button onClick={handleInlineSaveMapping} className="px-1.5 py-0.5 text-[10px] text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
-                                                  <button onClick={() => setInlineEditMappingId(null)} className="px-1.5 py-0.5 text-[10px] text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
-                                                </div></td>
-                                              </tr>
-                                            );
-                                          }
-                                          return (
-                                            <tr key={mid} className="hover:bg-indigo-50/50">
-                                              <td className="px-2 py-1"><span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-indigo-100 text-indigo-700">{m.component}</span></td>
-                                              <td className="px-2 py-1"><span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${(m as unknown as Record<string,string>).dc_location === 'NGDC' ? 'bg-green-100 text-green-700' : (m as unknown as Record<string,string>).dc_location === 'Legacy' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>{(m as unknown as Record<string,string>).dc_location || 'N/A'}</span></td>
-                                              <td className="px-2 py-1 font-mono text-gray-700">{m.dc || (m as unknown as Record<string,string>).legacy_dc || '-'}</td>
-                                              <td className="px-2 py-1 font-mono text-gray-700">{m.nh || '-'}</td>
-                                              <td className="px-2 py-1 font-mono text-gray-700">{m.sz || '-'}</td>
-                                              <td className="px-2 py-1 font-mono text-gray-600">
-                                                {(() => { const resolved = clientResolveCidr(m.dc || '', m.nh || '', m.sz || ''); const display = m.cidr || (m as unknown as Record<string,string>).legacy_cidr || '-'; return (<span>{display}{resolved && resolved === m.cidr ? <span className="ml-1 text-[8px] text-green-600 font-sans">(SZ)</span> : null}</span>); })()}
-                                              </td>
-                                              <td className="px-2 py-1"><span className={`px-1.5 py-0.5 text-[10px] rounded-full ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span></td>
-                                              <td className="px-2 py-1 text-gray-500 max-w-[120px] truncate">{m.notes || '-'}</td>
-                                              <td className="px-2 py-1"><div className="flex gap-1">
-                                                <button onClick={() => { setInlineEditMappingId(mid); setInlineEditForm({ ...m }); }} className="px-1.5 py-0.5 text-[10px] text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
-                                                <button onClick={() => handleInlineDeleteMapping(mid)} className="px-1.5 py-0.5 text-[10px] text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
-                                              </div></td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  ) : (
-                                    <p className="text-[11px] text-gray-400 italic py-2">No component mappings yet. Click &quot;+ Add Mapping&quot; to define DC/NH/SZ placement for each component.</p>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                          </React.Fragment>
                           );
                         })}
                       </tbody>

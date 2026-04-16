@@ -518,7 +518,7 @@ export function MigrationStudioPage() {
       // Issue 6: For partial migration, create groups only for selected DCs
       // For complete migration, create groups for all DCs from Settings App Management
       if (appMigrationInfo && migrationAppDCs.length > 0) {
-        const isPartial = appMigrationInfo.migration_type === 'partial';
+        const isPartial = (appMigrationInfo as unknown as Record<string, string>).migration_type === 'partial';
         const targetDCs = isPartial
           ? migrationAppDCs.filter(dc => {
               // For partial migration, only create groups for DCs that are being migrated

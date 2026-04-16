@@ -20,7 +20,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const [filterAppId, setFilterAppId] = useState(appId || '');
   const [filterEnv, setFilterEnv] = useState(environment || '');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newGroup, setNewGroup] = useState({ app_id: appId || '', dc: '', nh: '', sz: '', subtype: '', customSuffix: '', description: '', environment: environment || 'Production' });
+  const [newGroup, setNewGroup] = useState({ app_id: appId || '', dc: '', nh: '', sz: '', subtype: '', customSuffix: '', description: '', environment: environment || 'Production', direction: 'egress' as 'egress' | 'ingress' });
   const [createValidationError, setCreateValidationError] = useState<string | null>(null);
   const [newMember, setNewMember] = useState({ type: 'ip' as GroupMember['type'], value: '', description: '' });
 
@@ -84,27 +84,28 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const updateAppOptions = (selectedAppId: string, mappings?: Record<string, unknown>[]) => {
     const appMappings = getAppMappings(selectedAppId, mappings);
     const dcs = [...new Set(appMappings.map(m => String(m.dc || '')).filter(Boolean))].sort();
-    // Extract available components from mappings
+    // In egress/ingress model, components are only relevant for ingress (destination) groups
     const comps = [...new Set(appMappings.map(m => String(m.component || '')).filter(Boolean))].sort();
-    // Show all NHs/SZs initially (will be filtered when component is selected)
+    // Show all NHs/SZs for the app (no component filtering for egress)
     const nhs = [...new Set(appMappings.map(m => String(m.nh || '')).filter(Boolean))].sort();
     const szs = [...new Set(appMappings.map(m => String(m.sz || '')).filter(Boolean))].sort();
     setAppNHOptions(nhs);
     setAppSZOptions(szs);
     setAppDCOptions(dcs);
     setAppComponentOptions(comps);
-    // Reset downstream selections — user must pick component first
+    // Reset downstream selections
     setNewGroup(prev => ({
       ...prev,
       app_id: selectedAppId,
-      subtype: '',  // Reset component
-      nh: '',       // Reset NH — depends on component
-      sz: '',       // Reset SZ — depends on component
+      subtype: '',
+      nh: nhs.length === 1 ? nhs[0] : '',
+      sz: szs.length === 1 ? szs[0] : '',
+      direction: 'egress',
     }));
   };
 
   // When component changes, filter NH and SZ options based on that app+component
-  const updateForComponent = (component: string) => {
+  const _updateForComponent = (component: string): void => {
     if (!component || !newGroup.app_id) {
       // No component selected — show all NHs/SZs for the app
       const appMappings = getAppMappings(newGroup.app_id);
@@ -129,6 +130,8 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       sz: szs.length === 1 ? szs[0] : '',
     }));
   };
+
+  void _updateForComponent;
 
   const loadGroups = async (forAppId?: string, forEnv?: string) => {
     setLoading(true);
@@ -185,23 +188,37 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     setCreateMembers(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Auto-generate group name from standard fields: grp-{APP}-{NH}-{SZ}-{Component}[-{suffix}]
+  // Auto-generate group name based on direction:
+  // Egress (source): grp-{APP}-{NH}-{SZ}
+  // Ingress (destination): grp-{APP}-{NH}-{SZ}-{COMP}-Ingress
   const autoGroupName = (() => {
-    const parts = ['grp', newGroup.app_id, newGroup.nh, newGroup.sz, newGroup.subtype].filter(Boolean);
-    if (parts.length < 5) return ''; // All 4 fields required (grp + 4)
-    let name = parts.join('-');
-    if (newGroup.customSuffix.trim()) name += `-${newGroup.customSuffix.trim()}`;
-    return name;
+    if (!newGroup.app_id || !newGroup.nh || !newGroup.sz) return '';
+    if (newGroup.direction === 'egress') {
+      // Source group: grp-{APP}-{NH}-{SZ}
+      return `grp-${newGroup.app_id}-${newGroup.nh}-${newGroup.sz}`;
+    } else {
+      // Destination group: grp-{APP}-{NH}-{SZ}-{COMP}-Ingress
+      if (!newGroup.subtype) return '';
+      let name = `grp-${newGroup.app_id}-${newGroup.nh}-${newGroup.sz}-${newGroup.subtype}-Ingress`;
+      if (newGroup.customSuffix.trim()) name = `grp-${newGroup.app_id}-${newGroup.nh}-${newGroup.sz}-${newGroup.subtype}-${newGroup.customSuffix.trim()}-Ingress`;
+      return name;
+    }
   })();
 
   // Validation: all required fields + at least 1 member
-  const canCreateGroup = !!(newGroup.app_id && newGroup.nh && newGroup.sz && newGroup.subtype && createMembers.length > 0 && autoGroupName);
+  // Egress: app + nh + sz + members
+  // Ingress: app + nh + sz + component + members
+  const canCreateGroup = (() => {
+    if (!newGroup.app_id || !newGroup.nh || !newGroup.sz || createMembers.length === 0 || !autoGroupName) return false;
+    if (newGroup.direction === 'ingress' && !newGroup.subtype) return false;
+    return true;
+  })();
 
   const handleCreateGroup = async () => {
     if (!newGroup.app_id) { setCreateValidationError('Application is required'); return; }
     if (!newGroup.nh) { setCreateValidationError('Neighbourhood (NH) is required'); return; }
     if (!newGroup.sz) { setCreateValidationError('Security Zone (SZ) is required'); return; }
-    if (!newGroup.subtype) { setCreateValidationError('Component is required'); return; }
+    if (newGroup.direction === 'ingress' && !newGroup.subtype) { setCreateValidationError('Component is required for Ingress (destination) groups'); return; }
     if (createMembers.length === 0) { setCreateValidationError('At least one member (IP/subnet/group) is required — empty groups are not allowed'); return; }
     setCreateValidationError(null);
     try {
@@ -214,7 +231,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       // Track group creation as a policy change — new group affects any rule referencing it
       setPendingChanges(prev => [...prev, { type: 'group_created', detail: `Created group ${autoGroupName} with ${createMembers.length} member(s)` }]);
       setShowCreate(false);
-      setNewGroup({ app_id: filterAppId || '', dc: '', nh: '', sz: '', subtype: '', customSuffix: '', description: '', environment: filterEnv || 'Production' });
+      setNewGroup({ app_id: filterAppId || '', dc: '', nh: '', sz: '', subtype: '', customSuffix: '', description: '', environment: filterEnv || 'Production', direction: 'egress' });
       setCreateMembers([]);
       setCreateValidationError(null);
       loadGroups(filterAppId, filterEnv);
@@ -498,7 +515,31 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
             <div className="mb-3 p-3 bg-blue-50 rounded-lg space-y-2">
               {/* Standards notice */}
               <div className="p-2 bg-blue-100 border border-blue-200 rounded text-[10px] text-blue-800">
-                <strong>NGDC Naming Standard:</strong> Group name is auto-generated as <span className="font-mono">grp-APP-NH-SZ-Component</span>. All fields are mandatory. At least one member is required.
+                <strong>NGDC Naming Standard:</strong>
+                {newGroup.direction === 'egress'
+                  ? <> Source group: <span className="font-mono">grp-{'{APP}'}-{'{NH}'}-{'{SZ}'}</span>. One per app per NH/SZ.</>
+                  : <> Destination group: <span className="font-mono">grp-{'{APP}'}-{'{NH}'}-{'{SZ}'}-{'{COMP}'}-Ingress</span>. Only for apps with incoming clients.</>
+                }
+                <br />At least one member is required.
+              </div>
+              {/* Direction selector (Egress/Ingress) */}
+              <div className="flex gap-2 mb-1">
+                <button
+                  onClick={() => setNewGroup({ ...newGroup, direction: 'egress', subtype: '', customSuffix: '' })}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                    newGroup.direction === 'egress' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Egress (Source)
+                </button>
+                <button
+                  onClick={() => setNewGroup({ ...newGroup, direction: 'ingress' })}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                    newGroup.direction === 'ingress' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Ingress (Destination)
+                </button>
               </div>
               <div>
                 <label className="text-xs text-gray-500">Application <span className="text-red-500">*</span></label>
@@ -512,44 +553,47 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                   <p className="text-[9px] text-gray-500 mt-0.5">DCs: {appDCOptions.join(', ')} (group applies to all mapped DCs)</p>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-xs text-gray-500">Component <span className="text-red-500">*</span></label>
-                  <select className={inputClass} value={newGroup.subtype} onChange={e => { updateForComponent(e.target.value); setCreateValidationError(null); }} disabled={!newGroup.app_id}>
-                    <option value="">-- Select Component --</option>
-                    {appComponentOptions.length > 0
-                      ? appComponentOptions.map(c => <option key={c} value={c}>{c}</option>)
-                      : ['WEB','APP','DB','MQ','BAT','API'].map(c => <option key={c} value={c}>{c}</option>)
-                    }
-                  </select>
-                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
-                  {newGroup.subtype && <p className="text-[9px] text-green-600 mt-0.5">NH/SZ filtered for {newGroup.subtype}</p>}
-                </div>
+              <div className={`grid ${newGroup.direction === 'ingress' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
                 <div>
                   <label className="text-xs text-gray-500">NH <span className="text-red-500">*</span></label>
-                  <select className={inputClass} value={newGroup.nh} onChange={e => { setNewGroup({ ...newGroup, nh: e.target.value }); setCreateValidationError(null); }} disabled={!newGroup.subtype}>
+                  <select className={inputClass} value={newGroup.nh} onChange={e => { setNewGroup({ ...newGroup, nh: e.target.value }); setCreateValidationError(null); }} disabled={!newGroup.app_id}>
                     <option value="">-- Select NH --</option>
                     {appNHOptions.map(nh => <option key={nh} value={nh}>{nh}</option>)}
                   </select>
-                  {!newGroup.subtype && <p className="text-[9px] text-gray-400 mt-0.5">Select a component first</p>}
-                  {newGroup.subtype && appNHOptions.length === 0 && <p className="text-[9px] text-amber-600 mt-0.5">No NHs mapped</p>}
+                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
+                  {newGroup.app_id && appNHOptions.length === 0 && <p className="text-[9px] text-amber-600 mt-0.5">No NHs mapped</p>}
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">SZ <span className="text-red-500">*</span></label>
-                  <select className={inputClass} value={newGroup.sz} onChange={e => { setNewGroup({ ...newGroup, sz: e.target.value }); setCreateValidationError(null); }} disabled={!newGroup.subtype}>
+                  <select className={inputClass} value={newGroup.sz} onChange={e => { setNewGroup({ ...newGroup, sz: e.target.value }); setCreateValidationError(null); }} disabled={!newGroup.app_id}>
                     <option value="">-- Select SZ --</option>
                     {appSZOptions.map(sz => <option key={sz} value={sz}>{sz}</option>)}
                   </select>
-                  {!newGroup.subtype && <p className="text-[9px] text-gray-400 mt-0.5">Select a component first</p>}
-                  {newGroup.subtype && appSZOptions.length === 0 && <p className="text-[9px] text-amber-600 mt-0.5">No SZs mapped</p>}
+                  {!newGroup.app_id && <p className="text-[9px] text-gray-400 mt-0.5">Select an app first</p>}
+                  {newGroup.app_id && appSZOptions.length === 0 && <p className="text-[9px] text-amber-600 mt-0.5">No SZs mapped</p>}
                 </div>
+                {newGroup.direction === 'ingress' && (
+                  <div>
+                    <label className="text-xs text-gray-500">Component <span className="text-red-500">*</span></label>
+                    <select className={inputClass} value={newGroup.subtype} onChange={e => { setNewGroup({ ...newGroup, subtype: e.target.value }); setCreateValidationError(null); }} disabled={!newGroup.app_id}>
+                      <option value="">-- Select Component --</option>
+                      {appComponentOptions.length > 0
+                        ? appComponentOptions.map(c => <option key={c} value={c}>{c}</option>)
+                        : ['DB','API','VIP','APP','WEB','MQ'].map(c => <option key={c} value={c}>{c}</option>)
+                      }
+                    </select>
+                    <p className="text-[9px] text-gray-400 mt-0.5">Ingress component (DB, API, VIP, etc.)</p>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-500">Custom Suffix <span className="text-gray-400">(optional)</span></label>
-                  <input className={inputClass} placeholder="e.g. frontend, batch01" value={newGroup.customSuffix} onChange={e => setNewGroup({ ...newGroup, customSuffix: e.target.value.replace(/[^a-zA-Z0-9_-]/g, '') })} />
-                  <p className="text-[9px] text-gray-400 mt-0.5">For sub-component differentiation only</p>
-                </div>
+                {newGroup.direction === 'ingress' && (
+                  <div>
+                    <label className="text-xs text-gray-500">Custom Suffix <span className="text-gray-400">(optional)</span></label>
+                    <input className={inputClass} placeholder="e.g. primary, cluster01" value={newGroup.customSuffix} onChange={e => setNewGroup({ ...newGroup, customSuffix: e.target.value.replace(/[^a-zA-Z0-9_-]/g, '') })} />
+                    <p className="text-[9px] text-gray-400 mt-0.5">Additional differentiation before -Ingress</p>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs text-gray-500">Environment</label>
                   <select className={inputClass} value={newGroup.environment} onChange={e => setNewGroup({ ...newGroup, environment: e.target.value })}>
@@ -560,8 +604,8 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                 </div>
               </div>
               {/* Auto-generated group name preview */}
-              <div className={`rounded px-2 py-1.5 text-xs font-mono ${autoGroupName ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-gray-100 border border-gray-200 text-gray-400'}`}>
-                {autoGroupName || 'grp-{APP}-{NH}-{SZ}-{Component} — select all required fields'}
+              <div className={`rounded px-2 py-1.5 text-xs font-mono ${autoGroupName ? (newGroup.direction === 'egress' ? 'bg-blue-50 border border-blue-200 text-blue-800' : 'bg-purple-50 border border-purple-200 text-purple-800') : 'bg-gray-100 border border-gray-200 text-gray-400'}`}>
+                {autoGroupName || (newGroup.direction === 'egress' ? 'grp-{APP}-{NH}-{SZ} — select app, NH, and SZ' : 'grp-{APP}-{NH}-{SZ}-{COMP}-Ingress — select all required fields')}
               </div>
               <input className={inputClass} placeholder="Description" value={newGroup.description} onChange={e => setNewGroup({ ...newGroup, description: e.target.value })} />
               {/* Inline member creation during group creation — REQUIRED */}

@@ -303,16 +303,27 @@ SEED_LIFECYCLE_EVENTS = _SD_LIFECYCLE_EVENTS
 
 
 def _build_seed_rules() -> list[dict[str, Any]]:
-    """Build NGDC firewall rules from seed data groups.
+    """Build NGDC firewall rules using the **egress / ingress** group model.
 
-    Comprehensive test data covering ALL six Logical Data Flow scenarios:
+    Naming convention (per user approval):
+      Source  (egress):  grp-{APP_DIST_ID}-{NH}-{SZ}
+      Dest    (ingress): grp-{APP_DIST_ID}-{NH}-{SZ}-{COMP}-Ingress
 
-    LDF-001: GEN/STD zones across NHs → 0 boundaries (no firewall)
-    LDF-002: Same NH, same SZ → 0 boundaries (no firewall)
-    LDF-003: Segmented zone → different zone, different NHs → 1 boundary (egress)
-    LDF-004: Same segmented zone, different NHs → 2 boundaries (egress+ingress)
-    LDF-005: Same NH, different segmented zones → 1 boundary
-    LDF-006: PAA flow (internet → PAA → internal) → 2 boundaries
+    App-to-NH/SZ mapping (from SEED_APPLICATIONS):
+      CRM  AD-1001  NH02/CCS      HRM  AD-1002  NH01/GEN
+      TRD  AD-1003  NH06/CDE      PAY  AD-1004  NH08/CCS
+      INS  AD-1005  NH04/STD      KYC  AD-1006  NH05/CCS
+      FRD  AD-1007  NH02/CDE      LND  AD-1008  NH09/GEN
+      WLT  AD-1009  NH10/PAA      CBK  AD-1010  NH08/CPA
+      EPT  AD-1011  NH01/CCS      MBK  AD-1012  NH07/CPA
+
+    LDF scenarios covered:
+      LDF-001: GEN/STD zones across NHs → 0 boundaries (open zones, no firewall)
+      LDF-002: Same NH, same SZ → 0 boundaries (intra-NH, intra-SZ)
+      LDF-003: Segmented → open/different zone, different NHs → 1 boundary (egress only)
+      LDF-004: Same segmented zone, different NHs → 2 boundaries (egress + ingress)
+      LDF-005: Same NH, different segmented zones → 1 boundary
+      LDF-006: PAA/CCS flow (internet → internal) → 2 boundaries
     """
     rules: list[dict[str, Any]] = []
     base = datetime.utcnow()
@@ -327,237 +338,275 @@ def _build_seed_rules() -> list[dict[str, Any]]:
         # LDF-002: Same NH, same SZ — 0 boundaries (intra-NH, intra-SZ)
         # ================================================================
 
-        # CRM internal (NH02, CDE)
-        ("grp-CRM-NH02-CDE-WEB", "CDE", "NH02", "grp-CRM-NH02-CDE-APP", "CDE", "NH02",
-         "TCP 443", "CRM Web to App (same NH/SZ)", "CRM", "Deployed", True, -30, "Production", "LDF-002"),
-        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-CRM-NH02-CDE-DB", "CDE", "NH02",
-         "TCP 1521", "CRM App to DB (same NH/SZ)", "CRM", "Deployed", True, -30, "Production", "LDF-002"),
-        ("grp-CRM-NH02-CDE-BAT", "CDE", "NH02", "grp-CRM-NH02-CDE-DB", "CDE", "NH02",
-         "TCP 1521", "CRM Batch to DB (same NH/SZ)", "CRM", "Certified", True, -20, "Production", "LDF-002"),
-        ("grp-CRM-NH02-CDE-API", "CDE", "NH02", "grp-CRM-NH02-CDE-APP", "CDE", "NH02",
-         "TCP 8443", "CRM API to App (same NH/SZ)", "CRM", "Deployed", True, -25, "Production", "LDF-002"),
+        # CRM (AD-1001, NH02/CCS) — egress → own DB/API ingress
+        ("grp-AD-1001-NH02-CCS", "CCS", "NH02",
+         "grp-AD-1001-NH02-CCS-DB-Ingress", "CCS", "NH02",
+         "TCP 1521", "CRM egress to CRM DB (same NH/SZ)", "CRM",
+         "Deployed", True, -30, "Production", "LDF-002"),
+        ("grp-AD-1001-NH02-CCS", "CCS", "NH02",
+         "grp-AD-1001-NH02-CCS-API-Ingress", "CCS", "NH02",
+         "TCP 8443", "CRM egress to CRM API (same NH/SZ)", "CRM",
+         "Certified", True, -25, "Production", "LDF-002"),
 
-        # TRD internal (NH06, CDE)
-        ("grp-TRD-NH06-CDE-WEB", "CDE", "NH06", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
-         "TCP 8443", "TRD Web to App (same NH/SZ)", "TRD", "Deployed", True, -120, "Production", "LDF-002"),
-        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-TRD-NH06-CDE-DB", "CDE", "NH06",
-         "TCP 1521", "TRD App to DB (same NH/SZ)", "TRD", "Deployed", True, -120, "Production", "LDF-002"),
-        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-TRD-NH06-CDE-MQ", "CDE", "NH06",
-         "TCP 9092", "TRD App to MQ (same NH/SZ)", "TRD", "Certified", True, -80, "Production", "LDF-002"),
-        ("grp-TRD-NH06-CDE-API", "CDE", "NH06", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
-         "TCP 8443", "TRD API to App (same NH/SZ)", "TRD", "Deployed", True, -100, "Production", "LDF-002"),
+        # TRD (AD-1003, NH06/CDE) — egress → own DB/MQ ingress
+        ("grp-AD-1003-NH06-CDE", "CDE", "NH06",
+         "grp-AD-1003-NH06-CDE-DB-Ingress", "CDE", "NH06",
+         "TCP 1521", "TRD egress to TRD DB (same NH/SZ)", "TRD",
+         "Deployed", True, -120, "Production", "LDF-002"),
+        ("grp-AD-1003-NH06-CDE", "CDE", "NH06",
+         "grp-AD-1003-NH06-CDE-MQ-Ingress", "CDE", "NH06",
+         "TCP 9092", "TRD egress to TRD MQ (same NH/SZ)", "TRD",
+         "Certified", True, -80, "Production", "LDF-002"),
 
-        # PAY internal (NH07, CPA)
-        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-PAY-NH07-CPA-DB", "CPA", "NH07",
-         "TCP 1521", "PAY App to DB (same NH/SZ)", "PAY", "Deployed", True, -150, "Production", "LDF-002"),
-        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-PAY-NH07-CPA-MQ", "CPA", "NH07",
-         "TCP 5672", "PAY App to MQ (same NH/SZ)", "PAY", "Certified", True, -100, "Production", "LDF-002"),
-        ("grp-PAY-NH07-CPA-API", "CPA", "NH07", "grp-PAY-NH07-CPA-APP", "CPA", "NH07",
-         "TCP 8443", "PAY API to App (same NH/SZ)", "PAY", "Deployed", True, -140, "Production", "LDF-002"),
+        # PAY (AD-1004, NH08/CCS) — egress → own DB ingress
+        ("grp-AD-1004-NH08-CCS", "CCS", "NH08",
+         "grp-AD-1004-NH08-CCS-DB-Ingress", "CCS", "NH08",
+         "TCP 1521", "PAY egress to PAY DB (same NH/SZ)", "PAY",
+         "Deployed", True, -150, "Production", "LDF-002"),
 
-        # FRD internal (NH02, CDE)
-        ("grp-FRD-NH02-CDE-APP", "CDE", "NH02", "grp-FRD-NH02-CDE-DB", "CDE", "NH02",
-         "TCP 1521", "FRD Engine to DB (same NH/SZ)", "FRD", "Deployed", True, -100, "Production", "LDF-002"),
-        ("grp-FRD-NH02-CDE-APP", "CDE", "NH02", "grp-FRD-NH02-CDE-MQ", "CDE", "NH02",
-         "TCP 9092", "FRD App to Kafka (same NH/SZ)", "FRD", "Deployed", True, -90, "Production", "LDF-002"),
-        ("grp-FRD-NH02-CDE-API", "CDE", "NH02", "grp-FRD-NH02-CDE-APP", "CDE", "NH02",
-         "TCP 8443", "FRD API to Engine (same NH/SZ)", "FRD", "Certified", True, -50, "Production", "LDF-002"),
+        # FRD (AD-1007, NH02/CDE) — egress → own DB/MQ ingress
+        ("grp-AD-1007-NH02-CDE", "CDE", "NH02",
+         "grp-AD-1007-NH02-CDE-DB-Ingress", "CDE", "NH02",
+         "TCP 1521", "FRD egress to FRD DB (same NH/SZ)", "FRD",
+         "Deployed", True, -100, "Production", "LDF-002"),
+        ("grp-AD-1007-NH02-CDE", "CDE", "NH02",
+         "grp-AD-1007-NH02-CDE-MQ-Ingress", "CDE", "NH02",
+         "TCP 9092", "FRD egress to FRD Kafka (same NH/SZ)", "FRD",
+         "Deployed", True, -90, "Production", "LDF-002"),
 
-        # CBK internal (NH08, CCS)
-        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-CBK-NH08-CCS-DB", "CCS", "NH08",
-         "TCP 1521", "CBK App to DB (same NH/SZ)", "CBK", "Deployed", True, -200, "Production", "LDF-002"),
-        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-CBK-NH08-CCS-MQ", "CCS", "NH08",
-         "TCP 5672", "CBK App to MQ (same NH/SZ)", "CBK", "Deployed", True, -180, "Production", "LDF-002"),
-        ("grp-CBK-NH08-CCS-API", "CCS", "NH08", "grp-CBK-NH08-CCS-APP", "CCS", "NH08",
-         "TCP 8443", "CBK API to App (same NH/SZ)", "CBK", "Certified", True, -150, "Production", "LDF-002"),
-        ("grp-CBK-NH08-CCS-BAT", "CCS", "NH08", "grp-CBK-NH08-CCS-DB", "CCS", "NH08",
-         "TCP 1521", "CBK Batch to DB (same NH/SZ)", "CBK", "Deployed", True, -160, "Production", "LDF-002"),
+        # CBK (AD-1010, NH08/CPA) — egress → own DB/MQ ingress
+        ("grp-AD-1010-NH08-CPA", "CPA", "NH08",
+         "grp-AD-1010-NH08-CPA-DB-Ingress", "CPA", "NH08",
+         "TCP 1521", "CBK egress to CBK DB (same NH/SZ)", "CBK",
+         "Deployed", True, -200, "Production", "LDF-002"),
+        ("grp-AD-1010-NH08-CPA", "CPA", "NH08",
+         "grp-AD-1010-NH08-CPA-MQ-Ingress", "CPA", "NH08",
+         "TCP 5672", "CBK egress to CBK MQ (same NH/SZ)", "CBK",
+         "Certified", True, -180, "Production", "LDF-002"),
 
-        # LND internal (NH09, CCS)
-        ("grp-LND-NH09-CCS-WEB", "CCS", "NH09", "grp-LND-NH09-CCS-APP", "CCS", "NH09",
-         "TCP 8443", "LND Web to App (same NH/SZ)", "LND", "Deployed", True, -110, "Production", "LDF-002"),
-        ("grp-LND-NH09-CCS-APP", "CCS", "NH09", "grp-LND-NH09-CCS-DB", "CCS", "NH09",
-         "TCP 1521", "LND App to DB (same NH/SZ)", "LND", "Deployed", True, -110, "Production", "LDF-002"),
-        ("grp-LND-NH09-CCS-BAT", "CCS", "NH09", "grp-LND-NH09-CCS-DB", "CCS", "NH09",
-         "TCP 1521", "LND Batch to DB (same NH/SZ)", "LND", "Certified", True, -80, "Production", "LDF-002"),
+        # KYC (AD-1006, NH05/CCS) — egress → own DB/API ingress
+        ("grp-AD-1006-NH05-CCS", "CCS", "NH05",
+         "grp-AD-1006-NH05-CCS-DB-Ingress", "CCS", "NH05",
+         "TCP 5432", "KYC egress to KYC DB (same NH/SZ)", "KYC",
+         "Deployed", True, -95, "Production", "LDF-002"),
 
-        # WLT internal (NH10, CDE)
-        ("grp-WLT-NH10-CDE-WEB", "CDE", "NH10", "grp-WLT-NH10-CDE-APP", "CDE", "NH10",
-         "TCP 8443", "WLT Web to App (same NH/SZ)", "WLT", "Deployed", True, -130, "Production", "LDF-002"),
-        ("grp-WLT-NH10-CDE-APP", "CDE", "NH10", "grp-WLT-NH10-CDE-DB", "CDE", "NH10",
-         "TCP 1521", "WLT App to DB (same NH/SZ)", "WLT", "Deployed", True, -130, "Production", "LDF-002"),
-        ("grp-WLT-NH10-CDE-API", "CDE", "NH10", "grp-WLT-NH10-CDE-APP", "CDE", "NH10",
-         "TCP 8443", "WLT API to App (same NH/SZ)", "WLT", "Certified", True, -60, "Production", "LDF-002"),
+        # WLT (AD-1009, NH10/PAA) — egress → own DB/API ingress
+        ("grp-AD-1009-NH10-PAA", "PAA", "NH10",
+         "grp-AD-1009-NH10-PAA-DB-Ingress", "PAA", "NH10",
+         "TCP 1521", "WLT egress to WLT DB (same NH/SZ)", "WLT",
+         "Deployed", True, -130, "Production", "LDF-002"),
 
-        # MBK internal (NH07, CPA)
-        ("grp-MBK-NH07-CPA-WEB", "CPA", "NH07", "grp-MBK-NH07-CPA-APP", "CPA", "NH07",
-         "TCP 443", "MBK Web to App (same NH/SZ)", "MBK", "Deployed", True, -40, "Production", "LDF-002"),
-        ("grp-MBK-NH07-CPA-APP", "CPA", "NH07", "grp-MBK-NH07-CPA-DB", "CPA", "NH07",
-         "TCP 1521", "MBK App to DB (same NH/SZ)", "MBK", "Deployed", True, -40, "Production", "LDF-002"),
+        # MBK (AD-1012, NH07/CPA) — egress → own DB/API ingress
+        ("grp-AD-1012-NH07-CPA", "CPA", "NH07",
+         "grp-AD-1012-NH07-CPA-DB-Ingress", "CPA", "NH07",
+         "TCP 1521", "MBK egress to MBK DB (same NH/SZ)", "MBK",
+         "Deployed", True, -40, "Production", "LDF-002"),
+        ("grp-AD-1012-NH07-CPA", "CPA", "NH07",
+         "grp-AD-1012-NH07-CPA-API-Ingress", "CPA", "NH07",
+         "TCP 8443", "MBK egress to MBK API (same NH/SZ)", "MBK",
+         "Certified", True, -35, "Production", "LDF-002"),
+
+        # INS (AD-1005, NH04/STD) — egress → own DB ingress
+        ("grp-AD-1005-NH04-STD", "STD", "NH04",
+         "grp-AD-1005-NH04-STD-DB-Ingress", "STD", "NH04",
+         "TCP 5432", "INS egress to INS DB (same NH/SZ)", "INS",
+         "Deployed", True, -85, "Production", "LDF-002"),
+
+        # LND (AD-1008, NH09/GEN) — egress → own DB ingress
+        ("grp-AD-1008-NH09-GEN", "GEN", "NH09",
+         "grp-AD-1008-NH09-GEN-DB-Ingress", "GEN", "NH09",
+         "TCP 5432", "LND egress to LND DB (same NH/SZ)", "LND",
+         "Deployed", True, -110, "Production", "LDF-002"),
+
+        # HRM (AD-1002, NH01/GEN) — no ingress, so egress-only internal
+        # (HRM talks to its own backend; single-group rule)
+        ("grp-AD-1002-NH01-GEN", "GEN", "NH01",
+         "grp-AD-1002-NH01-GEN", "GEN", "NH01",
+         "TCP 5432", "HRM internal egress loopback (same NH/SZ)", "HRM",
+         "Deployed", True, -90, "Production", "LDF-002"),
+
+        # EPT (AD-1011, NH01/CCS) — egress → own API ingress
+        ("grp-AD-1011-NH01-CCS", "CCS", "NH01",
+         "grp-AD-1011-NH01-CCS-API-Ingress", "CCS", "NH01",
+         "TCP 8443", "EPT egress to EPT API (same NH/SZ)", "EPT",
+         "Deployed", True, -10, "Production", "LDF-002"),
 
         # ================================================================
         # LDF-001: GEN/STD zones across NHs — 0 boundaries (no firewall)
         # ================================================================
 
-        # HRM (NH01/GEN) -> INS (NH04/GEN)
-        ("grp-HRM-NH01-GEN-WEB", "GEN", "NH01", "grp-HRM-NH01-GEN-APP", "GEN", "NH01",
-         "TCP 8443", "HRM Web to App", "HRM", "Deployed", True, -90, "Production", "LDF-002"),
-        ("grp-HRM-NH01-GEN-APP", "GEN", "NH01", "grp-HRM-NH01-GEN-DB", "GEN", "NH01",
-         "TCP 5432", "HRM App to DB", "HRM", "Deployed", True, -90, "Production", "LDF-002"),
-        ("grp-HRM-NH01-GEN-BAT", "GEN", "NH01", "grp-HRM-NH01-GEN-DB", "GEN", "NH01",
-         "TCP 5432", "HRM Batch to DB", "HRM", "Certified", True, -60, "Production", "LDF-002"),
-        ("grp-HRM-NH01-GEN-APP", "GEN", "NH01", "grp-INS-NH04-GEN-API", "GEN", "NH04",
-         "TCP 8443", "HRM to INS API (GEN→GEN cross-NH, no FW)", "HRM", "Deployed", True, -85, "Production", "LDF-001"),
-        ("grp-INS-NH04-GEN-APP", "GEN", "NH04", "grp-KYC-NH05-GEN-API", "GEN", "NH05",
-         "TCP 8443", "INS to KYC API (GEN→GEN cross-NH, no FW)", "INS", "Certified", True, -75, "Production", "LDF-001"),
-        ("grp-KYC-NH05-GEN-APP", "GEN", "NH05", "grp-HRM-NH01-GEN-APP", "GEN", "NH01",
-         "TCP 8443", "KYC to HRM callback (GEN→GEN cross-NH, no FW)", "KYC", "Deployed", True, -65, "Production", "LDF-001"),
+        # HRM(NH01/GEN) → LND(NH09/GEN): open zones, no FW
+        ("grp-AD-1002-NH01-GEN", "GEN", "NH01",
+         "grp-AD-1008-NH09-GEN-DB-Ingress", "GEN", "NH09",
+         "TCP 8443", "HRM to LND (GEN→GEN cross-NH, no FW)", "HRM",
+         "Deployed", True, -85, "Production", "LDF-001"),
 
-        # INS internal (NH04, GEN)
-        ("grp-INS-NH04-GEN-WEB", "GEN", "NH04", "grp-INS-NH04-GEN-APP", "GEN", "NH04",
-         "TCP 8443", "INS Web to App", "INS", "Deployed", True, -85, "Production", "LDF-002"),
-        ("grp-INS-NH04-GEN-APP", "GEN", "NH04", "grp-INS-NH04-GEN-DB", "GEN", "NH04",
-         "TCP 5432", "INS App to DB", "INS", "Deployed", True, -85, "Production", "LDF-002"),
+        # INS(NH04/STD) → HRM(NH01/GEN): open zones, no FW
+        ("grp-AD-1005-NH04-STD", "STD", "NH04",
+         "grp-AD-1002-NH01-GEN", "GEN", "NH01",
+         "TCP 8443", "INS to HRM (STD→GEN cross-NH, no FW)", "INS",
+         "Certified", True, -75, "Production", "LDF-001"),
 
-        # KYC internal (NH05, GEN)
-        ("grp-KYC-NH05-GEN-WEB", "GEN", "NH05", "grp-KYC-NH05-GEN-APP", "GEN", "NH05",
-         "TCP 8443", "KYC Web to App", "KYC", "Deployed", True, -95, "Production", "LDF-002"),
-        ("grp-KYC-NH05-GEN-APP", "GEN", "NH05", "grp-KYC-NH05-GEN-DB", "GEN", "NH05",
-         "TCP 5432", "KYC App to DB", "KYC", "Deployed", True, -95, "Production", "LDF-002"),
-        ("grp-KYC-NH05-GEN-API", "GEN", "NH05", "grp-KYC-NH05-GEN-APP", "GEN", "NH05",
-         "TCP 8443", "KYC API to App", "KYC", "Certified", True, -70, "Production", "LDF-002"),
+        # LND(NH09/GEN) → INS(NH04/STD): open zones, no FW
+        ("grp-AD-1008-NH09-GEN", "GEN", "NH09",
+         "grp-AD-1005-NH04-STD-DB-Ingress", "STD", "NH04",
+         "TCP 5432", "LND to INS DB (GEN→STD cross-NH, no FW)", "LND",
+         "Deployed", True, -65, "Production", "LDF-001"),
 
         # ================================================================
-        # LDF-003: Segmented → different zone, different NHs — 1 boundary (egress)
-        # Egress through source NH's SZ firewall only
+        # LDF-003: Segmented → open/different zone, different NHs — 1 boundary (egress)
+        # Source is in a segmented zone (non-GEN/STD), dest is open or different segmented zone.
+        # Egress rule required at source NH's SZ firewall only.
         # ================================================================
 
-        # PAY(NH07/CPA) → FRD(NH02/CDE): 1 boundary, egress via fw-PA-NH07-CPA
-        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
-         "TCP 8443", "PAY to Fraud Check (CPA→CDE, 1 FW egress)", "PAY", "Pending Review", False, -10, "Production", "LDF-003"),
+        # CRM(NH02/CCS) → HRM(NH01/GEN): CCS segmented egress → GEN open
+        ("grp-AD-1001-NH02-CCS", "CCS", "NH02",
+         "grp-AD-1002-NH01-GEN", "GEN", "NH01",
+         "TCP 8443", "CRM to HRM (CCS→GEN, 1 FW egress)", "CRM",
+         "Pending Review", False, -10, "Production", "LDF-003"),
 
-        # CBK(NH08/CCS) → PAY(NH07/CPA): 1 boundary, egress via fw-PA-NH08-CCS
-        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-PAY-NH07-CPA-API", "CPA", "NH07",
-         "TCP 8443", "CBK to Payment (CCS→CPA, 1 FW egress)", "CBK", "Pending Review", False, -5, "Production", "LDF-003"),
+        # PAY(NH08/CCS) → FRD-API(NH02/CDE): CCS → CDE cross-SZ
+        ("grp-AD-1004-NH08-CCS", "CCS", "NH08",
+         "grp-AD-1007-NH02-CDE-API-Ingress", "CDE", "NH02",
+         "TCP 8443", "PAY to FRD API (CCS→CDE, 1 FW egress)", "PAY",
+         "Pending Review", False, -8, "Production", "LDF-003"),
 
-        # LND(NH09/CCS) → KYC(NH05/GEN): 1 boundary, egress via fw-PA-NH09-CCS
-        ("grp-LND-NH09-CCS-APP", "CCS", "NH09", "grp-KYC-NH05-GEN-API", "GEN", "NH05",
-         "TCP 8443", "LND to KYC Check (CCS→GEN, 1 FW egress)", "LND", "Certified", True, -35, "Production", "LDF-003"),
+        # FRD(NH02/CDE) → LND(NH09/GEN): CDE segmented → GEN open
+        ("grp-AD-1007-NH02-CDE", "CDE", "NH02",
+         "grp-AD-1008-NH09-GEN-DB-Ingress", "GEN", "NH09",
+         "TCP 8443", "FRD to LND (CDE→GEN, 1 FW egress)", "FRD",
+         "Certified", True, -45, "Production", "LDF-003"),
 
-        # FRD(NH02/CDE) → HRM(NH01/GEN): 1 boundary, egress via fw-PA-NH02-CDE
-        ("grp-FRD-NH02-CDE-APP", "CDE", "NH02", "grp-HRM-NH01-GEN-APP", "GEN", "NH01",
-         "TCP 8443", "FRD to HRM lookup (CDE→GEN, 1 FW egress)", "FRD", "Certified", True, -45, "Production", "LDF-003"),
+        # TRD(NH06/CDE) → INS(NH04/STD): CDE segmented → STD open
+        ("grp-AD-1003-NH06-CDE", "CDE", "NH06",
+         "grp-AD-1005-NH04-STD-DB-Ingress", "STD", "NH04",
+         "TCP 8443", "TRD to INS (CDE→STD, 1 FW egress)", "TRD",
+         "Pending Review", False, -6, "Production", "LDF-003"),
 
-        # TRD(NH06/CDE) → INS(NH04/GEN): 1 boundary, egress via fw-PA-NH06-CDE
-        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-INS-NH04-GEN-APP", "GEN", "NH04",
-         "TCP 8443", "TRD to INS policy (CDE→GEN, 1 FW egress)", "TRD", "Pending Review", False, -8, "Production", "LDF-003"),
-
-        # MBK(NH07/CPA) → CBK(NH08/CCS): 1 boundary, egress via fw-PA-NH07-CPA
-        ("grp-MBK-NH07-CPA-APP", "CPA", "NH07", "grp-CBK-NH08-CCS-API", "CCS", "NH08",
-         "TCP 8443", "MBK to Core Banking (CPA→CCS, 1 FW egress)", "MBK", "Certified", True, -30, "Production", "LDF-003"),
+        # MBK(NH07/CPA) → KYC-DB(NH05/CCS): CPA → CCS cross-SZ
+        ("grp-AD-1012-NH07-CPA", "CPA", "NH07",
+         "grp-AD-1006-NH05-CCS-DB-Ingress", "CCS", "NH05",
+         "TCP 8443", "MBK to KYC DB (CPA→CCS, 1 FW egress)", "MBK",
+         "Certified", True, -30, "Production", "LDF-003"),
 
         # ================================================================
-        # LDF-004: Same segmented zone, different NHs — 2 boundaries (egress+ingress)
-        # Egress via source NH's SZ firewall + Ingress via dest NH's SZ firewall
+        # LDF-004: Same segmented zone, different NHs — 2 boundaries (egress + ingress)
+        # Both source and destination are in the same segmented zone but different NHs.
         # ================================================================
 
-        # CRM(NH02/CDE) → WLT(NH10/CDE): 2 boundaries (NH02-CDE egress, NH10-CDE ingress)
-        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-WLT-NH10-CDE-API", "CDE", "NH10",
-         "TCP 8443", "CRM to WLT portfolio (CDE→CDE cross-NH, 2 FW)", "CRM", "Certified", True, -25, "Production", "LDF-004"),
+        # CRM(NH02/CCS) → PAY-DB(NH08/CCS): CCS→CCS cross-NH
+        ("grp-AD-1001-NH02-CCS", "CCS", "NH02",
+         "grp-AD-1004-NH08-CCS-DB-Ingress", "CCS", "NH08",
+         "TCP 8443", "CRM to PAY DB (CCS→CCS cross-NH, 2 FW)", "CRM",
+         "Certified", True, -25, "Production", "LDF-004"),
 
-        # WLT(NH10/CDE) → TRD(NH06/CDE): 2 boundaries (NH10-CDE egress, NH06-CDE ingress)
-        ("grp-WLT-NH10-CDE-APP", "CDE", "NH10", "grp-TRD-NH06-CDE-API", "CDE", "NH06",
-         "TCP 8443", "WLT to Trading (CDE→CDE cross-NH, 2 FW)", "WLT", "Certified", True, -45, "Production", "LDF-004"),
+        # KYC(NH05/CCS) → EPT-API(NH01/CCS): CCS→CCS cross-NH
+        ("grp-AD-1006-NH05-CCS", "CCS", "NH05",
+         "grp-AD-1011-NH01-CCS-API-Ingress", "CCS", "NH01",
+         "TCP 8443", "KYC to EPT API (CCS→CCS cross-NH, 2 FW)", "KYC",
+         "Pending Review", False, -3, "Production", "LDF-004"),
 
-        # FRD(NH02/CDE) → TRD(NH06/CDE): 2 boundaries (NH02-CDE egress, NH06-CDE ingress)
-        ("grp-FRD-NH02-CDE-API", "CDE", "NH02", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
-         "TCP 8443", "FRD alert to TRD (CDE→CDE cross-NH, 2 FW)", "FRD", "Pending Review", False, -7, "Production", "LDF-004"),
+        # CBK(NH08/CPA) → MBK-API(NH07/CPA): CPA→CPA cross-NH
+        ("grp-AD-1010-NH08-CPA", "CPA", "NH08",
+         "grp-AD-1012-NH07-CPA-API-Ingress", "CPA", "NH07",
+         "TCP 8443", "CBK to MBK API (CPA→CPA cross-NH, 2 FW)", "CBK",
+         "Certified", True, -45, "Production", "LDF-004"),
 
-        # CRM(NH02/CDE) → FRD(NH02/CDE): same NH — should be LDF-002, 0 boundaries
-        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
-         "TCP 8443", "CRM to Fraud (same NH02/CDE, 0 FW)", "CRM", "Certified", True, -40, "Production", "LDF-002"),
-
-        # CBK(NH08/CCS) → LND(NH09/CCS): 2 boundaries (NH08-CCS egress, NH09-CCS ingress)
-        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-LND-NH09-CCS-APP", "CCS", "NH09",
-         "TCP 8443", "CBK to LND transfer (CCS→CCS cross-NH, 2 FW)", "CBK", "Pending Review", False, -3, "Production", "LDF-004"),
-
-        # PAY(NH07/CPA) → MBK(NH07/CPA): same NH — should be LDF-002, 0 boundaries
-        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-MBK-NH07-CPA-API", "CPA", "NH07",
-         "TCP 8443", "PAY to Mobile Banking (same NH07/CPA, 0 FW)", "PAY", "Deployed", True, -20, "Production", "LDF-002"),
+        # FRD(NH02/CDE) → TRD-DB(NH06/CDE): CDE→CDE cross-NH
+        ("grp-AD-1007-NH02-CDE", "CDE", "NH02",
+         "grp-AD-1003-NH06-CDE-DB-Ingress", "CDE", "NH06",
+         "TCP 8443", "FRD to TRD DB (CDE→CDE cross-NH, 2 FW)", "FRD",
+         "Pending Review", False, -7, "Production", "LDF-004"),
 
         # ================================================================
         # LDF-005: Same NH, different segmented zones — 1 boundary
         # ================================================================
 
-        # CRM(NH02/CDE) → within NH02 but to CPA zone (hypothetical cross-zone)
-        # Need a CPA group in NH02 — use PAA or create a scenario
-        # PAY data feed to FRD within NH07: CPA → CDE cross-zone within NH07
-        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-MBK-NH07-CPA-DB", "CPA", "NH07",
-         "TCP 1521", "PAY to MBK DB within NH07 (same NH/SZ, 0 FW)", "PAY", "Deployed", True, -15, "Production", "LDF-002"),
+        # CRM(NH02/CCS) → FRD-API(NH02/CDE): same NH, CCS→CDE cross-zone
+        ("grp-AD-1001-NH02-CCS", "CCS", "NH02",
+         "grp-AD-1007-NH02-CDE-API-Ingress", "CDE", "NH02",
+         "TCP 8443", "CRM to FRD API (same NH02, CCS→CDE cross-zone, 1 FW)", "CRM",
+         "Certified", True, -40, "Production", "LDF-005"),
 
         # ================================================================
-        # LDF-006: PAA flow — 2 boundaries (PAA perimeter + internal NH firewall)
+        # LDF-006: PAA/CCS flow — internet-facing to internal (2 boundaries)
         # ================================================================
 
-        # EPT(NH01/PAA) → CRM(NH02/CDE): PAA perimeter + NH02 CDE firewall
-        ("grp-EPT-NH01-PAA-WEB", "PAA", "NH01", "grp-CRM-NH02-CDE-API", "CDE", "NH02",
-         "TCP 443", "EPT Portal to CRM API (PAA→CDE, 2 FW)", "EPT", "Pending Review", False, -4, "Production", "LDF-006"),
+        # EPT(NH01/CCS) → CRM-API(NH02/CCS): EPT is internet-facing portal
+        ("grp-AD-1011-NH01-CCS", "CCS", "NH01",
+         "grp-AD-1001-NH02-CCS-API-Ingress", "CCS", "NH02",
+         "TCP 443", "EPT to CRM API (CCS→CCS cross-NH, 2 FW)", "EPT",
+         "Pending Review", False, -4, "Production", "LDF-006"),
 
-        # EPT(NH01/PAA) → CBK(NH08/CCS): PAA perimeter + NH08 CCS firewall
-        ("grp-EPT-NH01-PAA-APP", "PAA", "NH01", "grp-CBK-NH08-CCS-API", "CCS", "NH08",
-         "TCP 8443", "EPT to Core Banking (PAA→CCS, 2 FW)", "EPT", "Pending Review", False, -3, "Production", "LDF-006"),
+        # EPT(NH01/CCS) → CBK-API(NH08/CPA): CCS→CPA cross-SZ
+        ("grp-AD-1011-NH01-CCS", "CCS", "NH01",
+         "grp-AD-1010-NH08-CPA-API-Ingress", "CPA", "NH08",
+         "TCP 8443", "EPT to CBK API (CCS→CPA, 2 FW)", "EPT",
+         "Pending Review", False, -3, "Production", "LDF-006"),
 
-        # EPT(NH01/PAA) → PAY(NH07/CPA): PAA perimeter + NH07 CPA firewall
-        ("grp-EPT-NH01-PAA-API", "PAA", "NH01", "grp-PAY-NH07-CPA-API", "CPA", "NH07",
-         "TCP 8443", "EPT to Payment (PAA→CPA, 2 FW)", "EPT", "Pending Review", False, -2, "Production", "LDF-006"),
-
-        # EPT(NH01/PAA) internal (same NH/SZ)
-        ("grp-EPT-NH01-PAA-WEB", "PAA", "NH01", "grp-EPT-NH01-PAA-APP", "PAA", "NH01",
-         "TCP 443", "EPT Web to App (same NH/SZ)", "EPT", "Deployed", True, -10, "Production", "LDF-002"),
-        ("grp-EPT-NH01-PAA-APP", "PAA", "NH01", "grp-EPT-NH01-PAA-API", "PAA", "NH01",
-         "TCP 8443", "EPT App to API (same NH/SZ)", "EPT", "Deployed", True, -10, "Production", "LDF-002"),
+        # WLT(NH10/PAA) → TRD-DB(NH06/CDE): PAA→CDE cross-SZ
+        ("grp-AD-1009-NH10-PAA", "PAA", "NH10",
+         "grp-AD-1003-NH06-CDE-DB-Ingress", "CDE", "NH06",
+         "TCP 8443", "WLT to TRD DB (PAA→CDE, 2 FW)", "WLT",
+         "Certified", True, -50, "Production", "LDF-006"),
 
         # ================================================================
-        # Non-Production environment rules (replicating key scenarios)
+        # Non-Production / Pre-Production / UAT environment rules
         # ================================================================
 
-        # CRM Non-Prod (NH02, CDE)
-        ("grp-CRM-NH02-CDE-WEB", "CDE", "NH02", "grp-CRM-NH02-CDE-APP", "CDE", "NH02",
-         "TCP 443", "CRM Web to App (Non-Prod)", "CRM", "Deployed", True, -60, "Non-Production", "LDF-002"),
-        ("grp-CRM-NH02-CDE-APP", "CDE", "NH02", "grp-CRM-NH02-CDE-DB", "CDE", "NH02",
-         "TCP 1521", "CRM App to DB (Non-Prod)", "CRM", "Deployed", True, -60, "Non-Production", "LDF-002"),
+        # CRM Non-Prod (NH02/CCS)
+        ("grp-AD-1001-NH02-CCS", "CCS", "NH02",
+         "grp-AD-1001-NH02-CCS-DB-Ingress", "CCS", "NH02",
+         "TCP 1521", "CRM egress to DB (Non-Prod)", "CRM",
+         "Deployed", True, -60, "Non-Production", "LDF-002"),
 
-        # TRD Non-Prod (NH06, CDE)
-        ("grp-TRD-NH06-CDE-WEB", "CDE", "NH06", "grp-TRD-NH06-CDE-APP", "CDE", "NH06",
-         "TCP 8443", "TRD Web to App (Non-Prod)", "TRD", "Deployed", True, -90, "Non-Production", "LDF-002"),
-        ("grp-TRD-NH06-CDE-APP", "CDE", "NH06", "grp-TRD-NH06-CDE-DB", "CDE", "NH06",
-         "TCP 1521", "TRD App to DB (Non-Prod)", "TRD", "Certified", True, -90, "Non-Production", "LDF-002"),
+        # TRD Non-Prod (NH06/CDE)
+        ("grp-AD-1003-NH06-CDE", "CDE", "NH06",
+         "grp-AD-1003-NH06-CDE-DB-Ingress", "CDE", "NH06",
+         "TCP 1521", "TRD egress to DB (Non-Prod)", "TRD",
+         "Certified", True, -90, "Non-Production", "LDF-002"),
 
-        # PAY Pre-Prod (NH07, CPA) — cross-SZ test in pre-prod
-        ("grp-PAY-NH07-CPA-APP", "CPA", "NH07", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
-         "TCP 8443", "PAY to FRD Check (Pre-Prod, CPA→CDE, 1 FW)", "PAY", "Certified", True, -50, "Pre-Production", "LDF-003"),
+        # PAY Pre-Prod cross-SZ (NH08/CCS → NH02/CDE)
+        ("grp-AD-1004-NH08-CCS", "CCS", "NH08",
+         "grp-AD-1007-NH02-CDE-API-Ingress", "CDE", "NH02",
+         "TCP 8443", "PAY to FRD (Pre-Prod, CCS→CDE, 1 FW)", "PAY",
+         "Certified", True, -50, "Pre-Production", "LDF-003"),
 
-        # CBK Non-Prod (NH08, CCS)
-        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-CBK-NH08-CCS-DB", "CCS", "NH08",
-         "TCP 1521", "CBK App to DB (Non-Prod)", "CBK", "Deployed", True, -120, "Non-Production", "LDF-002"),
-        ("grp-CBK-NH08-CCS-APP", "CCS", "NH08", "grp-LND-NH09-CCS-APP", "CCS", "NH09",
-         "TCP 8443", "CBK to LND (Non-Prod, CCS→CCS, 2 FW)", "CBK", "Pending Review", False, -14, "Non-Production", "LDF-004"),
+        # CBK Non-Prod (NH08/CPA)
+        ("grp-AD-1010-NH08-CPA", "CPA", "NH08",
+         "grp-AD-1010-NH08-CPA-DB-Ingress", "CPA", "NH08",
+         "TCP 1521", "CBK egress to DB (Non-Prod)", "CBK",
+         "Deployed", True, -120, "Non-Production", "LDF-002"),
 
-        # HRM UAT (NH01, GEN) — GEN cross-NH
-        ("grp-HRM-NH01-GEN-APP", "GEN", "NH01", "grp-KYC-NH05-GEN-API", "GEN", "NH05",
-         "TCP 8443", "HRM to KYC (UAT, GEN→GEN, no FW)", "HRM", "Certified", True, -40, "UAT", "LDF-001"),
+        # CBK Non-Prod cross-NH CPA → CPA (NH08 → NH07)
+        ("grp-AD-1010-NH08-CPA", "CPA", "NH08",
+         "grp-AD-1012-NH07-CPA-API-Ingress", "CPA", "NH07",
+         "TCP 8443", "CBK to MBK (Non-Prod, CPA→CPA, 2 FW)", "CBK",
+         "Pending Review", False, -14, "Non-Production", "LDF-004"),
 
-        # INS SIT (NH04, GEN)
-        ("grp-INS-NH04-GEN-WEB", "GEN", "NH04", "grp-INS-NH04-GEN-APP", "GEN", "NH04",
-         "TCP 8443", "INS Web to App (SIT)", "INS", "Deployed", True, -55, "SIT", "LDF-002"),
+        # HRM UAT (NH01/GEN → NH09/GEN)
+        ("grp-AD-1002-NH01-GEN", "GEN", "NH01",
+         "grp-AD-1008-NH09-GEN-DB-Ingress", "GEN", "NH09",
+         "TCP 8443", "HRM to LND (UAT, GEN→GEN, no FW)", "HRM",
+         "Certified", True, -40, "UAT", "LDF-001"),
 
-        # WLT DR (NH10, CDE) — cross-NH CDE in DR
-        ("grp-WLT-NH10-CDE-APP", "CDE", "NH10", "grp-CRM-NH02-CDE-API", "CDE", "NH02",
-         "TCP 8443", "WLT to CRM (DR, CDE→CDE, 2 FW)", "WLT", "Pending Review", False, -5, "DR", "LDF-004"),
+        # INS SIT (NH04/STD)
+        ("grp-AD-1005-NH04-STD", "STD", "NH04",
+         "grp-AD-1005-NH04-STD-DB-Ingress", "STD", "NH04",
+         "TCP 8443", "INS egress to INS DB (SIT)", "INS",
+         "Deployed", True, -55, "SIT", "LDF-002"),
 
-        # EPT Non-Prod PAA flow
-        ("grp-EPT-NH01-PAA-WEB", "PAA", "NH01", "grp-FRD-NH02-CDE-API", "CDE", "NH02",
-         "TCP 443", "EPT to FRD (Non-Prod, PAA→CDE, 2 FW)", "EPT", "Certified", True, -20, "Non-Production", "LDF-006"),
+        # WLT DR cross-NH PAA → CCS (NH10 → NH02)
+        ("grp-AD-1009-NH10-PAA", "PAA", "NH10",
+         "grp-AD-1001-NH02-CCS-API-Ingress", "CCS", "NH02",
+         "TCP 8443", "WLT to CRM API (DR, PAA→CCS, 2 FW)", "WLT",
+         "Pending Review", False, -5, "DR", "LDF-006"),
+
+        # EPT Non-Prod (NH01/CCS → NH02/CDE)
+        ("grp-AD-1011-NH01-CCS", "CCS", "NH01",
+         "grp-AD-1007-NH02-CDE-MQ-Ingress", "CDE", "NH02",
+         "TCP 443", "EPT to FRD MQ (Non-Prod, CCS→CDE, 2 FW)", "EPT",
+         "Certified", True, -20, "Non-Production", "LDF-006"),
     ]
 
     for src, sz_s, src_nh, dst, sz_d, dst_nh, port, desc, app, st, g2g, days, env, ldf in app_rules:
@@ -568,7 +617,6 @@ def _build_seed_rules() -> list[dict[str, Any]]:
             "destination": dst, "destination_zone": sz_d, "destination_nh": dst_nh,
             "port": port, "protocol": port.split(" ")[0],
             "action": "Allow", "description": desc, "application": app, "status": st,
-            # rule_status mirrors status — "Submitted" only for new Studio-created rules
             "rule_status": st,
             "lifecycle_status": st,
             "rule_migration_status": "Migrated",
@@ -3808,10 +3856,13 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             nh, sz = dst_nh, dst_sz
         else:
             nh, sz = src_nh, src_sz
-        # Format: grp-APP-NH-SZ-COMP (standard naming)
+        # Egress/Ingress naming convention
         if prefix == "grp":
-            return f"grp-{short_app}-{nh}-{sz}-{detected_comp}"
-        return f"{prefix}-{short_app}-{nh}-{sz}-{detected_comp}"
+            if direction == "source":
+                return f"grp-{short_app}-{nh}-{sz}"
+            else:
+                return f"grp-{short_app}-{nh}-{sz}-{detected_comp}-Ingress"
+        return f"{prefix}-{short_app}-{nh}-{sz}"
 
     def _build_mapping(legacy_name: str, entry_type: str, idx: int, direction: str = "source") -> dict[str, Any]:
         ln = legacy_name.lower()
@@ -4070,7 +4121,11 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
                 else:
                     ngdc_ips.append(f"svr-{clean_ip}")
 
-        ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}"
+        # Egress/Ingress naming: source = grp-APP-NH-SZ, dest = grp-APP-NH-SZ-COMP-Ingress
+        if direction == "source":
+            ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}"
+        else:
+            ngdc_group_name = f"grp-{short_app}-{comp_nh}-{comp_sz}-{comp}-Ingress"
         return {
             "component": comp,
             "direction": direction,
@@ -4130,7 +4185,12 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
 
         # Try to find existing NGDC mapping for this group
         table_match = _lookup_ngdc_mapping(legacy_name)
-        ngdc_name = table_match["ngdc_name"] if table_match else f"grp-{short_app}-{dir_nh}-{dir_sz}-{detected_comp}"
+        if table_match:
+            ngdc_name = table_match["ngdc_name"]
+        elif direction == "source":
+            ngdc_name = f"grp-{short_app}-{dir_nh}-{dir_sz}"
+        else:
+            ngdc_name = f"grp-{short_app}-{dir_nh}-{dir_sz}-{detected_comp}-Ingress"
 
         # Map each member to NGDC equivalent
         mapped_members: list[dict[str, Any]] = []
@@ -4208,7 +4268,7 @@ async def get_ngdc_recommendations(rule_id: str) -> dict[str, Any] | None:
             "component_group_count": len(component_groups),
         },
         "app_distributed_id": app_label,
-        "naming_standard": f"grp-{short_app}-{{NH}}-{{SZ}}-{{COMPONENT}}[-{{SUBCOMP}}]",
+        "naming_standard": f"Source: grp-{short_app}-{{NH}}-{{SZ}} | Dest: grp-{short_app}-{{NH}}-{{SZ}}-{{COMP}}-Ingress",
         "source_nh": src_nh,
         "source_sz": src_sz,
         "source_dc": src_dc,
