@@ -1,7 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup, FirewallRule } from '@/types';
 import * as api from '@/lib/api';
-import { autoPrefix, isNgdcGroupName } from '@/lib/utils';
+import { autoPrefix } from '@/lib/utils';
+
+/* ------------------------------------------------------------------ */
+/*  Props & Constants                                                  */
+/* ------------------------------------------------------------------ */
 
 interface DragDropRuleBuilderProps {
   applications: Application[];
@@ -9,46 +13,6 @@ interface DragDropRuleBuilderProps {
   editRule?: FirewallRule | null;
   onEditComplete?: () => void;
 }
-
-// Fallback static data (used while API data loads)
-const FALLBACK_NEIGHBOURHOODS = [
-  { id: 'NH01', name: 'Technology Enablement Services' },
-  { id: 'NH02', name: 'Core Banking' },
-  { id: 'NH03', name: 'Digital Channels' },
-  { id: 'NH04', name: 'Wealth Management' },
-  { id: 'NH05', name: 'Enterprise Services' },
-  { id: 'NH06', name: 'Wholesale Banking' },
-  { id: 'NH07', name: 'Global Payments and Liquidity' },
-  { id: 'NH08', name: 'Data and Analytics' },
-  { id: 'NH09', name: 'Assisted Channels' },
-  { id: 'NH10', name: 'Consumer Lending' },
-  { id: 'NH11', name: 'Production Mainframe' },
-  { id: 'NH12', name: 'Non-Production Mainframe' },
-  { id: 'NH13', name: 'Non-Production Shared' },
-  { id: 'NH14', name: 'DMZ' },
-  { id: 'NH15', name: 'Non-Production DMZ' },
-  { id: 'NH16', name: 'Pre-Production (Non-Prod Shared)' },
-  { id: 'NH17', name: 'Pre-Production DMZ' },
-];
-
-const FALLBACK_DATACENTERS = [
-  { code: 'ALPHA_NGDC', name: 'Alpha NGDC' },
-  { code: 'BETA_NGDC', name: 'Beta NGDC' },
-  { code: 'GAMMA_NGDC', name: 'Gamma NGDC' },
-];
-
-const SUBTYPES = [
-  { code: 'APP', name: 'Application Servers' },
-  { code: 'WEB', name: 'Web Servers' },
-  { code: 'DB', name: 'Database Servers' },
-  { code: 'BAT', name: 'Batch Servers' },
-  { code: 'MQ', name: 'Message Queue' },
-  { code: 'API', name: 'API Servers' },
-  { code: 'LB', name: 'Load Balancers' },
-  { code: 'MON', name: 'Monitoring' },
-  { code: 'MFR', name: 'Mainframe' },
-  { code: 'SVC', name: 'Services' },
-];
 
 const PROTOCOLS = ['TCP', 'UDP', 'ICMP', 'ANY'];
 
@@ -67,509 +31,422 @@ const COMMON_PORTS = [
   { value: '3389', label: 'RDP (3389)' },
 ];
 
+const FALLBACK_NHS = [
+  { id: 'NH01', name: 'Technology Enablement Services' },
+  { id: 'NH02', name: 'Core Banking' },
+  { id: 'NH03', name: 'Digital Channels' },
+  { id: 'NH04', name: 'Wealth Management' },
+  { id: 'NH05', name: 'Enterprise Services' },
+  { id: 'NH06', name: 'Wholesale Banking' },
+  { id: 'NH07', name: 'Global Payments and Liquidity' },
+  { id: 'NH08', name: 'Data and Analytics' },
+  { id: 'NH09', name: 'Assisted Channels' },
+  { id: 'NH10', name: 'Consumer Lending' },
+  { id: 'NH14', name: 'DMZ' },
+];
+
+const FALLBACK_DCS = [
+  { code: 'ALPHA_NGDC', name: 'Alpha NGDC' },
+  { code: 'BETA_NGDC', name: 'Beta NGDC' },
+  { code: 'GAMMA_NGDC', name: 'Gamma NGDC' },
+];
+
+interface DestTarget {
+  label: string;
+  appDistId: string;
+  hasIngress: boolean;
+  szHint?: string;
+}
+
+const DEST_COLORS = [
+  { bg: 'bg-red-700', text: 'text-white', border: 'border-red-200', hover: 'hover:border-red-400 hover:bg-red-50' },
+  { bg: 'bg-amber-600', text: 'text-white', border: 'border-amber-200', hover: 'hover:border-amber-400 hover:bg-amber-50' },
+  { bg: 'bg-emerald-600', text: 'text-white', border: 'border-emerald-200', hover: 'hover:border-emerald-400 hover:bg-emerald-50' },
+  { bg: 'bg-blue-700', text: 'text-white', border: 'border-blue-200', hover: 'hover:border-blue-400 hover:bg-blue-50' },
+  { bg: 'bg-violet-600', text: 'text-white', border: 'border-violet-200', hover: 'hover:border-violet-400 hover:bg-violet-50' },
+  { bg: 'bg-pink-600', text: 'text-white', border: 'border-pink-200', hover: 'hover:border-pink-400 hover:bg-pink-50' },
+  { bg: 'bg-teal-600', text: 'text-white', border: 'border-teal-200', hover: 'hover:border-teal-400 hover:bg-teal-50' },
+  { bg: 'bg-orange-600', text: 'text-white', border: 'border-orange-200', hover: 'hover:border-orange-400 hover:bg-orange-50' },
+];
+
+type MemberType = 'ip' | 'subnet' | 'cidr' | 'group' | 'range';
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
 export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onEditComplete }: DragDropRuleBuilderProps) {
   const isEditMode = !!editRule;
-  const [step, setStep] = useState(1);
-  const [submitting, setSubmitting] = useState(false);
-  const [draftCreatedMsg, setDraftCreatedMsg] = useState('');
 
+  /* ---------- Form State ---------- */
   const buildDefaultForm = () => ({
     application: '', dst_application: '', environment: 'Production', datacenter: '',
-    src_component: '', dst_component: '',
-    src_dc: '', dst_dc: '',
-    src_nh: '', src_sz: '', src_subtype: 'APP', src_custom: '',
-    dst_nh: '', dst_sz: '', dst_subtype: 'APP', dst_custom: '',
+    src_nh: '', src_sz: '', dst_nh: '', dst_sz: '',
+    src_group: '', dst_group: '',
     port: '443', customPort: '', protocol: 'TCP', action: 'Allow', description: '',
   });
 
-  // State for group auto-creation modal (source only)
+  const [form, setForm] = useState(buildDefaultForm);
+  const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [draftCreatedMsg, setDraftCreatedMsg] = useState('');
+  const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
+  const [, setValidatingBR] = useState(false);
+
+  /* ---------- Group creation modal ---------- */
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupMembers, setNewGroupMembers] = useState('');
+  const [newGroupMemberEntries, setNewGroupMemberEntries] = useState<{ type: string; value: string }[]>([]);
+  const [newMemberType, setNewMemberType] = useState('ip');
+  const [newMemberValue, setNewMemberValue] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupCompileVendor, setGroupCompileVendor] = useState('fortigate');
+  const [groupCompiledPolicy, setGroupCompiledPolicy] = useState<string | null>(null);
+  const [groupPolicyResult, setGroupPolicyResult] = useState<string | null>(null);
 
-  const [form, setForm] = useState(buildDefaultForm);
+  /* ---------- Drag-drop destination sidebar ---------- */
+  const [destSearch, setDestSearch] = useState('');
 
-  /** Try to extract the component code from an NGDC group name like grp-APP01-NH01-STD-WEB */
-  const extractComponentFromGroup = (groupName: string): string => {
-    if (!groupName) return '';
-    const parts = groupName.split('-');
-    // Pattern: grp-{app}-{nh}-{sz}-{component}
-    if (parts.length >= 5 && parts[0].toLowerCase() === 'grp') {
-      const candidate = parts[parts.length - 1].toUpperCase();
-      const knownComponents = ['APP', 'WEB', 'DB', 'BAT', 'MQ', 'API', 'LB', 'MON', 'MFR', 'SVC'];
-      if (knownComponents.includes(candidate)) return candidate;
-    }
-    return '';
-  };
-
-  // Pre-populate form when editing a draft rule
-  useEffect(() => {
-    if (!editRule) return;
-    const src = editRule.source;
-    const dst = editRule.destination;
-    const srcGroup = (src?.group_name || src?.ip_address || src?.cidr || '') as string;
-    // Destination group: could be stored as object {name, dest_ip, ...} or as plain string
-    const dstGroup = typeof dst === 'string' ? dst : (dst?.name || dst?.dest_ip || '') as string;
-    const srcSz = (src?.security_zone || '') as string;
-    const srcNh = (src?.neighbourhood || '') as string;
-    const ports = (src?.ports || (typeof dst === 'object' ? dst?.ports : '') || '') as string;
-    // Access rule-level fields that were persisted during creation/update
-    const ruleAny = editRule as unknown as Record<string, string>;
-    const dstApp = ruleAny.dst_application || '';
-    const dstNh = ruleAny.destination_nh || '';
-    // Destination SZ: try rule-level destination_zone first, then from dst object
-    const dstSz = ruleAny.destination_zone || (typeof dst === 'object' ? (dst?.security_zone || '') as string : '') as string;
-    // Source NH: also check rule-level source_nh
-    const resolvedSrcNh = srcNh || ruleAny.source_nh || '';
-    // Extract component from stored field or from group name
-    const srcComp = ruleAny.src_component || extractComponentFromGroup(srcGroup);
-    const dstComp = ruleAny.dst_component || extractComponentFromGroup(dstGroup);
-    setForm({
-      application: editRule.application || '',
-      dst_application: dstApp,
-      environment: editRule.environment || 'Production',
-      datacenter: editRule.datacenter || '',
-      src_dc: (ruleAny.src_dc || editRule.datacenter || ''),
-      dst_dc: (ruleAny.dst_dc || editRule.datacenter || ''),
-      src_component: srcComp, dst_component: dstComp,
-      src_nh: resolvedSrcNh, src_sz: srcSz, src_subtype: srcComp || 'APP', src_custom: srcGroup,
-      dst_nh: dstNh, dst_sz: dstSz, dst_subtype: dstComp || 'APP', dst_custom: dstGroup,
-      port: ports || '443', customPort: '', protocol: 'TCP',
-      action: ruleAny.action || 'Allow',
-      description: editRule.description || '',
-    });
-  }, [editRule]);
-  const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
-  const [validatingBR, setValidatingBR] = useState(false);
-
-  // App DC Mappings for component-based NH/SZ filtering
+  /* ---------- Reference data ---------- */
   const [appDcMappings, setAppDcMappings] = useState<Record<string, unknown>[]>([]);
+  const [srcNHs, setSrcNHs] = useState<NeighbourhoodRegistry[]>([]);
+  const [srcSZs, setSrcSZs] = useState<SecurityZone[]>([]);
+  const [srcDCs, setSrcDCs] = useState<NGDCDataCenter[]>([]);
+  const [dstNHs, setDstNHs] = useState<NeighbourhoodRegistry[]>([]);
+  const [dstSZs, setDstSZs] = useState<SecurityZone[]>([]);
+  const [dstDCs, setDstDCs] = useState<NGDCDataCenter[]>([]);
+  const [srcAppGroups, setSrcAppGroups] = useState<FirewallGroup[]>([]);
+  const [dstAppGroups, setDstAppGroups] = useState<FirewallGroup[]>([]);
 
-  // Load app DC mappings on mount
-  useEffect(() => {
-    api.getAppDCMappings()
-      .then(m => setAppDcMappings(m))
-      .catch(() => setAppDcMappings([]));
-  }, []);
+  const upd = (field: string, value: string) => setForm(p => ({ ...p, [field]: value }));
+  const sel = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors';
+  const lbl = 'block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5';
 
-  // Helper: check if a mapping belongs to a given appId
-  // The dropdown value is app_distributed_id (e.g. "APP01-NGDC"), but mappings may only
-  // store app_id (e.g. "APP01"). Also resolve via the applications list.
+  /* ------------------------------------------------------------------ */
+  /*  Data Loading                                                       */
+  /* ------------------------------------------------------------------ */
+
+  useEffect(() => { api.getAppDCMappings().then(m => setAppDcMappings(m)).catch(() => setAppDcMappings([])); }, []);
+
   const mappingMatchesApp = useCallback((mr: Record<string, string>, appId: string): boolean => {
     if (!appId) return false;
-    // Direct match on either field
     if (mr.app_distributed_id === appId || mr.app_id === appId) return true;
-    // Resolve: if appId is an app_distributed_id, find the matching app_id from the applications list
     const appObj = applications.find(a => (a.app_distributed_id || a.app_id) === appId);
     if (appObj && mr.app_id === appObj.app_id) return true;
     return false;
   }, [applications]);
 
-  // Derive available components for source app from app_dc_mappings
-  const srcComponents = useMemo(() => {
-    if (!form.application) return [] as string[];
-    const comps = new Set<string>();
-    for (const m of appDcMappings) {
-      const mr = m as Record<string, string>;
-      if (mappingMatchesApp(mr, form.application) && mr.component) {
-        comps.add(mr.component);
-      }
-    }
-    return Array.from(comps).sort();
-  }, [form.application, appDcMappings, mappingMatchesApp]);
+  const collectMappingNHs = useCallback((appId: string) => {
+    const s = new Set<string>();
+    for (const m of appDcMappings) { const mr = m as Record<string, string>; if (mappingMatchesApp(mr, appId) && mr.nh) s.add(mr.nh); }
+    return s;
+  }, [appDcMappings, mappingMatchesApp]);
 
-  // Derive available components for destination app
-  const dstComponents = useMemo(() => {
-    const dstApp = form.dst_application || form.application;
-    if (!dstApp) return [] as string[];
-    const comps = new Set<string>();
-    for (const m of appDcMappings) {
-      const mr = m as Record<string, string>;
-      if (mappingMatchesApp(mr, dstApp) && mr.component) {
-        comps.add(mr.component);
-      }
-    }
-    return Array.from(comps).sort();
-  }, [form.dst_application, form.application, appDcMappings, mappingMatchesApp]);
+  const collectMappingSZs = useCallback((appId: string) => {
+    const s = new Set<string>();
+    for (const m of appDcMappings) { const mr = m as Record<string, string>; if (mappingMatchesApp(mr, appId) && mr.sz) s.add(mr.sz); }
+    return s;
+  }, [appDcMappings, mappingMatchesApp]);
 
-  // Source NH/SZ/DC from source app
-  const [srcNHs, setSrcNHs] = useState<NeighbourhoodRegistry[]>([]);
-  const [srcSZs, setSrcSZs] = useState<SecurityZone[]>([]);
-  const [srcDCs, setSrcDCs] = useState<NGDCDataCenter[]>([]);
-  const [loadingSrc, setLoadingSrc] = useState(false);
-
-  // Destination NH/SZ/DC from destination app
-  const [dstNHs, setDstNHs] = useState<NeighbourhoodRegistry[]>([]);
-  const [dstSZs, setDstSZs] = useState<SecurityZone[]>([]);
-  const [dstDCs, setDstDCs] = useState<NGDCDataCenter[]>([]);
-  const [loadingDst, setLoadingDst] = useState(false);
-
-  // NGDC groups for source and destination apps
-  const [srcAppGroups, setSrcAppGroups] = useState<FirewallGroup[]>([]);
-  const [dstAppGroups, setDstAppGroups] = useState<FirewallGroup[]>([]);
-
-  // Load source app groups
-  useEffect(() => {
-    if (!form.application) { setSrcAppGroups([]); return; }
-    api.getGroups(form.application)
-      .then(groups => setSrcAppGroups(groups.filter(g => isNgdcGroupName(g.name))))
-      .catch(() => setSrcAppGroups([]));
-  }, [form.application]);
-
-  // Load destination app groups
-  useEffect(() => {
-    const dstApp = form.dst_application || form.application;
-    if (!dstApp) { setDstAppGroups([]); return; }
-    api.getGroups(dstApp)
-      .then(groups => setDstAppGroups(groups.filter(g => isNgdcGroupName(g.name))))
-      .catch(() => setDstAppGroups([]));
-  }, [form.dst_application, form.application]);
+  const collectMappingDCs = useCallback((appId: string) => {
+    const s = new Set<string>();
+    for (const m of appDcMappings) { const mr = m as Record<string, string>; if (mappingMatchesApp(mr, appId) && mr.dc) s.add(mr.dc); }
+    return s;
+  }, [appDcMappings, mappingMatchesApp]);
 
   const loadSrcData = useCallback(async (env: string, appId: string) => {
     if (!env) return;
-    setLoadingSrc(true);
-    try {
-      const data = await api.getFilteredNhSzDc(env, appId || undefined);
-      setSrcNHs(data.neighbourhoods || []);
-      setSrcSZs(data.security_zones || []);
-      setSrcDCs(data.datacenters || []);
-    } catch {
-      setSrcNHs([]); setSrcSZs([]); setSrcDCs([]);
-    }
-    setLoadingSrc(false);
+    try { const d = await api.getFilteredNhSzDc(env, appId || undefined); setSrcNHs(d.neighbourhoods || []); setSrcSZs(d.security_zones || []); setSrcDCs(d.datacenters || []); }
+    catch { setSrcNHs([]); setSrcSZs([]); setSrcDCs([]); }
   }, []);
 
   const loadDstData = useCallback(async (env: string, appId?: string) => {
     if (!env) return;
-    setLoadingDst(true);
-    try {
-      const data = await api.getFilteredNhSzDc(env, appId);
-      setDstNHs(data.neighbourhoods || []);
-      setDstSZs(data.security_zones || []);
-      setDstDCs(data.datacenters || []);
-    } catch {
-      setDstNHs([]); setDstSZs([]); setDstDCs([]);
-    }
-    setLoadingDst(false);
+    try { const d = await api.getFilteredNhSzDc(env, appId); setDstNHs(d.neighbourhoods || []); setDstSZs(d.security_zones || []); setDstDCs(d.datacenters || []); }
+    catch { setDstNHs([]); setDstSZs([]); setDstDCs([]); }
   }, []);
 
-  useEffect(() => {
-    loadSrcData(form.environment, form.application);
-  }, [form.environment, form.application, loadSrcData]);
+  useEffect(() => { loadSrcData(form.environment, form.application); }, [form.environment, form.application, loadSrcData]);
 
   useEffect(() => {
-    if (form.dst_application) {
-      // Destination has its own app — load its own app-specific NH/SZ/DC
-      loadDstData(form.environment, form.dst_application);
-    } else if (form.application) {
-      // No separate destination app — load source app's data for destination too
-      // This ensures destination SZs are app-specific (same app), not "all SZs"
-      loadDstData(form.environment, form.application);
-    } else {
-      setDstNHs([]); setDstSZs([]); setDstDCs([]);
-    }
+    const app = form.dst_application || form.application;
+    if (app) loadDstData(form.environment, app);
+    else { setDstNHs([]); setDstSZs([]); setDstDCs([]); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.environment, form.dst_application, form.application, loadDstData]);
 
-  // Helper: collect NH ids from app_dc_mappings for a given app (and optionally component)
-  const collectMappingNHs = useCallback((appId: string, component?: string) => {
-    const nhSet = new Set<string>();
-    for (const m of appDcMappings) {
-      const mr = m as Record<string, string>;
-      if (mappingMatchesApp(mr, appId) &&
-          (!component || mr.component === component) && mr.nh) {
-        nhSet.add(mr.nh);
-      }
-    }
-    return nhSet;
-  }, [appDcMappings, mappingMatchesApp]);
+  /* Load source egress groups (no -Ingress suffix) */
+  useEffect(() => {
+    if (!form.application) { setSrcAppGroups([]); return; }
+    api.getGroups(form.application)
+      .then(groups => setSrcAppGroups(groups.filter(g => !g.name.toLowerCase().includes('-ingress'))))
+      .catch(() => setSrcAppGroups([]));
+  }, [form.application]);
 
-  const collectMappingSZs = useCallback((appId: string, component?: string) => {
-    const szSet = new Set<string>();
-    for (const m of appDcMappings) {
-      const mr = m as Record<string, string>;
-      if (mappingMatchesApp(mr, appId) &&
-          (!component || mr.component === component) && mr.sz) {
-        szSet.add(mr.sz);
-      }
-    }
-    return szSet;
-  }, [appDcMappings, mappingMatchesApp]);
-
-  // Collect DCs from app_dc_mappings for a given app (and optionally component)
-  const collectMappingDCs = useCallback((appId: string, component?: string) => {
-    const dcSet = new Set<string>();
-    for (const m of appDcMappings) {
-      const mr = m as Record<string, string>;
-      if (mappingMatchesApp(mr, appId) &&
-          (!component || mr.component === component)) {
-        if (mr.dc) dcSet.add(mr.dc);
-        if (mr.legacy_dc) dcSet.add(mr.legacy_dc);
-      }
-    }
-    return dcSet;
-  }, [appDcMappings, mappingMatchesApp]);
-
-  // Derive DCs from mappings for source app+component
-  const srcMappingDCs = useMemo(() => {
-    if (!form.application) return [] as { code: string; name: string; dc_type: string }[];
-    const dcSet = collectMappingDCs(form.application, form.src_component || undefined);
-    if (dcSet.size > 0) {
-      return Array.from(dcSet).map(dc => ({
-        code: dc, name: dc,
-        dc_type: dc.toUpperCase().includes('NGDC') ? 'NGDC' : 'Legacy'
-      }));
-    }
-    // Fallback to API-loaded DCs
-    return srcDCs.map(dc => ({ code: dc.code, name: dc.name, dc_type: 'NGDC' }));
-  }, [form.application, form.src_component, collectMappingDCs, srcDCs]);
-
-  // Derive DCs from mappings for destination app+component
-  const dstMappingDCs = useMemo(() => {
+  /* Load destination ingress groups (with -Ingress suffix) */
+  useEffect(() => {
     const dstApp = form.dst_application || form.application;
-    if (!dstApp) return [] as { code: string; name: string; dc_type: string }[];
-    const dcSet = collectMappingDCs(dstApp, form.dst_component || undefined);
-    if (dcSet.size > 0) {
-      return Array.from(dcSet).map(dc => ({
-        code: dc, name: dc,
-        dc_type: dc.toUpperCase().includes('NGDC') ? 'NGDC' : 'Legacy'
-      }));
-    }
-    return dstDCs.map(dc => ({ code: dc.code, name: dc.name, dc_type: 'NGDC' }));
-  }, [form.dst_application, form.application, form.dst_component, collectMappingDCs, dstDCs]);
+    if (!dstApp) { setDstAppGroups([]); return; }
+    api.getGroups(dstApp)
+      .then(groups => setDstAppGroups(groups.filter(g => g.name.toLowerCase().includes('-ingress'))))
+      .catch(() => setDstAppGroups([]));
+  }, [form.dst_application, form.application]);
 
-  // Filter NHs/SZs based on selected component from app_dc_mappings
-  // When no component is selected but the app has mappings, use ALL component NHs/SZs
-  // instead of falling back to app-level defaults (which may be stale)
+  /* ------------------------------------------------------------------ */
+  /*  Derived NH / SZ / DC from app_dc_mappings                         */
+  /* ------------------------------------------------------------------ */
+
   const srcNeighbourhoods = useMemo(() => {
     if (form.application) {
-      const nhSet = collectMappingNHs(form.application, form.src_component || undefined);
+      const nhSet = collectMappingNHs(form.application);
       if (nhSet.size > 0) {
-        const filtered = srcNHs.filter(nh => nhSet.has(nh.nh_id));
-        if (filtered.length > 0) return filtered.map(nh => ({ id: nh.nh_id, name: nh.name }));
-        // NHs not in srcNHs (API response) — build from fallback list
-        return FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
+        const f = srcNHs.filter(nh => nhSet.has(nh.nh_id));
+        if (f.length > 0) return f.map(nh => ({ id: nh.nh_id, name: nh.name }));
+        return FALLBACK_NHS.filter(nh => nhSet.has(nh.id));
       }
     }
-    return srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
-  }, [srcNHs, form.src_component, form.application, collectMappingNHs]);
+    return srcNHs.length > 0 ? srcNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NHS;
+  }, [srcNHs, form.application, collectMappingNHs]);
 
   const srcZones = useMemo(() => {
     if (form.application) {
-      const szSet = collectMappingSZs(form.application, form.src_component || undefined);
+      const szSet = collectMappingSZs(form.application);
       if (szSet.size > 0) {
-        const filtered = srcSZs.filter(sz => szSet.has(sz.code));
-        if (filtered.length > 0) return filtered.map(sz => ({ code: sz.code, name: sz.name }));
-        // SZs not in srcSZs — return raw codes
+        const f = srcSZs.filter(sz => szSet.has(sz.code));
+        if (f.length > 0) return f.map(sz => ({ code: sz.code, name: sz.name }));
         return Array.from(szSet).map(code => ({ code, name: code }));
       }
     }
     return srcSZs.length > 0 ? srcSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
-  }, [srcSZs, form.src_component, form.application, collectMappingSZs]);
+  }, [srcSZs, form.application, collectMappingSZs]);
 
   const dstNeighbourhoods = useMemo(() => {
     const dstApp = form.dst_application || form.application;
-    let result: { id: string; name: string }[];
     if (dstApp) {
-      const nhSet = collectMappingNHs(dstApp, form.dst_component || undefined);
+      const nhSet = collectMappingNHs(dstApp);
       if (nhSet.size > 0) {
-        const filtered = dstNHs.filter(nh => nhSet.has(nh.nh_id));
-        result = filtered.length > 0 ? filtered.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS.filter(nh => nhSet.has(nh.id));
-      } else {
-        result = dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
+        const f = dstNHs.filter(nh => nhSet.has(nh.nh_id));
+        if (f.length > 0) return f.map(nh => ({ id: nh.nh_id, name: nh.name }));
+        return FALLBACK_NHS.filter(nh => nhSet.has(nh.id));
       }
-    } else {
-      result = dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NEIGHBOURHOODS;
     }
-    // Ensure the currently selected destination NH is always present (draft edit restoration)
-    if (form.dst_nh && !result.find(nh => nh.id === form.dst_nh)) {
-      result = [{ id: form.dst_nh, name: form.dst_nh }, ...result];
-    }
-    return result;
-  }, [dstNHs, form.dst_component, form.dst_application, form.application, form.dst_nh, collectMappingNHs]);
+    const r = dstNHs.length > 0 ? dstNHs.map(nh => ({ id: nh.nh_id, name: nh.name })) : FALLBACK_NHS;
+    if (form.dst_nh && !r.find(n => n.id === form.dst_nh)) return [{ id: form.dst_nh, name: form.dst_nh }, ...r];
+    return r;
+  }, [dstNHs, form.dst_application, form.application, form.dst_nh, collectMappingNHs]);
 
   const dstZones = useMemo(() => {
     const dstApp = form.dst_application || form.application;
-    let result: { code: string; name: string }[];
     if (dstApp) {
-      const szSet = collectMappingSZs(dstApp, form.dst_component || undefined);
+      const szSet = collectMappingSZs(dstApp);
       if (szSet.size > 0) {
-        const filtered = dstSZs.filter(sz => szSet.has(sz.code));
-        result = filtered.length > 0 ? filtered.map(sz => ({ code: sz.code, name: sz.name })) : Array.from(szSet).map(code => ({ code, name: code }));
-      } else {
-        result = dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
+        const f = dstSZs.filter(sz => szSet.has(sz.code));
+        if (f.length > 0) return f.map(sz => ({ code: sz.code, name: sz.name }));
+        return Array.from(szSet).map(code => ({ code, name: code }));
       }
-    } else {
-      result = dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
     }
-    // Ensure the currently selected destination SZ is always present (draft edit restoration)
-    if (form.dst_sz && !result.find(sz => sz.code === form.dst_sz)) {
-      result = [{ code: form.dst_sz, name: form.dst_sz }, ...result];
-    }
-    return result;
-  }, [dstSZs, form.dst_component, form.dst_application, form.application, form.dst_sz, collectMappingSZs]);
+    const r = dstSZs.length > 0 ? dstSZs.map(sz => ({ code: sz.code, name: sz.name })) : [];
+    if (form.dst_sz && !r.find(s => s.code === form.dst_sz)) return [{ code: form.dst_sz, name: form.dst_sz }, ...r];
+    return r;
+  }, [dstSZs, form.dst_application, form.application, form.dst_sz, collectMappingSZs]);
 
-  // Combined datacenter list for backward compat (uses mapping-derived DCs)
   const datacenters = useMemo(() => {
-    const all = [...srcMappingDCs, ...dstMappingDCs];
+    const dcSet = new Set<string>();
+    const items: { code: string; name: string }[] = [];
+    for (const appId of [form.application, form.dst_application]) {
+      if (!appId) continue;
+      for (const dc of Array.from(collectMappingDCs(appId))) {
+        if (!dcSet.has(dc)) { dcSet.add(dc); items.push({ code: dc, name: dc }); }
+      }
+    }
+    if (items.length > 0) return items;
+    const all = [...srcDCs, ...dstDCs];
     const seen = new Set<string>();
-    const unique: { code: string; name: string }[] = [];
-    for (const dc of all) {
-      if (!seen.has(dc.code)) { seen.add(dc.code); unique.push({ code: dc.code, name: dc.name }); }
-    }
-    return unique.length > 0 ? unique : FALLBACK_DATACENTERS;
-  }, [srcMappingDCs, dstMappingDCs]);
+    const u: { code: string; name: string }[] = [];
+    for (const dc of all) { if (!seen.has(dc.code)) { seen.add(dc.code); u.push({ code: dc.code, name: dc.name }); } }
+    return u.length > 0 ? u : FALLBACK_DCS;
+  }, [form.application, form.dst_application, collectMappingDCs, srcDCs, dstDCs]);
 
-  // Filter groups by NH, SZ, AND component — match groups whose name contains the codes
-  const srcFilteredGroups = useMemo(() => {
-    if (!form.src_nh && !form.src_sz && !form.src_component) return srcAppGroups;
-    return srcAppGroups.filter(g => {
-      const name = g.name.toLowerCase();
-      const matchNh = !form.src_nh || name.includes(form.src_nh.toLowerCase());
-      const matchSz = !form.src_sz || name.includes(form.src_sz.toLowerCase());
-      const matchComp = !form.src_component || name.includes(form.src_component.toLowerCase());
-      return matchNh && matchSz && matchComp;
-    });
-  }, [srcAppGroups, form.src_nh, form.src_sz, form.src_component]);
+  /* ------------------------------------------------------------------ */
+  /*  Auto-populate NH/SZ when app has single mapping                    */
+  /* ------------------------------------------------------------------ */
 
-  const dstFilteredGroups = useMemo(() => {
-    if (!form.dst_nh && !form.dst_sz && !form.dst_component) return dstAppGroups;
-    return dstAppGroups.filter(g => {
-      const name = g.name.toLowerCase();
-      const matchNh = !form.dst_nh || name.includes(form.dst_nh.toLowerCase());
-      const matchSz = !form.dst_sz || name.includes(form.dst_sz.toLowerCase());
-      const matchComp = !form.dst_component || name.includes(form.dst_component.toLowerCase());
-      return matchNh && matchSz && matchComp;
-    });
-  }, [dstAppGroups, form.dst_nh, form.dst_sz, form.dst_component]);
-
-  // Auto-populate NH/SZ when component is selected and there's only one option (Issue 1)
   useEffect(() => {
-    if (!form.src_component || !form.application) return;
-    const nhSet = collectMappingNHs(form.application, form.src_component);
-    const szSet = collectMappingSZs(form.application, form.src_component);
-    // Auto-set NH if exactly one match
-    if (nhSet.size === 1 && !form.src_nh) {
-      const nh = Array.from(nhSet)[0];
-      setForm(prev => ({ ...prev, src_nh: nh }));
-    }
-    // Auto-set SZ if exactly one match
-    if (szSet.size === 1 && !form.src_sz) {
-      const sz = Array.from(szSet)[0];
-      setForm(prev => ({ ...prev, src_sz: sz }));
-    }
+    if (!form.application) return;
+    const nhSet = collectMappingNHs(form.application);
+    const szSet = collectMappingSZs(form.application);
+    if (nhSet.size === 1 && !form.src_nh) setForm(p => ({ ...p, src_nh: Array.from(nhSet)[0] }));
+    if (szSet.size === 1 && !form.src_sz) setForm(p => ({ ...p, src_sz: Array.from(szSet)[0] }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.src_component, form.application, collectMappingNHs, collectMappingSZs]);
+  }, [form.application, collectMappingNHs, collectMappingSZs]);
 
   useEffect(() => {
     const dstApp = form.dst_application || form.application;
-    if (!form.dst_component || !dstApp) return;
-    const nhSet = collectMappingNHs(dstApp, form.dst_component);
-    const szSet = collectMappingSZs(dstApp, form.dst_component);
-    if (nhSet.size === 1 && !form.dst_nh) {
-      const nh = Array.from(nhSet)[0];
-      setForm(prev => ({ ...prev, dst_nh: nh }));
-    }
-    if (szSet.size === 1 && !form.dst_sz) {
-      const sz = Array.from(szSet)[0];
-      setForm(prev => ({ ...prev, dst_sz: sz }));
-    }
+    if (!dstApp) return;
+    const nhSet = collectMappingNHs(dstApp);
+    const szSet = collectMappingSZs(dstApp);
+    if (nhSet.size === 1 && !form.dst_nh) setForm(p => ({ ...p, dst_nh: Array.from(nhSet)[0] }));
+    if (szSet.size === 1 && !form.dst_sz) setForm(p => ({ ...p, dst_sz: Array.from(szSet)[0] }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.dst_component, form.dst_application, form.application, collectMappingNHs, collectMappingSZs]);
+  }, [form.dst_application, form.application, collectMappingNHs, collectMappingSZs]);
 
-  // Generate the standard group name for "create new" option
+  /* ------------------------------------------------------------------ */
+  /*  Auto-select source egress group when NH/SZ selected                */
+  /* ------------------------------------------------------------------ */
+
+  const srcEgressGroup = useMemo(() => {
+    if (!form.application || !form.src_nh || !form.src_sz) return null;
+    const expected = `grp-${form.application}-${form.src_nh}-${form.src_sz}`.toLowerCase();
+    return srcAppGroups.find(g => g.name.toLowerCase() === expected) || null;
+  }, [form.application, form.src_nh, form.src_sz, srcAppGroups]);
+
+  useEffect(() => {
+    if (srcEgressGroup && !form.src_group) setForm(p => ({ ...p, src_group: srcEgressGroup.name }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [srcEgressGroup]);
+
+  /* Filter destination ingress groups by NH/SZ */
+  const dstFilteredGroups = useMemo(() => {
+    if (!form.dst_nh && !form.dst_sz) return dstAppGroups;
+    return dstAppGroups.filter(g => {
+      const n = g.name.toLowerCase();
+      return (!form.dst_nh || n.includes(form.dst_nh.toLowerCase())) &&
+             (!form.dst_sz || n.includes(form.dst_sz.toLowerCase()));
+    });
+  }, [dstAppGroups, form.dst_nh, form.dst_sz]);
+
   const srcSuggestedName = useMemo(() => {
     if (!form.application || !form.src_nh || !form.src_sz) return '';
-    return `grp-${form.application}-${form.src_nh}-${form.src_sz}-${form.src_subtype}`;
-  }, [form.application, form.src_nh, form.src_sz, form.src_subtype]);
+    return `grp-${form.application}-${form.src_nh}-${form.src_sz}`;
+  }, [form.application, form.src_nh, form.src_sz]);
 
-  const dstSuggestedName = useMemo(() => {
-    const dstApp = form.dst_application || form.application;
-    if (!dstApp || !form.dst_nh || !form.dst_sz) return '';
-    return `grp-${dstApp}-${form.dst_nh}-${form.dst_sz}-${form.dst_subtype}`;
-  }, [form.application, form.dst_application, form.dst_nh, form.dst_sz, form.dst_subtype]);
+  /* ------------------------------------------------------------------ */
+  /*  Drag-and-drop destination targets                                  */
+  /* ------------------------------------------------------------------ */
 
-  // Keep srcName/dstName for backward compat — resolve from form.source/form.destination or suggested
-  const srcName = form.src_custom || srcSuggestedName;
-  const dstName = form.dst_custom || dstSuggestedName;
+  const commonDestinations = useMemo((): DestTarget[] => {
+    const targets: DestTarget[] = [];
+    const srcApp = form.application;
+    for (const app of applications) {
+      const id = app.app_distributed_id || app.app_id;
+      if (id === srcApp) continue;
+      const hasIngress = !!app.has_ingress;
+      const szHint = (app.sz || app.szs || '') as string;
+      targets.push({ label: app.app_name || id, appDistId: id, hasIngress, szHint: szHint.split(',')[0]?.trim() || '' });
+    }
+    targets.sort((a, b) => {
+      if (a.hasIngress && !b.hasIngress) return -1;
+      if (!a.hasIngress && b.hasIngress) return 1;
+      return a.appDistId.localeCompare(b.appDistId);
+    });
+    return targets;
+  }, [applications, form.application]);
 
-  const effectivePort = form.port === 'custom' ? form.customPort : form.port;
+  const filteredDestinations = useMemo(() => {
+    if (!destSearch) return commonDestinations;
+    const q = destSearch.toLowerCase();
+    return commonDestinations.filter(d => d.label.toLowerCase().includes(q));
+  }, [commonDestinations, destSearch]);
+
+  /* ------------------------------------------------------------------ */
+  /*  Edit mode pre-populate                                             */
+  /* ------------------------------------------------------------------ */
+
+  useEffect(() => {
+    if (!editRule) return;
+    const src = editRule.source;
+    const dst = editRule.destination;
+    const srcGroup = (src?.group_name || src?.ip_address || src?.cidr || '') as string;
+    const dstGroup = typeof dst === 'string' ? dst : (dst?.name || dst?.dest_ip || '') as string;
+    const ruleAny = editRule as unknown as Record<string, string>;
+    setForm({
+      application: editRule.application || '',
+      dst_application: ruleAny.dst_application || '',
+      environment: editRule.environment || 'Production',
+      datacenter: editRule.datacenter || '',
+      src_nh: (src?.neighbourhood || ruleAny.source_nh || '') as string,
+      src_sz: (src?.security_zone || '') as string,
+      dst_nh: ruleAny.destination_nh || '',
+      dst_sz: ruleAny.destination_zone || (typeof dst === 'object' ? (dst?.security_zone || '') as string : ''),
+      src_group: srcGroup,
+      dst_group: dstGroup,
+      port: (src?.ports || (typeof dst === 'object' ? dst?.ports : '') || '443') as string,
+      customPort: '',
+      protocol: 'TCP',
+      action: ruleAny.action || 'Allow',
+      description: (editRule as unknown as Record<string, string>).description || '',
+    });
+  }, [editRule]);
+
+  /* ------------------------------------------------------------------ */
+  /*  Birthright validation (auto-runs when zones change)                */
+  /* ------------------------------------------------------------------ */
 
   useEffect(() => {
     if (!form.src_sz || !form.dst_sz) { setBirthrightResult(null); return; }
     const timer = setTimeout(async () => {
       setValidatingBR(true);
       try {
-        const result = await api.validateBirthright({
+        const r = await api.validateBirthright({
           source_zone: form.src_sz, destination_zone: form.dst_sz,
           source_sz: form.src_sz, destination_sz: form.dst_sz,
           source_nh: form.src_nh, destination_nh: form.dst_nh,
-          source_dc: form.src_dc || form.datacenter, destination_dc: form.dst_dc || form.datacenter,
+          source_dc: form.datacenter, destination_dc: form.datacenter,
           environment: form.environment,
         });
-        setBirthrightResult(result);
+        setBirthrightResult(r);
       } catch { setBirthrightResult(null); }
       setValidatingBR(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [form.src_sz, form.dst_sz, form.src_nh, form.dst_nh, form.datacenter, form.environment, form.src_dc, form.dst_dc]);
+  }, [form.src_sz, form.dst_sz, form.src_nh, form.dst_nh, form.datacenter, form.environment]);
 
-  // Birthright already permitted = no FW rule needed, block submission
-  const isBirthrightPermitted = birthrightResult
-    && birthrightResult.compliant
-    && !birthrightResult.firewall_request_required;
+  const isBirthrightPermitted = birthrightResult && birthrightResult.compliant && !birthrightResult.firewall_request_required;
 
-  const canStep1 = form.application && form.environment && (form.src_dc || form.datacenter);
-  // Source group is required — rule creation is blocked until a source group is selected from App Groups
-  const srcGroupSelected = !!form.src_custom;
-  const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz && srcGroupSelected;
+  /* ------------------------------------------------------------------ */
+  /*  Step gating                                                        */
+  /* ------------------------------------------------------------------ */
+
+  const canStep1 = form.application && form.environment && form.datacenter;
+  const srcGroupSelected = !!form.src_group;
+  const dstGroupSelected = !!form.dst_group;
+  const canStep2 = form.src_nh && form.src_sz && form.dst_nh && form.dst_sz && srcGroupSelected && dstGroupSelected;
+  const effectivePort = form.port === 'custom' ? form.customPort : form.port;
   const canStep3 = effectivePort && form.protocol;
   const canSubmit = canStep1 && canStep2 && canStep3 && !isBirthrightPermitted;
+
+  /* ------------------------------------------------------------------ */
+  /*  Submit handler                                                     */
+  /* ------------------------------------------------------------------ */
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setDraftCreatedMsg('');
     try {
-      const finalSrc = form.src_custom ? autoPrefix(form.src_custom.trim(), 'group') : srcName;
-      const finalDst = form.dst_custom ? autoPrefix(form.dst_custom.trim(), 'group') : dstName;
-      const effectiveDc = form.src_dc || form.datacenter;
+      const finalSrc = form.src_group ? autoPrefix(form.src_group.trim(), 'group') : '';
+      const finalDst = form.dst_group ? autoPrefix(form.dst_group.trim(), 'group') : '';
       if (isEditMode && editRule) {
-        // Update existing draft rule — persist component info for future edits
         await api.updateRule(editRule.rule_id, {
-          application: form.application, environment: form.environment, datacenter: effectiveDc,
+          application: form.application, environment: form.environment, datacenter: form.datacenter,
           source: { source_type: 'Group', ip_address: null, cidr: null, group_name: finalSrc, ports: effectivePort, neighbourhood: form.src_nh, security_zone: form.src_sz },
           destination: { name: finalDst, security_zone: form.dst_sz, dest_ip: null, ports: effectivePort, is_predefined: false },
-          description: form.description,
-          source_nh: form.src_nh, destination_nh: form.dst_nh,
-          // Persist destination_zone at rule level so draft edit can restore it
-          destination_zone: form.dst_sz,
+          description: form.description, source_nh: form.src_nh, destination_nh: form.dst_nh,
           source_zone: form.src_sz,
           dst_application: form.dst_application || undefined,
-          src_component: form.src_component || undefined,
-          dst_component: form.dst_component || undefined,
-          src_dc: form.src_dc || undefined,
-          dst_dc: form.dst_dc || undefined,
-        });
+        } as Record<string, unknown>);
         onRuleCreated();
         if (onEditComplete) onEditComplete();
       } else {
         await api.createRule({
-          application: form.application, environment: form.environment, datacenter: effectiveDc,
-          source: finalSrc, source_zone: form.src_sz,
-          destination: finalDst, destination_zone: form.dst_sz,
-          port: effectivePort, protocol: form.protocol, action: form.action,
-          description: form.description, is_group_to_group: true,
-          source_nh: form.src_nh, destination_nh: form.dst_nh,
+          application: form.application, environment: form.environment, datacenter: form.datacenter,
+          source: finalSrc, source_zone: form.src_sz, destination: finalDst, destination_zone: form.dst_sz,
+          port: effectivePort, protocol: form.protocol, action: form.action, description: form.description,
+          is_group_to_group: true, source_nh: form.src_nh, destination_nh: form.dst_nh,
           dst_application: form.dst_application || undefined,
-          src_component: form.src_component || undefined,
-          dst_component: form.dst_component || undefined,
-          src_dc: form.src_dc || undefined,
-          dst_dc: form.dst_dc || undefined,
         });
         onRuleCreated();
-        setDraftCreatedMsg(`Rule created successfully! Status: DRAFT. The rule must be submitted for review before it becomes active.`);
+        setDraftCreatedMsg('Rule created successfully! Status: DRAFT. Submit for review to activate.');
         setStep(1);
         setForm(buildDefaultForm());
         setBirthrightResult(null);
@@ -578,705 +455,618 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     setSubmitting(false);
   };
 
-  const upd = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
-  const sel = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors';
-  const lbl = 'block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5';
-
-  const stepClass = (s: number) => {
-    if (step === s) return 'border-blue-600 text-blue-700 bg-white';
-    if (step > s) return 'border-green-500 text-green-700 bg-green-50/50';
-    return 'border-transparent text-gray-500 hover:text-gray-700';
-  };
-  const dotClass = (s: number) => {
-    if (step === s) return 'bg-blue-600 text-white';
-    if (step > s) return 'bg-green-500 text-white';
-    return 'bg-gray-300 text-white';
+  const handleDropDestination = (target: DestTarget) => {
+    setForm(p => ({ ...p, dst_application: target.appDistId, dst_nh: '', dst_sz: '', dst_group: '' }));
   };
 
-  const mainContent = (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Step indicators */}
-      <div className="flex border-b border-gray-200 bg-gray-50">
-        {[{ num: 1, label: 'Application & Environment' }, { num: 2, label: 'Source & Destination' }, { num: 3, label: 'Connection & Review' }].map(s => (
-          <button key={s.num} onClick={() => setStep(s.num)}
-            className={'flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ' + stepClass(s.num)}>
-            <span className={'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ' + dotClass(s.num)}>
-              {step > s.num ? '\u2713' : s.num}
-            </span>
-            <span className="hidden sm:inline">{s.label}</span>
-          </button>
-        ))}
-      </div>
+  /* ------------------------------------------------------------------ */
+  /*  Group compile helper                                               */
+  /* ------------------------------------------------------------------ */
 
-      <div className="p-6">
-        {/* Draft created banner */}
-        {draftCreatedMsg && (
-          <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-3">
-            <span className="text-amber-600 text-lg font-bold">!</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">{draftCreatedMsg}</p>
-              <p className="text-xs text-amber-600 mt-1">Go to the Rules list to view, edit, or submit draft rules.</p>
-            </div>
-            <button onClick={() => setDraftCreatedMsg('')} className="ml-auto text-amber-500 hover:text-amber-700 text-sm font-bold">&times;</button>
-          </div>
-        )}
-
-        {/* Step 1: Application & Environment */}
-        {step === 1 && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-5">
-              <div>
-                <label className={lbl}>Source Application</label>
-                <select className={sel} value={form.application} onChange={e => { upd('application', e.target.value); upd('src_component', ''); upd('src_nh', ''); upd('src_sz', ''); }}>
-                  <option value="">Select Source Application...</option>
-                  {applications.map(app => (
-                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">Populates source component, NH and SZ dropdowns</p>
-              </div>
-              <div>
-                <label className={lbl}>Destination Application</label>
-                <select className={sel} value={form.dst_application} onChange={e => { upd('dst_application', e.target.value); upd('dst_component', ''); upd('dst_nh', ''); upd('dst_sz', ''); }}>
-                  <option value="">Same as Source / All</option>
-                  {applications.map(app => (
-                    <option key={app.app_distributed_id || app.app_id} value={app.app_distributed_id || app.app_id}>{app.app_distributed_id || app.app_id}</option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">Populates destination component, NH and SZ dropdowns</p>
-              </div>
-            </div>
-            {/* Component selection - filters NHs and SZs */}
-            <div className="grid grid-cols-2 gap-5">
-              <div>
-                <label className={lbl}>Source Component</label>
-                <select className={sel} value={form.src_component} onChange={e => { upd('src_component', e.target.value); upd('src_nh', ''); upd('src_sz', ''); }}>
-                  <option value="">All Components</option>
-                  {srcComponents.map(c => (<option key={c} value={c}>{c}</option>))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">Filters source NHs and SZs per App Management mapping</p>
-              </div>
-              <div>
-                <label className={lbl}>Destination Component</label>
-                <select className={sel} value={form.dst_component} onChange={e => { upd('dst_component', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); }}>
-                  <option value="">All Components</option>
-                  {dstComponents.map(c => (<option key={c} value={c}>{c}</option>))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">Filters destination NHs and SZs per App Management mapping</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-5">
-              <div>
-                <label className={lbl}>Environment</label>
-                <select className={sel} value={form.environment} onChange={e => { upd('environment', e.target.value); upd('src_nh', ''); upd('src_sz', ''); upd('dst_nh', ''); upd('dst_sz', ''); }}>
-                  <option value="Production">Production</option>
-                  <option value="Non-Production">Non-Production</option>
-                  <option value="Pre-Production">Pre-Production</option>
-                </select>
-              </div>
-              <div>
-                <label className={lbl}>Source DC</label>
-                <select className={sel} value={form.src_dc} onChange={e => { upd('src_dc', e.target.value); upd('datacenter', e.target.value); }}>
-                  <option value="">Select Source DC...</option>
-                  {srcMappingDCs.map(dc => (
-                    <option key={dc.code} value={dc.code}>{dc.name} ({dc.dc_type})</option>
-                  ))}
-                  {srcMappingDCs.length === 0 && datacenters.map(dc => (
-                    <option key={dc.code} value={dc.code}>{dc.name}</option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">Filtered by source app + component from Settings</p>
-              </div>
-              <div>
-                <label className={lbl}>Destination DC</label>
-                <select className={sel} value={form.dst_dc} onChange={e => upd('dst_dc', e.target.value)}>
-                  <option value="">Same as Source</option>
-                  {dstMappingDCs.map(dc => (
-                    <option key={dc.code} value={dc.code}>{dc.name} ({dc.dc_type})</option>
-                  ))}
-                  {dstMappingDCs.length === 0 && datacenters.map(dc => (
-                    <option key={dc.code} value={dc.code}>{dc.name}</option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">Filtered by dest app + component from Settings</p>
-              </div>
-            </div>
-            {/* Cross-DC warning */}
-            {form.src_dc && form.dst_dc && form.src_dc !== form.dst_dc && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
-                <span className="text-amber-600 font-bold text-sm">!</span>
-                <span className="text-xs text-amber-700 font-medium">Cross-DC rule: Source DC <strong>{form.src_dc}</strong> &rarr; Destination DC <strong>{form.dst_dc}</strong>. Cross-DC birthright validation will be applied.</span>
-              </div>
-            )}
-            {form.application && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <span className="text-sm text-blue-800 font-medium">
-                  Building rule: <strong>{form.application}</strong>
-                  {form.src_component && <> ({form.src_component})</>}
-                  {form.dst_application && form.dst_application !== form.application && (
-                    <> &rarr; <strong>{form.dst_application}</strong>{form.dst_component && <> ({form.dst_component})</>}</>
-                  )}
-                  {' '}in <strong>{form.environment}</strong>
-                  {form.src_dc && <> at <strong>{form.src_dc}</strong></>}
-                  {form.dst_dc && form.dst_dc !== form.src_dc && <> &rarr; <strong>{form.dst_dc}</strong></>}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button onClick={() => setStep(2)} disabled={!canStep1}
-                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
-                Next: Source &amp; Destination &rarr;
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Source & Destination */}
-        {step === 2 && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
-              {/* Source panel */}
-              <div className="border border-blue-200 rounded-xl p-4 bg-blue-50/30">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-bold">SRC</span>
-                  <h3 className="text-sm font-bold text-blue-800">Source</h3>
-                  {form.application && <span className="text-[10px] text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded">App: {form.application}</span>}
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className={lbl}>Neighbourhood</label>
-                    <select className={sel} value={form.src_nh} onChange={e => upd('src_nh', e.target.value)}>
-                      <option value="">Select Neighbourhood...</option>
-                      {srcNeighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
-                    </select>
-                    {loadingSrc && <span className="text-[10px] text-blue-500 animate-pulse">Loading...</span>}
-                  </div>
-                  <div>
-                    <label className={lbl}>Security Zone</label>
-                    <select className={sel} value={form.src_sz} onChange={e => upd('src_sz', e.target.value)}>
-                      <option value="">Select Zone...</option>
-                      {srcZones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={lbl}>Source Group</label>
-                    {srcFilteredGroups.length > 0 ? (
-                      <>
-                        <select className={sel} value={form.src_custom} onChange={e => upd('src_custom', e.target.value)}>
-                          <option value="">Select Existing Group...</option>
-                          {srcFilteredGroups.map(g => (
-                            <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
-                          ))}
-                        </select>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{srcFilteredGroups.length} group(s) match {form.src_nh && `NH: ${form.src_nh}`}{form.src_nh && form.src_sz && ', '}{form.src_sz && `SZ: ${form.src_sz}`}</p>
-                      </>
-                    ) : form.application && form.src_nh && form.src_sz ? (
-                      <div className="p-3 bg-red-50 border border-red-300 rounded-lg">
-                        <p className="text-xs text-red-700 font-bold mb-1">No source group exists for {form.application} in {form.src_nh}/{form.src_sz}</p>
-                        <p className="text-[10px] text-red-600 mb-2">A source group is required. Select component to generate name, then create the group:</p>
-                        <select className={sel + ' mb-2'} value={form.src_subtype} onChange={e => { upd('src_subtype', e.target.value); upd('src_custom', ''); }}>
-                          {(srcComponents.length > 0 ? srcComponents : SUBTYPES.map(s => s.code)).map(c => (<option key={c} value={c}>{c}</option>))}
-                        </select>
-                        {srcSuggestedName && (
-                          <div className="space-y-1.5">
-                            <div className="px-2 py-1.5 text-xs bg-white border border-red-200 rounded font-mono text-red-700">{srcSuggestedName}</div>
-                            <button onClick={() => { setNewGroupName(srcSuggestedName); setNewGroupMembers(''); setShowCreateGroupModal(true); }}
-                              className="w-full px-3 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
-                              Create Group: {srcSuggestedName}
-                            </button>
-                          </div>
-                        )}
-                        <p className="text-[10px] text-red-500 mt-2 font-semibold">Rule creation is blocked until a source group is created or selected.</p>
-                      </div>
-                    ) : (
-                      <select className={sel} disabled>
-                        <option value="">Select NH &amp; SZ first...</option>
-                      </select>
-                    )}
-                    {form.src_custom && (
-                      <div className="mt-1 p-2 bg-white border border-blue-200 rounded-lg">
-                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Selected Group</div>
-                        <code className="text-xs font-mono text-blue-700 break-all">{form.src_custom}</code>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Arrow connector */}
-              <div className="flex flex-col items-center justify-center pt-12 gap-2">
-                <div className="w-px h-8 bg-gray-300" />
-                <div className="w-10 h-10 rounded-full bg-amber-100 border-2 border-amber-400 flex items-center justify-center">
-                  <span className="text-amber-700 text-lg font-bold">&rarr;</span>
-                </div>
-                <div className="text-[10px] text-gray-400 font-semibold uppercase">Policy</div>
-                {validatingBR && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600" />}
-                {birthrightResult && !validatingBR && (
-                  <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
-                    isBirthrightPermitted ? 'bg-green-100 text-green-700' :
-                    birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
-                    birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  )}>
-                    {isBirthrightPermitted ? 'ALREADY PERMITTED' :
-                     birthrightResult.firewall_request_required ? 'FW REQUIRED' :
-                     birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
-                  </span>
-                )}
-                <div className="w-px h-8 bg-gray-300" />
-              </div>
-
-              {/* Destination panel */}
-              <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/30">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">DST</span>
-                  <h3 className="text-sm font-bold text-emerald-800">Destination</h3>
-                  {(form.dst_application || form.application) && <span className="text-[10px] text-emerald-500 bg-emerald-100 px-1.5 py-0.5 rounded">App: {form.dst_application || form.application}</span>}
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className={lbl}>Neighbourhood</label>
-                    <select className={sel} value={form.dst_nh} onChange={e => upd('dst_nh', e.target.value)}>
-                      <option value="">Select Neighbourhood...</option>
-                      {dstNeighbourhoods.map(nh => (<option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>))}
-                    </select>
-                    {loadingDst && <span className="text-[10px] text-emerald-500 animate-pulse">Loading...</span>}
-                  </div>
-                  <div>
-                    <label className={lbl}>Security Zone</label>
-                    <select className={sel} value={form.dst_sz} onChange={e => upd('dst_sz', e.target.value)}>
-                      <option value="">Select Zone...</option>
-                      {dstZones.map(z => (<option key={z.code} value={z.code}>{z.code} - {z.name}</option>))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={lbl}>Destination Group</label>
-                    {dstFilteredGroups.length > 0 ? (
-                      <>
-                        <select className={sel} value={form.dst_custom} onChange={e => upd('dst_custom', e.target.value)}>
-                          <option value="">Select Existing Group...</option>
-                          {dstFilteredGroups.map(g => (
-                            <option key={g.name} value={g.name}>{g.name} ({g.members.length} members)</option>
-                          ))}
-                        </select>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{dstFilteredGroups.length} group(s) match {form.dst_nh && `NH: ${form.dst_nh}`}{form.dst_nh && form.dst_sz && ', '}{form.dst_sz && `SZ: ${form.dst_sz}`}</p>
-                      </>
-                    ) : (form.dst_application || form.application) && form.dst_nh && form.dst_sz ? (
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs text-amber-700 font-medium mb-1">No groups found for {form.dst_application || form.application} in {form.dst_nh}/{form.dst_sz}</p>
-                        <p className="text-[10px] text-amber-600 mb-2">You can still continue — select a component to generate the destination group name:</p>
-                        <select className={sel + ' mb-2'} value={form.dst_subtype} onChange={e => { upd('dst_subtype', e.target.value); upd('dst_custom', ''); }}>
-                          {(dstComponents.length > 0 ? dstComponents : SUBTYPES.map(s => s.code)).map(c => (<option key={c} value={c}>{c}</option>))}
-                        </select>
-                        {dstSuggestedName && (
-                          <div className="space-y-1.5">
-                            <button onClick={() => upd('dst_custom', dstSuggestedName)}
-                              className="w-full text-left px-2 py-1.5 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50 transition-colors">
-                              Use: <code className="font-mono text-amber-700">{dstSuggestedName}</code>
-                            </button>
-                            <button onClick={() => { setNewGroupName(dstSuggestedName); setNewGroupMembers(''); setShowCreateGroupModal(true); }}
-                              className="w-full px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 rounded hover:bg-amber-200 transition-colors">
-                              Create Group in App Groups
-                            </button>
-                          </div>
-                        )}
-                        <p className="text-[10px] text-amber-500 mt-1 italic">Warning: destination group does not exist yet. Rule will still be created.</p>
-                      </div>
-                    ) : (
-                      <select className={sel} disabled>
-                        <option value="">Select NH &amp; SZ first...</option>
-                      </select>
-                    )}
-                    {form.dst_custom && (
-                      <div className="mt-1 p-2 bg-white border border-emerald-200 rounded-lg">
-                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-0.5">Selected Group</div>
-                        <code className="text-xs font-mono text-emerald-700 break-all">{form.dst_custom}</code>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {birthrightResult && !validatingBR && (
-              <div className="space-y-2">
-                {/* Already permitted - block submission */}
-                {isBirthrightPermitted && (
-                  <div className="p-4 rounded-lg border-2 border-green-400 bg-green-50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-bold text-green-800">Already Permitted &mdash; No Firewall Rule Needed</span>
-                    </div>
-                    <p className="text-sm text-green-700">
-                      This traffic is already allowed by birthright policy. No additional firewall rule is required.
-                      You cannot submit a rule for traffic that is already permitted.
-                    </p>
-                    {birthrightResult.permitted.length > 0 && (
-                      <ul className="text-xs text-green-700 list-disc list-inside mt-2">
-                        {birthrightResult.permitted.map((p, i) => (<li key={i}>{p.rule} &mdash; {p.reason}</li>))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-                {/* Policy Status */}
-                {!isBirthrightPermitted && <div className={'p-3 rounded-lg border text-sm ' + (
-                  birthrightResult.firewall_request_required ? 'bg-amber-50 border-amber-200' :
-                  birthrightResult.compliant ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-                )}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={'font-bold text-xs ' + (
-                      birthrightResult.firewall_request_required ? 'text-amber-700' :
-                      birthrightResult.compliant ? 'text-green-700' : 'text-red-700'
-                    )}>
-                      Policy: {birthrightResult.matrix_used || ''}
-                    </span>
-                    <span className={'text-xs ' + (
-                      birthrightResult.firewall_request_required ? 'text-amber-600' :
-                      birthrightResult.compliant ? 'text-green-600' : 'text-red-600'
-                    )}>
-                      {birthrightResult.firewall_request_required
-                        ? 'Firewall rule required for this cross-zone traffic'
-                        : birthrightResult.compliant ? 'Permitted' : 'Blocked by policy'}
-                    </span>
-                  </div>
-                  {birthrightResult.permitted.length > 0 && (
-                    <ul className="text-xs text-green-700 list-disc list-inside mt-1">
-                      {birthrightResult.permitted.map((p, i) => (<li key={i}>{p.rule} &mdash; {p.reason}</li>))}
-                    </ul>
-                  )}
-                  {birthrightResult.warnings.length > 0 && (
-                    <ul className="text-xs text-amber-700 list-disc list-inside mt-1">
-                      {birthrightResult.warnings.map((w, i) => (<li key={i}>{w.rule} &mdash; {w.reason}</li>))}
-                    </ul>
-                  )}
-                </div>}
-
-                {/* Firewall Device Hops — rule required */}
-                {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
-                  <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-sm">
-                    <div className="font-bold text-xs text-amber-800 mb-1">Firewall Rule Required — {birthrightResult.firewall_devices_needed.length} device{birthrightResult.firewall_devices_needed.length > 1 ? 's' : ''}</div>
-                    <div className="flex flex-wrap gap-2">
-                      {birthrightResult.firewall_devices_needed.map((dev, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-amber-300 text-xs font-mono text-amber-800">
-                          {dev}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="text-[10px] text-amber-600 mt-1">
-                      DC: {datacenters.find(d => d.code === form.datacenter)?.name || form.datacenter}
-                    </div>
-                  </div>
-                )}
-
-                {/* Informational FW path — same SZ cross NH (permitted, no rule required) */}
-                {birthrightResult.firewall_path_info && birthrightResult.firewall_path_info.length > 0 && !birthrightResult.firewall_request_required && (
-                  <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50 text-sm">
-                    <div className="font-bold text-xs text-blue-700 mb-1">Traffic Path (informational — no firewall rule required)</div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-1 rounded bg-blue-100 border border-blue-200 text-xs font-mono text-blue-800">{form.src_nh} {form.src_sz}</span>
-                      {birthrightResult.firewall_path_info.map((fw, i) => (
-                        <span key={i} className="inline-flex items-center gap-1">
-                          <span className="text-gray-400">&rarr;</span>
-                          <span className="px-2 py-1 rounded bg-white border border-blue-200 text-xs font-mono text-blue-700">{fw}</span>
-                        </span>
-                      ))}
-                      <span className="text-gray-400">&rarr;</span>
-                      <span className="px-2 py-1 rounded bg-purple-100 border border-purple-200 text-xs font-mono text-purple-800">{form.dst_nh} {form.dst_sz}</span>
-                    </div>
-                    <div className="text-[10px] text-blue-500 mt-1">
-                      DC: {datacenters.find(d => d.code === form.datacenter)?.name || form.datacenter} — Permitted per birthright
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Source group required message */}
-            {form.src_nh && form.src_sz && !srcGroupSelected && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-xs font-semibold text-red-700">Source group is required to proceed. Please select or create a source group from App Groups above.</p>
-              </div>
-            )}
-
-            <div className="flex justify-between">
-              <button onClick={() => setStep(1)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                &larr; Back
-              </button>
-              <button onClick={() => setStep(3)} disabled={!canStep2}
-                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
-                Next: Connection Details &rarr;
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Connection & Review */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-3 gap-5">
-              <div>
-                <label className={lbl}>Port</label>
-                <select className={sel} value={form.port} onChange={e => upd('port', e.target.value)}>
-                  {COMMON_PORTS.map(p => (<option key={p.value} value={p.value}>{p.label}</option>))}
-                  <option value="custom">Custom Port...</option>
-                </select>
-                {form.port === 'custom' && (
-                  <input className={sel + ' mt-2'} placeholder="e.g. 8443, 9090-9095" value={form.customPort} onChange={e => upd('customPort', e.target.value)} />
-                )}
-              </div>
-              <div>
-                <label className={lbl}>Protocol</label>
-                <select className={sel} value={form.protocol} onChange={e => upd('protocol', e.target.value)}>
-                  {PROTOCOLS.map(p => (<option key={p} value={p}>{p}</option>))}
-                </select>
-              </div>
-              <div>
-                <label className={lbl}>Action</label>
-                <select className={sel} value={form.action} onChange={e => upd('action', e.target.value)}>
-                  <option value="Allow">Allow</option>
-                  <option value="Deny">Deny</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className={lbl}>Description (optional)</label>
-              <textarea className={sel + ' h-16 resize-none'} placeholder="Brief description of this rule..." value={form.description} onChange={e => upd('description', e.target.value)} />
-            </div>
-
-            {/* Birthright block banner */}
-            {isBirthrightPermitted && (
-              <div className="p-4 rounded-lg border-2 border-green-400 bg-green-50">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-green-800">Already Permitted &mdash; No Firewall Rule Needed</span>
-                </div>
-                <p className="text-sm text-green-700 mt-1">
-                  This traffic is already allowed by birthright policy. Rule creation is blocked.
-                </p>
-              </div>
-            )}
-
-            {/* Review summary */}
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Rule Summary</h4>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Source App:</span>
-                  <span className="font-medium text-gray-900">{form.application || '\u2014'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Destination App:</span>
-                  <span className="font-medium text-gray-900">{form.dst_application || form.application || '\u2014'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Environment:</span>
-                  <span className="font-medium text-gray-900">{form.environment}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Datacenter:</span>
-                  <span className="font-medium text-gray-900">{datacenters.find(d => d.code === form.datacenter)?.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Protocol/Port:</span>
-                  <span className="font-medium text-gray-900">{form.protocol}/{effectivePort}</span>
-                </div>
-                <div className="col-span-2 border-t border-gray-200 pt-2 mt-1">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <div className="text-[10px] text-gray-500 font-semibold uppercase">Source</div>
-                      <code className="text-xs font-mono text-blue-700">{form.src_custom || srcName || '\u2014'}</code>
-                      <div className="text-[10px] text-gray-400">{form.src_nh} / {form.src_sz}</div>
-                    </div>
-                    <span className="text-gray-400 text-lg font-bold">&rarr;</span>
-                    <div className="flex-1 text-right">
-                      <div className="text-[10px] text-gray-500 font-semibold uppercase">Destination</div>
-                      <code className="text-xs font-mono text-emerald-700">{form.dst_custom || dstName || '\u2014'}</code>
-                      <div className="text-[10px] text-gray-400">{form.dst_nh} / {form.dst_sz}</div>
-                    </div>
-                  </div>
-                </div>
-                {birthrightResult && (
-                  <div className="col-span-2 mt-1 space-y-1">
-                    <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (
-                      isBirthrightPermitted ? 'bg-green-100 text-green-700' :
-                      birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
-                      birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    )}>
-                      {isBirthrightPermitted
-                        ? 'Already Permitted \u2014 No FW Rule Needed'
-                        : birthrightResult.firewall_request_required
-                        ? 'Firewall Rule Required'
-                        : birthrightResult.compliant ? 'Policy: Permitted' : 'Policy: Blocked'}
-                    </span>
-                    {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
-                      <div className="text-[10px] text-blue-700 font-mono">
-                        {birthrightResult.firewall_devices_needed.join(' → ')}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between">
-              <button onClick={() => setStep(2)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                &larr; Back
-              </button>
-              <button onClick={handleSubmit} disabled={!canSubmit || submitting}
-                className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
-                {submitting ? (isEditMode ? 'Updating...' : 'Creating...') : isBirthrightPermitted ? 'Already Permitted (Cannot Create)' : isEditMode ? 'Update Firewall Rule' : 'Create Firewall Rule'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  /* eslint-disable @typescript-eslint/no-unused-vars */
-  /* ---------- Group auto-creation modal (Issue 5) + Policy Change Review ---------- */
-  const [groupPolicySubmitted, setGroupPolicySubmitted] = useState(false);
-  const [groupPolicyResult, setGroupPolicyResult] = useState<string | null>(null);
-  const [groupCompileVendor, setGroupCompileVendor] = useState('palo_alto');
-  const [groupCompiledPolicy, setGroupCompiledPolicy] = useState<string | null>(null);
-
-  // Generate device-specific compile output for a newly created group
-  const generateGroupCompile = (groupName: string, members: string[], vendor: string): string => {
+  const generateGroupCompile = (gName: string, members: { type: string; value: string }[], vendor: string): string => {
     const ts = new Date().toISOString();
+    const vals = members.map(m => m.value);
     switch (vendor) {
       case 'palo_alto': {
-        let p = `# Palo Alto PAN-OS Address Group Configuration\n# Group: ${groupName}\n# Generated: ${ts}\n\n`;
-        for (const m of members) {
-          const objName = m.replace(/[./]/g, '_');
-          p += m.includes('/') ? `set address ${objName} ip-netmask ${m}\n` : `set address ${objName} ip-netmask ${m}/32\n`;
-        }
-        p += `\nset address-group ${groupName} static [ ${members.map(m => m.replace(/[./]/g, '_')).join(' ')} ]\nset address-group ${groupName} description "Auto-created for ${form.application}"\n`;
+        let p = `# Palo Alto PAN-OS\n# Group: ${gName}\n# ${ts}\n\n`;
+        for (const m of vals) { const n = m.replace(/[./]/g, '_'); p += `set address ${n} ip-netmask ${m.includes('/') ? m : m + '/32'}\n`; }
+        p += `\nset address-group ${gName} static [ ${vals.map(m => m.replace(/[./]/g, '_')).join(' ')} ]\n`;
         return p;
       }
       case 'checkpoint': {
-        let p = `# Check Point SmartConsole CLI\n# Group: ${groupName}\n# Generated: ${ts}\n\n`;
-        for (const m of members) {
-          const objName = m.replace(/[./]/g, '_');
-          p += m.includes('/') ? `add network name ${objName} subnet ${m.split('/')[0]} mask-length ${m.split('/')[1]}\n` : `add host name ${objName} ip-address ${m}\n`;
+        let p = `# Check Point SmartConsole\n# Group: ${gName}\n# ${ts}\n\n`;
+        for (const m of vals) {
+          const n = m.replace(/[./]/g, '_');
+          p += m.includes('/') ? `add network name ${n} subnet ${m.split('/')[0]} mask-length ${m.split('/')[1]}\n` : `add host name ${n} ip-address ${m}\n`;
         }
-        p += `\nadd group name ${groupName}\n`;
-        for (const m of members) p += `set group name ${groupName} members.add ${m.replace(/[./]/g, '_')}\n`;
+        p += `\nadd group name ${gName}\n`;
+        for (const m of vals) p += `set group name ${gName} members.add ${m.replace(/[./]/g, '_')}\n`;
         return p;
       }
       case 'fortigate': {
-        let p = `# FortiGate CLI\n# Group: ${groupName}\n# Generated: ${ts}\n\nconfig firewall address\n`;
-        for (const m of members) {
-          const objName = m.replace(/[./]/g, '_');
-          p += `  edit "${objName}"\n    set type ${m.includes('/') ? 'ipmask' : 'ipmask'}\n    set subnet ${m.includes('/') ? m : m + '/32'}\n  next\n`;
-        }
-        p += `end\n\nconfig firewall addrgrp\n  edit "${groupName}"\n    set member ${members.map(m => `"${m.replace(/[./]/g, '_')}"`).join(' ')}\n    set comment "Auto-created for ${form.application}"\n  next\nend\n`;
+        let p = `# FortiGate CLI\n# Group: ${gName}\n# ${ts}\n\nconfig firewall address\n`;
+        for (const m of vals) { const n = m.replace(/[./]/g, '_'); p += `  edit "${n}"\n    set subnet ${m.includes('/') ? m : m + '/32'}\n  next\n`; }
+        p += `end\n\nconfig firewall addrgrp\n  edit "${gName}"\n    set member ${vals.map(m => `"${m.replace(/[./]/g, '_')}"`).join(' ')}\n  next\nend\n`;
         return p;
       }
       default: {
-        let p = `# Generic Group Policy\n# Group: ${groupName}\n# Generated: ${ts}\n\nGROUP_NAME=${groupName}\nGROUP_TYPE=address-group\n\n`;
-        for (const m of members) p += `MEMBER type=${m.includes('/') ? 'subnet' : 'ip'} value=${m}\n`;
+        let p = `# Generic\n# Group: ${gName}\n# ${ts}\n\n`;
+        for (const m of members) p += `MEMBER type=${m.type} value=${m.value}\n`;
         return p;
       }
     }
   };
 
-  const groupModal = showCreateGroupModal && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-bold text-gray-800">Create Group in App Groups</h3>
-        <p className="text-sm text-gray-600">The group <code className="font-mono text-blue-700 bg-blue-50 px-1 rounded">{newGroupName}</code> does not exist. Create it now to continue.</p>
-        {/* Policy Change Notice */}
-        <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-xs font-semibold text-amber-800">Policy Change Review Required</p>
-          <p className="text-[10px] text-amber-600 mt-0.5">Creating this group will automatically submit a policy change for review &amp; approval. The compiled device policy will be generated for the selected vendor.</p>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Group Name</label>
-          <input className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50" value={newGroupName} readOnly />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Members (comma-separated IPs / CIDRs)</label>
-          <textarea className="w-full px-3 py-2 border rounded-lg text-sm" rows={3} placeholder="e.g. 10.0.1.0/24, 10.0.2.5" value={newGroupMembers} onChange={e => setNewGroupMembers(e.target.value)} />
-        </div>
-        {/* Compile device type selector */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Compile Preview (Device Type)</label>
-          <select className="w-full px-3 py-2 border rounded-lg text-sm" value={groupCompileVendor} onChange={e => { setGroupCompileVendor(e.target.value); setGroupCompiledPolicy(null); }}>
-            <option value="palo_alto">Palo Alto PAN-OS</option>
-            <option value="checkpoint">Check Point SmartConsole</option>
-            <option value="fortigate">FortiGate CLI</option>
-            <option value="generic">Generic</option>
-          </select>
-        </div>
-        {/* Preview compile output */}
-        {newGroupMembers.trim() && (
-          <div>
-            <button onClick={() => {
-              const members = newGroupMembers.split(',').map(m => m.trim()).filter(Boolean);
-              setGroupCompiledPolicy(generateGroupCompile(newGroupName, members, groupCompileVendor));
-            }} className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 mb-2">
-              Preview Compiled Policy
-            </button>
-            {groupCompiledPolicy && (
-              <pre className="bg-gray-900 text-green-400 text-[10px] font-mono p-3 rounded-lg overflow-x-auto max-h-[150px] overflow-y-auto whitespace-pre leading-relaxed">
-                {groupCompiledPolicy}
-              </pre>
-            )}
-          </div>
-        )}
-        {/* Policy submission result */}
-        {groupPolicyResult && (
-          <div className={`p-2 rounded text-xs font-medium ${groupPolicyResult.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-            {groupPolicyResult}
-          </div>
-        )}
-        <div className="flex justify-end gap-3">
-          <button onClick={() => { setShowCreateGroupModal(false); setGroupCompiledPolicy(null); setGroupPolicyResult(null); setGroupPolicySubmitted(false); }} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
-          <button disabled={creatingGroup} onClick={async () => {
-            setCreatingGroup(true);
-            try {
-              const members = newGroupMembers.split(',').map(m => m.trim()).filter(Boolean);
-              // Create the group via API
-              await api.createGroup({
-                name: newGroupName,
-                app_id: form.application,
-                nh: form.src_nh,
-                sz: form.src_sz,
-                subtype: form.src_component || form.src_subtype || '',
-                description: `Auto-created for ${form.application} in ${form.src_nh}/${form.src_sz}`,
-                members: members.map(m => ({ type: m.includes('/') ? 'subnet' : 'ip', value: m, description: '' })),
-              });
-              // Submit policy change for review & approval
-              try {
-                const policyResult = await api.submitGroupPolicyChanges(
-                  newGroupName,
-                  'group_created',
-                  `Group ${newGroupName} created with ${members.length} member(s) for ${form.application}. Compiled for ${groupCompileVendor}.`,
-                  { added: { [`group:${newGroupName}`]: members }, removed: {}, changed: {},
-                    compile_vendor: groupCompileVendor,
-                    compiled_policy: generateGroupCompile(newGroupName, members, groupCompileVendor) }
-                );
-                setGroupPolicySubmitted(true);
-                setGroupPolicyResult(`Policy change submitted — ${policyResult.affected_rules} affected rule(s) sent for review`);
-              } catch {
-                setGroupPolicyResult('Group created but policy change submission failed — submit manually from Review page');
-              }
-              upd('src_custom', newGroupName);
-              onRuleCreated(); // trigger refresh
-            } catch {
-              setGroupPolicyResult('Failed to create group — check for duplicates');
-            }
-            setCreatingGroup(false);
-          }} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-            {creatingGroup ? 'Creating & Submitting...' : 'Create Group & Submit for Review'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  /* ------------------------------------------------------------------ */
+  /*  Step indicators                                                    */
+  /* ------------------------------------------------------------------ */
+
+  const stepClass = (s: number) =>
+    s === step ? 'text-blue-700 font-bold border-b-2 border-blue-600' :
+    s < step ? 'text-green-600 font-medium' : 'text-gray-400';
+  const dotClass = (s: number) =>
+    s === step ? 'bg-blue-600 text-white' :
+    s < step ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500';
+
+  /* ------------------------------------------------------------------ */
+  /*  Sorted application list                                            */
+  /* ------------------------------------------------------------------ */
+
+  const sortedApps = useMemo(() =>
+    [...applications].sort((a, b) => (a.app_distributed_id || a.app_id).localeCompare(b.app_distributed_id || b.app_id)),
+  [applications]);
+
+  /* ================================================================== */
+  /*  RENDER                                                             */
+  /* ================================================================== */
 
   return (
     <>
-      {groupModal}
-      {mainContent}
+      {/* Group creation modal */}
+      {showCreateGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-gray-800">Create Source Group in App Groups</h3>
+            <p className="text-sm text-gray-600">
+              Create group <code className="font-mono text-blue-700 bg-blue-50 px-1 rounded">{newGroupName}</code> to proceed with rule creation.
+            </p>
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs font-semibold text-amber-800">Policy Change Review Required</p>
+              <p className="text-[10px] text-amber-600 mt-0.5">Creating this group will submit a policy change for review and approval.</p>
+            </div>
+            <div>
+              <label className={lbl}>Group Name</label>
+              <input className={sel} value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
+            </div>
+            <div>
+              <label className={lbl}>Members</label>
+              <div className="flex gap-2 mb-2">
+                <select className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white" value={newMemberType} onChange={e => setNewMemberType(e.target.value)}>
+                  <option value="ip">IP (svr-)</option>
+                  <option value="subnet">Subnet (net-)</option>
+                  <option value="range">Range (rng-)</option>
+                  <option value="group">Group (grp-)</option>
+                </select>
+                <input className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm" placeholder="e.g. 10.0.1.5"
+                  value={newMemberValue} onChange={e => setNewMemberValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newMemberValue.trim()) {
+                      setNewGroupMemberEntries(p => [...p, { type: newMemberType, value: autoPrefix(newMemberValue.trim(), newMemberType as MemberType) }]);
+                      setNewMemberValue('');
+                    }
+                  }} />
+                <button onClick={() => {
+                  if (newMemberValue.trim()) {
+                    setNewGroupMemberEntries(p => [...p, { type: newMemberType, value: autoPrefix(newMemberValue.trim(), newMemberType as MemberType) }]);
+                    setNewMemberValue('');
+                  }
+                }} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">Add</button>
+              </div>
+              {newGroupMemberEntries.length > 0 && (
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {newGroupMemberEntries.map((m, i) => (
+                    <div key={i} className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded text-xs">
+                      <span>
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mr-1.5 ${
+                          m.type === 'ip' ? 'bg-blue-100 text-blue-700' :
+                          m.type === 'subnet' ? 'bg-purple-100 text-purple-700' :
+                          m.type === 'range' ? 'bg-orange-100 text-orange-700' :
+                          'bg-emerald-100 text-emerald-700'
+                        }`}>{m.type.toUpperCase()}</span>
+                        {m.value}
+                      </span>
+                      <button onClick={() => setNewGroupMemberEntries(p => p.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-xs">&times;</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {newGroupMemberEntries.length === 0 && <p className="text-xs text-red-500 mt-1">At least 1 member required</p>}
+            </div>
+            {/* Compile preview */}
+            <div>
+              <label className={lbl}>Compile Preview (Device)</label>
+              <select className={sel} value={groupCompileVendor} onChange={e => { setGroupCompileVendor(e.target.value); setGroupCompiledPolicy(null); }}>
+                <option value="fortigate">FortiGate CLI</option>
+                <option value="palo_alto">Palo Alto PAN-OS</option>
+                <option value="checkpoint">Check Point SmartConsole</option>
+                <option value="generic">Generic</option>
+              </select>
+            </div>
+            {newGroupMemberEntries.length > 0 && (
+              <div>
+                <button onClick={() => setGroupCompiledPolicy(generateGroupCompile(newGroupName, newGroupMemberEntries, groupCompileVendor))}
+                  className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 mb-2">
+                  Preview Compiled Policy
+                </button>
+                {groupCompiledPolicy && (
+                  <pre className="bg-gray-900 text-green-400 text-[10px] font-mono p-3 rounded-lg overflow-x-auto max-h-[150px] overflow-y-auto whitespace-pre leading-relaxed">
+                    {groupCompiledPolicy}
+                  </pre>
+                )}
+              </div>
+            )}
+            {groupPolicyResult && (
+              <div className={`p-2 rounded text-xs font-medium ${groupPolicyResult.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                {groupPolicyResult}
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button onClick={() => { setShowCreateGroupModal(false); setGroupCompiledPolicy(null); setGroupPolicyResult(null); setNewGroupMemberEntries([]); }}
+                className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Cancel</button>
+              <button disabled={creatingGroup || newGroupMemberEntries.length === 0 || !newGroupName.trim()} onClick={async () => {
+                setCreatingGroup(true);
+                try {
+                  await api.createGroup({
+                    name: newGroupName, app_id: form.application, nh: form.src_nh, sz: form.src_sz, subtype: '',
+                    description: `Egress group for ${form.application} in ${form.src_nh}/${form.src_sz}`,
+                    members: newGroupMemberEntries.map(m => ({ type: m.type as MemberType, value: m.value, description: '' })),
+                  });
+                  try {
+                    const pr = await api.submitGroupPolicyChanges(newGroupName, 'group_created',
+                      `Group ${newGroupName} created with ${newGroupMemberEntries.length} member(s)`,
+                      { added: { [`group:${newGroupName}`]: newGroupMemberEntries.map(m => m.value) }, removed: {}, changed: {},
+                        compile_vendor: groupCompileVendor, compiled_policy: generateGroupCompile(newGroupName, newGroupMemberEntries, groupCompileVendor) }
+                    );
+                    setGroupPolicyResult(`Policy change submitted - ${pr.affected_rules} affected rule(s)`);
+                  } catch { setGroupPolicyResult('Group created but policy submission failed'); }
+                  upd('src_group', newGroupName);
+                  api.getGroups(form.application)
+                    .then(groups => setSrcAppGroups(groups.filter(g => !g.name.toLowerCase().includes('-ingress'))))
+                    .catch(() => {});
+                  onRuleCreated();
+                } catch { setGroupPolicyResult('Failed to create group'); }
+                setCreatingGroup(false);
+              }} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {creatingGroup ? 'Creating...' : `Create Group with ${newGroupMemberEntries.length} members`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main content: wizard + sidebar */}
+      <div className="flex gap-6 bg-white min-h-[600px]">
+
+        {/* Left: Rule builder wizard */}
+        <div className="flex-1 max-w-3xl">
+
+          {/* Draft success banner */}
+          {draftCreatedMsg && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800 font-medium">{draftCreatedMsg}</div>
+          )}
+
+          {/* Step indicator */}
+          <div className="flex items-center gap-6 mb-6 pb-3 border-b border-gray-100">
+            {['Application & Environment', 'Source & Destination', 'Service & Review'].map((label, i) => (
+              <button key={i} onClick={() => { if (i + 1 < step) setStep(i + 1); }}
+                className={`flex items-center gap-2 pb-2 text-xs uppercase tracking-wider transition-colors ${stepClass(i + 1)}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${dotClass(i + 1)}`}>{i + 1}</span>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* =========================================================== */}
+          {/*  STEP 1: Application & Environment & DC                     */}
+          {/* =========================================================== */}
+          {step === 1 && (
+            <div className="space-y-5">
+              <h3 className="text-sm font-bold text-gray-800">Select Applications and Environment</h3>
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className={lbl}>Source Application (Egress)</label>
+                  <select className={`${sel} border-blue-200 focus:ring-blue-500`} value={form.application}
+                    onChange={e => { upd('application', e.target.value); upd('src_nh', ''); upd('src_sz', ''); upd('src_group', ''); }}>
+                    <option value="">-- Select Source App --</option>
+                    {sortedApps.map(app => {
+                      const id = app.app_distributed_id || app.app_id;
+                      return <option key={id} value={id}>{id}</option>;
+                    })}
+                  </select>
+                  <p className="text-[10px] text-blue-500 mt-1">Egress group: grp-APP-NH-SZ</p>
+                </div>
+                <div>
+                  <label className={lbl}>Destination Application (Ingress)</label>
+                  <select className={`${sel} border-purple-200 focus:ring-purple-500`} value={form.dst_application}
+                    onChange={e => { upd('dst_application', e.target.value); upd('dst_nh', ''); upd('dst_sz', ''); upd('dst_group', ''); }}>
+                    <option value="">-- Select Destination App --</option>
+                    {sortedApps.map(app => {
+                      const id = app.app_distributed_id || app.app_id;
+                      return <option key={id} value={id}>{id}</option>;
+                    })}
+                  </select>
+                  <p className="text-[10px] text-purple-500 mt-1">Or drag from Common Destinations sidebar</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className={lbl}>Environment</label>
+                  <select className={sel} value={form.environment} onChange={e => upd('environment', e.target.value)}>
+                    <option value="Production">Production</option>
+                    <option value="Non-Production">Non-Production</option>
+                    <option value="Pre-Production">Pre-Production</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={lbl}>Data Center</label>
+                  <select className={sel} value={form.datacenter} onChange={e => upd('datacenter', e.target.value)}>
+                    <option value="">-- Select DC --</option>
+                    {datacenters.map(dc => <option key={dc.code} value={dc.code}>{dc.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button onClick={() => setStep(2)} disabled={!canStep1}
+                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                  Next: Source and Destination &rarr;
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================== */}
+          {/*  STEP 2: Source (Egress) & Destination (Ingress)             */}
+          {/* =========================================================== */}
+          {step === 2 && (
+            <div className="space-y-5">
+              {/* Source card (blue) */}
+              <div className="rounded-xl border-2 border-blue-200 bg-blue-50/30 p-5">
+                <h4 className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-3">Source (Egress)</h4>
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className={lbl}>Neighbourhood</label>
+                    <select className={`${sel} border-blue-200`} value={form.src_nh}
+                      onChange={e => { upd('src_nh', e.target.value); upd('src_group', ''); }}>
+                      <option value="">-- Select NH --</option>
+                      {srcNeighbourhoods.map(nh => <option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={lbl}>Security Zone</label>
+                    <select className={`${sel} border-blue-200`} value={form.src_sz}
+                      onChange={e => { upd('src_sz', e.target.value); upd('src_group', ''); }}>
+                      <option value="">-- Select SZ --</option>
+                      {srcZones.map(sz => <option key={sz.code} value={sz.code}>{sz.code} - {sz.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Source group auto-selection */}
+                {form.src_nh && form.src_sz && (
+                  <div className="mt-2">
+                    <label className={lbl}>Source Egress Group</label>
+                    {srcEgressGroup ? (
+                      <div className="flex items-center gap-2 p-2 bg-blue-100 rounded-lg border border-blue-300">
+                        <span className="px-2 py-0.5 bg-blue-600 text-white rounded text-[10px] font-bold">AUTO</span>
+                        <code className="text-sm font-mono text-blue-800">{srcEgressGroup.name}</code>
+                        <span className="text-[10px] text-blue-600 ml-auto">{srcEgressGroup.members?.length || 0} members</span>
+                      </div>
+                    ) : srcAppGroups.length > 0 ? (
+                      <select className={`${sel} border-blue-200`} value={form.src_group} onChange={e => upd('src_group', e.target.value)}>
+                        <option value="">-- Select Egress Group --</option>
+                        {srcAppGroups.filter(g => !g.name.toLowerCase().includes('-ingress')).map(g => (
+                          <option key={g.name} value={g.name}>{g.name} ({g.members?.length || 0} members)</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-800 font-semibold mb-2">No egress group found for {srcSuggestedName}</p>
+                        <button onClick={() => {
+                          setNewGroupName(srcSuggestedName);
+                          setNewGroupMemberEntries([]);
+                          setGroupCompiledPolicy(null);
+                          setGroupPolicyResult(null);
+                          setShowCreateGroupModal(true);
+                        }}
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                          Create {srcSuggestedName} in App Groups
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Destination card (purple) */}
+              <div className="rounded-xl border-2 border-purple-200 bg-purple-50/30 p-5">
+                <h4 className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-3">Destination (Ingress)</h4>
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className={lbl}>Neighbourhood</label>
+                    <select className={`${sel} border-purple-200`} value={form.dst_nh}
+                      onChange={e => { upd('dst_nh', e.target.value); upd('dst_group', ''); }}>
+                      <option value="">-- Select NH --</option>
+                      {dstNeighbourhoods.map(nh => <option key={nh.id} value={nh.id}>{nh.id} - {nh.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={lbl}>Security Zone</label>
+                    <select className={`${sel} border-purple-200`} value={form.dst_sz}
+                      onChange={e => { upd('dst_sz', e.target.value); upd('dst_group', ''); }}>
+                      <option value="">-- Select SZ --</option>
+                      {dstZones.map(sz => <option key={sz.code} value={sz.code}>{sz.code} - {sz.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Destination ingress group selection */}
+                {form.dst_nh && form.dst_sz && (
+                  <div className="mt-2">
+                    <label className={lbl}>Destination Ingress Group</label>
+                    {dstFilteredGroups.length > 0 ? (
+                      <select className={`${sel} border-purple-200`} value={form.dst_group} onChange={e => upd('dst_group', e.target.value)}>
+                        <option value="">-- Select Ingress Group --</option>
+                        {dstFilteredGroups.map(g => (
+                          <option key={g.name} value={g.name}>{g.name} ({g.members?.length || 0} members)</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-xs text-red-700 font-semibold">No destination ingress group exists for {form.dst_nh}/{form.dst_sz}.</p>
+                        <p className="text-[10px] text-red-600 mt-1">Please re-check your selections or contact the destination app team to create the ingress group.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Birthright validation results */}
+              {birthrightResult && (
+                <div className="space-y-3">
+                  <div className={`p-3 rounded-lg border ${
+                    birthrightResult.firewall_request_required ? 'border-amber-300 bg-amber-50' :
+                    birthrightResult.compliant ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
+                  }`}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        birthrightResult.firewall_request_required ? 'bg-amber-200 text-amber-800' :
+                        birthrightResult.compliant ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+                      }`}>
+                        {birthrightResult.firewall_request_required ? 'FW REQUIRED' : birthrightResult.compliant ? 'PERMITTED' : 'BLOCKED'}
+                      </span>
+                      <span className={'font-bold text-xs ' + (birthrightResult.firewall_request_required ? 'text-amber-700' : birthrightResult.compliant ? 'text-green-700' : 'text-red-700')}>
+                        Policy: {birthrightResult.matrix_used || ''}
+                      </span>
+                    </div>
+                    {birthrightResult.permitted.length > 0 && (
+                      <ul className="text-xs text-green-700 list-disc list-inside mt-1">
+                        {birthrightResult.permitted.map((p, i) => <li key={i}>{p.rule} - {p.reason}</li>)}
+                      </ul>
+                    )}
+                    {birthrightResult.warnings.length > 0 && (
+                      <ul className="text-xs text-amber-700 list-disc list-inside mt-1">
+                        {birthrightResult.warnings.map((w, i) => <li key={i}>{w.rule} - {w.reason}</li>)}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Firewall device hops */}
+                  {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
+                    <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-sm">
+                      <div className="font-bold text-xs text-amber-800 mb-1">
+                        Firewall Rule Required - {birthrightResult.firewall_devices_needed.length} device{birthrightResult.firewall_devices_needed.length > 1 ? 's' : ''}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {birthrightResult.firewall_devices_needed.map((dev, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-amber-300 text-xs font-mono text-amber-800">{dev}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Informational FW path */}
+                  {birthrightResult.firewall_path_info && birthrightResult.firewall_path_info.length > 0 && !birthrightResult.firewall_request_required && (
+                    <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50 text-sm">
+                      <div className="font-bold text-xs text-blue-700 mb-1">Traffic Path (informational)</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-1 rounded bg-blue-100 border border-blue-200 text-xs font-mono text-blue-800">{form.src_nh} {form.src_sz}</span>
+                        {birthrightResult.firewall_path_info.map((fw, i) => (
+                          <span key={i} className="inline-flex items-center gap-1">
+                            <span className="text-gray-400">&rarr;</span>
+                            <span className="px-2 py-1 rounded bg-white border border-blue-200 text-xs font-mono text-blue-700">{fw}</span>
+                          </span>
+                        ))}
+                        <span className="text-gray-400">&rarr;</span>
+                        <span className="px-2 py-1 rounded bg-purple-100 border border-purple-200 text-xs font-mono text-purple-800">{form.dst_nh} {form.dst_sz}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Source group required */}
+              {form.src_nh && form.src_sz && !srcGroupSelected && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-xs font-semibold text-red-700">Source group is required. Select or create a source group above.</p>
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <button onClick={() => setStep(1)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">&larr; Back</button>
+                <button onClick={() => setStep(3)} disabled={!canStep2}
+                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                  Next: Service and Review &rarr;
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================== */}
+          {/*  STEP 3: Service & Review                                    */}
+          {/* =========================================================== */}
+          {step === 3 && (
+            <div className="space-y-5">
+              <h3 className="text-sm font-bold text-gray-800">Connection Details and Review</h3>
+              {/* Service chips */}
+              <div>
+                <label className={lbl}>Quick Select Service</label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {COMMON_PORTS.map(p => (
+                    <button key={p.value} onClick={() => upd('port', p.value)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        form.port === p.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                      }`}>{p.label}</button>
+                  ))}
+                  <button onClick={() => upd('port', 'custom')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      form.port === 'custom' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                    }`}>Custom...</button>
+                </div>
+                {form.port === 'custom' && (
+                  <input className={sel + ' mt-2'} placeholder="e.g. 8443, 9090-9095" value={form.customPort} onChange={e => upd('customPort', e.target.value)} />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className={lbl}>Protocol</label>
+                  <select className={sel} value={form.protocol} onChange={e => upd('protocol', e.target.value)}>
+                    {PROTOCOLS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={lbl}>Action</label>
+                  <select className={sel} value={form.action} onChange={e => upd('action', e.target.value)}>
+                    <option value="Allow">Allow</option>
+                    <option value="Deny">Deny</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className={lbl}>Description (optional)</label>
+                <textarea className={sel + ' h-16 resize-none'} placeholder="Brief description of this rule..." value={form.description} onChange={e => upd('description', e.target.value)} />
+              </div>
+
+              {/* Birthright block banner */}
+              {isBirthrightPermitted && (
+                <div className="p-4 rounded-lg border-2 border-green-400 bg-green-50">
+                  <span className="font-bold text-green-800">Already Permitted - No Firewall Rule Needed</span>
+                  <p className="text-sm text-green-700 mt-1">This traffic is already allowed by birthright policy. Rule creation is blocked.</p>
+                </div>
+              )}
+
+              {/* Review summary */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Rule Summary</h4>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Source App:</span><span className="font-medium text-gray-900">{form.application || '\u2014'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Dest App:</span><span className="font-medium text-gray-900">{form.dst_application || form.application || '\u2014'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Environment:</span><span className="font-medium text-gray-900">{form.environment}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Datacenter:</span><span className="font-medium text-gray-900">{datacenters.find(d => d.code === form.datacenter)?.name}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Protocol/Port:</span><span className="font-medium text-gray-900">{form.protocol}/{effectivePort}</span></div>
+                  <div className="col-span-2 border-t border-gray-200 pt-2 mt-1">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="text-[10px] text-blue-600 font-semibold uppercase">Source (Egress)</div>
+                        <code className="text-xs font-mono text-blue-700">{form.src_group || '\u2014'}</code>
+                        <div className="text-[10px] text-gray-400">{form.src_nh} / {form.src_sz}</div>
+                      </div>
+                      <span className="text-gray-400 text-lg font-bold">&rarr;</span>
+                      <div className="flex-1 text-right">
+                        <div className="text-[10px] text-purple-600 font-semibold uppercase">Destination (Ingress)</div>
+                        <code className="text-xs font-mono text-purple-700">{form.dst_group || '\u2014'}</code>
+                        <div className="text-[10px] text-gray-400">{form.dst_nh} / {form.dst_sz}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {birthrightResult && (
+                    <div className="col-span-2 mt-1 space-y-1">
+                      <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ' + (
+                        isBirthrightPermitted ? 'bg-green-100 text-green-700' :
+                        birthrightResult.firewall_request_required ? 'bg-amber-100 text-amber-700' :
+                        birthrightResult.compliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      )}>
+                        {isBirthrightPermitted ? 'Already Permitted - No FW Rule Needed' :
+                         birthrightResult.firewall_request_required ? 'Firewall Rule Required' :
+                         birthrightResult.compliant ? 'Policy: Permitted' : 'Policy: Blocked'}
+                      </span>
+                      {birthrightResult.firewall_devices_needed && birthrightResult.firewall_devices_needed.length > 0 && (
+                        <div className="text-[10px] text-blue-700 font-mono">{birthrightResult.firewall_devices_needed.join(' > ')}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-between">
+                <button onClick={() => setStep(2)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">&larr; Back</button>
+                <button onClick={handleSubmit} disabled={!canSubmit || submitting}
+                  className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
+                  {submitting ? (isEditMode ? 'Updating...' : 'Creating...') :
+                   isBirthrightPermitted ? 'Already Permitted (Cannot Create)' :
+                   isEditMode ? 'Update Firewall Rule' : 'Create Firewall Rule'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right sidebar: Predefined Destinations — only on Step 1 */}
+        {step === 1 && (
+          <div className="w-72 flex-shrink-0 border-l border-gray-200 pl-5">
+            <div className="bg-gradient-to-b from-gray-50 to-white rounded-xl border border-gray-200 p-4">
+              <h3 className="text-sm font-extrabold text-gray-800 tracking-tight mb-1">Destination</h3>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-3">Predefined Destinations</p>
+              <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-full text-xs mb-3 bg-white placeholder-gray-400 focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
+                placeholder="Search destinations..." value={destSearch} onChange={e => setDestSearch(e.target.value)} />
+              <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                {filteredDestinations.length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">No destinations available</p>}
+                {filteredDestinations.map((d, idx) => {
+                  const color = DEST_COLORS[idx % DEST_COLORS.length];
+                  return (
+                    <button key={d.appDistId} onClick={() => handleDropDestination(d)}
+                      className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border ${color.border} ${color.hover} transition-all duration-150 group bg-white shadow-sm hover:shadow`}
+                      draggable onDragEnd={() => handleDropDestination(d)}>
+                      <div className={`w-8 h-8 rounded-md ${color.bg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                        <svg className={`w-4 h-4 ${color.text}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm2 6h2v2H9v-2z" clipRule="evenodd" /></svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-gray-800 group-hover:text-gray-900 truncate uppercase">{d.label}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{d.szHint ? `${d.szHint} Zone` : d.appDistId}</div>
+                      </div>
+                      <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Destination section */}
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Custom Destination</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">Dest IP:</label>
+                    <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white mt-0.5" placeholder="e.g. 10.1.2.50" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">Ports:</label>
+                    <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white mt-0.5" placeholder="e.g. TCP 1521" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }

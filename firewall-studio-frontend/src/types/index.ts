@@ -56,6 +56,8 @@ export interface FirewallRule {
   updated_at: string;
   certified_at: string | null;
   certified_by: string | null;
+  description?: string;
+  action?: string;
 }
 
 export interface MigrationDetails {
@@ -143,8 +145,10 @@ export interface PredefinedDestination {
 }
 
 export interface Application {
+  [key: string]: unknown;
   id?: string;
   name: string;
+  app_name?: string;
   app_id: string;
   app_distributed_id: string;
   owner: string;
@@ -157,6 +161,12 @@ export interface Application {
   snow_sysid?: string;
   criticality?: number | string;
   pci_scope?: boolean;
+  // Egress/Ingress architecture fields
+  has_ingress?: boolean;
+  egress_ip?: string;
+  ingress_ips?: string;
+  ingress_components?: string;
+  direction?: 'egress' | 'ingress' | 'both';
 }
 
 export interface OrgConfig {
@@ -241,6 +251,8 @@ export interface FirewallGroup {
   members: GroupMember[];
   created_at?: string;
   updated_at?: string;
+  direction?: 'egress' | 'ingress';
+  app_distributed_id?: string;
 }
 
 export interface CompiledRule {
@@ -259,7 +271,7 @@ export interface ReviewRequest {
   id: string;
   rule_id: string;
   rule_name: string;
-  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification' | 'group_policy_change' | 'policy_add' | 'policy_modify' | 'policy_delete';
+  request_type: 'new_rule' | 'modify_rule' | 'delete_rule' | 'migration' | 'certification' | 'group_policy_change' | 'group_created' | 'group_member_change' | 'policy_add' | 'policy_modify' | 'policy_delete';
   requestor: string;
   reviewer: string | null;
   status: 'Pending' | 'Approved' | 'Rejected' | 'Withdrawn';
@@ -516,12 +528,12 @@ export interface NhSecurityZone {
   description: string;
 }
 
-// App-to-DC/NH/SZ Component Mapping
+// App-to-DC/NH/SZ Mapping (simplified - no per-component, app-level)
 export interface AppDCMapping {
   id?: string;
   app_id: string;
   app_distributed_id?: string;
-  component: 'WEB' | 'APP' | 'DB' | 'MQ' | 'BAT' | 'API';
+  component?: 'WEB' | 'APP' | 'DB' | 'MQ' | 'BAT' | 'API';
   dc_location: 'NGDC' | 'Legacy';
   dc: string;
   nh: string;

@@ -2,9 +2,13 @@
 
 All reference data constants are defined here and imported by database.py.
 Comprehensive test data for multiple apps, environments, firewall devices.
-NGDC groups use standardised grp-{APP}-{NH}-{SZ}-{COMP} naming with svr- prefixed IPs.
-Legacy rules use bare IPs and varied non-standardised legacy group names.
-Each app has multiple components (WEB, APP, DB, MQ, BAT, API) across zones within its NH.
+
+Egress/Ingress Group Architecture:
+  - Every app gets ONE egress (source) group: grp-{APP}-{NH##}-{SZ}
+  - Apps with incoming clients get ONE ingress (dest) group: grp-{APP}-{NH##}-{SZ}-{COMP}-Ingress
+  - No per-component groups; App Management has no Components field.
+  - CIDR ranges are at the SZ level (per NH per DC), not at App level.
+  - Groups are pre-created in App Groups based on app configuration.
 """
 
 from datetime import datetime, timedelta
@@ -347,373 +351,203 @@ SEED_LEGACY_DATACENTERS = [
 
 
 # ============================================================
-# Applications (10 apps, multi-component)
+# Applications — Egress/Ingress architecture
+# No "components" field. Each app has:
+#   egress_ip:    the app's outbound IP (one per app)
+#   has_ingress:  True if the app has incoming clients (VIP/DB/API listener)
+#   ingress_ips:  comma-separated ingress IPs (AVI/F5 VIP, DB listener, etc.)
+#   ingress_components: what types of ingress (e.g. "DB,API,VIP")
+# Groups are auto-created:
+#   Source:  grp-{APP}-{NH##}-{SZ}
+#   Dest:   grp-{APP}-{NH##}-{SZ}-{COMP}-Ingress
 # ============================================================
 
 SEED_APPLICATIONS = [
     {"app_id": "CRM", "name": "Customer Relationship Manager", "app_distributed_id": "AD-1001",
-     "owner": "Team Eta", "nh": "Core Banking,DMZ", "sz": "CCS,CDE,PAA", "criticality": "High", "pci_scope": True,
-     "neighborhoods": "Core Banking,DMZ", "szs": "CCS,CDE,PAA", "dcs": "ALPHA_NGDC,BETA_NGDC", "snow_sysid": "SYSID-CRM-001",
-     "components": ["WEB", "APP", "DB", "BAT", "API"],
+     "owner": "Team Eta", "nh": "Core Banking", "sz": "CCS", "criticality": "High", "pci_scope": True,
+     "neighborhoods": "Core Banking", "szs": "CCS", "dcs": "ALPHA_NGDC,BETA_NGDC", "snow_sysid": "SYSID-CRM-001",
+     "egress_ip": "svr-10.50.1.10", "has_ingress": True,
+     "ingress_ips": "svr-10.50.1.20,svr-10.50.1.21", "ingress_components": "DB,API",
      "description": "CRM platform for customer data management"},
     {"app_id": "HRM", "name": "Human Resource Manager", "app_distributed_id": "AD-1002",
      "owner": "Team Platform", "nh": "Technology Enablement Services", "sz": "GEN", "criticality": "Medium", "pci_scope": False,
      "neighborhoods": "Technology Enablement Services", "szs": "GEN", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-HRM-002",
-     "components": ["WEB", "APP", "DB", "BAT"],
+     "egress_ip": "svr-10.0.1.30", "has_ingress": False,
+     "ingress_ips": "", "ingress_components": "",
      "description": "HR management and employee portal"},
     {"app_id": "TRD", "name": "Trading Platform", "app_distributed_id": "AD-1003",
-     "owner": "Team Xi", "nh": "Wholesale Banking,Global Payments and Liquidity", "sz": "CDE,CPA", "criticality": "Critical", "pci_scope": True,
-     "neighborhoods": "Wholesale Banking,Global Payments and Liquidity", "szs": "CDE,CPA", "dcs": "ALPHA_NGDC,BETA_NGDC,GAMMA_NGDC", "snow_sysid": "SYSID-TRD-003",
-     "components": ["WEB", "APP", "DB", "MQ", "API", "BAT"],
+     "owner": "Team Xi", "nh": "Wholesale Banking", "sz": "CDE", "criticality": "Critical", "pci_scope": True,
+     "neighborhoods": "Wholesale Banking", "szs": "CDE", "dcs": "ALPHA_NGDC,BETA_NGDC,GAMMA_NGDC", "snow_sysid": "SYSID-TRD-003",
+     "egress_ip": "svr-172.16.20.10", "has_ingress": True,
+     "ingress_ips": "svr-10.6.1.30,svr-10.6.1.40", "ingress_components": "DB,MQ",
      "description": "Real-time trading and market data"},
     {"app_id": "PAY", "name": "Payment Gateway", "app_distributed_id": "AD-1004",
      "owner": "Team Epsilon", "nh": "Data and Analytics", "sz": "CCS", "criticality": "Critical", "pci_scope": True,
      "neighborhoods": "Data and Analytics", "szs": "CCS", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-PAY-004",
-     "components": ["APP", "DB", "MQ", "API"],
+     "egress_ip": "svr-10.50.8.10", "has_ingress": True,
+     "ingress_ips": "svr-10.50.7.30,svr-10.50.7.31", "ingress_components": "DB",
      "description": "Payment processing and settlement"},
     {"app_id": "INS", "name": "Insurance Portal", "app_distributed_id": "AD-1005",
-     "owner": "Team Kappa", "nh": "Wealth Management,DMZ", "sz": "STD,PAA", "criticality": "High", "pci_scope": False,
-     "neighborhoods": "Wealth Management,DMZ", "szs": "STD,PAA", "dcs": "ALPHA_NGDC,BETA_NGDC", "snow_sysid": "SYSID-INS-005",
-     "components": ["WEB", "APP", "DB", "BAT"],
+     "owner": "Team Kappa", "nh": "Wealth Management", "sz": "STD", "criticality": "High", "pci_scope": False,
+     "neighborhoods": "Wealth Management", "szs": "STD", "dcs": "ALPHA_NGDC,BETA_NGDC", "snow_sysid": "SYSID-INS-005",
+     "egress_ip": "svr-10.3.1.130", "has_ingress": True,
+     "ingress_ips": "svr-10.70.4.30,svr-10.70.4.31", "ingress_components": "DB",
      "description": "Insurance policy management"},
     {"app_id": "KYC", "name": "KYC Compliance", "app_distributed_id": "AD-1006",
-     "owner": "Team Lambda", "nh": "Enterprise Services", "sz": "CCS,CDE", "criticality": "High", "pci_scope": False,
-     "neighborhoods": "Enterprise Services", "szs": "CCS,CDE", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-KYC-006",
-     "components": ["WEB", "APP", "DB", "API"],
+     "owner": "Team Lambda", "nh": "Enterprise Services", "sz": "CCS", "criticality": "High", "pci_scope": False,
+     "neighborhoods": "Enterprise Services", "szs": "CCS", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-KYC-006",
+     "egress_ip": "svr-10.4.1.130", "has_ingress": True,
+     "ingress_ips": "svr-10.4.2.10,svr-10.4.2.11", "ingress_components": "DB,API",
      "description": "Know Your Customer compliance platform"},
     {"app_id": "FRD", "name": "Fraud Detection", "app_distributed_id": "AD-1007",
      "owner": "Team Eta", "nh": "Core Banking", "sz": "CDE", "criticality": "Critical", "pci_scope": True,
      "neighborhoods": "Core Banking", "szs": "CDE", "dcs": "ALPHA_NGDC,BETA_NGDC", "snow_sysid": "SYSID-FRD-007",
-     "components": ["APP", "DB", "MQ", "API"],
+     "egress_ip": "svr-10.1.1.50", "has_ingress": True,
+     "ingress_ips": "svr-10.1.2.20,svr-10.1.2.21", "ingress_components": "DB,MQ",
      "description": "Real-time fraud detection engine"},
     {"app_id": "LND", "name": "Lending Platform", "app_distributed_id": "AD-1008",
-     "owner": "Team Iota", "nh": "Assisted Channels", "sz": "GEN,CPA", "criticality": "High", "pci_scope": False,
-     "neighborhoods": "Assisted Channels", "szs": "GEN,CPA", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-LND-008",
-     "components": ["WEB", "APP", "DB", "BAT"],
+     "owner": "Team Iota", "nh": "Assisted Channels", "sz": "GEN", "criticality": "High", "pci_scope": False,
+     "neighborhoods": "Assisted Channels", "szs": "GEN", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-LND-008",
+     "egress_ip": "svr-10.8.1.130", "has_ingress": True,
+     "ingress_ips": "svr-10.8.2.30,svr-10.8.2.31", "ingress_components": "DB",
      "description": "Digital lending and loan origination"},
-    {"app_id": "WLT", "name": "Wealth Management", "app_distributed_id": "AD-1009",
-     "owner": "Team Mu", "nh": "Consumer Lending,DMZ", "sz": "PAA,3PY", "criticality": "High", "pci_scope": True,
-     "neighborhoods": "Consumer Lending,DMZ", "szs": "PAA,3PY", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-WLT-009",
-     "components": ["WEB", "APP", "DB", "API"],
+    {"app_id": "WLT", "name": "Wealth Management App", "app_distributed_id": "AD-1009",
+     "owner": "Team Mu", "nh": "Consumer Lending", "sz": "PAA", "criticality": "High", "pci_scope": True,
+     "neighborhoods": "Consumer Lending", "szs": "PAA", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-WLT-009",
+     "egress_ip": "svr-10.70.1.100", "has_ingress": True,
+     "ingress_ips": "svr-10.9.1.30,svr-10.9.1.31", "ingress_components": "DB,API",
      "description": "Portfolio and wealth management"},
-    {"app_id": "CBK", "name": "Core Banking", "app_distributed_id": "AD-1010",
-     "owner": "Team Theta", "nh": "Data and Analytics", "sz": "CPA,CDE", "criticality": "Critical", "pci_scope": True,
-     "neighborhoods": "Data and Analytics", "szs": "CPA,CDE", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-CBK-010",
-     "components": ["APP", "DB", "MQ", "API", "BAT"],
+    {"app_id": "CBK", "name": "Core Banking Engine", "app_distributed_id": "AD-1010",
+     "owner": "Team Theta", "nh": "Data and Analytics", "sz": "CPA", "criticality": "Critical", "pci_scope": True,
+     "neighborhoods": "Data and Analytics", "szs": "CPA", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-CBK-010",
+     "egress_ip": "svr-10.7.1.10", "has_ingress": True,
+     "ingress_ips": "svr-10.7.2.30,svr-10.7.2.31", "ingress_components": "DB,MQ",
      "description": "Core banking transaction engine"},
     {"app_id": "EPT", "name": "Enterprise Portal", "app_distributed_id": "AD-1011",
-     "owner": "Team Platform", "nh": "Technology Enablement Services,DMZ", "sz": "CCS,PAA", "criticality": "High", "pci_scope": False,
-     "neighborhoods": "Technology Enablement Services,DMZ", "szs": "CCS,PAA", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-EPT-011",
-     "components": ["WEB", "APP", "API"],
-     "description": "Internet-facing enterprise portal (PAA zone)"},
+     "owner": "Team Platform", "nh": "Technology Enablement Services", "sz": "CCS", "criticality": "High", "pci_scope": False,
+     "neighborhoods": "Technology Enablement Services", "szs": "CCS", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-EPT-011",
+     "egress_ip": "svr-10.0.1.10", "has_ingress": True,
+     "ingress_ips": "svr-10.0.1.16", "ingress_components": "API",
+     "description": "Internet-facing enterprise portal"},
     {"app_id": "MBK", "name": "Mobile Banking", "app_distributed_id": "AD-1012",
-     "owner": "Team Epsilon", "nh": "Global Payments and Liquidity,DMZ", "sz": "PAA,CPA,CDE", "criticality": "Critical", "pci_scope": True,
-     "neighborhoods": "Global Payments and Liquidity,DMZ", "szs": "PAA,CPA,CDE", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-MBK-012",
-     "components": ["WEB", "APP", "DB", "API"],
+     "owner": "Team Epsilon", "nh": "Global Payments and Liquidity", "sz": "CPA", "criticality": "Critical", "pci_scope": True,
+     "neighborhoods": "Global Payments and Liquidity", "szs": "CPA", "dcs": "ALPHA_NGDC", "snow_sysid": "SYSID-MBK-012",
+     "egress_ip": "svr-10.6.1.168", "has_ingress": True,
+     "ingress_ips": "svr-10.6.1.16,svr-10.6.1.184", "ingress_components": "DB,API",
      "description": "Mobile banking application"},
 ]
 
 
 # ============================================================
-# App-to-DC/NH/SZ Component Mappings
-# Each app can span multiple DCs, same NH, and multiple SZs
-# depending on component type (WEB, APP, DB, MQ, BAT, API).
+# App-to-DC/NH/SZ Mappings — Simplified (app-level, no per-component)
+# Each entry maps an app to a DC with its NH/SZ.
+# dc_location: "NGDC" | "Legacy" — tracks where the app lives.
 # ============================================================
 
 SEED_APP_DC_MAPPINGS = [
-    # ================================================================
-    # App-DC Mappings — aligned with _build_ip_mappings() zones
-    # NH/SZ must match SEED_GROUPS naming: grp-{APP}-{NH}-{SZ}-{COMP}
-    # dc_location: "NGDC" | "Legacy"  — tracks where each component lives
-    # ================================================================
-
-    # --- CRM (AD-1001): Partially migrated — WEB/APP/BAT/API in NGDC, DB/MQ still in Legacy ---
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "WEB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.1.10/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CRM internet-facing web tier"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc_location": "NGDC",
+    # --- CRM (AD-1001): Partially migrated ---
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "10.1.1.0/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CRM application servers"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "10.1.1.30/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CRM batch processing"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "API", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "10.1.1.40/30", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CRM API gateway"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_A", "legacy_cidr": "10.25.1.128/28",
-     "status": "Active", "notes": "CRM database – still in Legacy DC Alpha"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "MQ", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_A", "legacy_cidr": "10.25.1.50/31",
-     "status": "Active", "notes": "CRM message queue – still in Legacy DC Alpha"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "APP", "dc_location": "NGDC",
+     "cidr": "10.50.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "CRM primary in Alpha NGDC"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "dc_location": "NGDC",
      "dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS",
-     "cidr": "172.16.1.20/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CRM Beta DR app tier"},
-    {"app_id": "CRM", "app_distributed_id": "AD-1001", "component": "DB", "dc_location": "NGDC",
-     "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "172.16.1.128/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CRM Beta DR database"},
+     "cidr": "172.16.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "CRM DR in Beta NGDC"},
+    {"app_id": "CRM", "app_distributed_id": "AD-1001", "dc_location": "Legacy",
+     "dc": "", "nh": "", "sz": "",
+     "cidr": "", "legacy_dc": "DC_LEGACY_A", "legacy_cidr": "10.25.1.0/24",
+     "status": "Active", "notes": "CRM legacy DC (partial migration)"},
 
-    # --- HRM (AD-1002): Fully in Legacy — not yet migrated ---
-    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "WEB", "dc_location": "Legacy",
+    # --- HRM (AD-1002): Fully in Legacy ---
+    {"app_id": "HRM", "app_distributed_id": "AD-1002", "dc_location": "Legacy",
      "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_B", "legacy_cidr": "10.26.2.130/31",
-     "status": "Active", "notes": "HRM web servers – Legacy DC Beta"},
-    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "APP", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_B", "legacy_cidr": "10.26.2.140/30",
-     "status": "Active", "notes": "HRM application servers – Legacy DC Beta"},
-    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "BAT", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_B", "legacy_cidr": "10.26.2.160/32",
-     "status": "Active", "notes": "HRM batch – Legacy DC Beta"},
-    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "DB", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_B", "legacy_cidr": "10.26.2.150/31",
-     "status": "Active", "notes": "HRM database – Legacy DC Beta"},
-    {"app_id": "HRM", "app_distributed_id": "AD-1002", "component": "MQ", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_B", "legacy_cidr": "10.26.2.162/31",
-     "status": "Active", "notes": "HRM message queue – Legacy DC Beta"},
+     "cidr": "", "legacy_dc": "DC_LEGACY_B", "legacy_cidr": "10.26.2.0/24",
+     "status": "Active", "notes": "HRM fully in Legacy DC Beta"},
 
     # --- TRD (AD-1003): Fully in NGDC ---
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "WEB", "dc_location": "NGDC",
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "172.16.20.10/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "TRD web servers"},
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "APP", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "172.16.20.20/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "TRD application servers"},
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "172.16.20.50/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "TRD batch processing"},
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "DB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "10.6.1.30/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "TRD database cluster"},
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "MQ", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "10.6.1.40/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "TRD message queue brokers"},
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "APP", "dc_location": "NGDC",
+     "cidr": "172.16.20.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "TRD primary in Alpha NGDC"},
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "dc_location": "NGDC",
      "dc": "BETA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "172.16.6.64/27", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "TRD Beta DR app tier"},
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "DB", "dc_location": "NGDC",
-     "dc": "BETA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "172.16.6.80/30", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "TRD Beta DR database"},
-    {"app_id": "TRD", "app_distributed_id": "AD-1003", "component": "APP", "dc_location": "NGDC",
+     "cidr": "172.16.6.64/26", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "TRD DR in Beta NGDC"},
+    {"app_id": "TRD", "app_distributed_id": "AD-1003", "dc_location": "NGDC",
      "dc": "GAMMA_NGDC", "nh": "NH06", "sz": "CDE",
-     "cidr": "172.16.20.64/27", "legacy_dc": "", "legacy_cidr": "",
+     "cidr": "172.16.20.64/26", "legacy_dc": "", "legacy_cidr": "",
      "status": "Active", "notes": "TRD Gamma DR app tier"},
 
-    # --- PAY (AD-1004): Partially migrated — WEB/APP in NGDC, DB/MQ in Legacy ---
-    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "WEB", "dc_location": "NGDC",
+    # --- PAY (AD-1004): Partially migrated ---
+    {"app_id": "PAY", "app_distributed_id": "AD-1004", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
-     "cidr": "10.50.8.10/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "PAY web servers"},
-    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "APP", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
-     "cidr": "10.50.8.20/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "PAY application servers"},
-    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CCS",
-     "cidr": "10.50.8.50/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "PAY batch processing"},
-    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "DB", "dc_location": "Legacy",
+     "cidr": "10.50.8.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "PAY primary in Alpha NGDC"},
+    {"app_id": "PAY", "app_distributed_id": "AD-1004", "dc_location": "Legacy",
      "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_D", "legacy_cidr": "10.28.7.30/31",
-     "status": "Active", "notes": "PAY database – still in Legacy DC Delta"},
-    {"app_id": "PAY", "app_distributed_id": "AD-1004", "component": "MQ", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_D", "legacy_cidr": "10.28.7.40/31",
-     "status": "Active", "notes": "PAY message queue – still in Legacy DC Delta"},
+     "cidr": "", "legacy_dc": "DC_LEGACY_D", "legacy_cidr": "10.28.7.0/24",
+     "status": "Active", "notes": "PAY legacy DC (partial migration)"},
 
     # --- INS (AD-1005): Fully in NGDC ---
-    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "WEB", "dc_location": "NGDC",
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
-     "cidr": "10.3.1.130/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "INS web portal"},
-    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "APP", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
-     "cidr": "10.3.1.140/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "INS application servers"},
-    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
-     "cidr": "10.3.1.160/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "INS batch processing"},
-    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "DB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.4.30/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "INS database"},
-    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "MQ", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.4.40/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "INS message queue"},
-    {"app_id": "INS", "app_distributed_id": "AD-1005", "component": "APP", "dc_location": "NGDC",
+     "cidr": "10.3.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "INS primary in Alpha NGDC"},
+    {"app_id": "INS", "app_distributed_id": "AD-1005", "dc_location": "NGDC",
      "dc": "BETA_NGDC", "nh": "NH04", "sz": "STD",
-     "cidr": "172.16.4.144/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "INS Beta DR"},
+     "cidr": "172.16.4.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "INS DR in Beta NGDC"},
 
     # --- KYC (AD-1006): Fully in NGDC ---
-    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "WEB", "dc_location": "NGDC",
+    {"app_id": "KYC", "app_distributed_id": "AD-1006", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
-     "cidr": "10.4.1.130/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "KYC web portal"},
-    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "APP", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
-     "cidr": "10.4.1.140/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "KYC application servers"},
-    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CCS",
-     "cidr": "10.4.1.160/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "KYC batch processing"},
-    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "DB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CDE",
-     "cidr": "10.4.2.10/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "KYC database"},
-    {"app_id": "KYC", "app_distributed_id": "AD-1006", "component": "MQ", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH05", "sz": "CDE",
-     "cidr": "10.4.2.20/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "KYC message queue"},
+     "cidr": "10.4.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "KYC primary in Alpha NGDC"},
 
-    # --- FRD (AD-1007): Partially migrated — APP/BAT in NGDC, DB/MQ in Legacy ---
-    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "WEB", "dc_location": "NGDC",
+    # --- FRD (AD-1007): Partially migrated ---
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "10.1.1.110/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "FRD web servers"},
-    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "APP", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "10.1.1.50/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "FRD fraud engine"},
-    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "10.1.1.60/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "FRD batch processing"},
-    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "DB", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_A", "legacy_cidr": "10.25.2.20/31",
-     "status": "Active", "notes": "FRD database – still in Legacy DC Alpha"},
-    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "MQ", "dc_location": "Legacy",
-     "dc": "", "nh": "", "sz": "",
-     "cidr": "", "legacy_dc": "DC_LEGACY_A", "legacy_cidr": "10.25.1.55/31",
-     "status": "Active", "notes": "FRD Kafka MQ – still in Legacy DC Alpha"},
-    {"app_id": "FRD", "app_distributed_id": "AD-1007", "component": "APP", "dc_location": "NGDC",
+     "cidr": "10.1.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "FRD primary in Alpha NGDC"},
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "dc_location": "NGDC",
      "dc": "BETA_NGDC", "nh": "NH02", "sz": "CDE",
-     "cidr": "172.16.1.160/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "FRD Beta DR"},
+     "cidr": "172.16.1.128/25", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "FRD DR in Beta NGDC"},
+    {"app_id": "FRD", "app_distributed_id": "AD-1007", "dc_location": "Legacy",
+     "dc": "", "nh": "", "sz": "",
+     "cidr": "", "legacy_dc": "DC_LEGACY_A", "legacy_cidr": "10.25.2.0/24",
+     "status": "Active", "notes": "FRD legacy DC (partial migration)"},
 
     # --- LND (AD-1008): Fully in NGDC ---
-    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "WEB", "dc_location": "NGDC",
+    {"app_id": "LND", "app_distributed_id": "AD-1008", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
-     "cidr": "10.8.1.130/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "LND web portal"},
-    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "APP", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
-     "cidr": "10.8.1.140/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "LND application servers"},
-    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "GEN",
-     "cidr": "10.8.1.160/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "LND batch processing"},
-    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "DB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CPA",
-     "cidr": "10.8.2.30/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "LND database"},
-    {"app_id": "LND", "app_distributed_id": "AD-1008", "component": "MQ", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH09", "sz": "CPA",
-     "cidr": "10.8.2.40/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "LND message queue"},
+     "cidr": "10.8.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "LND primary in Alpha NGDC"},
 
     # --- WLT (AD-1009): Fully in NGDC ---
-    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "WEB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.1.100/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "WLT internet-facing portal"},
-    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "APP", "dc_location": "NGDC",
+    {"app_id": "WLT", "app_distributed_id": "AD-1009", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "PAA",
-     "cidr": "10.9.1.20/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "WLT application servers"},
-    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "PAA",
-     "cidr": "10.9.1.50/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "WLT batch processing"},
-    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "DB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "3PY",
-     "cidr": "10.9.1.30/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "WLT database"},
-    {"app_id": "WLT", "app_distributed_id": "AD-1009", "component": "MQ", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH10", "sz": "3PY",
-     "cidr": "10.9.1.40/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "WLT message queue"},
+     "cidr": "10.9.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "WLT primary in Alpha NGDC"},
 
     # --- CBK (AD-1010): Fully in NGDC ---
-    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "WEB", "dc_location": "NGDC",
+    {"app_id": "CBK", "app_distributed_id": "AD-1010", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CPA",
-     "cidr": "10.7.1.10/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CBK web servers"},
-    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "APP", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CPA",
-     "cidr": "10.7.1.20/29", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CBK core banking engine"},
-    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "BAT", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CPA",
-     "cidr": "10.7.1.50/32", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CBK batch processing"},
-    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "DB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE",
-     "cidr": "10.7.2.30/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CBK database – PCI CDE"},
-    {"app_id": "CBK", "app_distributed_id": "AD-1010", "component": "MQ", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH08", "sz": "CDE",
-     "cidr": "10.7.2.40/31", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "CBK message queue"},
+     "cidr": "10.7.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "CBK primary in Alpha NGDC"},
 
     # --- EPT (AD-1011): Fully in NGDC ---
-    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "WEB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.1.20/30", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "EPT internet-facing portal"},
-    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "APP", "dc_location": "NGDC",
+    {"app_id": "EPT", "app_distributed_id": "AD-1011", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
-     "cidr": "10.0.1.0/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "EPT application servers"},
-    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "API", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH01", "sz": "CCS",
-     "cidr": "10.0.1.16/30", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "EPT API gateway"},
-    {"app_id": "EPT", "app_distributed_id": "AD-1011", "component": "APP", "dc_location": "NGDC",
-     "dc": "BETA_NGDC", "nh": "NH01", "sz": "CCS",
-     "cidr": "172.16.50.0/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "EPT Beta DR"},
+     "cidr": "10.0.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "EPT primary in Alpha NGDC"},
 
     # --- MBK (AD-1012): Fully in NGDC ---
-    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "WEB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH14", "sz": "PAA",
-     "cidr": "10.70.1.30/30", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "MBK mobile banking web"},
-    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "APP", "dc_location": "NGDC",
+    {"app_id": "MBK", "app_distributed_id": "AD-1012", "dc_location": "NGDC",
      "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "10.6.1.168/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "MBK application servers"},
-    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "DB", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CDE",
-     "cidr": "10.6.1.16/28", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "MBK database – PCI CDE"},
-    {"app_id": "MBK", "app_distributed_id": "AD-1012", "component": "API", "dc_location": "NGDC",
-     "dc": "ALPHA_NGDC", "nh": "NH07", "sz": "CPA",
-     "cidr": "10.6.1.184/30", "legacy_dc": "", "legacy_cidr": "",
-     "status": "Active", "notes": "MBK API layer"},
+     "cidr": "10.6.1.0/24", "legacy_dc": "", "legacy_cidr": "",
+     "status": "Active", "notes": "MBK primary in Alpha NGDC"},
 ]
 
 
@@ -764,14 +598,16 @@ SEED_PREDEFINED_DESTINATIONS = [
 # ============================================================
 
 SEED_NAMING_STANDARDS = [
-    {"pattern": "grp-{APP}-{NH}-{SZ}-{TIER}", "type": "group",
-     "example": "grp-AD-1001-NH02-CDE-APP", "description": "Group naming: grp-AppID-NH-SZ-Tier"},
+    {"pattern": "grp-{APP}-{NH##}-{SZ}", "type": "group_source",
+     "example": "grp-AD-1001-NH02-CCS", "description": "Source (egress) group: grp-AppDistId-NH-SZ"},
+    {"pattern": "grp-{APP}-{NH##}-{SZ}-{COMP}-Ingress", "type": "group_destination",
+     "example": "grp-AD-1003-NH06-CDE-DB-Ingress", "description": "Destination (ingress) group: grp-AppDistId-NH-SZ-Component-Ingress"},
     {"pattern": "svr-{IP}", "type": "server",
      "example": "svr-10.1.1.10", "description": "Individual server/IP: svr-x.x.x.x"},
     {"pattern": "rng-{START_IP}-{END_OCTET}", "type": "range",
-     "example": "rng-10.1.1.10-20", "description": "IP range: rng-x.x.x.x-y (last octet range)"},
-    {"pattern": "sub-{CIDR}", "type": "subnet",
-     "example": "sub-10.1.1.0/24", "description": "Subnet: sub-x.x.x.x/mask"},
+     "example": "rng-10.124.132.4-9", "description": "IP range: rng-x.x.x.x-y (last octet range)"},
+    {"pattern": "net-{CIDR}", "type": "subnet",
+     "example": "net-10.23.25.0-25", "description": "Subnet: net-x.x.x.x-mask"},
     {"pattern": "pol-{APP}-{ENV}-{SEQ}", "type": "policy",
      "example": "pol-CRM-PROD-001", "description": "Policy naming: pol-AppID-Env-Sequence"},
     {"pattern": "fw-{VENDOR}-{DC}-{SEQ}", "type": "firewall_device",
@@ -1207,325 +1043,186 @@ SEED_ORG_CONFIG = {
 
 SEED_GROUPS = [
     # ================================================================
-    # NGDC Groups — aligned with _build_ip_mappings() NGDC IPs exactly
-    # Naming: grp-{APP}-{NH}-{SZ}-{COMPONENT}
+    # NGDC Groups — Egress/Ingress Architecture
+    # Source (egress): grp-{APP}-{NH##}-{SZ}  — one per app
+    # Destination (ingress): grp-{APP}-{NH##}-{SZ}-{COMP}-Ingress — only for apps with incoming clients
+    # Groups are pre-created in App Groups based on app configuration.
     # ================================================================
 
-    # --- CRM: Source NH02/STD, Destination NH02/GEN ---
-    {"name": "grp-AD-1001-NH02-STD-WEB", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "STD", "subtype": "WEB",
-     "description": "CRM Web Servers", "members": [
-        {"type": "ip", "value": "svr-10.50.1.10", "description": "CRM Web 1"},
-        {"type": "ip", "value": "svr-10.50.1.11", "description": "CRM Web 2"},
+    # --- CRM (AD-1001): NH02/CCS — has_ingress=True (DB, API) ---
+    {"name": "grp-AD-1001-NH02-CCS", "app_id": "CRM", "app_distributed_id": "AD-1001",
+     "direction": "source", "nh": "NH02", "sz": "CCS",
+     "description": "CRM egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.50.1.10", "description": "CRM egress IP"},
      ]},
-    {"name": "grp-AD-1001-NH02-STD-APP", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "STD", "subtype": "APP",
-     "description": "CRM Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.50.1.20", "description": "CRM App 1"},
-        {"type": "ip", "value": "svr-10.50.1.21", "description": "CRM App 2"},
-        {"type": "ip", "value": "svr-10.50.1.22", "description": "CRM App 3"},
+    {"name": "grp-AD-1001-NH02-CCS-DB-Ingress", "app_id": "CRM", "app_distributed_id": "AD-1001",
+     "direction": "destination", "nh": "NH02", "sz": "CCS",
+     "description": "CRM DB ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.50.1.20", "description": "CRM DB VIP"},
+        {"type": "ip", "value": "svr-10.50.1.21", "description": "CRM DB Standby"},
      ]},
-    {"name": "grp-AD-1001-NH02-STD-BAT", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "STD", "subtype": "BAT",
-     "description": "CRM Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.50.1.40", "description": "CRM Batch 1"},
-     ]},
-    {"name": "grp-AD-1001-NH02-GEN-DB", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "GEN", "subtype": "DB",
-     "description": "CRM Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.50.1.30", "description": "CRM DB Primary"},
-        {"type": "ip", "value": "svr-10.50.1.31", "description": "CRM DB Standby"},
-     ]},
-    {"name": "grp-AD-1001-NH02-GEN-MQ", "app_id": "CRM", "app_distributed_id": "AD-1001", "nh": "NH02", "sz": "GEN", "subtype": "MQ",
-     "description": "CRM Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.50.1.42", "description": "CRM MQ 1"},
-        {"type": "ip", "value": "svr-10.50.1.43", "description": "CRM MQ 2"},
+    {"name": "grp-AD-1001-NH02-CCS-API-Ingress", "app_id": "CRM", "app_distributed_id": "AD-1001",
+     "direction": "destination", "nh": "NH02", "sz": "CCS",
+     "description": "CRM API ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.50.1.30", "description": "CRM API Gateway"},
      ]},
 
-    # --- HRM: Source NH01/GEN, Destination NH01/STD ---
-    {"name": "grp-AD-1002-NH01-GEN-WEB", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "GEN", "subtype": "WEB",
-     "description": "HRM Web Servers", "members": [
-        {"type": "ip", "value": "svr-10.0.2.130", "description": "HRM Web 1"},
-        {"type": "ip", "value": "svr-10.0.2.131", "description": "HRM Web 2"},
-     ]},
-    {"name": "grp-AD-1002-NH01-GEN-APP", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "GEN", "subtype": "APP",
-     "description": "HRM Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.0.2.140", "description": "HRM App 1"},
-        {"type": "ip", "value": "svr-10.0.2.141", "description": "HRM App 2"},
-        {"type": "ip", "value": "svr-10.0.2.142", "description": "HRM App 3"},
-     ]},
-    {"name": "grp-AD-1002-NH01-GEN-BAT", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "GEN", "subtype": "BAT",
-     "description": "HRM Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.0.2.160", "description": "HRM Batch 1"},
-     ]},
-    {"name": "grp-AD-1002-NH01-STD-DB", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "STD", "subtype": "DB",
-     "description": "HRM Database", "members": [
-        {"type": "ip", "value": "svr-10.0.2.150", "description": "HRM DB Primary"},
-        {"type": "ip", "value": "svr-10.0.2.151", "description": "HRM DB Replica"},
-     ]},
-    {"name": "grp-AD-1002-NH01-STD-MQ", "app_id": "HRM", "app_distributed_id": "AD-1002", "nh": "NH01", "sz": "STD", "subtype": "MQ",
-     "description": "HRM Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.0.2.162", "description": "HRM MQ 1"},
-        {"type": "ip", "value": "svr-10.0.2.163", "description": "HRM MQ 2"},
+    # --- HRM (AD-1002): NH01/GEN — has_ingress=False ---
+    {"name": "grp-AD-1002-NH01-GEN", "app_id": "HRM", "app_distributed_id": "AD-1002",
+     "direction": "source", "nh": "NH01", "sz": "GEN",
+     "description": "HRM egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.0.2.130", "description": "HRM egress IP"},
      ]},
 
-    # --- TRD: Source NH06/CDE, Destination NH07/CPA ---
-    {"name": "grp-AD-1003-NH06-CDE-WEB", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH06", "sz": "CDE", "subtype": "WEB",
-     "description": "TRD Web Frontend", "members": [
-        {"type": "ip", "value": "svr-172.16.20.10", "description": "TRD Web 1"},
-        {"type": "ip", "value": "svr-172.16.20.11", "description": "TRD Web 2"},
+    # --- TRD (AD-1003): NH06/CDE — has_ingress=True (DB, MQ) ---
+    {"name": "grp-AD-1003-NH06-CDE", "app_id": "TRD", "app_distributed_id": "AD-1003",
+     "direction": "source", "nh": "NH06", "sz": "CDE",
+     "description": "TRD egress group (source)", "members": [
+        {"type": "ip", "value": "svr-172.16.20.10", "description": "TRD egress IP"},
      ]},
-    {"name": "grp-AD-1003-NH06-CDE-APP", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH06", "sz": "CDE", "subtype": "APP",
-     "description": "TRD Application Servers", "members": [
-        {"type": "ip", "value": "svr-172.16.20.20", "description": "TRD App 1"},
-        {"type": "ip", "value": "svr-172.16.20.21", "description": "TRD App 2"},
-        {"type": "ip", "value": "svr-172.16.20.22", "description": "TRD App 3"},
+    {"name": "grp-AD-1003-NH06-CDE-DB-Ingress", "app_id": "TRD", "app_distributed_id": "AD-1003",
+     "direction": "destination", "nh": "NH06", "sz": "CDE",
+     "description": "TRD DB ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-172.16.20.30", "description": "TRD DB Primary"},
+        {"type": "ip", "value": "svr-172.16.20.31", "description": "TRD DB Standby"},
      ]},
-    {"name": "grp-AD-1003-NH06-CDE-BAT", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH06", "sz": "CDE", "subtype": "BAT",
-     "description": "TRD Batch Processing", "members": [
-        {"type": "ip", "value": "svr-172.16.20.50", "description": "TRD Batch 1"},
-     ]},
-    {"name": "grp-AD-1003-NH07-CPA-DB", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH07", "sz": "CPA", "subtype": "DB",
-     "description": "TRD Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.6.1.30", "description": "TRD DB Primary"},
-        {"type": "ip", "value": "svr-10.6.1.31", "description": "TRD DB Standby"},
-     ]},
-    {"name": "grp-AD-1003-NH07-CPA-MQ", "app_id": "TRD", "app_distributed_id": "AD-1003", "nh": "NH07", "sz": "CPA", "subtype": "MQ",
-     "description": "TRD Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.6.1.40", "description": "TRD MQ Broker 1"},
-        {"type": "ip", "value": "svr-10.6.1.41", "description": "TRD MQ Broker 2"},
+    {"name": "grp-AD-1003-NH06-CDE-MQ-Ingress", "app_id": "TRD", "app_distributed_id": "AD-1003",
+     "direction": "destination", "nh": "NH06", "sz": "CDE",
+     "description": "TRD MQ ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-172.16.20.40", "description": "TRD MQ Broker 1"},
+        {"type": "ip", "value": "svr-172.16.20.41", "description": "TRD MQ Broker 2"},
      ]},
 
-    # --- PAY: Source NH08/CCS, Destination NH07/CDE ---
-    {"name": "grp-AD-1004-NH08-CCS-WEB", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH08", "sz": "CCS", "subtype": "WEB",
-     "description": "PAY Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.50.8.10", "description": "PAY Web 1"},
-        {"type": "ip", "value": "svr-10.50.8.11", "description": "PAY Web 2"},
+    # --- PAY (AD-1004): NH08/CCS — has_ingress=True (API) ---
+    {"name": "grp-AD-1004-NH08-CCS", "app_id": "PAY", "app_distributed_id": "AD-1004",
+     "direction": "source", "nh": "NH08", "sz": "CCS",
+     "description": "PAY egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.50.8.10", "description": "PAY egress IP"},
      ]},
-    {"name": "grp-AD-1004-NH08-CCS-APP", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH08", "sz": "CCS", "subtype": "APP",
-     "description": "PAY Transaction Processors", "members": [
-        {"type": "ip", "value": "svr-10.50.8.20", "description": "PAY App 1"},
-        {"type": "ip", "value": "svr-10.50.8.21", "description": "PAY App 2"},
-        {"type": "ip", "value": "svr-10.50.8.22", "description": "PAY App 3"},
-     ]},
-    {"name": "grp-AD-1004-NH08-CCS-BAT", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH08", "sz": "CCS", "subtype": "BAT",
-     "description": "PAY Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.50.8.50", "description": "PAY Batch 1"},
-     ]},
-    {"name": "grp-AD-1004-NH07-CDE-DB", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH07", "sz": "CDE", "subtype": "DB",
-     "description": "PAY Database (PCI CDE)", "members": [
-        {"type": "ip", "value": "svr-10.50.7.30", "description": "PAY DB Primary"},
-        {"type": "ip", "value": "svr-10.50.7.31", "description": "PAY DB Standby"},
-     ]},
-    {"name": "grp-AD-1004-NH07-CDE-MQ", "app_id": "PAY", "app_distributed_id": "AD-1004", "nh": "NH07", "sz": "CDE", "subtype": "MQ",
-     "description": "PAY Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.50.7.40", "description": "PAY MQ 1"},
-        {"type": "ip", "value": "svr-10.50.7.41", "description": "PAY MQ 2"},
+    {"name": "grp-AD-1004-NH08-CCS-API-Ingress", "app_id": "PAY", "app_distributed_id": "AD-1004",
+     "direction": "destination", "nh": "NH08", "sz": "CCS",
+     "description": "PAY API ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.50.8.20", "description": "PAY API VIP"},
+        {"type": "ip", "value": "svr-10.50.8.21", "description": "PAY API Standby"},
      ]},
 
-    # --- INS: Source NH04/STD, Destination NH14/PAA ---
-    {"name": "grp-AD-1005-NH04-STD-WEB", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH04", "sz": "STD", "subtype": "WEB",
-     "description": "INS Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.3.1.130", "description": "INS Web 1"},
-        {"type": "ip", "value": "svr-10.3.1.131", "description": "INS Web 2"},
-     ]},
-    {"name": "grp-AD-1005-NH04-STD-APP", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH04", "sz": "STD", "subtype": "APP",
-     "description": "INS Application Servers", "members": [
-        {"type": "ip", "value": "svr-10.3.1.140", "description": "INS App 1"},
-        {"type": "ip", "value": "svr-10.3.1.141", "description": "INS App 2"},
-        {"type": "ip", "value": "svr-10.3.1.142", "description": "INS App 3"},
-     ]},
-    {"name": "grp-AD-1005-NH04-STD-BAT", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH04", "sz": "STD", "subtype": "BAT",
-     "description": "INS Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.3.1.160", "description": "INS Batch 1"},
-     ]},
-    {"name": "grp-AD-1005-NH14-PAA-DB", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH14", "sz": "PAA", "subtype": "DB",
-     "description": "INS Database", "members": [
-        {"type": "ip", "value": "svr-10.70.4.30", "description": "INS DB Primary"},
-        {"type": "ip", "value": "svr-10.70.4.31", "description": "INS DB Standby"},
-     ]},
-    {"name": "grp-AD-1005-NH14-PAA-MQ", "app_id": "INS", "app_distributed_id": "AD-1005", "nh": "NH14", "sz": "PAA", "subtype": "MQ",
-     "description": "INS Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.70.4.40", "description": "INS MQ 1"},
-        {"type": "ip", "value": "svr-10.70.4.41", "description": "INS MQ 2"},
+    # --- INS (AD-1005): NH04/STD — has_ingress=False ---
+    {"name": "grp-AD-1005-NH04-STD", "app_id": "INS", "app_distributed_id": "AD-1005",
+     "direction": "source", "nh": "NH04", "sz": "STD",
+     "description": "INS egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.3.1.130", "description": "INS egress IP"},
      ]},
 
-    # --- KYC: Source NH05/CCS, Destination NH05/CDE ---
-    {"name": "grp-AD-1006-NH05-CCS-WEB", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CCS", "subtype": "WEB",
-     "description": "KYC Web Interface", "members": [
-        {"type": "ip", "value": "svr-10.4.1.130", "description": "KYC Web 1"},
-        {"type": "ip", "value": "svr-10.4.1.131", "description": "KYC Web 2"},
+    # --- KYC (AD-1006): NH05/CCS — has_ingress=True (DB) ---
+    {"name": "grp-AD-1006-NH05-CCS", "app_id": "KYC", "app_distributed_id": "AD-1006",
+     "direction": "source", "nh": "NH05", "sz": "CCS",
+     "description": "KYC egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.4.1.130", "description": "KYC egress IP"},
      ]},
-    {"name": "grp-AD-1006-NH05-CCS-APP", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CCS", "subtype": "APP",
-     "description": "KYC Application", "members": [
-        {"type": "ip", "value": "svr-10.4.1.140", "description": "KYC App 1"},
-        {"type": "ip", "value": "svr-10.4.1.141", "description": "KYC App 2"},
-        {"type": "ip", "value": "svr-10.4.1.142", "description": "KYC App 3"},
-     ]},
-    {"name": "grp-AD-1006-NH05-CCS-BAT", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CCS", "subtype": "BAT",
-     "description": "KYC Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.4.1.160", "description": "KYC Batch 1"},
-     ]},
-    {"name": "grp-AD-1006-NH05-CDE-DB", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CDE", "subtype": "DB",
-     "description": "KYC Database", "members": [
-        {"type": "ip", "value": "svr-10.4.2.10", "description": "KYC DB Primary"},
-        {"type": "ip", "value": "svr-10.4.2.11", "description": "KYC DB Replica"},
-     ]},
-    {"name": "grp-AD-1006-NH05-CDE-MQ", "app_id": "KYC", "app_distributed_id": "AD-1006", "nh": "NH05", "sz": "CDE", "subtype": "MQ",
-     "description": "KYC Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.4.2.20", "description": "KYC MQ 1"},
-        {"type": "ip", "value": "svr-10.4.2.21", "description": "KYC MQ 2"},
+    {"name": "grp-AD-1006-NH05-CCS-DB-Ingress", "app_id": "KYC", "app_distributed_id": "AD-1006",
+     "direction": "destination", "nh": "NH05", "sz": "CCS",
+     "description": "KYC DB ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.4.1.140", "description": "KYC DB VIP"},
      ]},
 
-    # --- FRD: Source NH02/CDE, Destination NH02/Swift ---
-    {"name": "grp-AD-1007-NH02-CDE-WEB", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "CDE", "subtype": "WEB",
-     "description": "FRD Web Interface", "members": [
-        {"type": "ip", "value": "svr-10.1.1.110", "description": "FRD Web 1"},
-        {"type": "ip", "value": "svr-10.1.1.111", "description": "FRD Web 2"},
+    # --- FRD (AD-1007): NH02/CDE — has_ingress=True (API, DB) ---
+    {"name": "grp-AD-1007-NH02-CDE", "app_id": "FRD", "app_distributed_id": "AD-1007",
+     "direction": "source", "nh": "NH02", "sz": "CDE",
+     "description": "FRD egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.1.1.50", "description": "FRD egress IP"},
      ]},
-    {"name": "grp-AD-1007-NH02-CDE-APP", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "CDE", "subtype": "APP",
-     "description": "FRD Detection Engine", "members": [
-        {"type": "ip", "value": "svr-10.1.1.50", "description": "FRD Engine 1"},
-        {"type": "ip", "value": "svr-10.1.1.51", "description": "FRD Engine 2"},
-        {"type": "ip", "value": "svr-10.1.1.52", "description": "FRD Engine 3"},
+    {"name": "grp-AD-1007-NH02-CDE-API-Ingress", "app_id": "FRD", "app_distributed_id": "AD-1007",
+     "direction": "destination", "nh": "NH02", "sz": "CDE",
+     "description": "FRD API ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.1.1.60", "description": "FRD API Gateway"},
      ]},
-    {"name": "grp-AD-1007-NH02-CDE-BAT", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "CDE", "subtype": "BAT",
-     "description": "FRD Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.1.1.60", "description": "FRD Batch 1"},
-     ]},
-    {"name": "grp-AD-1007-NH02-Swift-DB", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "Swift", "subtype": "DB",
-     "description": "FRD Database (PCI CDE)", "members": [
-        {"type": "ip", "value": "svr-10.1.2.20", "description": "FRD DB Primary"},
-        {"type": "ip", "value": "svr-10.1.2.21", "description": "FRD DB Standby"},
-     ]},
-    {"name": "grp-AD-1007-NH02-Swift-MQ", "app_id": "FRD", "app_distributed_id": "AD-1007", "nh": "NH02", "sz": "Swift", "subtype": "MQ",
-     "description": "FRD Event Stream", "members": [
-        {"type": "ip", "value": "svr-10.1.1.55", "description": "FRD Kafka 1"},
-        {"type": "ip", "value": "svr-10.1.1.56", "description": "FRD Kafka 2"},
+    {"name": "grp-AD-1007-NH02-CDE-DB-Ingress", "app_id": "FRD", "app_distributed_id": "AD-1007",
+     "direction": "destination", "nh": "NH02", "sz": "CDE",
+     "description": "FRD DB ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.1.1.70", "description": "FRD DB Primary"},
+        {"type": "ip", "value": "svr-10.1.1.71", "description": "FRD DB Standby"},
      ]},
 
-    # --- LND: Source NH09/GEN, Destination NH09/CPA ---
-    {"name": "grp-AD-1008-NH09-GEN-WEB", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "GEN", "subtype": "WEB",
-     "description": "LND Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.8.1.130", "description": "LND Web 1"},
-        {"type": "ip", "value": "svr-10.8.1.131", "description": "LND Web 2"},
-     ]},
-    {"name": "grp-AD-1008-NH09-GEN-APP", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "GEN", "subtype": "APP",
-     "description": "LND Loan Engine", "members": [
-        {"type": "ip", "value": "svr-10.8.1.140", "description": "LND App 1"},
-        {"type": "ip", "value": "svr-10.8.1.141", "description": "LND App 2"},
-        {"type": "ip", "value": "svr-10.8.1.142", "description": "LND App 3"},
-     ]},
-    {"name": "grp-AD-1008-NH09-GEN-BAT", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "GEN", "subtype": "BAT",
-     "description": "LND Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.8.1.160", "description": "LND Batch 1"},
-     ]},
-    {"name": "grp-AD-1008-NH09-CPA-DB", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "CPA", "subtype": "DB",
-     "description": "LND Database", "members": [
-        {"type": "ip", "value": "svr-10.8.2.30", "description": "LND DB Primary"},
-        {"type": "ip", "value": "svr-10.8.2.31", "description": "LND DB Standby"},
-     ]},
-    {"name": "grp-AD-1008-NH09-CPA-MQ", "app_id": "LND", "app_distributed_id": "AD-1008", "nh": "NH09", "sz": "CPA", "subtype": "MQ",
-     "description": "LND Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.8.2.40", "description": "LND MQ 1"},
-        {"type": "ip", "value": "svr-10.8.2.41", "description": "LND MQ 2"},
+    # --- LND (AD-1008): NH09/GEN — has_ingress=False ---
+    {"name": "grp-AD-1008-NH09-GEN", "app_id": "LND", "app_distributed_id": "AD-1008",
+     "direction": "source", "nh": "NH09", "sz": "GEN",
+     "description": "LND egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.8.1.130", "description": "LND egress IP"},
      ]},
 
-    # --- WLT: Source NH14/PAA (WEB), NH10/PAA (APP/BAT), Destination NH10/3PY ---
-    {"name": "grp-AD-1009-NH14-PAA-WEB", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
-     "description": "WLT Web Interface", "members": [
-        {"type": "ip", "value": "svr-10.70.1.100", "description": "WLT Web 1"},
-        {"type": "ip", "value": "svr-10.70.1.101", "description": "WLT Web 2"},
+    # --- WLT (AD-1009): NH10/PAA — has_ingress=True (DB) ---
+    {"name": "grp-AD-1009-NH10-PAA", "app_id": "WLT", "app_distributed_id": "AD-1009",
+     "direction": "source", "nh": "NH10", "sz": "PAA",
+     "description": "WLT egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.9.1.10", "description": "WLT egress IP"},
      ]},
-    {"name": "grp-AD-1009-NH10-PAA-APP", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "PAA", "subtype": "APP",
-     "description": "WLT Portfolio Engine", "members": [
-        {"type": "ip", "value": "svr-10.9.1.20", "description": "WLT App 1"},
-        {"type": "ip", "value": "svr-10.9.1.21", "description": "WLT App 2"},
-        {"type": "ip", "value": "svr-10.9.1.22", "description": "WLT App 3"},
-     ]},
-    {"name": "grp-AD-1009-NH10-PAA-BAT", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "PAA", "subtype": "BAT",
-     "description": "WLT Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.9.1.50", "description": "WLT Batch 1"},
-     ]},
-    {"name": "grp-AD-1009-NH10-3PY-DB", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "3PY", "subtype": "DB",
-     "description": "WLT Database (PCI CDE)", "members": [
+    {"name": "grp-AD-1009-NH10-PAA-DB-Ingress", "app_id": "WLT", "app_distributed_id": "AD-1009",
+     "direction": "destination", "nh": "NH10", "sz": "PAA",
+     "description": "WLT DB ingress group (destination)", "members": [
         {"type": "ip", "value": "svr-10.9.1.30", "description": "WLT DB Primary"},
         {"type": "ip", "value": "svr-10.9.1.31", "description": "WLT DB Replica"},
      ]},
-    {"name": "grp-AD-1009-NH10-3PY-MQ", "app_id": "WLT", "app_distributed_id": "AD-1009", "nh": "NH10", "sz": "3PY", "subtype": "MQ",
-     "description": "WLT Message Queue", "members": [
-        {"type": "ip", "value": "svr-10.9.1.40", "description": "WLT MQ 1"},
-        {"type": "ip", "value": "svr-10.9.1.41", "description": "WLT MQ 2"},
+
+    # --- CBK (AD-1010): NH08/CPA — has_ingress=True (DB, API) ---
+    {"name": "grp-AD-1010-NH08-CPA", "app_id": "CBK", "app_distributed_id": "AD-1010",
+     "direction": "source", "nh": "NH08", "sz": "CPA",
+     "description": "CBK egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.7.1.10", "description": "CBK egress IP"},
+     ]},
+    {"name": "grp-AD-1010-NH08-CPA-DB-Ingress", "app_id": "CBK", "app_distributed_id": "AD-1010",
+     "direction": "destination", "nh": "NH08", "sz": "CPA",
+     "description": "CBK DB ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.7.1.30", "description": "CBK DB Primary"},
+        {"type": "ip", "value": "svr-10.7.1.31", "description": "CBK DB Standby"},
+     ]},
+    {"name": "grp-AD-1010-NH08-CPA-API-Ingress", "app_id": "CBK", "app_distributed_id": "AD-1010",
+     "direction": "destination", "nh": "NH08", "sz": "CPA",
+     "description": "CBK API ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.7.1.40", "description": "CBK API VIP"},
      ]},
 
-    # --- CBK: Source NH08/CPA, Destination NH08/CDE ---
-    {"name": "grp-AD-1010-NH08-CPA-WEB", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CPA", "subtype": "WEB",
-     "description": "CBK Web Portal", "members": [
-        {"type": "ip", "value": "svr-10.7.1.10", "description": "CBK Web 1"},
-        {"type": "ip", "value": "svr-10.7.1.11", "description": "CBK Web 2"},
+    # --- EPT (AD-1011): NH01/CCS — has_ingress=True (API) ---
+    {"name": "grp-AD-1011-NH01-CCS", "app_id": "EPT", "app_distributed_id": "AD-1011",
+     "direction": "source", "nh": "NH01", "sz": "CCS",
+     "description": "EPT egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.0.1.10", "description": "EPT egress IP"},
      ]},
-    {"name": "grp-AD-1010-NH08-CPA-APP", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CPA", "subtype": "APP",
-     "description": "CBK Core Engine", "members": [
-        {"type": "ip", "value": "svr-10.7.1.20", "description": "CBK App 1"},
-        {"type": "ip", "value": "svr-10.7.1.21", "description": "CBK App 2"},
-        {"type": "ip", "value": "svr-10.7.1.22", "description": "CBK App 3"},
+    {"name": "grp-AD-1011-NH01-CCS-API-Ingress", "app_id": "EPT", "app_distributed_id": "AD-1011",
+     "direction": "destination", "nh": "NH01", "sz": "CCS",
+     "description": "EPT API ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.0.1.16", "description": "EPT API Gateway"},
+        {"type": "ip", "value": "svr-10.0.1.17", "description": "EPT API Standby"},
      ]},
-    {"name": "grp-AD-1010-NH08-CPA-BAT", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CPA", "subtype": "BAT",
-     "description": "CBK Batch Processing", "members": [
-        {"type": "ip", "value": "svr-10.7.1.50", "description": "CBK Batch 1"},
+
+    # --- MBK (AD-1012): NH07/CPA — has_ingress=True (DB, API) ---
+    {"name": "grp-AD-1012-NH07-CPA", "app_id": "MBK", "app_distributed_id": "AD-1012",
+     "direction": "source", "nh": "NH07", "sz": "CPA",
+     "description": "MBK egress group (source)", "members": [
+        {"type": "ip", "value": "svr-10.6.1.168", "description": "MBK egress IP"},
      ]},
-    {"name": "grp-AD-1010-NH08-CDE-DB", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CDE", "subtype": "DB",
-     "description": "CBK Database Cluster", "members": [
-        {"type": "ip", "value": "svr-10.7.2.30", "description": "CBK DB Primary"},
-        {"type": "ip", "value": "svr-10.7.2.31", "description": "CBK DB Standby"},
+    {"name": "grp-AD-1012-NH07-CPA-DB-Ingress", "app_id": "MBK", "app_distributed_id": "AD-1012",
+     "direction": "destination", "nh": "NH07", "sz": "CPA",
+     "description": "MBK DB ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.6.1.16", "description": "MBK DB Primary"},
      ]},
-    {"name": "grp-AD-1010-NH08-CDE-MQ", "app_id": "CBK", "app_distributed_id": "AD-1010", "nh": "NH08", "sz": "CDE", "subtype": "MQ",
-     "description": "CBK Message Bus", "members": [
-        {"type": "ip", "value": "svr-10.7.2.40", "description": "CBK MQ 1"},
-        {"type": "ip", "value": "svr-10.7.2.41", "description": "CBK MQ 2"},
+    {"name": "grp-AD-1012-NH07-CPA-API-Ingress", "app_id": "MBK", "app_distributed_id": "AD-1012",
+     "direction": "destination", "nh": "NH07", "sz": "CPA",
+     "description": "MBK API ingress group (destination)", "members": [
+        {"type": "ip", "value": "svr-10.6.1.184", "description": "MBK API Gateway"},
      ]},
 
     # --- SHARED: Cross-app infrastructure groups ---
-    {"name": "grp-AD-SHARED-NH14-PSE-API", "app_id": "SHARED", "app_distributed_id": "AD-SHARED", "nh": "NH14", "sz": "PSE", "subtype": "API",
-     "description": "DMZ API Gateway (External)", "members": [
+    {"name": "grp-AD-SHARED-NH14-PSE", "app_id": "SHARED", "app_distributed_id": "AD-SHARED",
+     "direction": "source", "nh": "NH14", "sz": "PSE",
+     "description": "DMZ API Gateway (External) egress group", "members": [
         {"type": "ip", "value": "svr-10.70.1.10", "description": "DMZ API 1"},
         {"type": "ip", "value": "svr-10.70.1.11", "description": "DMZ API 2"},
      ]},
-    {"name": "grp-AD-SHARED-NH01-UC-MON", "app_id": "SHARED", "app_distributed_id": "AD-SHARED", "nh": "NH01", "sz": "UC", "subtype": "MON",
-     "description": "Monitoring Agents", "members": [
+    {"name": "grp-AD-SHARED-NH01-UC", "app_id": "SHARED", "app_distributed_id": "AD-SHARED",
+     "direction": "source", "nh": "NH01", "sz": "UC",
+     "description": "Monitoring Agents egress group", "members": [
         {"type": "ip", "value": "svr-10.80.1.100", "description": "Monitor Agent 1"},
         {"type": "ip", "value": "svr-10.80.1.101", "description": "Monitor Agent 2"},
-     ]},
-
-    # --- EPT — Enterprise Portal (NH14/PAA WEB, NH01/CCS APP/API) ---
-    {"name": "grp-AD-1011-NH14-PAA-WEB", "app_id": "EPT", "app_distributed_id": "AD-1011", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
-     "description": "EPT Web Frontend (PAA zone)", "members": [
-        {"type": "ip", "value": "svr-10.70.1.20", "description": "EPT Web 1"},
-        {"type": "ip", "value": "svr-10.70.1.21", "description": "EPT Web 2"},
-     ]},
-    {"name": "grp-AD-1011-NH01-CCS-APP", "app_id": "EPT", "app_distributed_id": "AD-1011", "nh": "NH01", "sz": "CCS", "subtype": "APP",
-     "description": "EPT App Backend", "members": [
-        {"type": "ip", "value": "svr-10.0.1.10", "description": "EPT App 1"},
-        {"type": "ip", "value": "svr-10.0.1.11", "description": "EPT App 2"},
-     ]},
-    {"name": "grp-AD-1011-NH01-CCS-API", "app_id": "EPT", "app_distributed_id": "AD-1011", "nh": "NH01", "sz": "CCS", "subtype": "API",
-     "description": "EPT API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.0.1.16", "description": "EPT API 1"},
-     ]},
-
-    # --- MBK — Mobile Banking (NH14/PAA WEB, NH07/CPA APP/API, NH07/CDE DB) ---
-    {"name": "grp-AD-1012-NH14-PAA-WEB", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH14", "sz": "PAA", "subtype": "WEB",
-     "description": "MBK Mobile Web", "members": [
-        {"type": "ip", "value": "svr-10.70.1.30", "description": "MBK Web 1"},
-     ]},
-    {"name": "grp-AD-1012-NH07-CPA-APP", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH07", "sz": "CPA", "subtype": "APP",
-     "description": "MBK App Engine", "members": [
-        {"type": "ip", "value": "svr-10.6.1.168", "description": "MBK App 1"},
-        {"type": "ip", "value": "svr-10.6.1.169", "description": "MBK App 2"},
-     ]},
-    {"name": "grp-AD-1012-NH07-CDE-DB", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH07", "sz": "CDE", "subtype": "DB",
-     "description": "MBK Database", "members": [
-        {"type": "ip", "value": "svr-10.6.1.16", "description": "MBK DB Primary"},
-     ]},
-    {"name": "grp-AD-1012-NH07-CPA-API", "app_id": "MBK", "app_distributed_id": "AD-1012", "nh": "NH07", "sz": "CPA", "subtype": "API",
-     "description": "MBK API Gateway", "members": [
-        {"type": "ip", "value": "svr-10.6.1.184", "description": "MBK API 1"},
      ]},
 ]
 
