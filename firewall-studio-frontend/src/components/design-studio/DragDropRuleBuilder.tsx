@@ -55,7 +55,19 @@ interface DestTarget {
   label: string;
   appDistId: string;
   hasIngress: boolean;
+  szHint?: string;
 }
+
+const DEST_COLORS = [
+  { bg: 'bg-red-700', text: 'text-white', border: 'border-red-200', hover: 'hover:border-red-400 hover:bg-red-50' },
+  { bg: 'bg-amber-600', text: 'text-white', border: 'border-amber-200', hover: 'hover:border-amber-400 hover:bg-amber-50' },
+  { bg: 'bg-emerald-600', text: 'text-white', border: 'border-emerald-200', hover: 'hover:border-emerald-400 hover:bg-emerald-50' },
+  { bg: 'bg-blue-700', text: 'text-white', border: 'border-blue-200', hover: 'hover:border-blue-400 hover:bg-blue-50' },
+  { bg: 'bg-violet-600', text: 'text-white', border: 'border-violet-200', hover: 'hover:border-violet-400 hover:bg-violet-50' },
+  { bg: 'bg-pink-600', text: 'text-white', border: 'border-pink-200', hover: 'hover:border-pink-400 hover:bg-pink-50' },
+  { bg: 'bg-teal-600', text: 'text-white', border: 'border-teal-200', hover: 'hover:border-teal-400 hover:bg-teal-50' },
+  { bg: 'bg-orange-600', text: 'text-white', border: 'border-orange-200', hover: 'hover:border-orange-400 hover:bg-orange-50' },
+];
 
 type MemberType = 'ip' | 'subnet' | 'cidr' | 'group' | 'range';
 
@@ -319,7 +331,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
       const id = app.app_distributed_id || app.app_id;
       if (id === srcApp) continue;
       const hasIngress = !!app.has_ingress;
-      targets.push({ label: `${id} - ${app.app_name || id}`, appDistId: id, hasIngress });
+      const szHint = (app.sz || app.szs || '') as string;
+      targets.push({ label: app.app_name || id, appDistId: id, hasIngress, szHint: szHint.split(',')[0]?.trim() || '' });
     }
     targets.sort((a, b) => {
       if (a.hasIngress && !b.hasIngress) return -1;
@@ -631,29 +644,10 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
         </div>
       )}
 
-      {/* Main content: sidebar + wizard */}
+      {/* Main content: wizard + sidebar */}
       <div className="flex gap-6 bg-white min-h-[600px]">
 
-        {/* Left sidebar: Drag-and-drop common destinations */}
-        <div className="w-64 flex-shrink-0 border-r border-gray-200 pr-4">
-          <h3 className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-3">Common Destinations</h3>
-          <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs mb-3 bg-white placeholder-gray-400"
-            placeholder="Search destinations..." value={destSearch} onChange={e => setDestSearch(e.target.value)} />
-          <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
-            {filteredDestinations.length === 0 && <p className="text-xs text-gray-400 italic">No destinations available</p>}
-            {filteredDestinations.map(d => (
-              <button key={d.appDistId} onClick={() => handleDropDestination(d)}
-                className="w-full text-left px-3 py-2 rounded-lg border border-gray-100 hover:border-purple-300 hover:bg-purple-50 transition-colors group"
-                draggable onDragEnd={() => handleDropDestination(d)}>
-                <div className="text-xs font-medium text-gray-800 group-hover:text-purple-700">{d.appDistId}</div>
-                <div className="text-[10px] text-gray-400 truncate">{d.label.split(' - ').slice(1).join(' - ')}</div>
-                {d.hasIngress && <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded text-[9px] font-bold">INGRESS</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Center: Rule builder wizard */}
+        {/* Left: Rule builder wizard */}
         <div className="flex-1 max-w-3xl">
 
           {/* Draft success banner */}
@@ -1025,6 +1019,53 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
             </div>
           )}
         </div>
+
+        {/* Right sidebar: Predefined Destinations — only on Step 1 */}
+        {step === 1 && (
+          <div className="w-72 flex-shrink-0 border-l border-gray-200 pl-5">
+            <div className="bg-gradient-to-b from-gray-50 to-white rounded-xl border border-gray-200 p-4">
+              <h3 className="text-sm font-extrabold text-gray-800 tracking-tight mb-1">Destination</h3>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-3">Predefined Destinations</p>
+              <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-full text-xs mb-3 bg-white placeholder-gray-400 focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
+                placeholder="Search destinations..." value={destSearch} onChange={e => setDestSearch(e.target.value)} />
+              <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                {filteredDestinations.length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">No destinations available</p>}
+                {filteredDestinations.map((d, idx) => {
+                  const color = DEST_COLORS[idx % DEST_COLORS.length];
+                  return (
+                    <button key={d.appDistId} onClick={() => handleDropDestination(d)}
+                      className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border ${color.border} ${color.hover} transition-all duration-150 group bg-white shadow-sm hover:shadow`}
+                      draggable onDragEnd={() => handleDropDestination(d)}>
+                      <div className={`w-8 h-8 rounded-md ${color.bg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                        <svg className={`w-4 h-4 ${color.text}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm2 6h2v2H9v-2z" clipRule="evenodd" /></svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-gray-800 group-hover:text-gray-900 truncate uppercase">{d.label}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{d.szHint ? `${d.szHint} Zone` : d.appDistId}</div>
+                      </div>
+                      <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Destination section */}
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Custom Destination</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">Dest IP:</label>
+                    <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white mt-0.5" placeholder="e.g. 10.1.2.50" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">Ports:</label>
+                    <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white mt-0.5" placeholder="e.g. TCP 1521" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
