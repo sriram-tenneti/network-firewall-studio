@@ -14,6 +14,7 @@ import { autoPrefix } from '@/lib/utils';
 import { detectEntryType, parseToResourceEntries, parseExpandedToDisplayLines } from '@/lib/nestingParser';
 import type { ResourceEntry } from '@/lib/nestingParser';
 import type { Column } from '@/components/shared/DataTable';
+import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
 
 interface ModifyState {
   rule_source: string;
@@ -1565,6 +1566,8 @@ export default function FirewallManagementPage() {
           </div>
         </div>
       )}
+
+      <ModuleAssistant module="firewall-management" context={{ app_id: selectedApp, environment: selectedEnv }} />
     </div>
   );
 }

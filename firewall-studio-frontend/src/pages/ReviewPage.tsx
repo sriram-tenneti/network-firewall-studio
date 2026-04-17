@@ -9,6 +9,7 @@ import { useNotification } from '@/hooks/useNotification';
 import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification, approvePolicyChange, rejectPolicyChange } from '@/lib/api';
 import type { ReviewRequest, RuleModification } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
+import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
 
 /** Convert a RuleModification into a ReviewRequest shape so both appear in the same table. */
 function modToReview(m: RuleModification): ReviewRequest {
@@ -329,6 +330,8 @@ export default function ReviewPage(props: { context?: string }) {
         onReject={handleReject}
         onCompileRule={compileRule}
       />
+
+      <ModuleAssistant module="review" />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { importLegacyRulesExcel, importLegacyRulesJSON, exportLegacyRulesToExcel, importNGDCMappingsExcel, getNGDCMappings, deleteNGDCMapping, createNGDCMapping, importRulesToNGDC, getImportedApps, createAppDCMapping, deleteAppDCMapping, getLegacyRules, clearAllLegacyRules, isHideSeedEnabled } from '@/lib/api';
 import { autoCreateLegacyGroupsFromRules } from '@/lib/legacyGroupAutoCreate';
 import type { FirewallRule, LegacyRule } from '@/types';
+import { ModuleAssistant } from '@/components/shared/ModuleAssistant';
 
 interface ImportedApp {
   app_id: string;
@@ -670,6 +671,8 @@ export default function DataImportPage({ context }: DataImportPageProps) {
           </div>
         </>
       )}
+
+      <ModuleAssistant module="data-import" />
     </div>
   );
 }
