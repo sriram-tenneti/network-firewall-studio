@@ -200,9 +200,10 @@ async def get_rule_request_route(request_id: str) -> dict[str, Any]:
 async def set_rule_request_status_route(request_id: str,
                                           payload: dict[str, Any]) -> dict[str, Any]:
     status = payload.get("status")
+    note = payload.get("note")
     if not status:
         raise HTTPException(400, "status is required")
-    r = await set_rule_request_status(request_id, status)
+    r = await set_rule_request_status(request_id, status, note)
     if not r:
         raise HTTPException(404, "Rule request not found")
     return r

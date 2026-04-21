@@ -7189,12 +7189,14 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-async def set_rule_request_status(request_id: str, status: str) -> dict[str, Any] | None:
+async def set_rule_request_status(request_id: str, status: str, note: str | None = None) -> dict[str, Any] | None:
     items = _load_rule_requests()
     for r in items:
         if r.get("request_id") == request_id:
             r["status"] = status
             r["updated_at"] = _now()
+            if note:
+                r.setdefault("review_notes", []).append({"at": _now(), "status": status, "note": note})
             for phys in r.get("expansion", []):
                 # propagate high-level status to physical rules
                 mapping = {

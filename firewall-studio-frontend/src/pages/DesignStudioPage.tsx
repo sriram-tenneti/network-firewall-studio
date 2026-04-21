@@ -12,6 +12,7 @@ import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
 import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import RuleRequestBuilder from '@/components/design-studio/RuleRequestBuilder';
+import RuleRequestsPanel from '@/components/design-studio/RuleRequestsPanel';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
@@ -333,6 +334,9 @@ export function DesignStudioPage() {
             <div className="text-xs text-indigo-600">One logical request → deterministic per-DC PhysicalRule fan-out based on source &amp; destination presences.</div>
           </div>
           <RuleRequestBuilder applications={applications} onSubmitted={loadData} />
+          <div className="mt-4">
+            <RuleRequestsPanel environment={(selectedEnv as '' | 'Production' | 'Non-Production' | 'Pre-Production')} onChanged={loadData} />
+          </div>
         </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">

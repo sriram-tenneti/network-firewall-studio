@@ -1261,8 +1261,8 @@ export const createRuleRequest = (payload: RuleRequestInput) =>
 export const getRuleRequest = (requestId: string) =>
   fetchJSON<RuleRequestRecord>(`/api/rules/requests/${requestId}`);
 
-export const setRuleRequestStatus = (requestId: string, status: string) =>
+export const setRuleRequestStatus = (requestId: string, status: string, note?: string) =>
   fetchJSON<RuleRequestRecord>(`/api/rules/requests/${requestId}/status`, {
     method: 'PUT',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, note }),
   });
