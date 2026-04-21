@@ -11,6 +11,7 @@ import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal'
 import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
 import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
 import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
+import RuleRequestBuilder from '@/components/design-studio/RuleRequestBuilder';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
@@ -25,7 +26,7 @@ export function DesignStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
-  const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'builder' | 'multi_dc'>('table');
   const [editingDraftRule, setEditingDraftRule] = useState<FirewallRule | null>(null);
 
   const detailModal = useModal<FirewallRule>();
@@ -288,6 +289,7 @@ export function DesignStudioPage() {
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
             <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Rules</button>
             <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>+ New Rule</button>
+            <button onClick={() => setViewMode('multi_dc')} className={`px-3 py-2 text-sm font-medium border-l border-gray-300 ${viewMode === 'multi_dc' ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 hover:bg-indigo-50'}`}>⚡ Multi-DC Request</button>
           </div>
         </div>
       </div>
@@ -323,6 +325,14 @@ export function DesignStudioPage() {
             editRule={editingDraftRule}
             onEditComplete={() => { setEditingDraftRule(null); setViewMode('table'); }}
           />
+        </div>
+      ) : viewMode === 'multi_dc' ? (
+        <div className="bg-white border rounded-lg shadow-sm p-4">
+          <div className="mb-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <div className="text-sm font-semibold text-indigo-800">Multi-DC Rule Request</div>
+            <div className="text-xs text-indigo-600">One logical request → deterministic per-DC PhysicalRule fan-out based on source &amp; destination presences.</div>
+          </div>
+          <RuleRequestBuilder applications={applications} onSubmitted={loadData} />
         </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">
