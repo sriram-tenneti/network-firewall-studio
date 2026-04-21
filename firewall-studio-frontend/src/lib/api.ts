@@ -1075,3 +1075,194 @@ export const createLifecycleEvent = (ruleId: string, eventType: string, details 
     method: 'POST',
     body: JSON.stringify({ rule_id: ruleId, event_type: eventType, details, actor }),
   });
+
+
+// ============================================================
+// Revamp: Shared Services, Presences, Multi-DC Fan-out
+// ============================================================
+import type {
+  SharedService,
+  SharedServicePresence,
+  AppPresence,
+  RuleRequestRecord,
+  RuleExpansionPreview,
+  Environment,
+  DestinationEntityKind,
+  MemberSpec,
+} from '../types';
+
+export const getSharedServices = (params?: {
+  environment?: Environment;
+  category?: string;
+  q?: string;
+}) => {
+  const qs = new URLSearchParams();
+  if (params?.environment) qs.set('environment', params.environment);
+  if (params?.category) qs.set('category', params.category);
+  if (params?.q) qs.set('q', params.q);
+  const s = qs.toString();
+  return fetchJSON<SharedService[]>(
+    `/api/reference/shared-services${s ? `?${s}` : ''}`,
+  );
+};
+
+export const getSharedService = (serviceId: string) =>
+  fetchJSON<SharedService>(`/api/reference/shared-services/${serviceId}`);
+
+export const createSharedService = (data: Partial<SharedService>) =>
+  fetchJSON<SharedService>('/api/reference/shared-services', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const updateSharedService = (
+  serviceId: string,
+  data: Partial<SharedService>,
+) =>
+  fetchJSON<SharedService>(`/api/reference/shared-services/${serviceId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+export const deleteSharedService = (serviceId: string) =>
+  fetchJSON<{ status: string }>(
+    `/api/reference/shared-services/${serviceId}`,
+    { method: 'DELETE' },
+  );
+
+export const getSharedServicePresences = (
+  serviceId: string,
+  params?: { environment?: Environment; dc_id?: string },
+) => {
+  const qs = new URLSearchParams();
+  if (params?.environment) qs.set('environment', params.environment);
+  if (params?.dc_id) qs.set('dc_id', params.dc_id);
+  const s = qs.toString();
+  return fetchJSON<SharedServicePresence[]>(
+    `/api/reference/shared-services/${serviceId}/presences${s ? `?${s}` : ''}`,
+  );
+};
+
+export const upsertSharedServicePresence = (
+  serviceId: string,
+  presence: Partial<SharedServicePresence> & {
+    dc_id: string;
+    environment: Environment;
+    nh_id: string;
+    sz_code: string;
+    members: MemberSpec[];
+  },
+) =>
+  fetchJSON<SharedServicePresence>(
+    `/api/reference/shared-services/${serviceId}/presences`,
+    { method: 'POST', body: JSON.stringify(presence) },
+  );
+
+export const deleteSharedServicePresence = (
+  serviceId: string,
+  dcId: string,
+  environment: Environment,
+  nhId: string,
+  szCode: string,
+) => {
+  const qs = new URLSearchParams({
+    dc_id: dcId,
+    environment,
+    nh_id: nhId,
+    sz_code: szCode,
+  });
+  return fetchJSON<{ status: string }>(
+    `/api/reference/shared-services/${serviceId}/presences?${qs}`,
+    { method: 'DELETE' },
+  );
+};
+
+export const getAppPresences = (params?: {
+  app?: string;
+  environment?: Environment;
+  dc_id?: string;
+}) => {
+  const qs = new URLSearchParams();
+  if (params?.app) qs.set('app', params.app);
+  if (params?.environment) qs.set('environment', params.environment);
+  if (params?.dc_id) qs.set('dc_id', params.dc_id);
+  const s = qs.toString();
+  return fetchJSON<AppPresence[]>(
+    `/api/reference/app-presences${s ? `?${s}` : ''}`,
+  );
+};
+
+export const upsertAppPresence = (presence: AppPresence) =>
+  fetchJSON<AppPresence>('/api/reference/app-presences', {
+    method: 'POST',
+    body: JSON.stringify(presence),
+  });
+
+export const deleteAppPresence = (
+  appDistributedId: string,
+  dcId: string,
+  environment: Environment,
+  nhId: string,
+  szCode: string,
+) => {
+  const qs = new URLSearchParams({
+    app_distributed_id: appDistributedId,
+    dc_id: dcId,
+    environment,
+    nh_id: nhId,
+    sz_code: szCode,
+  });
+  return fetchJSON<{ status: string }>(
+    `/api/reference/app-presences?${qs}`,
+    { method: 'DELETE' },
+  );
+};
+
+export interface RuleRequestInput {
+  application_ref: string;
+  destination_kind: DestinationEntityKind;
+  destination_ref?: string | null;
+  environment: Environment;
+  ports: string;
+  action?: 'ACCEPT' | 'DROP';
+  description?: string;
+  src_members_override?: MemberSpec[];
+  dst_members_override?: MemberSpec[];
+  requested_dcs?: string[];
+  include_cross_dc?: boolean;
+  owner?: string;
+}
+
+export const previewRuleExpansion = (payload: RuleRequestInput) =>
+  fetchJSON<RuleExpansionPreview>('/api/rules/preview-expansion', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const listRuleRequests = (params?: {
+  environment?: Environment;
+  status?: string;
+}) => {
+  const qs = new URLSearchParams();
+  if (params?.environment) qs.set('environment', params.environment);
+  if (params?.status) qs.set('status', params.status);
+  const s = qs.toString();
+  return fetchJSON<RuleRequestRecord[]>(
+    `/api/rules/requests${s ? `?${s}` : ''}`,
+  );
+};
+
+export const createRuleRequest = (payload: RuleRequestInput) =>
+  fetchJSON<RuleRequestRecord>('/api/rules/requests', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const getRuleRequest = (requestId: string) =>
+  fetchJSON<RuleRequestRecord>(`/api/rules/requests/${requestId}`);
+
+export const setRuleRequestStatus = (requestId: string, status: string) =>
+  fetchJSON<RuleRequestRecord>(`/api/rules/requests/${requestId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });

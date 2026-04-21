@@ -39,6 +39,9 @@ from app.seed_data import (
     SEED_APP_DC_MAPPINGS as _SD_APP_DC_MAPPINGS,
     SEED_REVIEWS as _SD_REVIEWS,
     SEED_LIFECYCLE_EVENTS as _SD_LIFECYCLE_EVENTS,
+    SEED_SHARED_SERVICES as _SD_SHARED_SERVICES,
+    SEED_SHARED_SERVICE_PRESENCES as _SD_SHARED_SERVICE_PRESENCES,
+    SEED_APP_PRESENCES as _SD_APP_PRESENCES,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
 )
@@ -670,6 +673,18 @@ async def seed_database() -> None:
     _save("reviews", deepcopy(SEED_REVIEWS))
     _save("rule_modifications", [])
     _save("lifecycle_events", deepcopy(SEED_LIFECYCLE_EVENTS))
+    # Revamp: Shared Services + presences + per-DC app presences
+    _save("shared_services", deepcopy(_SD_SHARED_SERVICES))
+    _save("shared_service_presences", deepcopy(_SD_SHARED_SERVICE_PRESENCES))
+    _save("app_presences", deepcopy(_SD_APP_PRESENCES))
+    _save("rule_requests", [])
+    # Materialize derived groups so Studio works end-to-end out of the box.
+    existing_groups = _load("groups") or []
+    derived = _build_derived_groups_from_presences(
+        _SD_SHARED_SERVICE_PRESENCES, _SD_APP_PRESENCES
+    )
+    merged = _merge_groups_preserving_existing(existing_groups, derived)
+    _save("groups", merged)
 
 
 # ============================================================
@@ -6682,3 +6697,514 @@ async def generate_hybrid_group_names(app_id: str) -> dict[str, Any]:
             })
 
     return {"app_id": app_id, "scenario": summary["migration_scenario"], "groups": groups}
+
+
+# ============================================================
+# Revamp: Shared Services + Presences + Group Derivation
+# ============================================================
+
+def _shared_service_group_name(service_id: str, nh_id: str, sz_code: str) -> str:
+    """Naming for shared-service groups: grp-<SERVICE_ID>-<NH>-<SZ>."""
+    return f"grp-{service_id.upper()}-{nh_id.upper()}-{sz_code.upper()}"
+
+
+def _app_egress_group_name(app_dist_id: str, nh_id: str, sz_code: str) -> str:
+    """Source group naming: grp-<AppDistId>-<NH>-<SZ>."""
+    return f"grp-{app_dist_id.upper()}-{nh_id.upper()}-{sz_code.upper()}"
+
+
+def _app_ingress_group_name(app_dist_id: str, nh_id: str, sz_code: str) -> str:
+    """Destination (App-ingress) naming: grp-<AppDistId>-<NH>-<SZ>-Ingress."""
+    return f"grp-{app_dist_id.upper()}-{nh_id.upper()}-{sz_code.upper()}-Ingress"
+
+
+def _build_derived_groups_from_presences(
+    ss_presences: list[dict[str, Any]],
+    app_presences: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Materialize FirewallGroup records from Shared Service + App presences.
+
+    Produces three owner_kinds:
+      - shared_service : grp-<SVC>-<NH>-<SZ>
+      - app_egress     : grp-<AD>-<NH>-<SZ>
+      - app_ingress    : grp-<AD>-<NH>-<SZ>-Ingress (only if has_ingress)
+    """
+    out: list[dict[str, Any]] = []
+    for p in ss_presences:
+        name = _shared_service_group_name(p["service_id"], p["nh_id"], p["sz_code"])
+        out.append({
+            "name": name,
+            "owner_kind": "shared_service",
+            "owner_ref": p["service_id"],
+            "dc_id": p["dc_id"],
+            "environment": p.get("environment", "Production"),
+            "nh_id": p["nh_id"],
+            "sz_code": p["sz_code"],
+            "nh": p["nh_id"],
+            "sz": p["sz_code"],
+            "app_id": p["service_id"],  # back-compat with legacy schema
+            "subtype": "SVC",
+            "direction": "ingress",
+            "members": list(p.get("members", [])),
+            "description": f"Derived: Shared Service {p['service_id']} @ {p['dc_id']} ({p.get('environment', '')})",
+            "created_at": _now(),
+            "updated_at": _now(),
+        })
+
+    for p in app_presences:
+        egr_name = _app_egress_group_name(
+            p["app_distributed_id"], p["nh_id"], p["sz_code"])
+        out.append({
+            "name": egr_name,
+            "owner_kind": "app_egress",
+            "owner_ref": p["app_distributed_id"],
+            "dc_id": p["dc_id"],
+            "environment": p.get("environment", "Production"),
+            "nh_id": p["nh_id"],
+            "sz_code": p["sz_code"],
+            "nh": p["nh_id"],
+            "sz": p["sz_code"],
+            "app_id": p["app_distributed_id"],
+            "app_distributed_id": p["app_distributed_id"],
+            "subtype": "APP",
+            "direction": "egress",
+            "members": list(p.get("egress_members", [])),
+            "description": f"Derived: App {p['app_distributed_id']} egress @ {p['dc_id']}",
+            "created_at": _now(),
+            "updated_at": _now(),
+        })
+        if p.get("has_ingress"):
+            ing_name = _app_ingress_group_name(
+                p["app_distributed_id"], p["nh_id"], p["sz_code"])
+            out.append({
+                "name": ing_name,
+                "owner_kind": "app_ingress",
+                "owner_ref": p["app_distributed_id"],
+                "dc_id": p["dc_id"],
+                "environment": p.get("environment", "Production"),
+                "nh_id": p["nh_id"],
+                "sz_code": p["sz_code"],
+                "nh": p["nh_id"],
+                "sz": p["sz_code"],
+                "app_id": p["app_distributed_id"],
+                "app_distributed_id": p["app_distributed_id"],
+                "subtype": "APP",
+                "direction": "ingress",
+                "members": list(p.get("ingress_members", [])),
+                "description": f"Derived: App {p['app_distributed_id']} ingress @ {p['dc_id']}",
+                "created_at": _now(),
+                "updated_at": _now(),
+            })
+    return out
+
+
+def _merge_groups_preserving_existing(
+    existing: list[dict[str, Any]],
+    derived: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge derived groups with existing ones — by (name, dc_id). Existing
+    wins on conflicts so user edits are preserved."""
+    key = lambda g: (str(g.get("name", "")), str(g.get("dc_id", "")))  # noqa
+    seen = {key(g) for g in existing}
+    out = list(existing)
+    for g in derived:
+        if key(g) in seen:
+            continue
+        out.append(g)
+        seen.add(key(g))
+    return out
+
+
+# ---- Shared Service CRUD ----
+
+async def get_shared_services() -> list[dict[str, Any]]:
+    return _load("shared_services") or []
+
+
+async def get_shared_service(service_id: str) -> dict[str, Any] | None:
+    for s in _load("shared_services") or []:
+        if str(s.get("service_id", "")).upper() == service_id.upper():
+            return s
+    return None
+
+
+async def create_shared_service(data: dict[str, Any]) -> dict[str, Any]:
+    items = _load("shared_services") or []
+    data = dict(data)
+    data["service_id"] = str(data.get("service_id", "")).upper()
+    data["created_at"] = _now()
+    data["updated_at"] = _now()
+    # dedupe by service_id
+    items = [i for i in items if str(i.get("service_id", "")).upper() != data["service_id"]]
+    items.append(data)
+    _save("shared_services", items)
+    return data
+
+
+async def update_shared_service(service_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    items = _load("shared_services") or []
+    for i in items:
+        if str(i.get("service_id", "")).upper() == service_id.upper():
+            i.update(updates)
+            i["updated_at"] = _now()
+            _save("shared_services", items)
+            return i
+    return None
+
+
+async def delete_shared_service(service_id: str) -> bool:
+    items = _load("shared_services") or []
+    new = [i for i in items if str(i.get("service_id", "")).upper() != service_id.upper()]
+    if len(new) == len(items):
+        return False
+    _save("shared_services", new)
+    # cascade: drop presences and derived groups
+    pres = _load("shared_service_presences") or []
+    _save("shared_service_presences",
+          [p for p in pres if str(p.get("service_id", "")).upper() != service_id.upper()])
+    groups = _load("groups") or []
+    _save("groups",
+          [g for g in groups
+           if not (g.get("owner_kind") == "shared_service"
+                   and str(g.get("owner_ref", "")).upper() == service_id.upper())])
+    return True
+
+
+# ---- Shared Service Presence CRUD ----
+
+async def get_shared_service_presences(service_id: str | None = None) -> list[dict[str, Any]]:
+    items = _load("shared_service_presences") or []
+    if service_id:
+        items = [p for p in items
+                 if str(p.get("service_id", "")).upper() == service_id.upper()]
+    return items
+
+
+async def upsert_shared_service_presence(data: dict[str, Any]) -> dict[str, Any]:
+    """Create or update a presence row keyed by (service_id, dc_id, environment, nh_id, sz_code)."""
+    items = _load("shared_service_presences") or []
+    data = dict(data)
+    data["service_id"] = str(data.get("service_id", "")).upper()
+    key = (data["service_id"], data.get("dc_id", ""),
+           data.get("environment", "Production"),
+           data.get("nh_id", ""), data.get("sz_code", ""))
+    updated = False
+    for i, p in enumerate(items):
+        pk = (str(p.get("service_id", "")).upper(), p.get("dc_id", ""),
+              p.get("environment", "Production"),
+              p.get("nh_id", ""), p.get("sz_code", ""))
+        if pk == key:
+            items[i] = data
+            updated = True
+            break
+    if not updated:
+        items.append(data)
+    _save("shared_service_presences", items)
+    # Re-materialize the derived group for this presence.
+    groups = _load("groups") or []
+    gname = _shared_service_group_name(data["service_id"], data["nh_id"], data["sz_code"])
+    # drop existing derived row with same (name, dc_id) before inserting
+    groups = [g for g in groups
+              if not (g.get("name") == gname and g.get("dc_id") == data.get("dc_id"))]
+    groups.append({
+        "name": gname,
+        "owner_kind": "shared_service",
+        "owner_ref": data["service_id"],
+        "dc_id": data.get("dc_id", ""),
+        "environment": data.get("environment", "Production"),
+        "nh_id": data.get("nh_id", ""),
+        "sz_code": data.get("sz_code", ""),
+        "nh": data.get("nh_id", ""),
+        "sz": data.get("sz_code", ""),
+        "app_id": data["service_id"],
+        "subtype": "SVC",
+        "direction": "ingress",
+        "members": list(data.get("members", [])),
+        "description": f"Shared Service {data['service_id']} @ {data.get('dc_id', '')}",
+        "created_at": _now(),
+        "updated_at": _now(),
+    })
+    _save("groups", groups)
+    return data
+
+
+async def delete_shared_service_presence(service_id: str, dc_id: str,
+                                          environment: str,
+                                          nh_id: str, sz_code: str) -> bool:
+    items = _load("shared_service_presences") or []
+    key = (service_id.upper(), dc_id, environment, nh_id, sz_code)
+    new = [p for p in items
+           if (str(p.get("service_id", "")).upper(), p.get("dc_id", ""),
+               p.get("environment", ""), p.get("nh_id", ""),
+               p.get("sz_code", "")) != key]
+    if len(new) == len(items):
+        return False
+    _save("shared_service_presences", new)
+    # drop the derived group
+    gname = _shared_service_group_name(service_id, nh_id, sz_code)
+    groups = _load("groups") or []
+    _save("groups", [g for g in groups
+                     if not (g.get("name") == gname and g.get("dc_id") == dc_id)])
+    return True
+
+
+# ---- Application Presence CRUD ----
+
+async def get_app_presences(app_dist_id: str | None = None) -> list[dict[str, Any]]:
+    items = _load("app_presences") or []
+    if app_dist_id:
+        items = [p for p in items
+                 if str(p.get("app_distributed_id", "")).upper() == app_dist_id.upper()]
+    return items
+
+
+async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
+    items = _load("app_presences") or []
+    data = dict(data)
+    data["app_distributed_id"] = str(data.get("app_distributed_id", "")).upper()
+    key = (data["app_distributed_id"], data.get("dc_id", ""),
+           data.get("environment", "Production"),
+           data.get("nh_id", ""), data.get("sz_code", ""))
+    updated = False
+    for i, p in enumerate(items):
+        pk = (str(p.get("app_distributed_id", "")).upper(), p.get("dc_id", ""),
+              p.get("environment", "Production"),
+              p.get("nh_id", ""), p.get("sz_code", ""))
+        if pk == key:
+            items[i] = data
+            updated = True
+            break
+    if not updated:
+        items.append(data)
+    _save("app_presences", items)
+    # rebuild derived app groups for this presence
+    groups = _load("groups") or []
+    egr_name = _app_egress_group_name(
+        data["app_distributed_id"], data["nh_id"], data["sz_code"])
+    ing_name = _app_ingress_group_name(
+        data["app_distributed_id"], data["nh_id"], data["sz_code"])
+    groups = [g for g in groups
+              if not (g.get("name") in (egr_name, ing_name)
+                      and g.get("dc_id") == data.get("dc_id"))]
+    groups.append({
+        "name": egr_name, "owner_kind": "app_egress",
+        "owner_ref": data["app_distributed_id"],
+        "dc_id": data.get("dc_id", ""),
+        "environment": data.get("environment", "Production"),
+        "nh_id": data.get("nh_id", ""), "sz_code": data.get("sz_code", ""),
+        "nh": data.get("nh_id", ""), "sz": data.get("sz_code", ""),
+        "app_id": data["app_distributed_id"],
+        "app_distributed_id": data["app_distributed_id"],
+        "subtype": "APP", "direction": "egress",
+        "members": list(data.get("egress_members", [])),
+        "description": f"App {data['app_distributed_id']} egress @ {data.get('dc_id', '')}",
+        "created_at": _now(), "updated_at": _now(),
+    })
+    if data.get("has_ingress"):
+        groups.append({
+            "name": ing_name, "owner_kind": "app_ingress",
+            "owner_ref": data["app_distributed_id"],
+            "dc_id": data.get("dc_id", ""),
+            "environment": data.get("environment", "Production"),
+            "nh_id": data.get("nh_id", ""), "sz_code": data.get("sz_code", ""),
+            "nh": data.get("nh_id", ""), "sz": data.get("sz_code", ""),
+            "app_id": data["app_distributed_id"],
+            "app_distributed_id": data["app_distributed_id"],
+            "subtype": "APP", "direction": "ingress",
+            "members": list(data.get("ingress_members", [])),
+            "description": f"App {data['app_distributed_id']} ingress @ {data.get('dc_id', '')}",
+            "created_at": _now(), "updated_at": _now(),
+        })
+    _save("groups", groups)
+    return data
+
+
+async def delete_app_presence(app_dist_id: str, dc_id: str, environment: str,
+                               nh_id: str, sz_code: str) -> bool:
+    items = _load("app_presences") or []
+    key = (app_dist_id.upper(), dc_id, environment, nh_id, sz_code)
+    new = [p for p in items
+           if (str(p.get("app_distributed_id", "")).upper(), p.get("dc_id", ""),
+               p.get("environment", ""), p.get("nh_id", ""),
+               p.get("sz_code", "")) != key]
+    if len(new) == len(items):
+        return False
+    _save("app_presences", new)
+    egr_name = _app_egress_group_name(app_dist_id, nh_id, sz_code)
+    ing_name = _app_ingress_group_name(app_dist_id, nh_id, sz_code)
+    groups = _load("groups") or []
+    _save("groups", [g for g in groups
+                     if not (g.get("name") in (egr_name, ing_name)
+                             and g.get("dc_id") == dc_id)])
+    return True
+
+
+# ============================================================
+# Revamp: Multi-DC Rule Fan-out
+# ============================================================
+
+def _load_rule_requests() -> list[dict[str, Any]]:
+    return _load("rule_requests") or []
+
+
+async def get_rule_requests() -> list[dict[str, Any]]:
+    return _load_rule_requests()
+
+
+async def get_rule_request(request_id: str) -> dict[str, Any] | None:
+    for r in _load_rule_requests():
+        if r.get("request_id") == request_id:
+            return r
+    return None
+
+
+async def _resolve_source_presences(app_dist_id: str, env: str,
+                                    requested_dcs: list[str] | None) -> list[dict[str, Any]]:
+    pres = [p for p in (_load("app_presences") or [])
+            if str(p.get("app_distributed_id", "")).upper() == app_dist_id.upper()
+            and p.get("environment") == env]
+    if requested_dcs:
+        pres = [p for p in pres if p.get("dc_id") in requested_dcs]
+    return pres
+
+
+async def _resolve_destination_presences(kind: str, dest_ref: str | None,
+                                         env: str,
+                                         requested_dcs: list[str] | None) -> list[dict[str, Any]]:
+    if kind == "shared_service" and dest_ref:
+        pres = [p for p in (_load("shared_service_presences") or [])
+                if str(p.get("service_id", "")).upper() == dest_ref.upper()
+                and p.get("environment") == env]
+    elif kind == "app_ingress" and dest_ref:
+        pres = [p for p in (_load("app_presences") or [])
+                if str(p.get("app_distributed_id", "")).upper() == dest_ref.upper()
+                and p.get("environment") == env
+                and p.get("has_ingress")]
+    else:
+        pres = []
+    if requested_dcs:
+        pres = [p for p in pres if p.get("dc_id") in requested_dcs]
+    return pres
+
+
+async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute the multi-DC fan-out for a proposed rule request.
+
+    Returns { physical_rules: [...], warnings: [...] } without persisting.
+    """
+    env = payload.get("environment", "Production")
+    src_app = payload.get("application_ref", "")
+    kind = payload.get("destination_kind", "shared_service")
+    dest_ref = payload.get("destination_ref")
+    requested_dcs = payload.get("requested_dcs")
+    include_cross_dc = bool(payload.get("include_cross_dc"))
+    ports = payload.get("ports", "TCP 8080")
+    action = payload.get("action", "ACCEPT")
+
+    src_pres = await _resolve_source_presences(src_app, env, requested_dcs)
+    dst_pres = await _resolve_destination_presences(kind, dest_ref, env, requested_dcs)
+
+    warnings: list[str] = []
+    if not src_pres:
+        warnings.append(
+            f"No source presence for {src_app} in environment {env}"
+            + (f" / DCs {requested_dcs}" if requested_dcs else "")
+        )
+    if not dst_pres:
+        warnings.append(
+            f"No destination presence for {kind}:{dest_ref} in environment {env}"
+            + (f" / DCs {requested_dcs}" if requested_dcs else "")
+        )
+
+    physical: list[dict[str, Any]] = []
+    seen_pairs: set[tuple[str, str, str, str]] = set()
+    for s in src_pres:
+        for d in dst_pres:
+            if s["dc_id"] != d["dc_id"] and not include_cross_dc:
+                continue
+            # source group name (egress)
+            src_group = _app_egress_group_name(
+                s["app_distributed_id"], s["nh_id"], s["sz_code"])
+            # destination group name
+            if kind == "shared_service":
+                dst_group = _shared_service_group_name(
+                    d["service_id"], d["nh_id"], d["sz_code"])
+            else:
+                dst_group = _app_ingress_group_name(
+                    d["app_distributed_id"], d["nh_id"], d["sz_code"])
+            key = (s["dc_id"], d["dc_id"], src_group, dst_group)
+            if key in seen_pairs:
+                continue
+            seen_pairs.add(key)
+            physical.append({
+                "src_dc": s["dc_id"],
+                "dst_dc": d["dc_id"],
+                "src_group_ref": src_group,
+                "dst_group_ref": dst_group,
+                "src_nh": s["nh_id"], "src_sz": s["sz_code"],
+                "dst_nh": d["nh_id"], "dst_sz": d["sz_code"],
+                "ports": ports, "action": action,
+                "environment": env,
+                "cross_dc": s["dc_id"] != d["dc_id"],
+                "lifecycle_status": "Preview",
+            })
+    if not physical and not warnings:
+        warnings.append(
+            "Source and destination have no DC in common; "
+            "enable 'Include cross-DC' to fan out across DCs."
+        )
+    return {"physical_rules": physical, "warnings": warnings}
+
+
+async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
+    preview = await preview_rule_expansion(payload)
+    request_id = f"RR-{_id()[:8].upper()}"
+    rules = []
+    for i, p in enumerate(preview.get("physical_rules", []), start=1):
+        rules.append({
+            "rule_id": f"{request_id}-P{i:02d}",
+            "request_id": request_id,
+            **p,
+            "lifecycle_status": "Submitted",
+        })
+    record = {
+        "request_id": request_id,
+        "application_ref": payload.get("application_ref", ""),
+        "destination_kind": payload.get("destination_kind", "shared_service"),
+        "destination_ref": payload.get("destination_ref"),
+        "environment": payload.get("environment", "Production"),
+        "ports": payload.get("ports", "TCP 8080"),
+        "action": payload.get("action", "ACCEPT"),
+        "description": payload.get("description", ""),
+        "owner": payload.get("owner", ""),
+        "status": "Submitted",
+        "expansion": rules,
+        "warnings": preview.get("warnings", []),
+        "created_at": _now(),
+        "updated_at": _now(),
+    }
+    items = _load_rule_requests()
+    items.append(record)
+    _save("rule_requests", items)
+    return record
+
+
+async def set_rule_request_status(request_id: str, status: str) -> dict[str, Any] | None:
+    items = _load_rule_requests()
+    for r in items:
+        if r.get("request_id") == request_id:
+            r["status"] = status
+            r["updated_at"] = _now()
+            for phys in r.get("expansion", []):
+                # propagate high-level status to physical rules
+                mapping = {
+                    "Approved": "Approved",
+                    "Deployed": "Deployed",
+                    "Rejected": "Rejected",
+                    "Certified": "Certified",
+                }
+                if status in mapping:
+                    phys["lifecycle_status"] = mapping[status]
+            _save("rule_requests", items)
+            return r
+    return None

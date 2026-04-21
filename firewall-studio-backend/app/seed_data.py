@@ -2341,4 +2341,260 @@ def build_seed_lifecycle_events() -> list[dict[str, Any]]:
 SEED_LEGACY_RULES = _build_legacy_rules()
 SEED_IP_MAPPINGS = _build_ip_mappings()
 SEED_REVIEWS = build_seed_reviews()
+
+
+# ============================================================
+# Shared Services (revamp)
+#
+# Naming: grp-<SERVICE_ID>-<NH>-<SZ>
+# Each service has presences[] scoped by (dc_id, environment, nh, sz)
+# with IP/CIDR/Range/Subnet members. Presences drive rule fan-out.
+# ============================================================
+
+SEED_SHARED_SERVICES = [
+    {
+        "service_id": "KAFKA",
+        "name": "Kafka (Event Streaming)",
+        "category": "Messaging",
+        "owner": "Platform — Streaming",
+        "description": "Enterprise Kafka cluster for event streaming and CDC.",
+        "icon": "📨",
+        "color": "#2563eb",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["events", "streaming", "pub-sub"],
+    },
+    {
+        "service_id": "MQ",
+        "name": "IBM MQ (Enterprise Messaging)",
+        "category": "Messaging",
+        "owner": "Platform — Messaging",
+        "description": "Enterprise messaging bus for legacy/core integration.",
+        "icon": "📬",
+        "color": "#0891b2",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["queue", "jms"],
+    },
+    {
+        "service_id": "ORACLE",
+        "name": "Oracle DB (Shared Instance)",
+        "category": "Database",
+        "owner": "DBAs",
+        "description": "Shared Oracle RAC for common reference data.",
+        "icon": "🗄",
+        "color": "#db2777",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["rdbms"],
+    },
+    {
+        "service_id": "APPD",
+        "name": "AppDynamics (APM)",
+        "category": "Observability",
+        "owner": "SRE",
+        "description": "Application performance monitoring controllers.",
+        "icon": "📊",
+        "color": "#ea580c",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["monitoring", "apm"],
+    },
+    {
+        "service_id": "SPLUNK",
+        "name": "Splunk (Log Forwarders)",
+        "category": "Observability",
+        "owner": "SRE",
+        "description": "Centralized log ingestion (syslog/HEC).",
+        "icon": "🪵",
+        "color": "#16a34a",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["logs"],
+    },
+    {
+        "service_id": "REDIS",
+        "name": "Redis (Shared Cache)",
+        "category": "Cache",
+        "owner": "Platform — Caching",
+        "description": "Shared Redis cluster for session and response caching.",
+        "icon": "⚡",
+        "color": "#dc2626",
+        "environments": ["Production", "Non-Production"],
+        "tags": ["cache"],
+    },
+    {
+        "service_id": "LDAP",
+        "name": "LDAP / Active Directory",
+        "category": "Identity",
+        "owner": "IAM",
+        "description": "Directory services for auth and group resolution.",
+        "icon": "🔐",
+        "color": "#7c3aed",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["identity", "auth"],
+    },
+]
+
+
+def _ss_presence(service_id, dc_id, env, nh_id, sz, members, dc_type="NGDC"):
+    return {
+        "service_id": service_id,
+        "dc_id": dc_id,
+        "dc_type": dc_type,
+        "environment": env,
+        "nh_id": nh_id,
+        "sz_code": sz,
+        "members": members,
+    }
+
+
+def _m(t, v, d=""):
+    return {"type": t, "value": v, "description": d}
+
+
+SEED_SHARED_SERVICE_PRESENCES = [
+    # Kafka — Production across all 3 NGDC DCs
+    _ss_presence("KAFKA", "ALPHA_NGDC", "Production", "NH08", "CCS", [
+        _m("ip", "10.0.8.101", "kafka-broker-01"),
+        _m("ip", "10.0.8.102", "kafka-broker-02"),
+        _m("ip", "10.0.8.103", "kafka-broker-03"),
+        _m("cidr", "10.0.8.96/28", "kafka cluster subnet"),
+    ]),
+    _ss_presence("KAFKA", "BETA_NGDC", "Production", "NH08", "CCS", [
+        _m("ip", "172.16.8.101", "kafka-broker-west-01"),
+        _m("ip", "172.16.8.102", "kafka-broker-west-02"),
+        _m("cidr", "172.16.8.96/28", "kafka cluster subnet (West)"),
+    ]),
+    _ss_presence("KAFKA", "GAMMA_NGDC", "Production", "NH08", "CCS", [
+        _m("ip", "10.50.8.101", "kafka-broker-central-01"),
+        _m("cidr", "10.50.8.96/28", "kafka cluster subnet (Central)"),
+    ]),
+    _ss_presence("KAFKA", "ALPHA_NGDC", "Non-Production", "NH13", "UCCS", [
+        _m("ip", "10.100.8.101", "kafka-broker-np-01"),
+        _m("cidr", "10.100.8.96/28", "kafka cluster subnet (Non-Prod)"),
+    ]),
+
+    # IBM MQ — Prod East/West, Non-Prod East
+    _ss_presence("MQ", "ALPHA_NGDC", "Production", "NH02", "CCS", [
+        _m("ip", "10.1.9.50", "mq-qmgr-01"),
+        _m("ip", "10.1.9.51", "mq-qmgr-02"),
+    ]),
+    _ss_presence("MQ", "BETA_NGDC", "Production", "NH02", "CCS", [
+        _m("ip", "172.16.9.50", "mq-qmgr-west-01"),
+    ]),
+    _ss_presence("MQ", "ALPHA_NGDC", "Non-Production", "NH13", "UCCS", [
+        _m("ip", "10.101.9.50", "mq-qmgr-np-01"),
+    ]),
+
+    # Oracle DB — Prod East + Central
+    _ss_presence("ORACLE", "ALPHA_NGDC", "Production", "NH02", "CDE", [
+        _m("ip", "10.1.2.10", "oracle-scan"),
+        _m("range", "10.1.2.11-10.1.2.14", "oracle-nodes"),
+    ]),
+    _ss_presence("ORACLE", "GAMMA_NGDC", "Production", "NH02", "CDE", [
+        _m("ip", "10.50.2.10", "oracle-scan-central"),
+    ]),
+    _ss_presence("ORACLE", "ALPHA_NGDC", "Non-Production", "NH13", "UCDE", [
+        _m("ip", "10.102.2.10", "oracle-np-scan"),
+    ]),
+
+    # AppDynamics — all 3 DCs Prod
+    _ss_presence("APPD", "ALPHA_NGDC", "Production", "NH01", "GEN", [
+        _m("ip", "10.0.1.200", "appd-controller-01"),
+    ]),
+    _ss_presence("APPD", "BETA_NGDC", "Production", "NH01", "GEN", [
+        _m("ip", "172.16.50.200", "appd-controller-west-01"),
+    ]),
+    _ss_presence("APPD", "GAMMA_NGDC", "Production", "NH01", "GEN", [
+        _m("ip", "10.50.50.200", "appd-controller-central-01"),
+    ]),
+    _ss_presence("APPD", "ALPHA_NGDC", "Non-Production", "NH13", "UGen", [
+        _m("ip", "10.103.1.200", "appd-controller-np-01"),
+    ]),
+
+    # Splunk — Prod East, Non-Prod East
+    _ss_presence("SPLUNK", "ALPHA_NGDC", "Production", "NH01", "GEN", [
+        _m("ip", "10.0.1.210", "splunk-hf-01"),
+        _m("ip", "10.0.1.211", "splunk-hf-02"),
+    ]),
+    _ss_presence("SPLUNK", "BETA_NGDC", "Production", "NH01", "GEN", [
+        _m("ip", "172.16.50.210", "splunk-hf-west-01"),
+    ]),
+    _ss_presence("SPLUNK", "ALPHA_NGDC", "Non-Production", "NH13", "UGen", [
+        _m("ip", "10.104.1.210", "splunk-hf-np-01"),
+    ]),
+
+    # Redis — Prod East
+    _ss_presence("REDIS", "ALPHA_NGDC", "Production", "NH03", "GEN", [
+        _m("ip", "10.2.5.10", "redis-01"),
+        _m("ip", "10.2.5.11", "redis-02"),
+    ]),
+    _ss_presence("REDIS", "ALPHA_NGDC", "Non-Production", "NH13", "UGen", [
+        _m("ip", "10.105.5.10", "redis-np-01"),
+    ]),
+
+    # LDAP — Prod East/West
+    _ss_presence("LDAP", "ALPHA_NGDC", "Production", "NH05", "GEN", [
+        _m("ip", "10.0.5.10", "ldap-01"),
+        _m("ip", "10.0.5.11", "ldap-02"),
+    ]),
+    _ss_presence("LDAP", "BETA_NGDC", "Production", "NH05", "GEN", [
+        _m("ip", "172.16.50.60", "ldap-west-01"),
+    ]),
+    _ss_presence("LDAP", "ALPHA_NGDC", "Non-Production", "NH13", "UGen", [
+        _m("ip", "10.106.5.10", "ldap-np-01"),
+    ]),
+]
+
+
+# Application presences — one row per (app, dc, env) with NH/SZ and seed
+# egress/ingress members. This replaces the implicit per-app has_ingress
+# flag with an explicit DC-scoped record.
+
+def _app_presence(app_dist_id, dc_id, env, nh, sz, has_ingress, egress, ingress, dc_type="NGDC"):
+    return {
+        "app_distributed_id": app_dist_id,
+        "dc_id": dc_id,
+        "dc_type": dc_type,
+        "environment": env,
+        "nh_id": nh,
+        "sz_code": sz,
+        "has_ingress": has_ingress,
+        "egress_members": egress,
+        "ingress_members": ingress,
+    }
+
+
+SEED_APP_PRESENCES = [
+    # CRM (AD-1001) — Prod East + West
+    _app_presence("AD-1001", "ALPHA_NGDC", "Production", "NH02", "CCS", True,
+                  [_m("ip", "10.50.1.10", "crm-egress-01")],
+                  [_m("ip", "10.50.1.20", "crm-api-vip"),
+                   _m("ip", "10.50.1.21", "crm-db-listener")]),
+    _app_presence("AD-1001", "BETA_NGDC", "Production", "NH02", "CCS", True,
+                  [_m("ip", "172.16.1.10", "crm-egress-west-01")],
+                  [_m("ip", "172.16.1.20", "crm-api-vip-west")]),
+
+    # HRM (AD-1002) — Prod East only, no ingress
+    _app_presence("AD-1002", "ALPHA_NGDC", "Production", "NH01", "GEN", False,
+                  [_m("ip", "10.0.1.30", "hrm-egress-01")], []),
+
+    # TRD (AD-1003) — all 3 DCs Prod, with ingress
+    _app_presence("AD-1003", "ALPHA_NGDC", "Production", "NH06", "CDE", True,
+                  [_m("ip", "172.16.20.10", "trd-egress-01")],
+                  [_m("ip", "10.6.1.30", "trd-db"), _m("ip", "10.6.1.40", "trd-mq-listener")]),
+    _app_presence("AD-1003", "BETA_NGDC", "Production", "NH06", "CDE", True,
+                  [_m("ip", "172.16.6.10", "trd-egress-west-01")],
+                  [_m("ip", "172.16.6.30", "trd-db-west")]),
+    _app_presence("AD-1003", "GAMMA_NGDC", "Production", "NH06", "CDE", True,
+                  [_m("ip", "10.50.6.10", "trd-egress-central-01")],
+                  [_m("ip", "10.50.6.30", "trd-db-central")]),
+
+    # PAY (AD-1004) — East only
+    _app_presence("AD-1004", "ALPHA_NGDC", "Production", "NH08", "CCS", True,
+                  [_m("ip", "10.50.8.10", "pay-egress-01")],
+                  [_m("ip", "10.50.7.30", "pay-db"), _m("ip", "10.50.7.31", "pay-db-standby")]),
+
+    # INS (AD-1005) — East + West, no ingress
+    _app_presence("AD-1005", "ALPHA_NGDC", "Production", "NH04", "STD", False,
+                  [_m("ip", "10.3.1.10", "ins-egress-01")], []),
+    _app_presence("AD-1005", "BETA_NGDC", "Production", "NH04", "STD", False,
+                  [_m("ip", "172.16.4.10", "ins-egress-west-01")], []),
+]
 SEED_LIFECYCLE_EVENTS = build_seed_lifecycle_events()

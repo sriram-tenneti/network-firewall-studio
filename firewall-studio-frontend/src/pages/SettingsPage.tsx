@@ -6,6 +6,7 @@ import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
+import SharedServicesTab from './settings/SharedServicesTab';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -778,6 +779,7 @@ export default function SettingsPage() {
     { id: 'security_zones', label: 'Security Zones' },
     { id: 'datacenters', label: 'Data Centers' },
     { id: 'app_management', label: 'App Management' },
+    { id: 'shared_services', label: 'Shared Services' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
@@ -1484,6 +1486,11 @@ export default function SettingsPage() {
               <div className="mt-3 text-xs text-gray-400">Total: {ngdcDatacenters.length} NGDC + {legacyDatacenters.length} Legacy = {ngdcDatacenters.length + legacyDatacenters.length} data center{ngdcDatacenters.length + legacyDatacenters.length !== 1 ? 's' : ''}</div>
             </div>
           </div>
+        )}
+
+        {/* ── Shared Services Tab ── */}
+        {activeTab === 'shared_services' && (
+          <SharedServicesTab />
         )}
 
         {/* ── App Management Tab ── */}
