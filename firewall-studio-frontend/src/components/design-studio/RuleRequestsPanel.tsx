@@ -6,17 +6,29 @@ interface RuleRequestsPanelProps {
   environment?: Environment | '';
   onChanged?: () => void;
   reloadKey?: number;
+  highlightId?: string | null;
 }
 
 const STATUSES: (RuleRequestRecord['status'] | 'All')[] = ['All', 'Pending', 'Approved', 'Rejected', 'Deployed', 'Certified'];
 
-export default function RuleRequestsPanel({ environment = '', onChanged, reloadKey = 0 }: RuleRequestsPanelProps) {
+export default function RuleRequestsPanel({ environment = '', onChanged, reloadKey = 0, highlightId = null }: RuleRequestsPanelProps) {
   const [items, setItems] = useState<RuleRequestRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<(typeof STATUSES)[number]>('All');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-expand newly-submitted requests and scroll into view.
+  useEffect(() => {
+    if (!highlightId) return;
+    setExpanded(highlightId);
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`rule-request-row-${highlightId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [highlightId, items.length]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,10 +58,13 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
     }
   };
 
-  const filtered = useMemo(() => items, [items]);
+  const filtered = useMemo(() => {
+    // Newest first so fresh submissions surface at the top.
+    return [...items].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  }, [items]);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div id="rule-requests-panel" className="bg-white border border-gray-200 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="text-sm font-semibold text-gray-900">Rule Requests</div>
@@ -74,9 +89,14 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
         <div className="space-y-2">
           {filtered.map((r) => {
             const open = expanded === r.request_id;
+            const isHighlighted = highlightId === r.request_id;
             return (
-              <div key={r.request_id} className="border border-gray-200 rounded-lg">
-                <div className="p-2.5 flex items-center gap-2 flex-wrap bg-slate-50">
+              <div
+                id={`rule-request-row-${r.request_id}`}
+                key={r.request_id}
+                className={`border rounded-lg transition-all ${isHighlighted ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-md' : 'border-gray-200'}`}
+              >
+                <div className={`p-2.5 flex items-center gap-2 flex-wrap ${isHighlighted ? 'bg-emerald-50' : 'bg-slate-50'}`}>
                   <code className="text-[11px] font-mono text-gray-700">{r.request_id}</code>
                   <span className="text-[11px] font-semibold text-gray-900">{r.application_ref}</span>
                   <span className="text-gray-400">→</span>

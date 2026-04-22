@@ -13,9 +13,11 @@ from fastapi import APIRouter, HTTPException
 from app.database import (
     classify_ip,
     classify_ips,
+    create_port,
     create_rule_request,
     create_shared_service,
     delete_app_presence,
+    delete_port,
     delete_shared_service,
     delete_shared_service_presence,
     get_app_presences,
@@ -26,8 +28,10 @@ from app.database import (
     get_shared_service_presences,
     get_shared_services,
     ingest_app_members,
+    list_ports,
     preview_rule_expansion,
     set_rule_request_status,
+    update_port,
     update_shared_service,
     upsert_app_presence,
     upsert_shared_service_presence,
@@ -275,3 +279,38 @@ async def set_rule_request_status_route(request_id: str,
     if not r:
         raise HTTPException(404, "Rule request not found")
     return r
+
+
+# ---- Port / Service Catalog ----
+
+@router.get("/api/reference/ports")
+async def list_ports_route() -> list[dict[str, Any]]:
+    """Return the catalog of well-known + custom ports used by the Rule Builder."""
+    return await list_ports()
+
+
+@router.post("/api/reference/ports")
+async def create_port_route(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload.get("name") and not payload.get("port_id"):
+        raise HTTPException(400, "name or port_id is required")
+    try:
+        int(payload.get("port") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "port must be an integer")
+    return await create_port(payload)
+
+
+@router.put("/api/reference/ports/{port_id}")
+async def update_port_route(port_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    r = await update_port(port_id, payload)
+    if not r:
+        raise HTTPException(404, "Port not found")
+    return r
+
+
+@router.delete("/api/reference/ports/{port_id}")
+async def delete_port_route(port_id: str) -> dict[str, Any]:
+    ok = await delete_port(port_id)
+    if not ok:
+        raise HTTPException(404, "Port not found")
+    return {"deleted": True, "port_id": port_id}

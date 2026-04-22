@@ -1335,3 +1335,36 @@ export const setRuleRequestStatus = (requestId: string, status: string, note?: s
     method: 'PUT',
     body: JSON.stringify({ status, note }),
   });
+
+// ---- Port / Service Catalog ----
+
+export interface PortCatalogEntry {
+  port_id: string;
+  name: string;
+  protocol: 'TCP' | 'UDP' | 'ICMP' | string;
+  port: number;
+  aliases?: string[];
+  category: string;
+  description?: string;
+}
+
+export const listPorts = () =>
+  fetchJSON<PortCatalogEntry[]>(`/api/reference/ports`);
+
+export const createPort = (data: Partial<PortCatalogEntry>) =>
+  fetchJSON<PortCatalogEntry>(`/api/reference/ports`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const updatePort = (portId: string, data: Partial<PortCatalogEntry>) =>
+  fetchJSON<PortCatalogEntry>(
+    `/api/reference/ports/${encodeURIComponent(portId)}`,
+    { method: 'PUT', body: JSON.stringify(data) },
+  );
+
+export const deletePort = (portId: string) =>
+  fetchJSON<{ deleted: boolean; port_id: string }>(
+    `/api/reference/ports/${encodeURIComponent(portId)}`,
+    { method: 'DELETE' },
+  );

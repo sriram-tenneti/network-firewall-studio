@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import SharedServicesSidebar from './SharedServicesSidebar';
+import PortPicker from './PortPicker';
 import type {
   Application,
   AppPresence,
@@ -7,6 +8,7 @@ import type {
   Environment,
   PhysicalRuleExpansion,
   RuleExpansionPreview,
+  RuleRequestRecord,
   SharedService,
   SharedServicePresence,
 } from '@/types';
@@ -14,7 +16,7 @@ import * as api from '@/lib/api';
 
 interface RuleRequestBuilderProps {
   applications: Application[];
-  onSubmitted?: () => void;
+  onSubmitted?: (requestId?: string) => void;
 }
 
 const ENVIRONMENTS: Environment[] = ['Production', 'Non-Production', 'Pre-Production'];
@@ -43,7 +45,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   const [preview, setPreview] = useState<RuleExpansionPreview | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [submittedRecord, setSubmittedRecord] = useState<RuleRequestRecord | null>(null);
 
   const loadRefs = useCallback(async () => {
     try {
@@ -148,8 +150,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
         description,
         include_cross_dc: includeCrossDc,
       });
-      setSubmittedId(r.request_id);
-      onSubmitted?.();
+      setSubmittedRecord(r);
+      onSubmitted?.(r.request_id);
     } catch (e) {
       setSubmitError((e as Error).message);
     } finally {
@@ -160,7 +162,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   const reset = () => {
     setStep(1); setSrcApp(''); setDest(null); setPorts('TCP 443');
     setAction('ACCEPT'); setDescription(''); setIncludeCrossDc(false);
-    setPreview(null); setSubmittedId(null); setSubmitError(null);
+    setPreview(null); setSubmittedRecord(null); setSubmitError(null);
   };
 
   return (
@@ -281,9 +283,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Ports</label>
-                <input value={ports} onChange={(e) => setPorts(e.target.value)}
-                  placeholder="e.g. TCP 443, TCP 8443"
-                  className="w-full border rounded px-2 py-1.5 text-sm font-mono" />
+                <PortPicker value={ports} onChange={setPorts} placeholder="Search/pick ports (HTTPS, Oracle, Mongo, Kafka, …)" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Action</label>
@@ -348,12 +348,53 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
 
             <FanOutTable rows={preview?.physical_rules || []} />
 
-            {submittedId ? (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                Submitted as RuleRequest <code className="font-mono">{submittedId}</code>. Fan-out expanded into {preview?.physical_rules.length ?? 0} PhysicalRule(s). Proceed to Review to approve.
-                <div className="mt-2">
-                  <button onClick={reset} className="text-xs px-2 py-1 rounded bg-emerald-700 text-white">
-                    Start another
+            {submittedRecord ? (
+              <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4 text-sm shadow-md">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600 text-white text-sm font-bold">✓</span>
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-emerald-900">Rule Request submitted — now in <span className="text-amber-700">Pending Review</span></div>
+                    <div className="text-[11px] text-emerald-700">Scroll down to the <strong>Rule Requests</strong> panel to Approve / Reject / Deploy / Certify.</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                  <div className="bg-white border border-emerald-200 rounded-lg p-2">
+                    <div className="text-[10px] uppercase font-bold text-emerald-700 mb-0.5">Rule Request ID</div>
+                    <code className="font-mono text-sm text-emerald-900 font-bold">{submittedRecord.request_id}</code>
+                  </div>
+                  <div className="bg-white border border-indigo-200 rounded-lg p-2">
+                    <div className="text-[10px] uppercase font-bold text-indigo-700 mb-0.5">Fan-out</div>
+                    <div className="text-sm text-indigo-900 font-bold">{submittedRecord.expansion?.length ?? 0} PhysicalRule(s) across {new Set((submittedRecord.expansion||[]).map(p => p.src_dc)).size} DC(s)</div>
+                  </div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-2 py-1 bg-slate-50 text-[10px] uppercase font-bold text-gray-700 border-b border-gray-200">Generated Physical Rule IDs (per DC)</div>
+                  <div className="max-h-40 overflow-y-auto">
+                    {(submittedRecord.expansion || []).map((p, i) => (
+                      <div key={i} className="px-2 py-1 flex items-center gap-2 text-[11px] border-b border-gray-50">
+                        <code className="font-mono text-indigo-700 font-bold">{p.rule_id ?? `${submittedRecord.request_id}-P${String(i+1).padStart(2,'0')}`}</code>
+                        <span className="px-1.5 py-0.5 rounded-full border bg-orange-50 text-orange-700 border-orange-200 text-[9px] font-semibold">{p.src_dc}{p.cross_dc ? ` → ${p.dst_dc}` : ''}</span>
+                        <span className="font-mono text-[10px] text-sky-700">{p.src_group_ref}</span>
+                        <span className="text-gray-300">→</span>
+                        <span className="font-mono text-[10px] text-rose-700">{p.dst_group_ref}</span>
+                        <span className="ml-auto px-1.5 py-0.5 rounded border bg-white text-gray-600 border-gray-200 text-[9px] font-mono">{p.ports}</span>
+                        <span className="px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200 text-[9px]">{p.lifecycle_status || 'Pending Review'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={reset} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800">
+                    Submit another
+                  </button>
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById('rule-requests-panel');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                  >
+                    Jump to Review queue ↓
                   </button>
                 </div>
               </div>

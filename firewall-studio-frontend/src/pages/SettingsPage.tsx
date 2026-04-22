@@ -7,6 +7,7 @@ import { useModal } from '@/hooks/useModal';
 import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
+import PortCatalogTab from './settings/PortCatalogTab';
 import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
@@ -823,6 +824,7 @@ export default function SettingsPage() {
     { id: 'datacenters', label: 'Data Centers' },
     { id: 'app_management', label: 'App Management' },
     { id: 'shared_services', label: 'Shared Services' },
+    { id: 'port_catalog', label: 'Port Configuration' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
@@ -1762,6 +1764,10 @@ export default function SettingsPage() {
         )}
 
         {/* ── Shared Services Tab ── */}
+        {activeTab === 'port_catalog' && (
+          <PortCatalogTab />
+        )}
+
         {activeTab === 'shared_services' && (
           <SharedServicesTab />
         )}

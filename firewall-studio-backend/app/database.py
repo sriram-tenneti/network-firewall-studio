@@ -43,6 +43,7 @@ from app.seed_data import (
     SEED_SHARED_SERVICES as _SD_SHARED_SERVICES,
     SEED_SHARED_SERVICE_PRESENCES as _SD_SHARED_SERVICE_PRESENCES,
     SEED_APP_PRESENCES as _SD_APP_PRESENCES,
+    SEED_PORT_CATALOG as _SD_PORT_CATALOG,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
 )
@@ -679,6 +680,7 @@ async def seed_database() -> None:
     _save("shared_service_presences", deepcopy(_SD_SHARED_SERVICE_PRESENCES))
     _save("app_presences", deepcopy(_SD_APP_PRESENCES))
     _save("rule_requests", [])
+    _save("port_catalog", deepcopy(_SD_PORT_CATALOG))
     # Materialize derived groups so Studio works end-to-end out of the box.
     existing_groups = _load("groups") or []
     derived = _build_derived_groups_from_presences(
@@ -7515,6 +7517,77 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
     items.append(record)
     _save("rule_requests", items)
     return record
+
+
+# ============================================================
+# Port / Service Catalog CRUD
+# ============================================================
+
+def _load_port_catalog() -> list[dict[str, Any]]:
+    items = _load("port_catalog")
+    if items is None:
+        items = deepcopy(_SD_PORT_CATALOG)
+        _save("port_catalog", items)
+    return items
+
+
+async def list_ports() -> list[dict[str, Any]]:
+    return _load_port_catalog()
+
+
+async def create_port(payload: dict[str, Any]) -> dict[str, Any]:
+    items = _load_port_catalog()
+    pid = str(payload.get("port_id", "")).strip().upper()
+    if not pid:
+        name = str(payload.get("name", "")).strip() or "PORT"
+        pid = name.upper().replace(" ", "_")[:32]
+    # ensure unique
+    base = pid
+    i = 1
+    existing = {p.get("port_id") for p in items}
+    while pid in existing:
+        i += 1
+        pid = f"{base}_{i}"
+    record = {
+        "port_id": pid,
+        "name": str(payload.get("name", pid)),
+        "protocol": str(payload.get("protocol", "TCP")).upper(),
+        "port": int(payload.get("port") or 0),
+        "aliases": list(payload.get("aliases") or []),
+        "category": str(payload.get("category", "Custom")),
+        "description": str(payload.get("description", "")),
+    }
+    items.append(record)
+    _save("port_catalog", items)
+    return record
+
+
+async def update_port(port_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    items = _load_port_catalog()
+    for p in items:
+        if p.get("port_id") == port_id:
+            for k in ("name", "protocol", "port", "aliases", "category", "description"):
+                if k in payload:
+                    if k == "port":
+                        p[k] = int(payload[k] or 0)
+                    elif k == "protocol":
+                        p[k] = str(payload[k]).upper()
+                    elif k == "aliases":
+                        p[k] = list(payload[k] or [])
+                    else:
+                        p[k] = payload[k]
+            _save("port_catalog", items)
+            return p
+    return None
+
+
+async def delete_port(port_id: str) -> bool:
+    items = _load_port_catalog()
+    new_items = [p for p in items if p.get("port_id") != port_id]
+    if len(new_items) == len(items):
+        return False
+    _save("port_catalog", new_items)
+    return True
 
 
 async def set_rule_request_status(request_id: str, status: str, note: str | None = None) -> dict[str, Any] | None:
