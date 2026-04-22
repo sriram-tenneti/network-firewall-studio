@@ -145,6 +145,39 @@ export function DesignStudioPage() {
     }
   };
 
+  const handleApproveRule = async (ruleId: string) => {
+    try {
+      await api.transitionRuleStatus(ruleId, 'Approved', 'studio', 'reviewer');
+      showNotification(`Rule ${ruleId} approved`, 'success');
+      detailModal.close();
+      loadData();
+    } catch {
+      showNotification('Failed to approve rule', 'error');
+    }
+  };
+
+  const handleDeployRule = async (ruleId: string) => {
+    try {
+      await api.transitionRuleStatus(ruleId, 'Deployed', 'studio', 'reviewer');
+      showNotification(`Rule ${ruleId} deployed`, 'success');
+      detailModal.close();
+      loadData();
+    } catch {
+      showNotification('Failed to deploy rule', 'error');
+    }
+  };
+
+  const handleRejectRule = async (ruleId: string) => {
+    try {
+      await api.transitionRuleStatus(ruleId, 'Rejected', 'studio', 'reviewer');
+      showNotification(`Rule ${ruleId} rejected`, 'success');
+      detailModal.close();
+      loadData();
+    } catch {
+      showNotification('Failed to reject rule', 'error');
+    }
+  };
+
   const _handleSubmitChange = async (ruleId: string) => {
     try {
       // Placeholder: In production this calls ServiceNow API to create CHG
@@ -198,11 +231,14 @@ export function DesignStudioPage() {
       render: (_, row) => <StatusBadge status={row.status} />,
     },
     {
-      key: '_actions', header: 'Actions', sortable: false, width: '280px',
+      key: '_actions', header: 'Actions', sortable: false, width: '360px',
       render: (_, row) => {
         const st = row.status;
         const canEdit = st === 'Draft';
         const canSubmit = st === 'Draft';
+        const canApprove = st === 'Pending Review';
+        const canReject = st === 'Pending Review';
+        const canDeploy = st === 'Approved';
         const canModify = st === 'Deployed' || st === 'Certified';
         const canCompile = st === 'Deployed' || st === 'Certified' || st === 'Approved';
         const canCertify = st === 'Deployed';
@@ -214,6 +250,15 @@ export function DesignStudioPage() {
             )}
             {canSubmit && (
               <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
+            )}
+            {canApprove && (
+              <button onClick={() => handleApproveRule(row.rule_id)} className="px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100">Approve</button>
+            )}
+            {canReject && (
+              <button onClick={() => handleRejectRule(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Reject</button>
+            )}
+            {canDeploy && (
+              <button onClick={() => handleDeployRule(row.rule_id)} className="px-2 py-1 text-xs font-medium text-sky-700 bg-sky-50 rounded hover:bg-sky-100">Deploy</button>
             )}
             {canModify && (
               <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100">Modify</button>
@@ -352,6 +397,10 @@ export function DesignStudioPage() {
         onEdit={() => { if (detailModal.data) { const row = detailModal.data; detailModal.close(); modifyModal.open(row); } }}
         onCompile={() => { if (detailModal.data) { detailModal.close(); compilerModal.open(detailModal.data.rule_id); } }}
         onSubmitReview={() => { if (detailModal.data) { handleSubmitReview(detailModal.data.rule_id); } }}
+        onApprove={() => { if (detailModal.data) { handleApproveRule(detailModal.data.rule_id); } }}
+        onReject={() => { if (detailModal.data) { handleRejectRule(detailModal.data.rule_id); } }}
+        onDeploy={() => { if (detailModal.data) { handleDeployRule(detailModal.data.rule_id); } }}
+        onCertify={() => { if (detailModal.data) { handleCertify(detailModal.data.rule_id); detailModal.close(); } }}
       />
 
       <RuleModifyModal isOpen={modifyModal.isOpen} onClose={modifyModal.close} rule={modifyModal.data} onSave={handleModify} />

@@ -139,31 +139,35 @@ function statusStyle(s: RuleRequestRecord['status']): string {
 function FanOutCompact({ rows }: { rows: PhysicalRuleExpansion[] }) {
   if (rows.length === 0) return <div className="text-[11px] text-gray-400 italic">No physical rules.</div>;
   return (
-    <div className="rounded border border-gray-200 overflow-hidden">
-      <table className="min-w-full text-[11px]">
-        <thead className="bg-gray-50 text-gray-600">
-          <tr>
-            <th className="px-2 py-1 text-left">Src DC</th>
-            <th className="px-2 py-1 text-left">Dst DC</th>
-            <th className="px-2 py-1 text-left">Src Group</th>
-            <th className="px-2 py-1 text-left">Dst Group</th>
-            <th className="px-2 py-1 text-left">Ports</th>
-            <th className="px-2 py-1 text-left">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-t border-gray-100">
-              <td className="px-2 py-1 font-mono">{r.src_dc}</td>
-              <td className="px-2 py-1 font-mono">{r.dst_dc}</td>
-              <td className="px-2 py-1 font-mono text-indigo-700">{r.src_group_ref}</td>
-              <td className="px-2 py-1 font-mono text-indigo-700">{r.dst_group_ref}</td>
-              <td className="px-2 py-1 font-mono">{r.ports}</td>
-              <td className="px-2 py-1">{r.action}{r.cross_dc ? ' · cross-DC' : ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      <div className="text-[10px] uppercase tracking-widest font-bold text-indigo-700">Per-DC Logical Data Flow (LDF)</div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {rows.map((r, i) => (
+          <div key={i} className="p-2.5 rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/60 shadow-sm">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-orange-50 text-orange-700 border-orange-200 font-semibold">{r.src_dc}{r.cross_dc ? ` → ${r.dst_dc}` : ''}</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-white text-gray-700 border-gray-200 font-mono">{r.ports}</span>
+              {r.cross_dc && <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200 font-semibold">cross-DC</span>}
+            </div>
+            <div className="flex items-stretch gap-1.5">
+              <div className="flex-1 min-w-0 p-1.5 bg-white border border-sky-200 rounded">
+                <div className="text-[8px] uppercase font-bold text-sky-600">Source · {r.src_dc}</div>
+                <div className="font-mono text-[10px] font-semibold text-sky-800 truncate">{r.src_group_ref}</div>
+              </div>
+              <div className="flex flex-col items-center justify-center px-0.5">
+                <svg className="w-7 h-3 text-indigo-400" viewBox="0 0 40 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2 8h32M28 3l6 5-6 5"/>
+                </svg>
+                <div className="text-[8px] font-bold text-indigo-600">{r.action}</div>
+              </div>
+              <div className="flex-1 min-w-0 p-1.5 bg-white border border-rose-200 rounded">
+                <div className="text-[8px] uppercase font-bold text-rose-600">Dest · {r.dst_dc}</div>
+                <div className="font-mono text-[10px] font-semibold text-rose-800 truncate">{r.dst_group_ref}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

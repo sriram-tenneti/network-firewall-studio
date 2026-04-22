@@ -113,6 +113,11 @@ export function transformRule(raw: RawBackendRule): FirewallRule {
   const src = raw.source;
   const isNamingValid = src.startsWith('grp-') || src.startsWith('svr-') || src.startsWith('rng-') || isLegacyGroupName(src);
   const dstNamingValid = raw.destination.startsWith('grp-') || raw.destination.startsWith('svr-') || raw.destination.startsWith('rng-') || isLegacyGroupName(raw.destination);
+  // A rule is group-to-group when BOTH endpoints are groups (grp- or legacy g-/grp-). Derive client-side so seed/fan-out rules render correctly even if backend flag is unset.
+  const srcIsGroup = src.startsWith('grp-') || isLegacyGroupName(src);
+  const dstIsGroup = raw.destination.startsWith('grp-') || isLegacyGroupName(raw.destination);
+  const derivedG2G = srcIsGroup && dstIsGroup;
+  const effectiveG2G = Boolean(raw.is_group_to_group) || derivedG2G;
   return {
     id: raw.rule_id,
     rule_id: raw.rule_id,
@@ -125,8 +130,8 @@ export function transformRule(raw: RawBackendRule): FirewallRule {
     status: raw.status as FirewallRule['status'],
     compliance: {
       naming_valid: isNamingValid && dstNamingValid,
-      group_to_group: raw.is_group_to_group,
-      requires_exception: !raw.is_group_to_group,
+      group_to_group: effectiveG2G,
+      requires_exception: !effectiveG2G,
     },
     expiry: raw.expiry_date,
     owner: 'System',

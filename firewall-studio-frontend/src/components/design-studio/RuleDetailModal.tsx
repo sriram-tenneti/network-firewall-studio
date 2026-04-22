@@ -11,6 +11,10 @@ interface RuleDetailModalProps {
   onEdit?: () => void;
   onCompile?: () => void;
   onSubmitReview?: () => void;
+  onApprove?: () => void;
+  onReject?: () => void;
+  onDeploy?: () => void;
+  onCertify?: () => void;
 }
 
 function getVal(obj: unknown, key: string): string {
@@ -72,7 +76,7 @@ function ExpandedHierarchy({ text, color }: { text: string; color: string }) {
   );
 }
 
-export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSubmitReview }: RuleDetailModalProps) {
+export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSubmitReview, onApprove, onReject, onDeploy, onCertify }: RuleDetailModalProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, FirewallGroup>>({});
   const [loadingGroups, setLoadingGroups] = useState(false);
 
@@ -224,15 +228,18 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
       {rule.compliance && (
         <div className="mt-4 p-3 bg-gray-50 rounded-lg">
           <h4 className="text-sm font-semibold text-gray-700 mb-2">Compliance</h4>
-          <div className="flex gap-4 text-xs">
-            <span className={rule.compliance.naming_valid ? 'text-green-600' : 'text-red-600'}>
-              Naming: {rule.compliance.naming_valid ? 'Valid' : 'Invalid'}
+          <div className="flex gap-2 text-[11px] flex-wrap">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-semibold ${rule.compliance.naming_valid ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" /> Naming {rule.compliance.naming_valid ? 'Valid' : 'Invalid'}
             </span>
-            <span className={rule.compliance.group_to_group ? 'text-green-600' : 'text-amber-600'}>
-              Group-to-Group: {rule.compliance.group_to_group ? 'Yes' : 'No'}
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-semibold ${rule.compliance.group_to_group ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {rule.compliance.group_to_group ? 'Group-to-Group Compliant' : 'Not Group-to-Group'}
             </span>
-            {rule.compliance.requires_exception && (
-              <span className="text-red-600">Exception Required</span>
+            {rule.compliance.requires_exception && !rule.compliance.group_to_group && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-semibold bg-rose-50 text-rose-700 border-rose-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-current" /> Exception Required
+              </span>
             )}
           </div>
           {rule.compliance.naming_errors && rule.compliance.naming_errors.length > 0 && (
@@ -243,15 +250,75 @@ export function RuleDetailModal({ isOpen, onClose, rule, onEdit, onCompile, onSu
         </div>
       )}
 
-      <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+      {/* Logical Data Flow (LDF) Visualization */}
+      <div className="mt-4 p-3 bg-gradient-to-br from-indigo-50 via-white to-purple-50 border border-indigo-100 rounded-lg">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-indigo-800 flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M3 12h17"/></svg>
+            Logical Data Flow (LDF)
+          </h4>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-white text-indigo-700 border-indigo-200">
+            {srcDC || rule.datacenter || 'any-DC'}
+          </span>
+        </div>
+        <div className="flex items-stretch gap-2 overflow-x-auto py-1">
+          {/* Source node */}
+          <div className="flex-1 min-w-[220px] p-2.5 bg-white border border-sky-200 rounded-lg shadow-sm">
+            <div className="text-[9px] uppercase tracking-widest font-bold text-sky-600 mb-1">Source</div>
+            <div className="font-mono text-[11px] font-semibold text-sky-800 truncate">{srcGroup || '—'}</div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {srcDC && <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-orange-50 text-orange-700 border-orange-200">{srcDC}</span>}
+              {srcNH && <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200">{srcNH}</span>}
+              {srcSZ && <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">{srcSZ}</span>}
+            </div>
+          </div>
+
+          {/* Arrow + port */}
+          <div className="flex flex-col items-center justify-center px-1">
+            <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">{srcPorts || dstPorts || 'ANY'}</div>
+            <svg className="w-10 h-4 text-indigo-400" viewBox="0 0 40 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2 8h32M28 3l6 5-6 5"/>
+            </svg>
+            <div className="text-[9px] font-bold text-indigo-600">PERMIT</div>
+          </div>
+
+          {/* Destination node */}
+          <div className="flex-1 min-w-[220px] p-2.5 bg-white border border-rose-200 rounded-lg shadow-sm">
+            <div className="text-[9px] uppercase tracking-widest font-bold text-rose-600 mb-1">Destination</div>
+            <div className="font-mono text-[11px] font-semibold text-rose-800 truncate">{dstName || '—'}</div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {dstDC && <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-orange-50 text-orange-700 border-orange-200">{dstDC}</span>}
+              {dstNH && <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200">{dstNH}</span>}
+              {dstSZ && <span className="text-[9px] px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">{dstSZ}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="mt-1.5 text-[10px] text-gray-500">
+          Logical flow shown for this rule. For multi-DC requests, each PhysicalRule below renders its own LDF based on per-DC NH/SZ presence intersection.
+        </div>
+      </div>
+
+      <div className="flex flex-wrap justify-end gap-2 mt-6 pt-4 border-t">
         {onEdit && rule.status === 'Draft' && (
           <button onClick={onEdit} className="px-4 py-2 text-sm font-medium text-white bg-amber-500 rounded-md hover:bg-amber-600">Edit</button>
         )}
-        {onCompile && (rule.status === 'Approved' || rule.status === 'Deployed' || rule.status === 'Certified') && (
-          <button onClick={onCompile} className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700">Compile</button>
-        )}
         {onSubmitReview && rule.status === 'Draft' && (
           <button onClick={onSubmitReview} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Submit for Review</button>
+        )}
+        {onApprove && rule.status === 'Pending Review' && (
+          <button onClick={onApprove} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700">Approve</button>
+        )}
+        {onReject && rule.status === 'Pending Review' && (
+          <button onClick={onReject} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Reject</button>
+        )}
+        {onDeploy && rule.status === 'Approved' && (
+          <button onClick={onDeploy} className="px-4 py-2 text-sm font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700">Deploy</button>
+        )}
+        {onCertify && rule.status === 'Deployed' && (
+          <button onClick={onCertify} className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700">Certify</button>
+        )}
+        {onCompile && (rule.status === 'Approved' || rule.status === 'Deployed' || rule.status === 'Certified') && (
+          <button onClick={onCompile} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Compile</button>
         )}
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Close</button>
       </div>
