@@ -7388,19 +7388,50 @@ async def get_rule_request(request_id: str) -> dict[str, Any] | None:
     return None
 
 
+def _presence_key_set(keys: list[dict[str, Any]] | None) -> set[tuple[str, str, str]] | None:
+    """Normalize a list of presence key dicts into a set of
+    (dc_id, nh_id, sz_code) tuples. Returns None when no keys were
+    supplied, meaning "no per-presence filtering" (all presences used).
+    """
+    if not keys:
+        return None
+    out: set[tuple[str, str, str]] = set()
+    for k in keys:
+        if not isinstance(k, dict):
+            continue
+        dc = str(k.get("dc_id") or "").strip()
+        nh = str(k.get("nh_id") or "").strip()
+        sz = str(k.get("sz_code") or "").strip()
+        if dc and nh and sz:
+            out.add((dc, nh, sz))
+    return out or None
+
+
+def _filter_by_presence_keys(pres: list[dict[str, Any]],
+                             keys: set[tuple[str, str, str]] | None) -> list[dict[str, Any]]:
+    if not keys:
+        return pres
+    return [p for p in pres
+            if (p.get("dc_id"), p.get("nh_id"), p.get("sz_code")) in keys]
+
+
 async def _resolve_source_presences(app_dist_id: str, env: str,
-                                    requested_dcs: list[str] | None) -> list[dict[str, Any]]:
+                                    requested_dcs: list[str] | None,
+                                    presence_keys: list[dict[str, Any]] | None = None,
+                                    ) -> list[dict[str, Any]]:
     pres = [p for p in (_load("app_presences") or [])
             if str(p.get("app_distributed_id", "")).upper() == app_dist_id.upper()
             and p.get("environment") == env]
     if requested_dcs:
         pres = [p for p in pres if p.get("dc_id") in requested_dcs]
-    return pres
+    return _filter_by_presence_keys(pres, _presence_key_set(presence_keys))
 
 
 async def _resolve_destination_presences(kind: str, dest_ref: str | None,
                                          env: str,
-                                         requested_dcs: list[str] | None) -> list[dict[str, Any]]:
+                                         requested_dcs: list[str] | None,
+                                         presence_keys: list[dict[str, Any]] | None = None,
+                                         ) -> list[dict[str, Any]]:
     if kind == "shared_service" and dest_ref:
         pres = [p for p in (_load("shared_service_presences") or [])
                 if str(p.get("service_id", "")).upper() == dest_ref.upper()
@@ -7414,7 +7445,7 @@ async def _resolve_destination_presences(kind: str, dest_ref: str | None,
         pres = []
     if requested_dcs:
         pres = [p for p in pres if p.get("dc_id") in requested_dcs]
-    return pres
+    return _filter_by_presence_keys(pres, _presence_key_set(presence_keys))
 
 
 async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
@@ -7431,8 +7462,13 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     ports = payload.get("ports", "TCP 8080")
     action = payload.get("action", "ACCEPT")
 
-    src_pres = await _resolve_source_presences(src_app, env, requested_dcs)
-    dst_pres = await _resolve_destination_presences(kind, dest_ref, env, requested_dcs)
+    source_presences = payload.get("source_presences")
+    destination_presences = payload.get("destination_presences")
+
+    src_pres = await _resolve_source_presences(
+        src_app, env, requested_dcs, source_presences)
+    dst_pres = await _resolve_destination_presences(
+        kind, dest_ref, env, requested_dcs, destination_presences)
 
     warnings: list[str] = []
     if not src_pres:

@@ -12,7 +12,22 @@ import type {
   SharedService,
   SharedServicePresence,
 } from '@/types';
+import type { PresenceKey } from '@/lib/api';
 import * as api from '@/lib/api';
+
+const presenceKey = (dc: string, nh: string, sz: string) => `${dc}|${nh}|${sz}`;
+const fromKey = (k: string): PresenceKey => {
+  const [dc_id, nh_id, sz_code] = k.split('|');
+  return { dc_id, nh_id, sz_code };
+};
+/** Legacy Shared Services (seeded before presences had a stable nh_id)
+ *  can still have app-style (nh_id, sz_code); we derive egress group name. */
+const appEgressGroupName = (app: string, nh: string, sz: string) =>
+  `grp-${app}-${nh}-${sz}`;
+const appIngressGroupName = (app: string, nh: string, sz: string) =>
+  `grp-${app}-${nh}-${sz}-Ingress`;
+const sharedServiceGroupName = (sid: string, nh: string, sz: string) =>
+  `grp-${sid}-${nh}-${sz}`;
 
 interface RuleRequestBuilderProps {
   applications: Application[];
@@ -46,6 +61,10 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedRecord, setSubmittedRecord] = useState<RuleRequestRecord | null>(null);
+
+  // Per-presence scoping selections. Empty set = use all presences.
+  const [selectedSrcKeys, setSelectedSrcKeys] = useState<Set<string>>(new Set());
+  const [selectedDstKeys, setSelectedDstKeys] = useState<Set<string>>(new Set());
 
   const loadRefs = useCallback(async () => {
     try {
@@ -98,6 +117,97 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
 
   const srcOptions = useMemo(() => applications.filter((a) => a.app_distributed_id), [applications]);
 
+  // Per-app / per-service presence candidates for the current environment.
+  // When either list has >1 entry we surface checkboxes so the user picks
+  // the (NH, SZ) the rule should apply to — otherwise fan-out uses all.
+  const srcPresenceCandidates = useMemo<PresenceKey[]>(() => {
+    if (!srcApp) return [];
+    return appPresences
+      .filter((p) => p.app_distributed_id?.toUpperCase() === srcApp.toUpperCase()
+                  && p.environment === environment)
+      .map((p) => ({ dc_id: p.dc_id, nh_id: p.nh_id, sz_code: p.sz_code }));
+  }, [srcApp, environment, appPresences]);
+
+  const dstPresenceCandidates = useMemo<PresenceKey[]>(() => {
+    if (!dest?.ref) return [];
+    if (dest.kind === 'shared_service') {
+      const list = ssPresences[dest.ref] || [];
+      return list
+        .filter((p) => p.environment === environment)
+        .map((p) => ({ dc_id: p.dc_id, nh_id: p.nh_id, sz_code: p.sz_code }));
+    }
+    if (dest.kind === 'app_ingress') {
+      return appPresences
+        .filter((p) => p.app_distributed_id?.toUpperCase() === dest.ref.toUpperCase()
+                    && p.environment === environment
+                    && p.has_ingress)
+        .map((p) => ({ dc_id: p.dc_id, nh_id: p.nh_id, sz_code: p.sz_code }));
+    }
+    return [];
+  }, [dest, environment, ssPresences, appPresences]);
+
+  // When src/dst/env change, forget prior presence scoping (UI defaults back
+  // to "all presences"). Avoids stale selections referencing a stale app.
+  useEffect(() => { setSelectedSrcKeys(new Set()); }, [srcApp, environment]);
+  useEffect(() => { setSelectedDstKeys(new Set()); }, [dest?.ref, dest?.kind, environment]);
+
+  const effectiveSrcPresences = useMemo<PresenceKey[] | undefined>(() => {
+    if (selectedSrcKeys.size === 0) return undefined;
+    return Array.from(selectedSrcKeys).map(fromKey);
+  }, [selectedSrcKeys]);
+  const effectiveDstPresences = useMemo<PresenceKey[] | undefined>(() => {
+    if (selectedDstKeys.size === 0) return undefined;
+    return Array.from(selectedDstKeys).map(fromKey);
+  }, [selectedDstKeys]);
+
+  // Resolved destination shared-service object (for default ports lookup)
+  const destService = useMemo<SharedService | null>(() => {
+    if (dest?.kind !== 'shared_service' || !dest.ref) return null;
+    return services.find((s) => s.service_id === dest.ref) ?? null;
+  }, [dest, services]);
+
+  // Default ports to surface in the Port Picker's pinned strip based on
+  // the chosen destination. Shared services contribute their standard
+  // catalog ports + service-specific additional ports. Apps (ingress)
+  // contribute the ingress_ports declared on the in-scope presences —
+  // this is the "App Management owns its own ports" side of Option B.
+  const portDefaults = useMemo<import('./PortPicker').PortPickerDefaults | null>(() => {
+    if (dest?.kind === 'shared_service' && destService) {
+      return {
+        label: destService.name,
+        standardPortIds: destService.standard_ports || [],
+        additionalPorts: destService.additional_ports || [],
+      };
+    }
+    if (dest?.kind === 'app_ingress' && dest.ref) {
+      const candidates = effectiveDstPresences && effectiveDstPresences.length > 0
+        ? appPresences.filter((p) => p.app_distributed_id?.toUpperCase() === dest.ref!.toUpperCase()
+            && p.environment === environment
+            && p.has_ingress
+            && effectiveDstPresences.some((k) => k.dc_id === p.dc_id && k.nh_id === p.nh_id && k.sz_code === p.sz_code))
+        : appPresences.filter((p) => p.app_distributed_id?.toUpperCase() === dest.ref!.toUpperCase()
+            && p.environment === environment && p.has_ingress);
+      const seenIds = new Set<string>();
+      const standardIds: string[] = [];
+      const addl: Array<NonNullable<AppPresence['ingress_ports']>[number]> = [];
+      for (const p of candidates) {
+        for (const b of p.ingress_ports || []) {
+          if (b.port_id) {
+            if (!seenIds.has(b.port_id)) { seenIds.add(b.port_id); standardIds.push(b.port_id); }
+          } else if (b.port) {
+            const key = `${b.protocol || 'TCP'}:${b.port}`;
+            if (!seenIds.has(key)) { seenIds.add(key); addl.push(b); }
+          }
+        }
+      }
+      if (standardIds.length === 0 && addl.length === 0) return null;
+      const hit = applications.find((a) => a.app_distributed_id === dest.ref);
+      const appLabel = hit?.app_name || dest.ref;
+      return { label: `${appLabel} (ingress)`, standardPortIds: standardIds, additionalPorts: addl };
+    }
+    return null;
+  }, [dest, destService, effectiveDstPresences, appPresences, environment, applications]);
+
   // Preview fan-out when inputs change
   useEffect(() => {
     setPreview(null);
@@ -113,6 +223,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
           ports,
           action,
           include_cross_dc: includeCrossDc,
+          source_presences: effectiveSrcPresences,
+          destination_presences: effectiveDstPresences,
         });
         if (!cancelled) setPreview(p);
       } catch (e) {
@@ -120,7 +232,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
       }
     })();
     return () => { cancelled = true; };
-  }, [srcApp, dest, environment, ports, action, includeCrossDc]);
+  }, [srcApp, dest, environment, ports, action, includeCrossDc,
+      effectiveSrcPresences, effectiveDstPresences]);
 
   const onDropDestination = (e: React.DragEvent) => {
     e.preventDefault();
@@ -149,6 +262,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
         action,
         description,
         include_cross_dc: includeCrossDc,
+        source_presences: effectiveSrcPresences,
+        destination_presences: effectiveDstPresences,
       });
       setSubmittedRecord(r);
       onSubmitted?.(r.request_id);
@@ -162,6 +277,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   const reset = () => {
     setStep(1); setSrcApp(''); setDest(null); setPorts('TCP 443');
     setAction('ACCEPT'); setDescription(''); setIncludeCrossDc(false);
+    setSelectedSrcKeys(new Set()); setSelectedDstKeys(new Set());
     setPreview(null); setSubmittedRecord(null); setSubmitError(null);
   };
 
@@ -269,6 +385,32 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               </div>
             </div>
 
+            {/* Per-presence scoping — surfaces only when the chosen app/service
+                spans multiple (DC, NH, SZ) combinations. Empty selection =
+                use all presences (default behavior). */}
+            <PresencePicker
+              title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source app'}?`}
+              subtitle="Each checked presence becomes one PhysicalRule with the matching grp-<App>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default)."
+              emptyHint={srcApp ? 'This app has no presence in the selected environment.' : 'Pick a source application first.'}
+              makeGroupName={(p) => appEgressGroupName(srcApp || 'APP', p.nh_id, p.sz_code)}
+              candidates={srcPresenceCandidates}
+              selected={selectedSrcKeys}
+              onChange={setSelectedSrcKeys}
+            />
+            <PresencePicker
+              title={`Destination presences — which (DC · NH · SZ) for ${dest?.label || 'the destination'}?`}
+              subtitle={dest?.kind === 'app_ingress'
+                ? 'Each checked presence becomes the destination grp-<App>-<NH>-<SZ>-Ingress group.'
+                : 'Each checked presence becomes the destination grp-<Service>-<NH>-<SZ> group.'}
+              emptyHint={dest ? 'This destination has no matching presence in the selected environment.' : 'Pick a destination first.'}
+              makeGroupName={(p) => dest?.kind === 'app_ingress'
+                ? appIngressGroupName(dest?.ref || 'APP', p.nh_id, p.sz_code)
+                : sharedServiceGroupName(dest?.ref || 'SVC', p.nh_id, p.sz_code)}
+              candidates={dstPresenceCandidates}
+              selected={selectedDstKeys}
+              onChange={setSelectedDstKeys}
+            />
+
             <div className="flex justify-end">
               <button disabled={!srcApp || !dest} onClick={() => setStep(2)}
                 className="px-4 py-1.5 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300">
@@ -283,7 +425,12 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Ports</label>
-                <PortPicker value={ports} onChange={setPorts} placeholder="Search/pick ports (HTTPS, Oracle, Mongo, Kafka, …)" />
+                <PortPicker
+                  value={ports}
+                  onChange={setPorts}
+                  placeholder="Search/pick ports (HTTPS, Oracle, Mongo, Kafka, …)"
+                  defaults={portDefaults}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Action</label>
@@ -472,6 +619,103 @@ function FanOutTable({ rows }: { rows: PhysicalRuleExpansion[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+interface PresencePickerProps {
+  title: string;
+  subtitle?: string;
+  emptyHint: string;
+  candidates: PresenceKey[];
+  selected: Set<string>;
+  onChange: (s: Set<string>) => void;
+  makeGroupName: (p: PresenceKey) => string;
+}
+
+function PresencePicker({
+  title, subtitle, emptyHint, candidates, selected, onChange, makeGroupName,
+}: PresencePickerProps) {
+  // Only render when there's something to pick. When the app has exactly
+  // one presence, scoping is a no-op so we hide the UI entirely.
+  if (candidates.length <= 1) return null;
+
+  const byDc = new Map<string, PresenceKey[]>();
+  for (const p of candidates) {
+    const list = byDc.get(p.dc_id) || [];
+    list.push(p);
+    byDc.set(p.dc_id, list);
+  }
+
+  const allKeys = candidates.map((p) => presenceKey(p.dc_id, p.nh_id, p.sz_code));
+  const allSelected = selected.size > 0 && allKeys.every((k) => selected.has(k));
+
+  const toggle = (k: string) => {
+    const next = new Set(selected);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    onChange(next);
+  };
+
+  const useAll = () => onChange(new Set());
+
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div>
+          <div className="text-xs font-semibold text-indigo-900">{title}</div>
+          {subtitle && <div className="text-[11px] text-indigo-800/80 mt-0.5">{subtitle}</div>}
+        </div>
+        <button
+          type="button"
+          onClick={useAll}
+          className={`text-[11px] px-2 py-1 rounded border ${selected.size === 0
+            ? 'bg-indigo-600 text-white border-indigo-600'
+            : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`}
+          title="Fan out across every presence"
+        >
+          {selected.size === 0 ? 'Using all presences' : 'Use all presences'}
+        </button>
+      </div>
+
+      {candidates.length === 0 ? (
+        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">{emptyHint}</div>
+      ) : (
+        <div className="space-y-2">
+          {Array.from(byDc.entries()).map(([dc, rows]) => (
+            <div key={dc} className="rounded-lg border border-white bg-white p-2">
+              <div className="text-[11px] font-mono text-gray-500 mb-1">{dc}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                {rows.map((p) => {
+                  const k = presenceKey(p.dc_id, p.nh_id, p.sz_code);
+                  const checked = selected.has(k);
+                  return (
+                    <label
+                      key={k}
+                      className={`flex items-center gap-2 text-xs rounded px-2 py-1 cursor-pointer border ${checked
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
+                        : 'border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(k)}
+                      />
+                      <span className="font-mono text-[11px]">{p.nh_id} / {p.sz_code}</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="font-mono text-[11px] text-indigo-700 truncate">{makeGroupName(p)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {allSelected && (
+            <div className="text-[11px] text-gray-500">
+              All presences checked — equivalent to "Using all presences".
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

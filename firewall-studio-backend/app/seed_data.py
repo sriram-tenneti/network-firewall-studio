@@ -2384,6 +2384,8 @@ SEED_SHARED_SERVICES = [
         "color": "#2563eb",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["events", "streaming", "pub-sub"],
+        "standard_ports": ["KAFKA", "KAFKA_TLS", "ZOOKEEPER"],
+        "additional_ports": [],
     },
     {
         "service_id": "MQ",
@@ -2395,6 +2397,8 @@ SEED_SHARED_SERVICES = [
         "color": "#0891b2",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["queue", "jms"],
+        "standard_ports": ["IBM_MQ"],
+        "additional_ports": [],
     },
     {
         "service_id": "ORACLE",
@@ -2406,6 +2410,10 @@ SEED_SHARED_SERVICES = [
         "color": "#db2777",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["rdbms"],
+        "standard_ports": ["ORACLE"],
+        "additional_ports": [
+            {"protocol": "TCP", "port": 2484, "label": "Oracle TCPS (TLS)"},
+        ],
     },
     {
         "service_id": "APPD",
@@ -2417,6 +2425,8 @@ SEED_SHARED_SERVICES = [
         "color": "#ea580c",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["monitoring", "apm"],
+        "standard_ports": ["APPD", "APPD_TLS", "HTTPS"],
+        "additional_ports": [],
     },
     {
         "service_id": "SPLUNK",
@@ -2428,6 +2438,8 @@ SEED_SHARED_SERVICES = [
         "color": "#16a34a",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["logs"],
+        "standard_ports": ["SPLUNK_HEC", "SPLUNK_FWD"],
+        "additional_ports": [],
     },
     {
         "service_id": "REDIS",
@@ -2439,6 +2451,8 @@ SEED_SHARED_SERVICES = [
         "color": "#dc2626",
         "environments": ["Production", "Non-Production"],
         "tags": ["cache"],
+        "standard_ports": ["REDIS"],
+        "additional_ports": [],
     },
     {
         "service_id": "LDAP",
@@ -2450,6 +2464,8 @@ SEED_SHARED_SERVICES = [
         "color": "#7c3aed",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["identity", "auth"],
+        "standard_ports": ["LDAP", "LDAPS", "KERBEROS"],
+        "additional_ports": [],
     },
     {
         "service_id": "MONGODB",
@@ -2461,6 +2477,8 @@ SEED_SHARED_SERVICES = [
         "color": "#059669",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["nosql", "document"],
+        "standard_ports": ["MONGODB"],
+        "additional_ports": [],
     },
     {
         "service_id": "MAINFRAME",
@@ -2472,6 +2490,10 @@ SEED_SHARED_SERVICES = [
         "color": "#475569",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["legacy", "tn3270", "z/os"],
+        "standard_ports": ["TN3270", "TN3270_TLS", "FTP"],
+        "additional_ports": [
+            {"protocol": "TCP", "port": 446, "label": "DRDA (DB2 z/OS)"},
+        ],
     },
     {
         "service_id": "DB2",
@@ -2483,6 +2505,8 @@ SEED_SHARED_SERVICES = [
         "color": "#0ea5e9",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["rdbms", "db2"],
+        "standard_ports": ["DB2"],
+        "additional_ports": [],
     },
     {
         "service_id": "MSSQL",
@@ -2494,6 +2518,8 @@ SEED_SHARED_SERVICES = [
         "color": "#1d4ed8",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["rdbms", "mssql"],
+        "standard_ports": ["MSSQL"],
+        "additional_ports": [],
     },
 ]
 

@@ -1,12 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PortCatalogEntry } from '@/lib/api';
+import type { PortBinding } from '@/types';
 import * as api from '@/lib/api';
+
+export interface PortPickerDefaults {
+  /** Label for the "Defaults for <X>" section. */
+  label: string;
+  /** port_ids resolved via the global catalog. */
+  standardPortIds?: string[];
+  /** Service/app-specific custom ports that don't belong in the catalog. */
+  additionalPorts?: PortBinding[];
+}
 
 interface PortPickerProps {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   className?: string;
+  /** When provided, a pinned "Defaults for <label>" strip is shown at
+   *  the top of the dropdown with one-click add buttons. */
+  defaults?: PortPickerDefaults | null;
 }
 
 /** Parse the freeform "ports" field into a list of tokens like "TCP 443". */
@@ -24,7 +37,30 @@ function humanLabel(p: PortCatalogEntry): string {
   return `${p.name} · ${p.protocol || 'TCP'} ${p.port}`;
 }
 
-export default function PortPicker({ value, onChange, placeholder = 'Pick a port…', className = '' }: PortPickerProps) {
+function bindingToken(b: PortBinding, catalog: PortCatalogEntry[]): string | null {
+  if (b.port_id) {
+    const hit = catalog.find((c) => c.port_id === b.port_id);
+    if (hit) return portToken(hit);
+  }
+  if (b.port && b.port > 0) {
+    const proto = (b.protocol || 'TCP').toUpperCase();
+    if (proto === 'ICMP') return 'ICMP';
+    return `${proto} ${b.port}`;
+  }
+  return null;
+}
+
+function bindingLabel(b: PortBinding, catalog: PortCatalogEntry[]): string {
+  if (b.port_id) {
+    const hit = catalog.find((c) => c.port_id === b.port_id);
+    if (hit) return humanLabel(hit);
+  }
+  const proto = (b.protocol || 'TCP').toUpperCase();
+  const suffix = b.port ? `${proto} ${b.port}` : proto;
+  return b.label ? `${b.label} · ${suffix}` : suffix;
+}
+
+export default function PortPicker({ value, onChange, placeholder = 'Pick a port…', className = '', defaults = null }: PortPickerProps) {
   const [catalog, setCatalog] = useState<PortCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -126,7 +162,80 @@ export default function PortPicker({ value, onChange, placeholder = 'Pick a port
       </div>
 
       {open && (
-        <div className="absolute z-30 mt-1 w-full min-w-[340px] bg-white border border-gray-200 rounded-xl shadow-xl max-h-80 overflow-hidden flex flex-col">
+        <div className="absolute z-30 mt-1 w-full min-w-[340px] bg-white border border-gray-200 rounded-xl shadow-xl max-h-96 overflow-hidden flex flex-col">
+          {defaults && ((defaults.standardPortIds?.length ?? 0) > 0 || (defaults.additionalPorts?.length ?? 0) > 0) && (
+            <div className="p-2 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-sky-50">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-700">
+                  Defaults for {defaults.label}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const toAdd: string[] = [];
+                    for (const pid of defaults.standardPortIds || []) {
+                      const hit = catalog.find((c) => c.port_id === pid);
+                      if (hit) toAdd.push(portToken(hit));
+                    }
+                    for (const b of defaults.additionalPorts || []) {
+                      const t = bindingToken(b, catalog);
+                      if (t) toAdd.push(t);
+                    }
+                    const cur = parsePorts(value);
+                    const next = Array.from(new Set([...cur, ...toAdd])).join(', ');
+                    onChange(next);
+                  }}
+                  className="text-[10px] px-2 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  + Add all
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {(defaults.standardPortIds || []).map((pid) => {
+                  const hit = catalog.find((c) => c.port_id === pid);
+                  if (!hit) return null;
+                  const token = portToken(hit);
+                  const picked = tokens.includes(token);
+                  return (
+                    <button
+                      key={`def-${pid}`}
+                      type="button"
+                      onClick={() => addToken(token)}
+                      title={humanLabel(hit)}
+                      className={`text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${picked
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50'}`}
+                    >
+                      <span className="font-mono font-semibold">{token}</span>
+                      <span className="text-[9px] text-gray-500">{hit.name}</span>
+                      {picked && <span>✓</span>}
+                    </button>
+                  );
+                })}
+                {(defaults.additionalPorts || []).map((b, i) => {
+                  const token = bindingToken(b, catalog);
+                  if (!token) return null;
+                  const picked = tokens.includes(token);
+                  return (
+                    <button
+                      key={`add-${i}-${token}`}
+                      type="button"
+                      onClick={() => addToken(token)}
+                      title={bindingLabel(b, catalog)}
+                      className={`text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${picked
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-white border-amber-200 text-amber-800 hover:bg-amber-50'}`}
+                    >
+                      <span className="font-mono font-semibold">{token}</span>
+                      {b.label && <span className="text-[9px] text-gray-500">{b.label}</span>}
+                      <span className="text-[9px] text-amber-600">custom</span>
+                      {picked && <span>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="p-2 border-b border-gray-100 flex flex-wrap gap-1 bg-slate-50">
             {categories.map((c) => (
               <button

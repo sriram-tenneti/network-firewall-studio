@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as api from '../../lib/api';
-import type { AppPresence, Environment, MemberSpec } from '../../types';
+import type { AppPresence, Environment, MemberSpec, PortBinding } from '../../types';
+import type { PortCatalogEntry } from '../../lib/api';
+import { PortBindingsEditor } from './SharedServicesTab';
 
 interface Props {
   appDistributedId: string;
@@ -34,6 +36,9 @@ export function AppPresenceMatrix({
   });
   const [egressText, setEgressText] = useState('');
   const [ingressText, setIngressText] = useState('');
+  const [ingressStdPortIds, setIngressStdPortIds] = useState<string[]>([]);
+  const [ingressAdditionalPorts, setIngressAdditionalPorts] = useState<PortBinding[]>([]);
+  const [portCatalog, setPortCatalog] = useState<PortCatalogEntry[]>([]);
 
   const [bulkText, setBulkText] = useState('');
   const [bulkDir, setBulkDir] = useState<'egress' | 'ingress'>('egress');
@@ -49,12 +54,14 @@ export function AppPresenceMatrix({
     if (!appDistributedId) return;
     setLoading(true);
     try {
-      const [ps, dcList, nhs] = await Promise.all([
+      const [ps, dcList, nhs, ports] = await Promise.all([
         api.getAppPresences({ app: appDistributedId, environment }),
         api.getNGDCDatacenters().catch(() => []),
         api.getNeighbourhoods().catch(() => []),
+        api.listPorts().catch(() => [] as PortCatalogEntry[]),
       ]);
       setPresences(ps || []);
+      setPortCatalog(ports || []);
       setDcs(
         (dcList || []).map((d: { dc_id?: string; id?: string; name?: string; dc_name?: string; type?: string }) => ({
           id: String(d.dc_id ?? d.id ?? ''),
@@ -107,6 +114,12 @@ export function AppPresenceMatrix({
       alert('DC, NH and SZ are required');
       return;
     }
+    const ingressPorts: PortBinding[] = form.has_ingress
+      ? [
+          ...ingressStdPortIds.map((pid) => ({ port_id: pid })),
+          ...ingressAdditionalPorts.filter((b) => b.port && b.port > 0),
+        ]
+      : [];
     const payload: AppPresence = {
       app_distributed_id: appDistributedId,
       dc_id: form.dc_id,
@@ -117,12 +130,15 @@ export function AppPresenceMatrix({
       has_ingress: Boolean(form.has_ingress),
       egress_members: parseMembers(egressText),
       ingress_members: form.has_ingress ? parseMembers(ingressText) : [],
+      ingress_ports: ingressPorts,
     };
     await api.upsertAppPresence(payload);
     setShowAdd(false);
     setForm({ app_distributed_id: appDistributedId, environment, has_ingress: false, dc_type: 'NGDC' });
     setEgressText('');
     setIngressText('');
+    setIngressStdPortIds([]);
+    setIngressAdditionalPorts([]);
     await load();
     onChange?.();
   };
@@ -282,6 +298,26 @@ export function AppPresenceMatrix({
               />
             </div>
           </div>
+          {form.has_ingress && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <PortBindingsEditor
+                title="Ingress Standard Ports"
+                subtitle="Pick from global Port Catalog. Surfaced as defaults in the Port Picker when this app is the destination."
+                mode="library"
+                catalog={portCatalog}
+                standardPortIds={ingressStdPortIds}
+                onChangeStandard={setIngressStdPortIds}
+              />
+              <PortBindingsEditor
+                title="Ingress Additional Ports"
+                subtitle="App-specific custom ports that don't belong in the catalog."
+                mode="custom"
+                catalog={portCatalog}
+                additionalPorts={ingressAdditionalPorts}
+                onChangeAdditional={setIngressAdditionalPorts}
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
             <button onClick={saveForm} className="px-4 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 rounded-md hover:shadow-md">Save Presence</button>
@@ -382,15 +418,16 @@ export function AppPresenceMatrix({
               <th className="px-2 py-2 text-center font-semibold">Egress IPs</th>
               <th className="px-2 py-2 text-left font-semibold">Ingress Group</th>
               <th className="px-2 py-2 text-center font-semibold">Ingress IPs</th>
+              <th className="px-2 py-2 text-left font-semibold">Ingress Ports</th>
               <th className="px-2 py-2 text-right font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {loading && (
-              <tr><td colSpan={8} className="px-2 py-4 text-center text-gray-500">Loading…</td></tr>
+              <tr><td colSpan={9} className="px-2 py-4 text-center text-gray-500">Loading…</td></tr>
             )}
             {!loading && presences.length === 0 && (
-              <tr><td colSpan={8} className="px-2 py-4 text-center text-gray-500">
+              <tr><td colSpan={9} className="px-2 py-4 text-center text-gray-500">
                 No presences yet — add one above or bulk-paste IPs to auto-create.
               </td></tr>
             )}
@@ -405,6 +442,30 @@ export function AppPresenceMatrix({
                   {p.has_ingress ? ingressName(p) : <span className="text-gray-400">—</span>}
                 </td>
                 <td className="px-2 py-1.5 text-center font-semibold text-gray-800">{p.has_ingress ? (p.ingress_members || []).length : '—'}</td>
+                <td className="px-2 py-1.5">
+                  {p.has_ingress && (p.ingress_ports || []).length > 0 ? (
+                    <div className="flex flex-wrap gap-1 max-w-[220px]">
+                      {(p.ingress_ports || []).slice(0, 4).map((b, i) => {
+                        const hit = b.port_id ? portCatalog.find((c) => c.port_id === b.port_id) : null;
+                        const label = hit
+                          ? `${hit.protocol} ${hit.port}`
+                          : b.port ? `${b.protocol || 'TCP'} ${b.port}` : b.port_id || '?';
+                        const title = hit ? `${hit.name} · ${hit.protocol} ${hit.port}` : (b.label || label);
+                        return (
+                          <span key={i} title={title}
+                            className="inline-block text-[10px] font-mono px-1.5 py-0.5 rounded border bg-indigo-50 text-indigo-700 border-indigo-200">
+                            {label}
+                          </span>
+                        );
+                      })}
+                      {(p.ingress_ports || []).length > 4 && (
+                        <span className="text-[10px] text-gray-500">+{(p.ingress_ports || []).length - 4}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
                 <td className="px-2 py-1.5 text-right">
                   <button
                     onClick={() => deletePresence(p)}

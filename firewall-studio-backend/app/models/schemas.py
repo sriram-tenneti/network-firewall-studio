@@ -32,6 +32,17 @@ class MemberSpec(BaseModel):
     dc_id: Optional[str] = None  # empty => valid in any DC the parent is in
 
 
+class PortBinding(BaseModel):
+    """Reference to a port — either by `port_id` into the global Port
+    Catalog or an inline `{protocol, port, label}` spec for service /
+    app -specific customs that don't belong in the shared library."""
+
+    port_id: Optional[str] = None
+    protocol: Optional[Literal["TCP", "UDP", "ICMP"]] = None
+    port: Optional[int] = None
+    label: Optional[str] = ""
+
+
 class AppPresence(BaseModel):
     """DC+env-specific presence of an Application."""
 
@@ -44,6 +55,11 @@ class AppPresence(BaseModel):
     has_ingress: bool = False
     egress_members: list[MemberSpec] = []
     ingress_members: list[MemberSpec] = []
+    # Listener/ingress ports exposed by this presence. Used by the rule
+    # builder's Port Picker as defaults when this app is chosen as the
+    # destination. Empty = no defaults; picker falls back to the global
+    # Port Catalog.
+    ingress_ports: list[PortBinding] = []
 
 
 class SharedServiceCategory(str, Enum):
@@ -83,6 +99,13 @@ class SharedService(BaseModel):
     color: Optional[str] = ""  # optional CSS color hint for the DnD sidebar
     environments: list[Environment] = [Environment.PRODUCTION]
     tags: list[str] = []
+    # Ports standard for this service — port_ids pointing into the global
+    # Port Catalog. Surfaced as defaults in the rule builder's Port Picker
+    # when this service is chosen as destination.
+    standard_ports: list[str] = []
+    # Service-specific customs that don't belong in the shared library
+    # (e.g. Oracle with non-standard TLS listener on 2484).
+    additional_ports: list[PortBinding] = []
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -137,6 +160,12 @@ class RuleRequestCreate(BaseModel):
     src_members_override: list[MemberSpec] = []
     dst_members_override: list[MemberSpec] = []
     requested_dcs: Optional[list[str]] = None  # optional DC scoping
+    # Optional per-presence scoping. Each entry identifies one (DC, NH, SZ)
+    # presence. When non-empty, only those presences participate in the
+    # fan-out — this lets the builder ask "which SZ for the source" when an
+    # app is present in multiple NH/SZ combinations.
+    source_presences: Optional[list[dict]] = None
+    destination_presences: Optional[list[dict]] = None
     include_cross_dc: bool = False
     owner: str = ""
 

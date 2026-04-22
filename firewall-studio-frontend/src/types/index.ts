@@ -625,6 +625,13 @@ export interface MemberSpec {
   dc_id?: string;
 }
 
+export interface PortBinding {
+  port_id?: string | null;
+  protocol?: 'TCP' | 'UDP' | 'ICMP' | null;
+  port?: number | null;
+  label?: string;
+}
+
 export interface AppPresence {
   app_distributed_id: string;
   dc_id: string;
@@ -635,6 +642,10 @@ export interface AppPresence {
   has_ingress: boolean;
   egress_members?: MemberSpec[];
   ingress_members?: MemberSpec[];
+  /** Listener/ingress ports exposed by this presence. Surfaced as
+   *  defaults in the rule builder's Port Picker when this app is
+   *  chosen as the destination. */
+  ingress_ports?: PortBinding[];
 }
 
 export interface ClassifyResult {
@@ -708,6 +719,10 @@ export interface SharedService {
   color?: string;
   environments: Environment[];
   tags?: string[];
+  /** Port-catalog IDs treated as defaults for this service. */
+  standard_ports?: string[];
+  /** Service-specific custom ports that don't belong in the shared library. */
+  additional_ports?: PortBinding[];
   created_at?: string;
   updated_at?: string;
 }

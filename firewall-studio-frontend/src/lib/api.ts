@@ -1287,6 +1287,12 @@ export const ingestAppMembers = (
     { method: 'POST', body: JSON.stringify(payload) },
   );
 
+export interface PresenceKey {
+  dc_id: string;
+  nh_id: string;
+  sz_code: string;
+}
+
 export interface RuleRequestInput {
   application_ref: string;
   destination_kind: DestinationEntityKind;
@@ -1298,6 +1304,13 @@ export interface RuleRequestInput {
   src_members_override?: MemberSpec[];
   dst_members_override?: MemberSpec[];
   requested_dcs?: string[];
+  /** Per-presence scoping for the source app. When provided, only these
+   *  (DC, NH, SZ) presences participate in fan-out. Leave empty to use
+   *  all of the app's presences. */
+  source_presences?: PresenceKey[];
+  /** Per-presence scoping for the destination (app_ingress or shared
+   *  service). Same semantics as source_presences. */
+  destination_presences?: PresenceKey[];
   include_cross_dc?: boolean;
   owner?: string;
 }
