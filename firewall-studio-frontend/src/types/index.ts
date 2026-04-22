@@ -605,3 +605,100 @@ export interface ExceptionRequest {
   reviewed_by: string | null;
   reviewed_at: string | null;
 }
+
+
+// ============================================================
+// Revamp: Shared Services, Presences, Multi-DC Fan-out
+// ============================================================
+
+export type Environment = 'Production' | 'Non-Production' | 'Pre-Production';
+export type MemberTypeKind = 'ip' | 'cidr' | 'subnet' | 'range' | 'group';
+export type OwnerKind = 'app_egress' | 'app_ingress' | 'shared_service' | 'adhoc_destination';
+export type DestinationEntityKind = 'app_ingress' | 'shared_service' | 'adhoc';
+export type SharedServiceCategory =
+  | 'Messaging' | 'Database' | 'Observability' | 'Identity' | 'Cache' | 'Other';
+
+export interface MemberSpec {
+  type: MemberTypeKind;
+  value: string;
+  description?: string;
+  dc_id?: string;
+}
+
+export interface AppPresence {
+  app_distributed_id: string;
+  dc_id: string;
+  dc_type?: 'NGDC' | 'Legacy';
+  environment: Environment;
+  nh_id: string;
+  sz_code: string;
+  has_ingress: boolean;
+  egress_members?: MemberSpec[];
+  ingress_members?: MemberSpec[];
+}
+
+export interface SharedServicePresence {
+  service_id: string;
+  dc_id: string;
+  dc_type?: 'NGDC' | 'Legacy';
+  environment: Environment;
+  nh_id: string;
+  sz_code: string;
+  members: MemberSpec[];
+}
+
+export interface SharedService {
+  service_id: string;
+  name: string;
+  category: SharedServiceCategory;
+  owner?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  environments: Environment[];
+  tags?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PhysicalRuleExpansion {
+  rule_id?: string;
+  request_id?: string;
+  src_dc: string;
+  dst_dc: string;
+  src_group_ref: string;
+  dst_group_ref: string;
+  src_nh?: string;
+  src_sz?: string;
+  dst_nh?: string;
+  dst_sz?: string;
+  ports: string;
+  action: string;
+  environment: Environment;
+  cross_dc?: boolean;
+  policy_result?: PolicyResult | null;
+  compiled_text?: string | null;
+  lifecycle_status?: string;
+}
+
+export interface RuleRequestRecord {
+  request_id: string;
+  application_ref: string;
+  destination_kind: DestinationEntityKind;
+  destination_ref?: string | null;
+  environment: Environment;
+  ports: string;
+  action: string;
+  description?: string;
+  owner?: string;
+  status: string;
+  expansion: PhysicalRuleExpansion[];
+  warnings?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RuleExpansionPreview {
+  physical_rules: PhysicalRuleExpansion[];
+  warnings: string[];
+}

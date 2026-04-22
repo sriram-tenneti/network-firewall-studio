@@ -6,6 +6,7 @@ import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
 import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
+import SharedServicesTab from './settings/SharedServicesTab';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -103,6 +104,12 @@ export default function SettingsPage() {
   // SZ-level CIDR map (loaded from backend)
   const [szCidrMap, setSzCidrMap] = useState<NhSecurityZone[]>([]);
   const [expandedNhSzId, setExpandedNhSzId] = useState<string | null>(null);
+
+  // Per-SZ CIDR bindings editing state (DC-specific)
+  const [expandedSzBindings, setExpandedSzBindings] = useState<string | null>(null);
+  const [newSzBindingForm, setNewSzBindingForm] = useState<{ dc: string; nh: string; cidr: string; vrf_id: string }>({ dc: '', nh: '', cidr: '', vrf_id: '' });
+  const [editingSzBindingKey, setEditingSzBindingKey] = useState<string | null>(null);
+  const [editSzBindingCidr, setEditSzBindingCidr] = useState<string>('');
 
   // Data Mode state (seed vs live)
   const [dataMode, setDataModeState] = useState<string>('seed');
@@ -727,6 +734,42 @@ export default function SettingsPage() {
     } catch { showNotification('Failed to delete security zone', 'error'); }
   };
 
+  // ── SZ CIDR Binding CRUD (DC-specific) ──
+  const reloadSzCidrMap = async () => {
+    try {
+      const data = await api.getSzCidrMap();
+      setSzCidrMap(data);
+    } catch { /* soft fail */ }
+  };
+  const handleAddSzBinding = async (sz: string) => {
+    const { dc, nh, cidr, vrf_id } = newSzBindingForm;
+    if (!nh || !cidr) { showNotification('NH and CIDR are required', 'error'); return; }
+    try {
+      await api.upsertSzCidrBinding({ nh, sz, dc: dc || '', cidr, vrf_id });
+      setNewSzBindingForm({ dc: '', nh: '', cidr: '', vrf_id: '' });
+      await reloadSzCidrMap();
+      showNotification(`Binding added: ${nh} · ${sz} · ${dc || 'any-DC'} → ${cidr}`, 'success');
+    } catch (e) { showNotification(`Failed to add binding: ${(e as Error).message}`, 'error'); }
+  };
+  const handleSaveSzBindingEdit = async (nh: string, sz: string, dc: string) => {
+    if (!editSzBindingCidr) { showNotification('CIDR is required', 'error'); return; }
+    try {
+      await api.upsertSzCidrBinding({ nh, sz, dc, cidr: editSzBindingCidr });
+      setEditingSzBindingKey(null);
+      setEditSzBindingCidr('');
+      await reloadSzCidrMap();
+      showNotification(`Binding updated: ${nh} · ${sz} · ${dc || 'any-DC'}`, 'success');
+    } catch (e) { showNotification(`Failed to update binding: ${(e as Error).message}`, 'error'); }
+  };
+  const handleDeleteSzBinding = async (nh: string, sz: string, dc: string) => {
+    if (!confirm(`Delete CIDR binding ${nh} · ${sz}${dc ? ' · ' + dc : ''}?`)) return;
+    try {
+      await api.deleteSzCidrBinding(nh, sz, dc || '');
+      await reloadSzCidrMap();
+      showNotification('Binding deleted', 'success');
+    } catch (e) { showNotification(`Failed to delete binding: ${(e as Error).message}`, 'error'); }
+  };
+
   // ── DC CRUD handlers ──
   const handleSaveDc = async (dcId: string) => {
     try {
@@ -778,6 +821,7 @@ export default function SettingsPage() {
     { id: 'security_zones', label: 'Security Zones' },
     { id: 'datacenters', label: 'Data Centers' },
     { id: 'app_management', label: 'App Management' },
+    { id: 'shared_services', label: 'Shared Services' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
@@ -1152,22 +1196,45 @@ export default function SettingsPage() {
         {/* ── Neighbourhoods Tab ── */}
         {activeTab === 'neighbourhoods' && (
           <div className="space-y-4">
-            <div className="p-4 bg-white border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Neighbourhoods</h2>
-                  <p className="text-xs text-gray-500 mt-1">Manage neighbourhood definitions with metadata and environment assignments. CIDR ranges are resolved at the SZ level per (DC, NH, SZ) — expand any NH row to see the breakdown. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
+            {/* Hero header */}
+            <div className="p-5 bg-gradient-to-br from-indigo-50 via-white to-blue-50 border border-indigo-100 rounded-2xl shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-md flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Neighbourhoods</h2>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Logical groupings of hosts, subnets, and zones. CIDRs resolve at the SZ level per (DC, NH, SZ) — expand any NH row to see the breakdown.</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {(['Production','Pre-Production','Non-Production'] as const).map(env => {
+                        const n = neighbourhoods.filter(nh => String(nh.environment || '') === env).length;
+                        const color = env === 'Production' ? 'bg-red-50 text-red-700 border-red-200' :
+                                      env === 'Pre-Production' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                      'bg-emerald-50 text-emerald-700 border-emerald-200';
+                        return (
+                          <span key={env} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${color}`}>
+                            {env}: {n}
+                          </span>
+                        );
+                      })}
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200">Total: {neighbourhoods.length}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white" value={nhEnvFilter} onChange={e => setNhEnvFilter(e.target.value)}>
+                <div className="flex items-center gap-2">
+                  <select className="px-3 py-2 text-sm border border-indigo-200 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-indigo-400" value={nhEnvFilter} onChange={e => setNhEnvFilter(e.target.value)}>
                     <option value="all">All Environments</option>
                     <option value="Production">Production</option>
                     <option value="Pre-Production">Pre-Production</option>
                     <option value="Non-Production">Non-Production</option>
                   </select>
-                  <button onClick={() => setShowAddNh(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add NH</button>
+                  <button onClick={() => setShowAddNh(true)} className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:shadow-lg transition-all shadow-md">+ Add NH</button>
                 </div>
               </div>
+            </div>
+
+            <div className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
 
               {showAddNh && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
@@ -1301,18 +1368,44 @@ export default function SettingsPage() {
         {/* ── Security Zones Tab ── */}
         {activeTab === 'security_zones' && (
           <div className="space-y-4">
-            <div className="p-4 bg-white border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Security Zones</h2>
-                  <p className="text-xs text-gray-500 mt-1">Manage security zone definitions with risk levels, PCI scope, fabric, and VRF prefix. CIDR is resolved at the (DC, NH, SZ) level in App Management. {dataMode === 'seed' ? '(Viewing seeded defaults)' : '(Viewing live/real data — editable)'}</p>
+            {/* Hero header */}
+            <div className="p-5 bg-gradient-to-br from-emerald-50 via-white to-teal-50 border border-emerald-100 rounded-2xl shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 9-8 10-4.5-1-8-5-8-10V7l8-4z"/></svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Security Zones</h2>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Risk-classified network segments. CIDR shown below is aggregated across all (DC, NH) bindings for each zone.</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {['Critical','High','Medium','Low'].map(r => {
+                        const n = securityZones.filter(sz => String(sz.risk_level) === r).length;
+                        const color = r === 'Critical' ? 'bg-red-100 text-red-700 border-red-200' :
+                                      r === 'High' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                      r === 'Medium' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                                      'bg-green-100 text-green-700 border-green-200';
+                        return (
+                          <span key={r} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${color}`}>
+                            {r}: {n}
+                          </span>
+                        );
+                      })}
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200">Total: {securityZones.length}</span>
+                    </div>
+                  </div>
                 </div>
-                <button onClick={() => setShowAddSz(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add SZ</button>
+                <button onClick={() => setShowAddSz(true)} className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg hover:shadow-lg transition-all shadow-md">+ Add Security Zone</button>
               </div>
+            </div>
 
+            <div className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
               {showAddSz && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-                  <h3 className="text-sm font-semibold text-blue-800">Add New Security Zone</h3>
+                <div className="mb-4 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-2">
+                  <h3 className="text-sm font-bold text-emerald-800 flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+                    Add New Security Zone
+                  </h3>
                   <div className="grid grid-cols-4 gap-2">
                     <input className={inp} placeholder="Code (e.g. STD)" value={String(newSzForm.code || '')} onChange={e => setNewSzForm({ ...newSzForm, code: e.target.value })} />
                     <input className={inp} placeholder="Name (e.g. Standard)" value={String(newSzForm.name || '')} onChange={e => setNewSzForm({ ...newSzForm, name: e.target.value })} />
@@ -1323,51 +1416,90 @@ export default function SettingsPage() {
                       <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option><option value="All">All</option>
                     </select>
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <input className={inp} placeholder="VRF Prefix (e.g. VRF-STD)" value={String(newSzForm.vrf_prefix || '')} onChange={e => setNewSzForm({ ...newSzForm, vrf_prefix: e.target.value })} />
                     <input className={inp} placeholder="Description" value={String(newSzForm.description || '')} onChange={e => setNewSzForm({ ...newSzForm, description: e.target.value })} />
-                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!newSzForm.pci_scope} onChange={e => setNewSzForm({ ...newSzForm, pci_scope: e.target.checked })} className="rounded border-gray-300 text-indigo-600" /> PCI Scope</label>
                   </div>
                   <div className="flex gap-2 mt-2">
-                    <button onClick={handleAddSz} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save</button>
+                    <button onClick={handleAddSz} className="px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700">Save</button>
                     <button onClick={() => setShowAddSz(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
                   </div>
                 </div>
               )}
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Risk Level</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">PCI</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fabric</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">VRF Prefix</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Code</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Name</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Risk</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">CIDR Bindings (DC · NH)</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Fabric</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">VRF Prefix</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100 bg-white">
                     {securityZones.map((sz, idx) => {
                       const code = String(sz.code || idx);
                       const isEditing = editingSzCode === code;
+                      const szBindings = szCidrMap.filter(e => e.sz === code);
+                      const szCidrs = [...new Set(szBindings.filter(e => !!e.cidr).map(e => e.cidr))];
+                      const isBindingsOpen = expandedSzBindings === code;
+                      const riskBg = String(sz.risk_level) === 'Critical' ? 'from-rose-300 to-red-400' :
+                                     String(sz.risk_level) === 'High' ? 'from-amber-300 to-orange-400' :
+                                     String(sz.risk_level) === 'Medium' ? 'from-yellow-300 to-amber-400' :
+                                     'from-emerald-300 to-teal-400';
                       return (
-                        <tr key={code} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{code}</td>
-                          <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editSzForm.name || '')} onChange={e => setEditSzForm({ ...editSzForm, name: e.target.value })} /> : String(sz.name || '')}</td>
+                        <React.Fragment key={code}>
+                        <tr className="hover:bg-emerald-50/40 transition-colors">
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-1.5 h-8 rounded-full bg-gradient-to-b ${riskBg} flex-shrink-0`}></span>
+                              <span className="font-mono text-xs font-bold text-emerald-700 tracking-wide">{code}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-gray-800 font-medium">{isEditing ? <input className={inp} value={String(editSzForm.name || '')} onChange={e => setEditSzForm({ ...editSzForm, name: e.target.value })} /> : String(sz.name || '')}</td>
                           <td className="px-3 py-2">{isEditing ? (
                             <select className={inp} value={String(editSzForm.risk_level || '')} onChange={e => setEditSzForm({ ...editSzForm, risk_level: e.target.value })}>
                               <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option>
                             </select>
-                          ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(sz.risk_level) === 'Critical' ? 'bg-red-100 text-red-800' : String(sz.risk_level) === 'High' ? 'bg-orange-100 text-orange-800' : String(sz.risk_level) === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{String(sz.risk_level || 'Low')}</span>}</td>
-                          <td className="px-3 py-2">{isEditing ? <input type="checkbox" checked={!!editSzForm.pci_scope} onChange={e => setEditSzForm({ ...editSzForm, pci_scope: e.target.checked })} className="rounded border-gray-300 text-indigo-600" /> : (sz.pci_scope ? <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800">Yes</span> : <span className="text-xs text-gray-400">No</span>)}</td>
+                          ) : <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full ${String(sz.risk_level) === 'Critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' : String(sz.risk_level) === 'High' ? 'bg-amber-50 text-amber-700 border border-amber-200' : String(sz.risk_level) === 'Medium' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{String(sz.risk_level || 'Low')}</span>}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              onClick={() => {
+                                const next = isBindingsOpen ? null : code;
+                                setExpandedSzBindings(next);
+                                if (next) setNewSzBindingForm({ dc: '', nh: '', cidr: '', vrf_id: '' });
+                              }}
+                              className="group inline-flex items-center gap-1.5 text-left rounded px-1.5 py-1 hover:bg-emerald-50 transition"
+                              title={isBindingsOpen ? 'Hide bindings' : 'Manage bindings'}
+                            >
+                              <svg className={`w-3 h-3 text-emerald-600 transition-transform ${isBindingsOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+                              {szCidrs.length === 0 ? (
+                                <span className="text-[11px] text-gray-400 italic group-hover:text-emerald-600">No bindings · add</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {szCidrs.slice(0, 3).map(c => (
+                                    <span key={c} className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/></svg>
+                                      {c}
+                                    </span>
+                                  ))}
+                                  {szCidrs.length > 3 && (
+                                    <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold">+{szCidrs.length - 3}</span>
+                                  )}
+                                </div>
+                              )}
+                            </button>
+                          </td>
                           <td className="px-3 py-2 text-xs">{isEditing ? (
                             <select className={inp} value={String(editSzForm.fabric || '')} onChange={e => setEditSzForm({ ...editSzForm, fabric: e.target.value })}>
                               <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option><option value="All">All</option>
                             </select>
-                          ) : String(sz.fabric || '—')}</td>
-                          <td className="px-3 py-2 font-mono text-xs">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '—')}</td>
+                          ) : <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{String(sz.fabric || '—')}</span>}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '—')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1376,21 +1508,149 @@ export default function SettingsPage() {
                               </div>
                             ) : (
                               <div className="flex gap-1">
-                                <button onClick={() => { setEditingSzCode(code); setEditSzForm({ name: sz.name, risk_level: sz.risk_level, pci_scope: sz.pci_scope, fabric: sz.fabric, vrf_prefix: sz.vrf_prefix, description: sz.description }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
-                                <button onClick={() => handleDeleteSz(code)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
+                                <button onClick={() => { setEditingSzCode(code); setEditSzForm({ name: sz.name, risk_level: sz.risk_level, pci_scope: sz.pci_scope, fabric: sz.fabric, vrf_prefix: sz.vrf_prefix, description: sz.description }); }} className="px-2 py-1 text-xs text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-50 font-medium">Edit</button>
+                                <button onClick={() => handleDeleteSz(code)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 font-medium">Delete</button>
                               </div>
                             )}
                           </td>
                         </tr>
+                        {isBindingsOpen && (
+                          <tr>
+                            <td colSpan={7} className="px-0 py-0">
+                              <div className="mx-3 my-2 p-3 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/70 border border-emerald-100 rounded-xl">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-md bg-gradient-to-br from-emerald-200 to-teal-300 text-emerald-800 flex items-center justify-center text-xs font-bold shadow-sm">
+                                      {code}
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-bold text-emerald-800">CIDR Bindings for {code}</div>
+                                      <div className="text-[10px] text-gray-500">Per (DC, NH) — DC-specific takes precedence; empty DC = any-DC fallback.</div>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                    {szBindings.length} binding{szBindings.length === 1 ? '' : 's'}
+                                  </span>
+                                </div>
+
+                                {szBindings.length > 0 && (
+                                  <div className="overflow-x-auto rounded-lg border border-emerald-100 bg-white/90 mb-2">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-emerald-50/80">
+                                        <tr>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-36">DC</th>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-28">NH</th>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider">CIDR</th>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-32">VRF</th>
+                                          <th className="px-2 py-1.5 text-right text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-32">Actions</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-emerald-50">
+                                        {szBindings.map((b) => {
+                                          const bkey = `${b.nh}|${code}|${b.dc || ''}`;
+                                          const isEdit = editingSzBindingKey === bkey;
+                                          return (
+                                            <tr key={bkey} className="hover:bg-emerald-50/40">
+                                              <td className="px-2 py-1 font-mono text-[11px] text-orange-700 font-semibold">
+                                                {b.dc ? b.dc.replace('_NGDC','') : <span className="italic text-gray-400">any-DC</span>}
+                                              </td>
+                                              <td className="px-2 py-1 font-mono text-[11px] text-indigo-700 font-semibold">{b.nh}</td>
+                                              <td className="px-2 py-1">
+                                                {isEdit ? (
+                                                  <input
+                                                    className={inp + ' font-mono text-[11px]'}
+                                                    placeholder="10.10.0.0/16"
+                                                    value={editSzBindingCidr}
+                                                    onChange={e => setEditSzBindingCidr(e.target.value)}
+                                                  />
+                                                ) : (
+                                                  <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                                    <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/></svg>
+                                                    {b.cidr || <span className="italic text-gray-400">empty</span>}
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-2 py-1 font-mono text-[10px] text-gray-600">{b.vrf_id || '—'}</td>
+                                              <td className="px-2 py-1 text-right">
+                                                {isEdit ? (
+                                                  <div className="inline-flex gap-1">
+                                                    <button onClick={() => handleSaveSzBindingEdit(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-white bg-emerald-600 rounded hover:bg-emerald-700">Save</button>
+                                                    <button onClick={() => { setEditingSzBindingKey(null); setEditSzBindingCidr(''); }} className="px-2 py-0.5 text-[11px] text-gray-600 border border-gray-200 rounded hover:bg-gray-50">Cancel</button>
+                                                  </div>
+                                                ) : (
+                                                  <div className="inline-flex gap-1">
+                                                    <button onClick={() => { setEditingSzBindingKey(bkey); setEditSzBindingCidr(b.cidr || ''); }} className="px-2 py-0.5 text-[11px] text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-50 font-medium">Edit</button>
+                                                    <button onClick={() => handleDeleteSzBinding(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-rose-700 border border-rose-200 rounded hover:bg-rose-50 font-medium">Delete</button>
+                                                  </div>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                {/* Add new binding */}
+                                <div className="p-2 rounded-lg bg-white border border-dashed border-emerald-200">
+                                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-1.5">+ Add CIDR binding</div>
+                                  <div className="grid grid-cols-12 gap-2">
+                                    <select
+                                      className={`${inp} col-span-3 text-xs`}
+                                      value={newSzBindingForm.dc}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, dc: e.target.value })}
+                                    >
+                                      <option value="">any-DC (fallback)</option>
+                                      {ngdcDatacenters.map((d, i) => {
+                                        const dcId = String(d.dc_id || d.code || i);
+                                        return <option key={dcId} value={dcId}>{dcId}</option>;
+                                      })}
+                                    </select>
+                                    <select
+                                      className={`${inp} col-span-3 text-xs`}
+                                      value={newSzBindingForm.nh}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, nh: e.target.value })}
+                                    >
+                                      <option value="">Select NH…</option>
+                                      {neighbourhoods.map((n, i) => {
+                                        const id = String((n as Record<string, unknown>).nh_id || (n as Record<string, unknown>).id || i);
+                                        return <option key={id} value={id}>{id}</option>;
+                                      })}
+                                    </select>
+                                    <input
+                                      className={`${inp} col-span-3 font-mono text-xs`}
+                                      placeholder="CIDR (e.g. 10.20.0.0/16)"
+                                      value={newSzBindingForm.cidr}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, cidr: e.target.value })}
+                                    />
+                                    <input
+                                      className={`${inp} col-span-2 font-mono text-xs`}
+                                      placeholder="VRF (optional)"
+                                      value={newSzBindingForm.vrf_id}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, vrf_id: e.target.value })}
+                                    />
+                                    <button
+                                      onClick={() => handleAddSzBinding(code)}
+                                      className="col-span-1 px-2 py-1 text-xs font-semibold text-white bg-gradient-to-r from-emerald-500 to-teal-500 rounded hover:shadow-md transition"
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                     {securityZones.length === 0 && (
-                      <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-500">No security zones found. Click &quot;+ Add SZ&quot; to create one.</td></tr>
+                      <tr><td colSpan={7} className="px-3 py-10 text-center text-sm text-gray-500">No security zones. Click <span className="font-semibold text-emerald-700">+ Add Security Zone</span> to create one.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
-              <div className="mt-3 text-xs text-gray-400">Total: {securityZones.length} security zone{securityZones.length !== 1 ? 's' : ''}</div>
             </div>
           </div>
         )}
@@ -1398,14 +1658,28 @@ export default function SettingsPage() {
         {/* ── Data Centers Tab ── */}
         {activeTab === 'datacenters' && (
           <div className="space-y-4">
-            <div className="p-4 bg-white border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                      <h2 className="text-lg font-semibold text-gray-900">Data Centers</h2>
-                      <p className="text-xs text-gray-500 mt-1">Manage NGDC and Legacy data center definitions with type classification. {dataMode === 'live' ? 'Live mode — fully editable.' : 'Viewing seeded defaults.'}  </p>
+            {/* Hero header */}
+            <div className="p-5 bg-gradient-to-br from-orange-50 via-white to-amber-50 border border-orange-100 rounded-2xl shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-md flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 7l1.5 10a2 2 0 002 2h9a2 2 0 002-2L20 7M4 7l2-3h12l2 3M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01"/></svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Data Centers</h2>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">NGDC and Legacy data centers. All rules, groups, and presences are scoped by DC.</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-green-100 text-green-700 border-green-200">NGDC: {ngdcDatacenters.length}</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-orange-100 text-orange-700 border-orange-200">Legacy: {legacyDatacenters.length}</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200">Total: {ngdcDatacenters.length + legacyDatacenters.length}</span>
+                    </div>
+                  </div>
                 </div>
-                <button onClick={() => setShowAddDc(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add DC</button>
+                <button onClick={() => setShowAddDc(true)} className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-orange-600 to-amber-600 rounded-lg hover:shadow-lg transition-all shadow-md">+ Add Data Center</button>
               </div>
+            </div>
+
+            <div className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
 
               {showAddDc && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
@@ -1486,49 +1760,74 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* ── Shared Services Tab ── */}
+        {activeTab === 'shared_services' && (
+          <SharedServicesTab />
+        )}
+
         {/* ── App Management Tab ── */}
         {activeTab === 'app_management' && (
           <div className="space-y-6">
-            <div className="p-4 bg-white border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <label className="text-sm font-semibold text-gray-700">Select Application:</label>
-                    <select className="flex-1 max-w-md px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
-                      value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
-                      <option value="">-- All Applications --</option>
-                      {applications.map(app => (
-                        <option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id}</option>
-                      ))}
-                    </select>
+            {/* Hero header */}
+            <div className="p-5 bg-gradient-to-br from-purple-50 via-white to-fuchsia-50 border border-purple-100 rounded-2xl shadow-sm">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center shadow-md flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                   </div>
-                  <div className="flex gap-2">
-                    <label className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 cursor-pointer">
-                      {importingApps ? 'Importing...' : 'Import Apps'}
-                      <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={importingApps} onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setImportingApps(true);
-                        try {
-                          const result = await api.importAppManagement(file);
-                          setImportResult(result);
-                          showNotification(`Import: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged`, 'success');
-                          loadRefData();
-                        } catch { showNotification('Import failed', 'error'); }
-                        setImportingApps(false);
-                        e.target.value = '';
-                      }} />
-                    </label>
-                    <button onClick={async () => {
-                      if (!confirm('Clear ALL imported app data? Seed apps will remain.')) return;
+                  <div>
+                    <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">App Management</h2>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Register applications with per-DC presences, egress/ingress configuration, and ServiceNow linkage.</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-purple-100 text-purple-700 border-purple-200">Apps: {applications.length}</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200">With Ingress: {applications.filter(a => a.has_ingress).length}</span>
+                      {selectedApp && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-indigo-100 text-indigo-700 border-indigo-200">Filtered: {selectedApp}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <label className="px-4 py-2 text-sm font-semibold text-purple-700 bg-white border border-purple-200 rounded-lg hover:bg-purple-50 cursor-pointer shadow-sm transition-all">
+                    {importingApps ? 'Importing…' : '⬆ Import Apps'}
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={importingApps} onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setImportingApps(true);
                       try {
-                        await api.clearAppManagement();
-                        showNotification('All imported apps cleared', 'success');
+                        const result = await api.importAppManagement(file);
+                        setImportResult(result);
+                        showNotification(`Import: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged`, 'success');
                         loadRefData();
-                      } catch { showNotification('Clear failed', 'error'); }
-                    }} className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100">Clear Apps</button>
-                    <button onClick={() => setShowAddApp(true)}
-                      className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Add Application</button>
-                  </div>
+                      } catch { showNotification('Import failed', 'error'); }
+                      setImportingApps(false);
+                      e.target.value = '';
+                    }} />
+                  </label>
+                  <button onClick={async () => {
+                    if (!confirm('Clear ALL imported app data? Seed apps will remain.')) return;
+                    try {
+                      await api.clearAppManagement();
+                      showNotification('All imported apps cleared', 'success');
+                      loadRefData();
+                    } catch { showNotification('Clear failed', 'error'); }
+                  }} className="px-4 py-2 text-sm font-semibold text-red-700 bg-white border border-red-200 rounded-lg hover:bg-red-50 shadow-sm transition-all">Clear Apps</button>
+                  <button onClick={() => setShowAddApp(true)}
+                    className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 rounded-lg hover:shadow-lg transition-all shadow-md">+ Add Application</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-semibold text-gray-700">Focus on:</label>
+                <select className="flex-1 max-w-md px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-400 bg-white shadow-sm"
+                  value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
+                  <option value="">-- All Applications --</option>
+                  {applications.map(app => (
+                    <option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id} — {app.app_name || ''}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

@@ -1,7 +1,179 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal
 from enum import Enum
 from datetime import datetime
+
+
+# ---- Revamp: Shared Services, Presences, Multi-DC Fan-out ----
+# These models are additive; they augment (do not replace) the existing
+# egress/ingress architecture. See docs/ARCHITECTURE_PROPOSAL for context.
+
+class Environment(str, Enum):
+    PRODUCTION = "Production"
+    NON_PRODUCTION = "Non-Production"
+    PRE_PRODUCTION = "Pre-Production"
+
+
+class MemberType(str, Enum):
+    IP = "ip"
+    CIDR = "cidr"
+    SUBNET = "subnet"
+    RANGE = "range"
+    GROUP = "group"
+
+
+class MemberSpec(BaseModel):
+    """Unified membership shape used by all group-like owners (apps,
+    shared services, ad-hoc destinations)."""
+
+    type: MemberType = MemberType.IP
+    value: str
+    description: Optional[str] = ""
+    dc_id: Optional[str] = None  # empty => valid in any DC the parent is in
+
+
+class AppPresence(BaseModel):
+    """DC+env-specific presence of an Application."""
+
+    app_distributed_id: str
+    dc_id: str
+    dc_type: Literal["NGDC", "Legacy"] = "NGDC"
+    environment: Environment = Environment.PRODUCTION
+    nh_id: str
+    sz_code: str
+    has_ingress: bool = False
+    egress_members: list[MemberSpec] = []
+    ingress_members: list[MemberSpec] = []
+
+
+class SharedServiceCategory(str, Enum):
+    MESSAGING = "Messaging"
+    DATABASE = "Database"
+    OBSERVABILITY = "Observability"
+    IDENTITY = "Identity"
+    CACHE = "Cache"
+    OTHER = "Other"
+
+
+class SharedServicePresence(BaseModel):
+    """DC+env-specific presence of a Shared Service."""
+
+    service_id: str
+    dc_id: str
+    dc_type: Literal["NGDC", "Legacy"] = "NGDC"
+    environment: Environment = Environment.PRODUCTION
+    nh_id: str
+    sz_code: str
+    members: list[MemberSpec] = []
+
+
+class SharedService(BaseModel):
+    """Centralized shared service (MQ, Kafka, DB, AppD, Splunk, Redis, …)
+    available as a rule destination.
+
+    Group naming: grp-<service_id>-<NH>-<SZ>
+    """
+
+    service_id: str  # slug, e.g. "KAFKA"
+    name: str
+    category: SharedServiceCategory = SharedServiceCategory.OTHER
+    owner: Optional[str] = ""
+    description: Optional[str] = ""
+    icon: Optional[str] = ""   # optional emoji/symbol used by the DnD sidebar
+    color: Optional[str] = ""  # optional CSS color hint for the DnD sidebar
+    environments: list[Environment] = [Environment.PRODUCTION]
+    tags: list[str] = []
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+# ---- Revamp: Extended Group shape ----
+
+class FirewallGroupOwnerKind(str, Enum):
+    APP_EGRESS = "app_egress"
+    APP_INGRESS = "app_ingress"
+    SHARED_SERVICE = "shared_service"
+    ADHOC_DESTINATION = "adhoc_destination"
+
+
+class FirewallGroupModel(BaseModel):
+    """Unified firewall group shape (new schema — existing groups are
+    auto-tagged during migration)."""
+
+    name: str
+    owner_kind: FirewallGroupOwnerKind = FirewallGroupOwnerKind.APP_EGRESS
+    owner_ref: Optional[str] = None  # app_distributed_id OR service_id
+    dc_id: Optional[str] = None
+    environment: Environment = Environment.PRODUCTION
+    nh_id: Optional[str] = None
+    sz_code: Optional[str] = None
+    direction: Literal["egress", "ingress"] = "egress"
+    members: list[MemberSpec] = []
+    description: Optional[str] = ""
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+# ---- Revamp: Multi-DC rule fan-out ----
+
+class DestinationEntityKind(str, Enum):
+    APP_INGRESS = "app_ingress"
+    SHARED_SERVICE = "shared_service"
+    ADHOC = "adhoc"
+
+
+class RuleRequestCreate(BaseModel):
+    """Logical rule request submitted in Studio — fans out into per-DC
+    PhysicalRule records.
+    """
+
+    application_ref: str  # source app_distributed_id
+    destination_kind: DestinationEntityKind
+    destination_ref: Optional[str] = None  # app_distributed_id OR service_id
+    environment: Environment = Environment.PRODUCTION
+    ports: str = "TCP 8080"
+    action: Literal["ACCEPT", "DROP"] = "ACCEPT"
+    description: str = ""
+    src_members_override: list[MemberSpec] = []
+    dst_members_override: list[MemberSpec] = []
+    requested_dcs: Optional[list[str]] = None  # optional DC scoping
+    include_cross_dc: bool = False
+    owner: str = ""
+
+
+class PhysicalRule(BaseModel):
+    rule_id: str
+    request_id: str
+    src_dc: str
+    dst_dc: str
+    src_group_ref: str
+    dst_group_ref: str
+    src_nh: Optional[str] = None
+    src_sz: Optional[str] = None
+    dst_nh: Optional[str] = None
+    dst_sz: Optional[str] = None
+    ports: str = ""
+    action: str = "ACCEPT"
+    environment: Environment = Environment.PRODUCTION
+    policy_result: Optional[str] = None  # filled from PolicyResult at fan-out
+    compiled_text: Optional[str] = None
+    lifecycle_status: str = "Submitted"
+
+
+class RuleRequestRecord(BaseModel):
+    request_id: str
+    application_ref: str
+    destination_kind: DestinationEntityKind
+    destination_ref: Optional[str] = None
+    environment: Environment
+    ports: str
+    action: str = "ACCEPT"
+    description: str = ""
+    owner: str = ""
+    status: str = "Draft"  # Draft | Submitted | Approved | Rejected
+    expansion: list[PhysicalRule] = []
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class RuleStatus(str, Enum):

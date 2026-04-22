@@ -4,13 +4,13 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-// RuleFormModal no longer used — draft editing uses full DragDropRuleBuilder
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
 import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
 import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
 import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
-import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
+import RuleRequestBuilder from '@/components/design-studio/RuleRequestBuilder';
+import RuleRequestsPanel from '@/components/design-studio/RuleRequestsPanel';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
@@ -25,8 +25,8 @@ export function DesignStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
-  const [viewMode, setViewMode] = useState<'table' | 'builder'>('table');
-  const [editingDraftRule, setEditingDraftRule] = useState<FirewallRule | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'multi_dc'>('table');
+  const [requestsReloadKey, setRequestsReloadKey] = useState(0);
 
   const detailModal = useModal<FirewallRule>();
   const modifyModal = useModal<FirewallRule>();
@@ -146,6 +146,39 @@ export function DesignStudioPage() {
     }
   };
 
+  const handleApproveRule = async (ruleId: string) => {
+    try {
+      await api.transitionRuleStatus(ruleId, 'Approved', 'studio', 'reviewer');
+      showNotification(`Rule ${ruleId} approved`, 'success');
+      detailModal.close();
+      loadData();
+    } catch {
+      showNotification('Failed to approve rule', 'error');
+    }
+  };
+
+  const handleDeployRule = async (ruleId: string) => {
+    try {
+      await api.transitionRuleStatus(ruleId, 'Deployed', 'studio', 'reviewer');
+      showNotification(`Rule ${ruleId} deployed`, 'success');
+      detailModal.close();
+      loadData();
+    } catch {
+      showNotification('Failed to deploy rule', 'error');
+    }
+  };
+
+  const handleRejectRule = async (ruleId: string) => {
+    try {
+      await api.transitionRuleStatus(ruleId, 'Rejected', 'studio', 'reviewer');
+      showNotification(`Rule ${ruleId} rejected`, 'success');
+      detailModal.close();
+      loadData();
+    } catch {
+      showNotification('Failed to reject rule', 'error');
+    }
+  };
+
   const _handleSubmitChange = async (ruleId: string) => {
     try {
       // Placeholder: In production this calls ServiceNow API to create CHG
@@ -199,11 +232,14 @@ export function DesignStudioPage() {
       render: (_, row) => <StatusBadge status={row.status} />,
     },
     {
-      key: '_actions', header: 'Actions', sortable: false, width: '280px',
+      key: '_actions', header: 'Actions', sortable: false, width: '360px',
       render: (_, row) => {
         const st = row.status;
         const canEdit = st === 'Draft';
         const canSubmit = st === 'Draft';
+        const canApprove = st === 'Pending Review';
+        const canReject = st === 'Pending Review';
+        const canDeploy = st === 'Approved';
         const canModify = st === 'Deployed' || st === 'Certified';
         const canCompile = st === 'Deployed' || st === 'Certified' || st === 'Approved';
         const canCertify = st === 'Deployed';
@@ -211,12 +247,19 @@ export function DesignStudioPage() {
           <div className="flex gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
             <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
             {canEdit && (
-              <>
-                <button onClick={() => { setEditingDraftRule(row); setViewMode('builder'); }} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
-              </>
+              <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
             )}
             {canSubmit && (
               <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
+            )}
+            {canApprove && (
+              <button onClick={() => handleApproveRule(row.rule_id)} className="px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100">Approve</button>
+            )}
+            {canReject && (
+              <button onClick={() => handleRejectRule(row.rule_id)} className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Reject</button>
+            )}
+            {canDeploy && (
+              <button onClick={() => handleDeployRule(row.rule_id)} className="px-2 py-1 text-xs font-medium text-sky-700 bg-sky-50 rounded hover:bg-sky-100">Deploy</button>
             )}
             {canModify && (
               <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded hover:bg-teal-100">Modify</button>
@@ -286,8 +329,8 @@ export function DesignStudioPage() {
             App Groups
           </button>
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
-            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Rules</button>
-            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>+ New Rule</button>
+            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-rose-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Rules</button>
+            <button onClick={() => setViewMode('multi_dc')} className={`px-3 py-2 text-sm font-medium border-l border-gray-300 ${viewMode === 'multi_dc' ? 'bg-rose-600 text-white' : 'bg-white text-rose-600 hover:bg-rose-50'}`}>+ New Rule</button>
           </div>
         </div>
       </div>
@@ -309,20 +352,20 @@ export function DesignStudioPage() {
         ))}
       </div>
 
-      {viewMode === 'builder' ? (
+      {viewMode === 'multi_dc' ? (
         <div className="bg-white border rounded-lg shadow-sm p-4">
-          {editingDraftRule && (
-            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
-              <span className="text-sm font-semibold text-amber-800">Editing Draft Rule: {editingDraftRule.rule_id}</span>
-              <button onClick={() => { setEditingDraftRule(null); setViewMode('table'); }} className="text-xs font-medium text-amber-600 hover:text-amber-800">Cancel Edit</button>
-            </div>
-          )}
-          <DragDropRuleBuilder
-            applications={applications}
-            onRuleCreated={loadData}
-            editRule={editingDraftRule}
-            onEditComplete={() => { setEditingDraftRule(null); setViewMode('table'); }}
-          />
+          <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+            <div className="text-sm font-semibold text-rose-800">New Rule · Multi-DC Request</div>
+            <div className="text-xs text-rose-600">One logical request → deterministic per-DC PhysicalRule fan-out based on source &amp; destination presences.</div>
+          </div>
+          <RuleRequestBuilder applications={applications} onSubmitted={() => { loadData(); setRequestsReloadKey(k => k + 1); }} />
+          <div className="mt-4">
+            <RuleRequestsPanel
+              environment={(selectedEnv as '' | 'Production' | 'Non-Production' | 'Pre-Production')}
+              reloadKey={requestsReloadKey}
+              onChanged={() => { loadData(); setRequestsReloadKey(k => k + 1); }}
+            />
+          </div>
         </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">
@@ -356,9 +399,13 @@ export function DesignStudioPage() {
         isOpen={detailModal.isOpen}
         onClose={detailModal.close}
         rule={detailModal.data}
-        onEdit={() => { if (detailModal.data) { detailModal.close(); setEditingDraftRule(detailModal.data); setViewMode('builder'); } }}
+        onEdit={() => { if (detailModal.data) { const row = detailModal.data; detailModal.close(); modifyModal.open(row); } }}
         onCompile={() => { if (detailModal.data) { detailModal.close(); compilerModal.open(detailModal.data.rule_id); } }}
         onSubmitReview={() => { if (detailModal.data) { handleSubmitReview(detailModal.data.rule_id); } }}
+        onApprove={() => { if (detailModal.data) { handleApproveRule(detailModal.data.rule_id); } }}
+        onReject={() => { if (detailModal.data) { handleRejectRule(detailModal.data.rule_id); } }}
+        onDeploy={() => { if (detailModal.data) { handleDeployRule(detailModal.data.rule_id); } }}
+        onCertify={() => { if (detailModal.data) { handleCertify(detailModal.data.rule_id); detailModal.close(); } }}
       />
 
       <RuleModifyModal isOpen={modifyModal.isOpen} onClose={modifyModal.close} rule={modifyModal.data} onSave={handleModify} />
