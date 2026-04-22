@@ -637,6 +637,57 @@ export interface AppPresence {
   ingress_members?: MemberSpec[];
 }
 
+export interface ClassifyResult {
+  matched: boolean;
+  dc: string;
+  nh: string;
+  sz: string;
+  cidr: string;
+  reason: string;
+  ip?: string;
+}
+
+export interface OccupantApp {
+  app_distributed_id: string;
+  dc_id: string;
+  environment: Environment;
+  nh_id: string;
+  sz_code: string;
+  has_ingress: boolean;
+  egress_count: number;
+  ingress_count: number;
+  egress_group: string;
+  ingress_group?: string;
+}
+
+export interface OccupantSharedService {
+  service_id: string;
+  dc_id: string;
+  environment: Environment;
+  nh_id: string;
+  sz_code: string;
+  member_count: number;
+  group: string;
+}
+
+export interface OccupantsResponse {
+  filter: { dc: string; nh: string; sz: string; environment: string };
+  applications: OccupantApp[];
+  shared_services: OccupantSharedService[];
+  total: number;
+}
+
+export interface IngestMembersResult {
+  app_distributed_id: string;
+  environment: Environment;
+  classified: Array<{
+    kind: string; value: string;
+    dc: string; nh: string; sz: string; cidr: string;
+  }>;
+  unclassified: Array<{ kind: string; value: string; reason: string }>;
+  presences: AppPresence[];
+}
+
 export interface SharedServicePresence {
   service_id: string;
   dc_id: string;

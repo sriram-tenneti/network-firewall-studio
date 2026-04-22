@@ -1109,6 +1109,9 @@ import type {
   Environment,
   DestinationEntityKind,
   MemberSpec,
+  ClassifyResult,
+  OccupantsResponse,
+  IngestMembersResult,
 } from '../types';
 
 export const getSharedServices = (params?: {
@@ -1237,6 +1240,52 @@ export const deleteAppPresence = (
     { method: 'DELETE' },
   );
 };
+
+// ---- Bidirectional IP ↔ (DC, NH, SZ) classifier / occupants ----
+
+export const classifyIp = (ip: string, dcHint?: string) =>
+  fetchJSON<ClassifyResult>('/api/reference/classify-ip', {
+    method: 'POST',
+    body: JSON.stringify({ ip, dc_hint: dcHint || '' }),
+  });
+
+export const classifyIps = (ips: string[], dcHint?: string) =>
+  fetchJSON<ClassifyResult[]>('/api/reference/classify-ips', {
+    method: 'POST',
+    body: JSON.stringify({ ips, dc_hint: dcHint || '' }),
+  });
+
+export const getOccupants = (params: {
+  dc?: string;
+  nh?: string;
+  sz?: string;
+  environment?: Environment | '';
+}) => {
+  const qs = new URLSearchParams();
+  if (params.dc) qs.set('dc', params.dc);
+  if (params.nh) qs.set('nh', params.nh);
+  if (params.sz) qs.set('sz', params.sz);
+  if (params.environment) qs.set('environment', params.environment);
+  const s = qs.toString();
+  return fetchJSON<OccupantsResponse>(
+    `/api/reference/occupants${s ? `?${s}` : ''}`,
+  );
+};
+
+export const ingestAppMembers = (
+  appDistributedId: string,
+  payload: {
+    environment: Environment;
+    direction: 'egress' | 'ingress';
+    members: Array<{ kind: string; value: string; description?: string }>;
+    dc_hint?: string;
+    has_ingress?: boolean;
+  },
+) =>
+  fetchJSON<IngestMembersResult>(
+    `/api/reference/applications/${encodeURIComponent(appDistributedId)}/ingest-members`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
 
 export interface RuleRequestInput {
   application_ref: string;

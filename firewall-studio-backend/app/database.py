@@ -6,6 +6,7 @@ IP Ranges, Naming Standards, Policy Matrix) is fully customizable via CRUD APIs.
 Data is stored in JSON files under the data/ directory and seeded on first startup.
 """
 
+import ipaddress
 import json
 import os
 import uuid
@@ -825,6 +826,267 @@ async def delete_sz_cidr_binding(nh_id: str, sz: str, dc: str) -> bool:
         _save("neighbourhoods", items)
         return True
     return False
+
+
+# ============================================================
+# Forward classifier: IP → (DC, NH, SZ)
+# Hierarchy: DC → NH → SZ (SZ nested inside NH inside DC)
+# Source of truth: neighbourhoods[*].security_zones[*] = {dc, zone, cidr}
+# ============================================================
+
+def _ip_in_cidr(ip: str, cidr: str) -> int:
+    """Return containment prefix length if ip fits inside cidr; -1 otherwise.
+
+    Accepts single-IP, CIDR, or 'a.b.c.d-a.b.c.e' range for the IP operand.
+    For ranges, requires every address in the range to fit the cidr.
+    """
+    if not ip or not cidr:
+        return -1
+    try:
+        target = ipaddress.ip_network(cidr.strip(), strict=False)
+    except ValueError:
+        return -1
+    try:
+        if "-" in ip and "/" not in ip:
+            lo_s, hi_s = [s.strip() for s in ip.split("-", 1)]
+            lo = ipaddress.ip_address(lo_s)
+            hi = ipaddress.ip_address(hi_s)
+            if lo > hi:
+                lo, hi = hi, lo
+            if lo in target and hi in target:
+                return target.prefixlen
+            return -1
+        net = ipaddress.ip_network(ip.strip(), strict=False)
+        if net.subnet_of(target):
+            return target.prefixlen
+        return -1
+    except ValueError:
+        return -1
+
+
+def _classify_ip_sync(ip: str, dc_hint: str = "") -> dict[str, Any]:
+    """Classify a single IP/CIDR/range into its (DC, NH, SZ) cell.
+
+    Walks all NH.security_zones bindings and picks the longest-prefix match.
+    If dc_hint is given, DC-specific bindings win over DC-agnostic fallbacks.
+    Returns {dc, nh, sz, cidr, matched, reason}.
+    """
+    neighbourhoods = _load("neighbourhoods") or []
+    best: dict[str, Any] | None = None
+    best_len = -1
+    for n in neighbourhoods:
+        nh_id = str(n.get("nh_id", ""))
+        for e in n.get("security_zones") or []:
+            cidr = str(e.get("cidr", "")).strip()
+            if not cidr:
+                continue
+            dc = str(e.get("dc", ""))
+            if dc_hint and dc and dc != dc_hint:
+                continue
+            plen = _ip_in_cidr(ip, cidr)
+            if plen < 0:
+                continue
+            # DC-specific > DC-agnostic at same prefix length
+            effective = plen + (1 if dc else 0)
+            if effective > best_len:
+                best_len = effective
+                best = {
+                    "dc": dc,
+                    "nh": nh_id,
+                    "sz": str(e.get("zone", "")),
+                    "cidr": cidr,
+                }
+    if best:
+        return {"matched": True, **best, "reason": "longest-prefix SZ CIDR binding match"}
+    return {
+        "matched": False, "dc": "", "nh": "", "sz": "", "cidr": "",
+        "reason": "no SZ CIDR binding contains this address",
+    }
+
+
+async def classify_ip(ip: str, dc_hint: str = "") -> dict[str, Any]:
+    """Async wrapper."""
+    return _classify_ip_sync(ip, dc_hint)
+
+
+async def classify_ips(ips: list[str], dc_hint: str = "") -> list[dict[str, Any]]:
+    return [{"ip": ip, **_classify_ip_sync(ip, dc_hint)} for ip in ips if ip]
+
+
+# ============================================================
+# Reverse lookup: (DC, NH, SZ) → occupants (apps + shared services + members)
+# ============================================================
+
+async def get_occupants(dc: str = "", nh: str = "", sz: str = "",
+                         environment: str = "") -> dict[str, Any]:
+    """Return apps and shared services present in the given cell.
+
+    Any of dc/nh/sz/environment may be empty — acts as wildcard on that axis.
+    """
+    apps = _load("app_presences") or []
+    svcs = _load("shared_service_presences") or []
+
+    def _match(p: dict[str, Any]) -> bool:
+        if dc and str(p.get("dc_id", "")) != dc:
+            return False
+        if nh and str(p.get("nh_id", "")) != nh:
+            return False
+        if sz and str(p.get("sz_code", "")) != sz:
+            return False
+        if environment and str(p.get("environment", "Production")) != environment:
+            return False
+        return True
+
+    app_rows = []
+    for p in apps:
+        if not _match(p):
+            continue
+        app_rows.append({
+            "app_distributed_id": p.get("app_distributed_id", ""),
+            "dc_id": p.get("dc_id", ""),
+            "environment": p.get("environment", "Production"),
+            "nh_id": p.get("nh_id", ""),
+            "sz_code": p.get("sz_code", ""),
+            "has_ingress": bool(p.get("has_ingress", False)),
+            "egress_count": len(p.get("egress_members", []) or []),
+            "ingress_count": len(p.get("ingress_members", []) or []),
+            "egress_group": _app_egress_group_name(
+                str(p.get("app_distributed_id", "")),
+                str(p.get("nh_id", "")),
+                str(p.get("sz_code", "")),
+            ),
+            "ingress_group": (
+                _app_ingress_group_name(
+                    str(p.get("app_distributed_id", "")),
+                    str(p.get("nh_id", "")),
+                    str(p.get("sz_code", "")),
+                ) if p.get("has_ingress") else ""
+            ),
+        })
+
+    svc_rows = []
+    for p in svcs:
+        if not _match(p):
+            continue
+        svc_rows.append({
+            "service_id": p.get("service_id", ""),
+            "dc_id": p.get("dc_id", ""),
+            "environment": p.get("environment", "Production"),
+            "nh_id": p.get("nh_id", ""),
+            "sz_code": p.get("sz_code", ""),
+            "member_count": len(p.get("members", []) or []),
+            "group": _shared_service_group_name(
+                str(p.get("service_id", "")),
+                str(p.get("nh_id", "")),
+                str(p.get("sz_code", "")),
+            ),
+        })
+
+    return {
+        "filter": {"dc": dc, "nh": nh, "sz": sz, "environment": environment},
+        "applications": app_rows,
+        "shared_services": svc_rows,
+        "total": len(app_rows) + len(svc_rows),
+    }
+
+
+# ============================================================
+# Ingest members: classify IPs/CIDRs and upsert presences + derive groups
+# ============================================================
+
+async def ingest_app_members(
+    app_distributed_id: str,
+    environment: str,
+    members: list[dict[str, Any]],
+    direction: str = "egress",
+    dc_hint: str = "",
+    default_has_ingress: bool = False,
+) -> dict[str, Any]:
+    """Classify each member, upsert app_presence per (DC, NH, SZ), auto-create
+    derived groups.
+
+    Each member: {"kind": "ip"|"cidr"|"range"|"subnet"|"group", "value": "..."}
+    Returns {classified: [...], unclassified: [...], presences: [...]}.
+    """
+    app_dist_id = (app_distributed_id or "").upper()
+    classified: list[dict[str, Any]] = []
+    unclassified: list[dict[str, Any]] = []
+    # bucket: (dc, nh, sz) -> list[MemberSpec]
+    buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for m in members or []:
+        kind = str(m.get("kind", "ip")).lower()
+        value = str(m.get("value", "")).strip()
+        if not value:
+            continue
+        if kind == "group":
+            unclassified.append({"kind": kind, "value": value,
+                                 "reason": "group members cannot be auto-classified"})
+            continue
+        res = _classify_ip_sync(value, dc_hint)
+        if not res.get("matched"):
+            unclassified.append({"kind": kind, "value": value,
+                                 "reason": res.get("reason", "no match")})
+            continue
+        bucket_key = (res["dc"], res["nh"], res["sz"])
+        buckets.setdefault(bucket_key, []).append({"kind": kind, "value": value})
+        classified.append({
+            "kind": kind, "value": value, "dc": res["dc"],
+            "nh": res["nh"], "sz": res["sz"], "cidr": res["cidr"],
+        })
+
+    presences: list[dict[str, Any]] = []
+    existing = _load("app_presences") or []
+    for (dc, nh, sz), new_members in buckets.items():
+        existing_row = None
+        for p in existing:
+            if (str(p.get("app_distributed_id", "")).upper() == app_dist_id
+                    and p.get("dc_id") == dc
+                    and p.get("environment") == environment
+                    and p.get("nh_id") == nh
+                    and p.get("sz_code") == sz):
+                existing_row = p
+                break
+        merged_egress = list((existing_row or {}).get("egress_members", []) or [])
+        merged_ingress = list((existing_row or {}).get("ingress_members", []) or [])
+        if direction == "ingress":
+            # dedupe by (kind, value)
+            seen = {(str(x.get("kind")), str(x.get("value"))) for x in merged_ingress}
+            for nm in new_members:
+                k = (nm["kind"], nm["value"])
+                if k not in seen:
+                    merged_ingress.append(nm)
+                    seen.add(k)
+        else:
+            seen = {(str(x.get("kind")), str(x.get("value"))) for x in merged_egress}
+            for nm in new_members:
+                k = (nm["kind"], nm["value"])
+                if k not in seen:
+                    merged_egress.append(nm)
+                    seen.add(k)
+        row = {
+            "app_distributed_id": app_dist_id,
+            "dc_id": dc,
+            "dc_type": (existing_row or {}).get("dc_type", "NGDC"),
+            "environment": environment,
+            "nh_id": nh,
+            "sz_code": sz,
+            "has_ingress": bool((existing_row or {}).get("has_ingress",
+                                                         default_has_ingress or direction == "ingress")),
+            "egress_members": merged_egress,
+            "ingress_members": merged_ingress,
+        }
+        if direction == "ingress":
+            row["has_ingress"] = True
+        saved = await upsert_app_presence(row)
+        presences.append(saved)
+
+    return {
+        "app_distributed_id": app_dist_id,
+        "environment": environment,
+        "classified": classified,
+        "unclassified": unclassified,
+        "presences": presences,
+    }
 
 
 async def get_ngdc_datacenters() -> list[dict[str, Any]]:

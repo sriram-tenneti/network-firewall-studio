@@ -7,6 +7,7 @@ import { useModal } from '@/hooks/useModal';
 import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
+import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -1954,6 +1955,18 @@ export default function SettingsPage() {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {/* Presence Matrix — per-(DC, NH, SZ) with auto-derived egress/ingress groups */}
+            {selectedAppData && (
+              <div className="p-5 bg-white border border-purple-100 rounded-2xl shadow-sm">
+                <AppPresenceMatrix
+                  appDistributedId={String(selectedAppData.app_distributed_id || selectedAppData.app_id)}
+                  appId={String(selectedAppData.app_id)}
+                  environment="Production"
+                  onChange={() => loadRefData()}
+                />
               </div>
             )}
 

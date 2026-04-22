@@ -435,6 +435,28 @@ SEED_APPLICATIONS = [
      "egress_ip": "svr-10.6.1.168", "has_ingress": True,
      "ingress_ips": "svr-10.6.1.16,svr-10.6.1.184", "ingress_components": "DB,API",
      "description": "Mobile banking application"},
+    # Demo app for multi-NH/SZ in a single DC — spans 3 (NH, SZ) pairs in ALPHA_NGDC
+    # plus 1 in BETA_NGDC. Group auto-materialization produces 4 egress + 4 ingress groups.
+    {"app_id": "OMS", "name": "Order Management System", "app_distributed_id": "AD-1013",
+     "owner": "Team Nu", "nh": "Core Banking, Wealth Management", "sz": "CCS, CPA, STD",
+     "criticality": "High", "pci_scope": False,
+     "neighborhoods": "Core Banking, Wealth Management",
+     "szs": "CCS, CPA, STD", "dcs": "ALPHA_NGDC,BETA_NGDC", "snow_sysid": "SYSID-OMS-013",
+     "egress_ip": "svr-10.1.1.10,svr-10.1.2.10,svr-10.3.1.70",
+     "has_ingress": True,
+     "ingress_ips": "svr-10.1.1.20,svr-10.1.2.20,svr-10.3.1.80",
+     "ingress_components": "Web,DB,Analytics",
+     "description": "Multi-tier Order Management System — web/app/db/analytics across multiple NH/SZ",
+     "presences": [
+         {"dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+          "tier": "Web", "egress": "10.1.1.10", "ingress": "10.1.1.20"},
+         {"dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CPA",
+          "tier": "DB",  "egress": "10.1.2.10", "ingress": "10.1.2.20"},
+         {"dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
+          "tier": "Analytics", "egress": "10.3.1.70", "ingress": "10.3.1.80"},
+         {"dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS",
+          "tier": "Web-West", "egress": "172.16.1.10", "ingress": "172.16.1.20"},
+     ]},
 ]
 
 
@@ -2596,5 +2618,23 @@ SEED_APP_PRESENCES = [
                   [_m("ip", "10.3.1.10", "ins-egress-01")], []),
     _app_presence("AD-1005", "BETA_NGDC", "Production", "NH04", "STD", False,
                   [_m("ip", "172.16.4.10", "ins-egress-west-01")], []),
+
+    # --- OMS (AD-1013) — demo app spanning multiple (NH, SZ) in same DC ---
+    # Web tier in ALPHA NH02/CCS
+    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH02", "CCS", True,
+                  [_m("ip", "10.1.1.10", "oms-web-egress")],
+                  [_m("ip", "10.1.1.20", "oms-web-ingress-vip")]),
+    # DB tier in ALPHA NH02/CPA — same NH, different SZ
+    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH02", "CPA", True,
+                  [_m("ip", "10.1.2.10", "oms-db-egress")],
+                  [_m("ip", "10.1.2.20", "oms-db-listener")]),
+    # Analytics tier in ALPHA NH04/STD — different NH
+    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH04", "STD", True,
+                  [_m("ip", "10.3.1.70", "oms-analytics-egress")],
+                  [_m("ip", "10.3.1.80", "oms-analytics-ingress")]),
+    # West Web tier in BETA NH02/CCS — DR/active-active
+    _app_presence("AD-1013", "BETA_NGDC", "Production", "NH02", "CCS", True,
+                  [_m("ip", "172.16.1.10", "oms-web-egress-west")],
+                  [_m("ip", "172.16.1.20", "oms-web-ingress-vip-west")]),
 ]
 SEED_LIFECYCLE_EVENTS = build_seed_lifecycle_events()
