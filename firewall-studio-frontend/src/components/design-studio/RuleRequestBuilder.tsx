@@ -370,9 +370,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                   <div className="px-2 py-1 bg-slate-50 text-[10px] uppercase font-bold text-gray-700 border-b border-gray-200">Generated Physical Rule IDs (per DC)</div>
                   <div className="max-h-40 overflow-y-auto">
-                    {(submittedRecord.expansion || []).map((p, i) => (
-                      <div key={i} className="px-2 py-1 flex items-center gap-2 text-[11px] border-b border-gray-50">
-                        <code className="font-mono text-indigo-700 font-bold">{p.rule_id ?? `${submittedRecord.request_id}-P${String(i+1).padStart(2,'0')}`}</code>
+                    {(submittedRecord.expansion || []).map((p) => (
+                      <div key={p.rule_id} className="px-2 py-1 flex items-center gap-2 text-[11px] border-b border-gray-50">
+                        <code className="font-mono text-indigo-700 font-bold">{p.rule_id}</code>
                         <span className="px-1.5 py-0.5 rounded-full border bg-orange-50 text-orange-700 border-orange-200 text-[9px] font-semibold">{p.src_dc}{p.cross_dc ? ` → ${p.dst_dc}` : ''}</span>
                         <span className="font-mono text-[10px] text-sky-700">{p.src_group_ref}</span>
                         <span className="text-gray-300">→</span>
@@ -384,15 +384,20 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   </div>
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <button onClick={reset} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800">
+                  <button type="button" onClick={reset} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 cursor-pointer">
                     Submit another
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       const el = document.getElementById('rule-requests-panel');
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      } else {
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                      }
                     }}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50 cursor-pointer"
                   >
                     Jump to Review queue ↓
                   </button>
