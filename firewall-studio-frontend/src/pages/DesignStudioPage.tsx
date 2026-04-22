@@ -4,13 +4,11 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Tabs } from '@/components/shared/Tabs';
 import { Notification } from '@/components/shared/Notification';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-// RuleFormModal no longer used — draft editing uses full DragDropRuleBuilder
 import { RuleDetailModal } from '@/components/design-studio/RuleDetailModal';
 import { RuleCompilerView } from '@/components/design-studio/RuleCompilerView';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
 import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
 import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
-import { DragDropRuleBuilder } from '@/components/design-studio/DragDropRuleBuilder';
 import RuleRequestBuilder from '@/components/design-studio/RuleRequestBuilder';
 import RuleRequestsPanel from '@/components/design-studio/RuleRequestsPanel';
 import { useModal } from '@/hooks/useModal';
@@ -27,8 +25,7 @@ export function DesignStudioPage() {
   const [selectedApp, setSelectedApp] = useState<string>('');
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
-  const [viewMode, setViewMode] = useState<'table' | 'builder' | 'multi_dc'>('table');
-  const [editingDraftRule, setEditingDraftRule] = useState<FirewallRule | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'multi_dc'>('table');
 
   const detailModal = useModal<FirewallRule>();
   const modifyModal = useModal<FirewallRule>();
@@ -213,9 +210,7 @@ export function DesignStudioPage() {
           <div className="flex gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
             <button onClick={() => detailModal.open(row)} className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">View</button>
             {canEdit && (
-              <>
-                <button onClick={() => { setEditingDraftRule(row); setViewMode('builder'); }} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
-              </>
+              <button onClick={() => modifyModal.open(row)} className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100">Edit</button>
             )}
             {canSubmit && (
               <button onClick={() => handleSubmitReview(row.rule_id)} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100">Submit</button>
@@ -288,9 +283,8 @@ export function DesignStudioPage() {
             App Groups
           </button>
           <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
-            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Rules</button>
-            <button onClick={() => setViewMode('builder')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'builder' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>+ New Rule</button>
-            <button onClick={() => setViewMode('multi_dc')} className={`px-3 py-2 text-sm font-medium border-l border-gray-300 ${viewMode === 'multi_dc' ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 hover:bg-indigo-50'}`}>⚡ Multi-DC Request</button>
+            <button onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-medium ${viewMode === 'table' ? 'bg-rose-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Rules</button>
+            <button onClick={() => setViewMode('multi_dc')} className={`px-3 py-2 text-sm font-medium border-l border-gray-300 ${viewMode === 'multi_dc' ? 'bg-rose-600 text-white' : 'bg-white text-rose-600 hover:bg-rose-50'}`}>+ New Rule</button>
           </div>
         </div>
       </div>
@@ -312,26 +306,11 @@ export function DesignStudioPage() {
         ))}
       </div>
 
-      {viewMode === 'builder' ? (
+      {viewMode === 'multi_dc' ? (
         <div className="bg-white border rounded-lg shadow-sm p-4">
-          {editingDraftRule && (
-            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
-              <span className="text-sm font-semibold text-amber-800">Editing Draft Rule: {editingDraftRule.rule_id}</span>
-              <button onClick={() => { setEditingDraftRule(null); setViewMode('table'); }} className="text-xs font-medium text-amber-600 hover:text-amber-800">Cancel Edit</button>
-            </div>
-          )}
-          <DragDropRuleBuilder
-            applications={applications}
-            onRuleCreated={loadData}
-            editRule={editingDraftRule}
-            onEditComplete={() => { setEditingDraftRule(null); setViewMode('table'); }}
-          />
-        </div>
-      ) : viewMode === 'multi_dc' ? (
-        <div className="bg-white border rounded-lg shadow-sm p-4">
-          <div className="mb-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-            <div className="text-sm font-semibold text-indigo-800">Multi-DC Rule Request</div>
-            <div className="text-xs text-indigo-600">One logical request → deterministic per-DC PhysicalRule fan-out based on source &amp; destination presences.</div>
+          <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+            <div className="text-sm font-semibold text-rose-800">New Rule · Multi-DC Request</div>
+            <div className="text-xs text-rose-600">One logical request → deterministic per-DC PhysicalRule fan-out based on source &amp; destination presences.</div>
           </div>
           <RuleRequestBuilder applications={applications} onSubmitted={loadData} />
           <div className="mt-4">
@@ -370,7 +349,7 @@ export function DesignStudioPage() {
         isOpen={detailModal.isOpen}
         onClose={detailModal.close}
         rule={detailModal.data}
-        onEdit={() => { if (detailModal.data) { detailModal.close(); setEditingDraftRule(detailModal.data); setViewMode('builder'); } }}
+        onEdit={() => { if (detailModal.data) { const row = detailModal.data; detailModal.close(); modifyModal.open(row); } }}
         onCompile={() => { if (detailModal.data) { detailModal.close(); compilerModal.open(detailModal.data.rule_id); } }}
         onSubmitReview={() => { if (detailModal.data) { handleSubmitReview(detailModal.data.rule_id); } }}
       />

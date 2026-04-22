@@ -19,13 +19,13 @@ const ENVIRONMENTS: Environment[] = ['Production', 'Non-Production', 'Pre-Produc
 const CATEGORIES: SharedServiceCategory[] = [
   'Messaging', 'Database', 'Observability', 'Identity', 'Cache', 'Other',
 ];
-const CATEGORY_STYLES: Record<SharedServiceCategory, { bg: string; text: string; border: string; ring: string }> = {
-  Messaging:    { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    ring: 'ring-blue-300' },
-  Database:     { bg: 'bg-pink-50',    text: 'text-pink-700',    border: 'border-pink-200',    ring: 'ring-pink-300' },
-  Observability:{ bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  ring: 'ring-orange-300' },
-  Identity:     { bg: 'bg-violet-50',  text: 'text-violet-700',  border: 'border-violet-200',  ring: 'ring-violet-300' },
-  Cache:        { bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     ring: 'ring-red-300' },
-  Other:        { bg: 'bg-gray-50',    text: 'text-gray-700',    border: 'border-gray-200',    ring: 'ring-gray-300' },
+const CATEGORY_STYLES: Record<SharedServiceCategory, { bg: string; text: string; border: string; ring: string; iconBg: string }> = {
+  Messaging:    { bg: 'bg-sky-50/70',    text: 'text-sky-700',    border: 'border-sky-100',    ring: 'ring-sky-200',    iconBg: 'bg-gradient-to-br from-sky-100 to-sky-200' },
+  Database:     { bg: 'bg-pink-50/70',   text: 'text-pink-700',   border: 'border-pink-100',   ring: 'ring-pink-200',   iconBg: 'bg-gradient-to-br from-pink-100 to-rose-200' },
+  Observability:{ bg: 'bg-orange-50/70', text: 'text-orange-700', border: 'border-orange-100', ring: 'ring-orange-200', iconBg: 'bg-gradient-to-br from-amber-100 to-orange-200' },
+  Identity:     { bg: 'bg-violet-50/70', text: 'text-violet-700', border: 'border-violet-100', ring: 'ring-violet-200', iconBg: 'bg-gradient-to-br from-violet-100 to-purple-200' },
+  Cache:        { bg: 'bg-rose-50/70',   text: 'text-rose-700',   border: 'border-rose-100',   ring: 'ring-rose-200',   iconBg: 'bg-gradient-to-br from-rose-100 to-red-200' },
+  Other:        { bg: 'bg-slate-50/70',  text: 'text-slate-700',  border: 'border-slate-100',  ring: 'ring-slate-200',  iconBg: 'bg-gradient-to-br from-slate-100 to-slate-200' },
 };
 
 const MEMBER_TYPES: MemberTypeKind[] = ['ip', 'cidr', 'subnet', 'range', 'group'];
@@ -240,7 +240,7 @@ export default function SharedServicesTab() {
               <div className={`p-4 rounded-t-xl ${style.bg}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-white/80 border border-white flex items-center justify-center text-xl shadow-sm">
+                    <div className={`w-10 h-10 rounded-lg ${style.iconBg} ${style.text} ring-1 ${style.ring} flex items-center justify-center text-xl shadow-sm`}>
                       {s.icon || '🧩'}
                     </div>
                     <div>

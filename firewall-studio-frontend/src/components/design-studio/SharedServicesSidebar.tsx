@@ -17,14 +17,14 @@ interface SharedServicesSidebarProps {
 
 const CATEGORY_STYLES: Record<
   SharedServiceCategory,
-  { grad: string; ring: string; chip: string; text: string }
+  { grad: string; ring: string; chip: string; text: string; tint: string }
 > = {
-  Messaging:     { grad: 'from-blue-500 to-blue-700',    ring: 'ring-blue-200',    chip: 'bg-blue-50 text-blue-700 border-blue-200',      text: 'text-blue-700' },
-  Database:      { grad: 'from-pink-500 to-pink-700',    ring: 'ring-pink-200',    chip: 'bg-pink-50 text-pink-700 border-pink-200',      text: 'text-pink-700' },
-  Observability: { grad: 'from-orange-500 to-orange-700', ring: 'ring-orange-200', chip: 'bg-orange-50 text-orange-700 border-orange-200', text: 'text-orange-700' },
-  Identity:      { grad: 'from-violet-500 to-violet-700', ring: 'ring-violet-200', chip: 'bg-violet-50 text-violet-700 border-violet-200', text: 'text-violet-700' },
-  Cache:         { grad: 'from-red-500 to-red-700',      ring: 'ring-red-200',    chip: 'bg-red-50 text-red-700 border-red-200',          text: 'text-red-700' },
-  Other:         { grad: 'from-slate-500 to-slate-700',  ring: 'ring-slate-200',  chip: 'bg-slate-50 text-slate-700 border-slate-200',    text: 'text-slate-700' },
+  Messaging:     { grad: 'from-sky-200 to-sky-300',       ring: 'ring-sky-100',     chip: 'bg-sky-50 text-sky-700 border-sky-100',         text: 'text-sky-700',     tint: 'bg-sky-50/60' },
+  Database:      { grad: 'from-pink-200 to-rose-300',     ring: 'ring-pink-100',    chip: 'bg-pink-50 text-pink-700 border-pink-100',      text: 'text-pink-700',    tint: 'bg-pink-50/60' },
+  Observability: { grad: 'from-amber-200 to-orange-300',  ring: 'ring-orange-100',  chip: 'bg-orange-50 text-orange-700 border-orange-100', text: 'text-orange-700',  tint: 'bg-orange-50/60' },
+  Identity:      { grad: 'from-violet-200 to-purple-300', ring: 'ring-violet-100',  chip: 'bg-violet-50 text-violet-700 border-violet-100', text: 'text-violet-700',  tint: 'bg-violet-50/60' },
+  Cache:         { grad: 'from-rose-200 to-red-300',      ring: 'ring-rose-100',    chip: 'bg-rose-50 text-rose-700 border-rose-100',      text: 'text-rose-700',    tint: 'bg-rose-50/60' },
+  Other:         { grad: 'from-slate-200 to-slate-300',   ring: 'ring-slate-100',   chip: 'bg-slate-50 text-slate-700 border-slate-100',   text: 'text-slate-700',   tint: 'bg-slate-50/60' },
 };
 
 const ALL_CATEGORIES: ('all' | SharedServiceCategory)[] = [
@@ -131,7 +131,7 @@ export function SharedServicesSidebar({
               <div className="p-2.5 pl-3 bg-white">
                 <div className="flex items-start gap-2">
                   <div
-                    className={`w-8 h-8 shrink-0 rounded-md bg-gradient-to-br ${style.grad} text-white flex items-center justify-center text-base shadow-sm`}
+                    className={`w-8 h-8 shrink-0 rounded-md bg-gradient-to-br ${style.grad} ${style.text} flex items-center justify-center text-base shadow-sm ring-1 ${style.ring}`}
                   >
                     {s.icon || '🧩'}
                   </div>

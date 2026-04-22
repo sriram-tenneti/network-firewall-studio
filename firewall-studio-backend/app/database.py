@@ -761,6 +761,72 @@ async def get_all_sz_cidr_map() -> list[dict[str, Any]]:
     return result
 
 
+async def upsert_sz_cidr_binding(
+    nh_id: str, sz: str, dc: str, cidr: str,
+    vrf_id: str = "", description: str = "",
+) -> dict[str, Any] | None:
+    """Add or update a single (DC, NH, SZ) CIDR binding on a neighbourhood.
+
+    Keyed by (nh_id, sz, dc). DC may be empty string for a DC-agnostic fallback.
+    Returns the resulting binding or None if the NH does not exist.
+    """
+    items = _load("neighbourhoods") or []
+    for n in items:
+        if str(n.get("nh_id", "")) != str(nh_id):
+            continue
+        szs = list(n.get("security_zones") or [])
+        found = None
+        for entry in szs:
+            if (
+                str(entry.get("zone", "")) == str(sz)
+                and str(entry.get("dc", "")) == str(dc)
+            ):
+                found = entry
+                break
+        if found is None:
+            found = {"zone": sz, "dc": dc}
+            szs.append(found)
+        found["cidr"] = cidr
+        if vrf_id:
+            found["vrf_id"] = vrf_id
+        if description:
+            found["description"] = description
+        n["security_zones"] = szs
+        _save("neighbourhoods", items)
+        return {
+            "nh": nh_id,
+            "nh_name": str(n.get("name", "")),
+            "sz": sz,
+            "dc": dc,
+            "cidr": cidr,
+            "vrf_id": found.get("vrf_id", ""),
+            "description": found.get("description", ""),
+        }
+    return None
+
+
+async def delete_sz_cidr_binding(nh_id: str, sz: str, dc: str) -> bool:
+    """Remove a CIDR binding for (nh_id, sz, dc). Returns True if removed."""
+    items = _load("neighbourhoods") or []
+    for n in items:
+        if str(n.get("nh_id", "")) != str(nh_id):
+            continue
+        szs = list(n.get("security_zones") or [])
+        new_szs = [
+            e for e in szs
+            if not (
+                str(e.get("zone", "")) == str(sz)
+                and str(e.get("dc", "")) == str(dc)
+            )
+        ]
+        if len(new_szs) == len(szs):
+            return False
+        n["security_zones"] = new_szs
+        _save("neighbourhoods", items)
+        return True
+    return False
+
+
 async def get_ngdc_datacenters() -> list[dict[str, Any]]:
     return _load("ngdc_datacenters") or []
 

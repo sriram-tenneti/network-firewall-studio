@@ -105,6 +105,12 @@ export default function SettingsPage() {
   const [szCidrMap, setSzCidrMap] = useState<NhSecurityZone[]>([]);
   const [expandedNhSzId, setExpandedNhSzId] = useState<string | null>(null);
 
+  // Per-SZ CIDR bindings editing state (DC-specific)
+  const [expandedSzBindings, setExpandedSzBindings] = useState<string | null>(null);
+  const [newSzBindingForm, setNewSzBindingForm] = useState<{ dc: string; nh: string; cidr: string; vrf_id: string }>({ dc: '', nh: '', cidr: '', vrf_id: '' });
+  const [editingSzBindingKey, setEditingSzBindingKey] = useState<string | null>(null);
+  const [editSzBindingCidr, setEditSzBindingCidr] = useState<string>('');
+
   // Data Mode state (seed vs live)
   const [dataMode, setDataModeState] = useState<string>('seed');
   const [switchingMode, setSwitchingMode] = useState(false);
@@ -726,6 +732,42 @@ export default function SettingsPage() {
       setSecurityZones(prev => prev.filter(s => String(s.code) !== code));
       showNotification('Security Zone deleted', 'success');
     } catch { showNotification('Failed to delete security zone', 'error'); }
+  };
+
+  // ── SZ CIDR Binding CRUD (DC-specific) ──
+  const reloadSzCidrMap = async () => {
+    try {
+      const data = await api.getSzCidrMap();
+      setSzCidrMap(data);
+    } catch { /* soft fail */ }
+  };
+  const handleAddSzBinding = async (sz: string) => {
+    const { dc, nh, cidr, vrf_id } = newSzBindingForm;
+    if (!nh || !cidr) { showNotification('NH and CIDR are required', 'error'); return; }
+    try {
+      await api.upsertSzCidrBinding({ nh, sz, dc: dc || '', cidr, vrf_id });
+      setNewSzBindingForm({ dc: '', nh: '', cidr: '', vrf_id: '' });
+      await reloadSzCidrMap();
+      showNotification(`Binding added: ${nh} · ${sz} · ${dc || 'any-DC'} → ${cidr}`, 'success');
+    } catch (e) { showNotification(`Failed to add binding: ${(e as Error).message}`, 'error'); }
+  };
+  const handleSaveSzBindingEdit = async (nh: string, sz: string, dc: string) => {
+    if (!editSzBindingCidr) { showNotification('CIDR is required', 'error'); return; }
+    try {
+      await api.upsertSzCidrBinding({ nh, sz, dc, cidr: editSzBindingCidr });
+      setEditingSzBindingKey(null);
+      setEditSzBindingCidr('');
+      await reloadSzCidrMap();
+      showNotification(`Binding updated: ${nh} · ${sz} · ${dc || 'any-DC'}`, 'success');
+    } catch (e) { showNotification(`Failed to update binding: ${(e as Error).message}`, 'error'); }
+  };
+  const handleDeleteSzBinding = async (nh: string, sz: string, dc: string) => {
+    if (!confirm(`Delete CIDR binding ${nh} · ${sz}${dc ? ' · ' + dc : ''}?`)) return;
+    try {
+      await api.deleteSzCidrBinding(nh, sz, dc || '');
+      await reloadSzCidrMap();
+      showNotification('Binding deleted', 'success');
+    } catch (e) { showNotification(`Failed to delete binding: ${(e as Error).message}`, 'error'); }
   };
 
   // ── DC CRUD handlers ──
@@ -1392,7 +1434,7 @@ export default function SettingsPage() {
                       <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Code</th>
                       <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Name</th>
                       <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Risk</th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">CIDR Bindings</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">CIDR Bindings (DC · NH)</th>
                       <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Fabric</th>
                       <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">VRF Prefix</th>
                       <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Actions</th>
@@ -1402,13 +1444,16 @@ export default function SettingsPage() {
                     {securityZones.map((sz, idx) => {
                       const code = String(sz.code || idx);
                       const isEditing = editingSzCode === code;
-                      const szCidrs = [...new Set(szCidrMap.filter(e => e.sz === code && !!e.cidr).map(e => e.cidr))];
-                      const riskBg = String(sz.risk_level) === 'Critical' ? 'from-red-500 to-red-700' :
-                                     String(sz.risk_level) === 'High' ? 'from-orange-500 to-orange-700' :
-                                     String(sz.risk_level) === 'Medium' ? 'from-yellow-500 to-amber-600' :
-                                     'from-green-500 to-emerald-600';
+                      const szBindings = szCidrMap.filter(e => e.sz === code);
+                      const szCidrs = [...new Set(szBindings.filter(e => !!e.cidr).map(e => e.cidr))];
+                      const isBindingsOpen = expandedSzBindings === code;
+                      const riskBg = String(sz.risk_level) === 'Critical' ? 'from-rose-300 to-red-400' :
+                                     String(sz.risk_level) === 'High' ? 'from-amber-300 to-orange-400' :
+                                     String(sz.risk_level) === 'Medium' ? 'from-yellow-300 to-amber-400' :
+                                     'from-emerald-300 to-teal-400';
                       return (
-                        <tr key={code} className="hover:bg-emerald-50/40 transition-colors">
+                        <React.Fragment key={code}>
+                        <tr className="hover:bg-emerald-50/40 transition-colors">
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
                               <span className={`w-1.5 h-8 rounded-full bg-gradient-to-b ${riskBg} flex-shrink-0`}></span>
@@ -1420,23 +1465,34 @@ export default function SettingsPage() {
                             <select className={inp} value={String(editSzForm.risk_level || '')} onChange={e => setEditSzForm({ ...editSzForm, risk_level: e.target.value })}>
                               <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option>
                             </select>
-                          ) : <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full ${String(sz.risk_level) === 'Critical' ? 'bg-red-100 text-red-800 border border-red-200' : String(sz.risk_level) === 'High' ? 'bg-orange-100 text-orange-800 border border-orange-200' : String(sz.risk_level) === 'Medium' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-green-100 text-green-800 border border-green-200'}`}>{String(sz.risk_level || 'Low')}</span>}</td>
+                          ) : <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full ${String(sz.risk_level) === 'Critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' : String(sz.risk_level) === 'High' ? 'bg-amber-50 text-amber-700 border border-amber-200' : String(sz.risk_level) === 'Medium' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{String(sz.risk_level || 'Low')}</span>}</td>
                           <td className="px-3 py-2">
-                            {szCidrs.length === 0 ? (
-                              <span className="text-[11px] text-gray-400 italic">No bindings</span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1 max-w-xs">
-                                {szCidrs.slice(0, 3).map(c => (
-                                  <span key={c} className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
-                                    <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/></svg>
-                                    {c}
-                                  </span>
-                                ))}
-                                {szCidrs.length > 3 && (
-                                  <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold">+{szCidrs.length - 3}</span>
-                                )}
-                              </div>
-                            )}
+                            <button
+                              onClick={() => {
+                                const next = isBindingsOpen ? null : code;
+                                setExpandedSzBindings(next);
+                                if (next) setNewSzBindingForm({ dc: '', nh: '', cidr: '', vrf_id: '' });
+                              }}
+                              className="group inline-flex items-center gap-1.5 text-left rounded px-1.5 py-1 hover:bg-emerald-50 transition"
+                              title={isBindingsOpen ? 'Hide bindings' : 'Manage bindings'}
+                            >
+                              <svg className={`w-3 h-3 text-emerald-600 transition-transform ${isBindingsOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+                              {szCidrs.length === 0 ? (
+                                <span className="text-[11px] text-gray-400 italic group-hover:text-emerald-600">No bindings · add</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {szCidrs.slice(0, 3).map(c => (
+                                    <span key={c} className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/></svg>
+                                      {c}
+                                    </span>
+                                  ))}
+                                  {szCidrs.length > 3 && (
+                                    <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold">+{szCidrs.length - 3}</span>
+                                  )}
+                                </div>
+                              )}
+                            </button>
                           </td>
                           <td className="px-3 py-2 text-xs">{isEditing ? (
                             <select className={inp} value={String(editSzForm.fabric || '')} onChange={e => setEditSzForm({ ...editSzForm, fabric: e.target.value })}>
@@ -1458,6 +1514,135 @@ export default function SettingsPage() {
                             )}
                           </td>
                         </tr>
+                        {isBindingsOpen && (
+                          <tr>
+                            <td colSpan={7} className="px-0 py-0">
+                              <div className="mx-3 my-2 p-3 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/70 border border-emerald-100 rounded-xl">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-md bg-gradient-to-br from-emerald-200 to-teal-300 text-emerald-800 flex items-center justify-center text-xs font-bold shadow-sm">
+                                      {code}
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-bold text-emerald-800">CIDR Bindings for {code}</div>
+                                      <div className="text-[10px] text-gray-500">Per (DC, NH) — DC-specific takes precedence; empty DC = any-DC fallback.</div>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                    {szBindings.length} binding{szBindings.length === 1 ? '' : 's'}
+                                  </span>
+                                </div>
+
+                                {szBindings.length > 0 && (
+                                  <div className="overflow-x-auto rounded-lg border border-emerald-100 bg-white/90 mb-2">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-emerald-50/80">
+                                        <tr>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-36">DC</th>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-28">NH</th>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider">CIDR</th>
+                                          <th className="px-2 py-1.5 text-left text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-32">VRF</th>
+                                          <th className="px-2 py-1.5 text-right text-[9px] font-bold text-emerald-800 uppercase tracking-wider w-32">Actions</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-emerald-50">
+                                        {szBindings.map((b) => {
+                                          const bkey = `${b.nh}|${code}|${b.dc || ''}`;
+                                          const isEdit = editingSzBindingKey === bkey;
+                                          return (
+                                            <tr key={bkey} className="hover:bg-emerald-50/40">
+                                              <td className="px-2 py-1 font-mono text-[11px] text-orange-700 font-semibold">
+                                                {b.dc ? b.dc.replace('_NGDC','') : <span className="italic text-gray-400">any-DC</span>}
+                                              </td>
+                                              <td className="px-2 py-1 font-mono text-[11px] text-indigo-700 font-semibold">{b.nh}</td>
+                                              <td className="px-2 py-1">
+                                                {isEdit ? (
+                                                  <input
+                                                    className={inp + ' font-mono text-[11px]'}
+                                                    placeholder="10.10.0.0/16"
+                                                    value={editSzBindingCidr}
+                                                    onChange={e => setEditSzBindingCidr(e.target.value)}
+                                                  />
+                                                ) : (
+                                                  <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                                    <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/></svg>
+                                                    {b.cidr || <span className="italic text-gray-400">empty</span>}
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-2 py-1 font-mono text-[10px] text-gray-600">{b.vrf_id || '—'}</td>
+                                              <td className="px-2 py-1 text-right">
+                                                {isEdit ? (
+                                                  <div className="inline-flex gap-1">
+                                                    <button onClick={() => handleSaveSzBindingEdit(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-white bg-emerald-600 rounded hover:bg-emerald-700">Save</button>
+                                                    <button onClick={() => { setEditingSzBindingKey(null); setEditSzBindingCidr(''); }} className="px-2 py-0.5 text-[11px] text-gray-600 border border-gray-200 rounded hover:bg-gray-50">Cancel</button>
+                                                  </div>
+                                                ) : (
+                                                  <div className="inline-flex gap-1">
+                                                    <button onClick={() => { setEditingSzBindingKey(bkey); setEditSzBindingCidr(b.cidr || ''); }} className="px-2 py-0.5 text-[11px] text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-50 font-medium">Edit</button>
+                                                    <button onClick={() => handleDeleteSzBinding(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-rose-700 border border-rose-200 rounded hover:bg-rose-50 font-medium">Delete</button>
+                                                  </div>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                {/* Add new binding */}
+                                <div className="p-2 rounded-lg bg-white border border-dashed border-emerald-200">
+                                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-1.5">+ Add CIDR binding</div>
+                                  <div className="grid grid-cols-12 gap-2">
+                                    <select
+                                      className={`${inp} col-span-3 text-xs`}
+                                      value={newSzBindingForm.dc}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, dc: e.target.value })}
+                                    >
+                                      <option value="">any-DC (fallback)</option>
+                                      {ngdcDatacenters.map((d, i) => {
+                                        const dcId = String(d.dc_id || d.code || i);
+                                        return <option key={dcId} value={dcId}>{dcId}</option>;
+                                      })}
+                                    </select>
+                                    <select
+                                      className={`${inp} col-span-3 text-xs`}
+                                      value={newSzBindingForm.nh}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, nh: e.target.value })}
+                                    >
+                                      <option value="">Select NH…</option>
+                                      {neighbourhoods.map((n, i) => {
+                                        const id = String((n as Record<string, unknown>).nh_id || (n as Record<string, unknown>).id || i);
+                                        return <option key={id} value={id}>{id}</option>;
+                                      })}
+                                    </select>
+                                    <input
+                                      className={`${inp} col-span-3 font-mono text-xs`}
+                                      placeholder="CIDR (e.g. 10.20.0.0/16)"
+                                      value={newSzBindingForm.cidr}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, cidr: e.target.value })}
+                                    />
+                                    <input
+                                      className={`${inp} col-span-2 font-mono text-xs`}
+                                      placeholder="VRF (optional)"
+                                      value={newSzBindingForm.vrf_id}
+                                      onChange={e => setNewSzBindingForm({ ...newSzBindingForm, vrf_id: e.target.value })}
+                                    />
+                                    <button
+                                      onClick={() => handleAddSzBinding(code)}
+                                      className="col-span-1 px-2 py-1 text-xs font-semibold text-white bg-gradient-to-r from-emerald-500 to-teal-500 rounded hover:shadow-md transition"
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                     {securityZones.length === 0 && (

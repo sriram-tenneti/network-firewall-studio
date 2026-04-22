@@ -637,6 +637,21 @@ export const getNhSecurityZones = (nhId: string, dc?: string) => {
   return fetchJSON<Record<string, unknown>[]>(`/api/reference/nh-security-zones/${nhId}${qs ? `?${qs}` : ''}`);
 };
 
+// SZ-level CIDR binding CRUD (DC-specific)
+export const upsertSzCidrBinding = (payload: {
+  nh: string; sz: string; dc: string; cidr: string; vrf_id?: string; description?: string;
+}) =>
+  fetchJSON<NhSecurityZone>('/api/reference/sz-cidr-bindings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+export const deleteSzCidrBinding = (nh: string, sz: string, dc: string) => {
+  const params = new URLSearchParams({ nh, sz, dc });
+  return fetchJSON<{ message: string }>(`/api/reference/sz-cidr-bindings?${params}`, { method: 'DELETE' });
+};
+
 // Auto-populate NH/SZ/DC filtered by environment + app
 export const getFilteredNhSzDc = (environment: string, appId?: string) => {
   const params = new URLSearchParams({ environment });

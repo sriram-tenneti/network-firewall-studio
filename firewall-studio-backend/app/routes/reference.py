@@ -1381,6 +1381,38 @@ async def list_nh_security_zones(nh_id: str, dc: str = ""):
     return await get_nh_security_zones(nh_id, dc)
 
 
+@router.post("/sz-cidr-bindings")
+async def upsert_sz_cidr_binding_endpoint(data: dict):
+    """Add or update a (DC, NH, SZ) CIDR binding. Keyed by (nh, sz, dc)."""
+    from app.database import upsert_sz_cidr_binding
+    nh = str(data.get("nh", "")).strip()
+    sz = str(data.get("sz", "")).strip()
+    dc = str(data.get("dc", "")).strip()
+    cidr = str(data.get("cidr", "")).strip()
+    if not nh or not sz or not cidr:
+        raise HTTPException(status_code=400, detail="nh, sz, cidr are required")
+    result = await upsert_sz_cidr_binding(
+        nh_id=nh, sz=sz, dc=dc, cidr=cidr,
+        vrf_id=str(data.get("vrf_id", "")).strip(),
+        description=str(data.get("description", "")).strip(),
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Neighbourhood not found")
+    return result
+
+
+@router.delete("/sz-cidr-bindings")
+async def delete_sz_cidr_binding_endpoint(nh: str = "", sz: str = "", dc: str = ""):
+    """Delete a (DC, NH, SZ) CIDR binding."""
+    from app.database import delete_sz_cidr_binding
+    if not nh or not sz:
+        raise HTTPException(status_code=400, detail="nh and sz are required")
+    ok = await delete_sz_cidr_binding(nh_id=nh, sz=sz, dc=dc)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Binding not found")
+    return {"message": "Binding deleted"}
+
+
 @router.get("/app-dc-mappings")
 async def list_app_dc_mappings():
     from app.database import get_app_dc_mappings
