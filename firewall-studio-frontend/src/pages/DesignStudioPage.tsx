@@ -26,6 +26,7 @@ export function DesignStudioPage() {
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [activeTab, setActiveTab] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'multi_dc'>('table');
+  const [requestsReloadKey, setRequestsReloadKey] = useState(0);
 
   const detailModal = useModal<FirewallRule>();
   const modifyModal = useModal<FirewallRule>();
@@ -357,9 +358,13 @@ export function DesignStudioPage() {
             <div className="text-sm font-semibold text-rose-800">New Rule · Multi-DC Request</div>
             <div className="text-xs text-rose-600">One logical request → deterministic per-DC PhysicalRule fan-out based on source &amp; destination presences.</div>
           </div>
-          <RuleRequestBuilder applications={applications} onSubmitted={loadData} />
+          <RuleRequestBuilder applications={applications} onSubmitted={() => { loadData(); setRequestsReloadKey(k => k + 1); }} />
           <div className="mt-4">
-            <RuleRequestsPanel environment={(selectedEnv as '' | 'Production' | 'Non-Production' | 'Pre-Production')} onChanged={loadData} />
+            <RuleRequestsPanel
+              environment={(selectedEnv as '' | 'Production' | 'Non-Production' | 'Pre-Production')}
+              reloadKey={requestsReloadKey}
+              onChanged={() => { loadData(); setRequestsReloadKey(k => k + 1); }}
+            />
           </div>
         </div>
       ) : (

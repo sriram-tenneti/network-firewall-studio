@@ -7231,7 +7231,7 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
             "rule_id": f"{request_id}-P{i:02d}",
             "request_id": request_id,
             **p,
-            "lifecycle_status": "Submitted",
+            "lifecycle_status": "Pending Review",
         })
     record = {
         "request_id": request_id,
@@ -7243,7 +7243,7 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
         "action": payload.get("action", "ACCEPT"),
         "description": payload.get("description", ""),
         "owner": payload.get("owner", ""),
-        "status": "Submitted",
+        "status": "Pending",
         "expansion": rules,
         "warnings": preview.get("warnings", []),
         "created_at": _now(),

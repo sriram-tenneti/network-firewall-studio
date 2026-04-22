@@ -5,14 +5,15 @@ import * as api from '@/lib/api';
 interface RuleRequestsPanelProps {
   environment?: Environment | '';
   onChanged?: () => void;
+  reloadKey?: number;
 }
 
 const STATUSES: (RuleRequestRecord['status'] | 'All')[] = ['All', 'Pending', 'Approved', 'Rejected', 'Deployed', 'Certified'];
 
-export default function RuleRequestsPanel({ environment = '', onChanged }: RuleRequestsPanelProps) {
+export default function RuleRequestsPanel({ environment = '', onChanged, reloadKey = 0 }: RuleRequestsPanelProps) {
   const [items, setItems] = useState<RuleRequestRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUSES)[number]>('Pending');
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUSES)[number]>('All');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export default function RuleRequestsPanel({ environment = '', onChanged }: RuleR
     setLoading(false);
   }, [environment, statusFilter]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, reloadKey]);
 
   const act = async (id: string, to: RuleRequestRecord['status']) => {
     try {
