@@ -1,7 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup, FirewallRule } from '@/types';
+import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup, FirewallRule, SharedService, SharedServicePresence, SharedServiceCategory } from '@/types';
 import * as api from '@/lib/api';
 import { autoPrefix } from '@/lib/utils';
+
+const SS_CAT_STYLES: Record<SharedServiceCategory, { grad: string; chip: string; ring: string }> = {
+  Messaging:     { grad: 'from-blue-500 to-blue-700',    chip: 'bg-blue-50 text-blue-700 border-blue-200',       ring: 'ring-blue-200' },
+  Database:      { grad: 'from-pink-500 to-pink-700',    chip: 'bg-pink-50 text-pink-700 border-pink-200',       ring: 'ring-pink-200' },
+  Observability: { grad: 'from-orange-500 to-orange-700', chip: 'bg-orange-50 text-orange-700 border-orange-200', ring: 'ring-orange-200' },
+  Identity:      { grad: 'from-violet-500 to-violet-700', chip: 'bg-violet-50 text-violet-700 border-violet-200', ring: 'ring-violet-200' },
+  Cache:         { grad: 'from-red-500 to-red-700',      chip: 'bg-red-50 text-red-700 border-red-200',          ring: 'ring-red-200' },
+  Other:         { grad: 'from-slate-500 to-slate-700',  chip: 'bg-slate-50 text-slate-700 border-slate-200',    ring: 'ring-slate-200' },
+};
 
 /* ------------------------------------------------------------------ */
 /*  Props & Constants                                                  */
@@ -52,22 +61,17 @@ const FALLBACK_DCS = [
 ];
 
 interface DestTarget {
+  kind: 'shared_service' | 'app_ingress';
   label: string;
-  appDistId: string;
+  appDistId: string;   // for apps: app_distributed_id; for shared services: service_id
   hasIngress: boolean;
   szHint?: string;
+  category?: SharedServiceCategory;
+  dcs?: string[];
+  nhHint?: string;
+  owner?: string;
+  description?: string;
 }
-
-const DEST_COLORS = [
-  { bg: 'bg-red-700', text: 'text-white', border: 'border-red-200', hover: 'hover:border-red-400 hover:bg-red-50' },
-  { bg: 'bg-amber-600', text: 'text-white', border: 'border-amber-200', hover: 'hover:border-amber-400 hover:bg-amber-50' },
-  { bg: 'bg-emerald-600', text: 'text-white', border: 'border-emerald-200', hover: 'hover:border-emerald-400 hover:bg-emerald-50' },
-  { bg: 'bg-blue-700', text: 'text-white', border: 'border-blue-200', hover: 'hover:border-blue-400 hover:bg-blue-50' },
-  { bg: 'bg-violet-600', text: 'text-white', border: 'border-violet-200', hover: 'hover:border-violet-400 hover:bg-violet-50' },
-  { bg: 'bg-pink-600', text: 'text-white', border: 'border-pink-200', hover: 'hover:border-pink-400 hover:bg-pink-50' },
-  { bg: 'bg-teal-600', text: 'text-white', border: 'border-teal-200', hover: 'hover:border-teal-400 hover:bg-teal-50' },
-  { bg: 'bg-orange-600', text: 'text-white', border: 'border-orange-200', hover: 'hover:border-orange-400 hover:bg-orange-50' },
-];
 
 type MemberType = 'ip' | 'subnet' | 'cidr' | 'group' | 'range';
 
@@ -106,6 +110,9 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
 
   /* ---------- Drag-drop destination sidebar ---------- */
   const [destSearch, setDestSearch] = useState('');
+  const [destCategory, setDestCategory] = useState<'all' | SharedServiceCategory>('all');
+  const [sharedServices, setSharedServices] = useState<SharedService[]>([]);
+  const [ssPresences, setSsPresences] = useState<Record<string, SharedServicePresence[]>>({});
 
   /* ---------- Reference data ---------- */
   const [appDcMappings, setAppDcMappings] = useState<Record<string, unknown>[]>([]);
@@ -127,6 +134,28 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   /* ------------------------------------------------------------------ */
 
   useEffect(() => { api.getAppDCMappings().then(m => setAppDcMappings(m)).catch(() => setAppDcMappings([])); }, []);
+
+  // Load Shared Services (drag-drop preferred destinations)
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const svcs = await api.getSharedServices();
+        if (cancelled) return;
+        setSharedServices(svcs);
+        const entries = await Promise.all(
+          svcs.map(async (s) => [s.service_id, await api.getSharedServicePresences(s.service_id)] as const),
+        );
+        if (cancelled) return;
+        const m: Record<string, SharedServicePresence[]> = {};
+        for (const [k, v] of entries) m[k] = v;
+        setSsPresences(m);
+      } catch {
+        /* silent */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const mappingMatchesApp = useCallback((mr: Record<string, string>, appId: string): boolean => {
     if (!appId) return false;
@@ -326,27 +355,78 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
 
   const commonDestinations = useMemo((): DestTarget[] => {
     const targets: DestTarget[] = [];
+
+    // Shared Services (preferred) — filtered by env and DC
+    for (const svc of sharedServices) {
+      if (form.environment && svc.environments && svc.environments.length &&
+          !svc.environments.includes(form.environment as typeof svc.environments[number])) continue;
+      const pres = (ssPresences[svc.service_id] || []).filter(p =>
+        (!form.environment || p.environment === form.environment) &&
+        (!form.datacenter || p.dc_id === form.datacenter)
+      );
+      if (form.datacenter && pres.length === 0) continue;
+      const allPres = ssPresences[svc.service_id] || [];
+      const dcs = [...new Set((pres.length ? pres : allPres).map(p => p.dc_id))];
+      const szHint = (pres[0] || allPres[0])?.sz_code || '';
+      const nhHint = (pres[0] || allPres[0])?.nh_id || '';
+      targets.push({
+        kind: 'shared_service',
+        label: svc.name,
+        appDistId: svc.service_id,
+        hasIngress: true,
+        szHint,
+        category: svc.category,
+        dcs,
+        nhHint,
+        owner: svc.owner,
+        description: svc.description,
+      });
+    }
+
+    // Apps-with-Ingress as a secondary pool
     const srcApp = form.application;
     for (const app of applications) {
       const id = app.app_distributed_id || app.app_id;
       if (id === srcApp) continue;
       const hasIngress = !!app.has_ingress;
+      if (!hasIngress) continue;
       const szHint = (app.sz || app.szs || '') as string;
-      targets.push({ label: app.app_name || id, appDistId: id, hasIngress, szHint: szHint.split(',')[0]?.trim() || '' });
+      targets.push({
+        kind: 'app_ingress',
+        label: app.app_name || id,
+        appDistId: id,
+        hasIngress,
+        szHint: szHint.split(',')[0]?.trim() || '',
+      });
     }
+
     targets.sort((a, b) => {
-      if (a.hasIngress && !b.hasIngress) return -1;
-      if (!a.hasIngress && b.hasIngress) return 1;
-      return a.appDistId.localeCompare(b.appDistId);
+      if (a.kind === 'shared_service' && b.kind !== 'shared_service') return -1;
+      if (a.kind !== 'shared_service' && b.kind === 'shared_service') return 1;
+      return a.label.localeCompare(b.label);
     });
     return targets;
-  }, [applications, form.application]);
+  }, [sharedServices, ssPresences, applications, form.application, form.environment, form.datacenter]);
 
   const filteredDestinations = useMemo(() => {
-    if (!destSearch) return commonDestinations;
-    const q = destSearch.toLowerCase();
-    return commonDestinations.filter(d => d.label.toLowerCase().includes(q));
-  }, [commonDestinations, destSearch]);
+    let list = commonDestinations;
+    if (destCategory !== 'all') {
+      list = list.filter(d => d.kind === 'shared_service' && d.category === destCategory);
+    }
+    if (destSearch) {
+      const q = destSearch.toLowerCase();
+      list = list.filter(d =>
+        d.label.toLowerCase().includes(q) ||
+        d.appDistId.toLowerCase().includes(q) ||
+        (d.category || '').toLowerCase().includes(q) ||
+        (d.owner || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [commonDestinations, destSearch, destCategory]);
+
+  const destSharedCount = useMemo(() => commonDestinations.filter(d => d.kind === 'shared_service').length, [commonDestinations]);
+  const destAppCount = useMemo(() => commonDestinations.filter(d => d.kind === 'app_ingress').length, [commonDestinations]);
 
   /* ------------------------------------------------------------------ */
   /*  Edit mode pre-populate                                             */
@@ -456,6 +536,23 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   };
 
   const handleDropDestination = (target: DestTarget) => {
+    if (target.kind === 'shared_service') {
+      // Pre-populate NH/SZ from the service's presence in the currently-selected DC (or first)
+      const svcPres = ssPresences[target.appDistId] || [];
+      const match = svcPres.find(p =>
+        (!form.environment || p.environment === form.environment) &&
+        (!form.datacenter || p.dc_id === form.datacenter)
+      ) || svcPres[0];
+      const suggestedGroup = match ? `grp-${target.label}-${match.nh_id}-${match.sz_code}` : '';
+      setForm(p => ({
+        ...p,
+        dst_application: target.appDistId,
+        dst_nh: match?.nh_id || '',
+        dst_sz: match?.sz_code || '',
+        dst_group: suggestedGroup,
+      }));
+      return;
+    }
     setForm(p => ({ ...p, dst_application: target.appDistId, dst_nh: '', dst_sz: '', dst_group: '' }));
   };
 
@@ -1020,42 +1117,124 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           )}
         </div>
 
-        {/* Right sidebar: Predefined Destinations — only on Step 1 */}
+        {/* Right sidebar: Shared Services (preferred) + Apps-with-Ingress — only on Step 1 */}
         {step === 1 && (
-          <div className="w-72 flex-shrink-0 border-l border-gray-200 pl-5">
-            <div className="bg-gradient-to-b from-gray-50 to-white rounded-xl border border-gray-200 p-4">
-              <h3 className="text-sm font-extrabold text-gray-800 tracking-tight mb-1">Destination</h3>
-              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-3">Predefined Destinations</p>
-              <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-full text-xs mb-3 bg-white placeholder-gray-400 focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
-                placeholder="Search destinations..." value={destSearch} onChange={e => setDestSearch(e.target.value)} />
-              <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                {filteredDestinations.length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">No destinations available</p>}
-                {filteredDestinations.map((d, idx) => {
-                  const color = DEST_COLORS[idx % DEST_COLORS.length];
+          <div className="w-80 flex-shrink-0 border-l border-gray-200 pl-5">
+            <div className="bg-gradient-to-b from-indigo-50 via-white to-white rounded-2xl border border-indigo-100 p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-extrabold text-gray-900 tracking-tight flex items-center gap-1.5">
+                  <span className="inline-flex w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 items-center justify-center shadow-sm">
+                    <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V4zM12 4a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V4zM4 12a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM12 12a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                  </span>
+                  Destinations
+                </h3>
+                <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-full">
+                  {destSharedCount} SS · {destAppCount} App
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-3">Drag or tap to pick</p>
+
+              <input
+                className="w-full px-3 py-2 border border-gray-200 rounded-full text-xs mb-3 bg-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 shadow-inner"
+                placeholder="Search services..."
+                value={destSearch}
+                onChange={e => setDestSearch(e.target.value)}
+              />
+
+              {/* Category chip filters */}
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(['all', 'Messaging', 'Database', 'Observability', 'Identity', 'Cache', 'Other'] as const).map(cat => {
+                  const active = destCategory === cat;
+                  const style = cat === 'all' ? null : SS_CAT_STYLES[cat];
                   return (
-                    <button key={d.appDistId} onClick={() => handleDropDestination(d)}
-                      className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border ${color.border} ${color.hover} transition-all duration-150 group bg-white shadow-sm hover:shadow`}
-                      draggable onDragEnd={() => handleDropDestination(d)}>
-                      <div className={`w-8 h-8 rounded-md ${color.bg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                        <svg className={`w-4 h-4 ${color.text}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm2 6h2v2H9v-2z" clipRule="evenodd" /></svg>
+                    <button
+                      key={cat}
+                      onClick={() => setDestCategory(cat)}
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all ${
+                        active
+                          ? (cat === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : `bg-gradient-to-r ${style!.grad} text-white border-transparent shadow-sm`)
+                          : (cat === 'all' ? 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50' : `${style!.chip} hover:shadow-sm`)
+                      }`}
+                    >
+                      {cat === 'all' ? 'All' : cat}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1 -mr-1">
+                {filteredDestinations.length === 0 && (
+                  <div className="text-xs text-gray-400 italic text-center py-6 border border-dashed border-gray-200 rounded-lg bg-gray-50/50">
+                    No destinations match.
+                  </div>
+                )}
+
+                {filteredDestinations.map(d => {
+                  const ss = d.kind === 'shared_service';
+                  const style = ss ? SS_CAT_STYLES[d.category || 'Other'] : SS_CAT_STYLES.Other;
+                  return (
+                    <button
+                      key={`${d.kind}-${d.appDistId}`}
+                      onClick={() => handleDropDestination(d)}
+                      draggable
+                      onDragEnd={() => handleDropDestination(d)}
+                      className={`w-full text-left rounded-xl border bg-white shadow-sm hover:shadow-md hover:-translate-y-0.5 transform transition-all duration-150 group overflow-hidden ${
+                        ss ? 'border-transparent hover:ring-2 hover:' + style.ring : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className={`flex items-stretch`}>
+                        {/* Colored bar with icon */}
+                        <div className={`w-11 flex-shrink-0 flex flex-col items-center justify-center py-2 ${ss ? `bg-gradient-to-br ${style.grad}` : 'bg-gradient-to-br from-gray-600 to-gray-800'}`}>
+                          <span className="text-white text-base font-black tracking-tighter leading-none">
+                            {d.label.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="text-white/80 text-[8px] uppercase mt-0.5 font-bold tracking-widest">
+                            {ss ? 'SS' : 'APP'}
+                          </span>
+                        </div>
+
+                        <div className="min-w-0 flex-1 px-3 py-2">
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <div className="text-[13px] font-extrabold text-gray-900 truncate">{d.label}</div>
+                            <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                          <div className="text-[10px] text-gray-500 font-mono truncate">{d.appDistId}</div>
+
+                          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                            {ss && d.category && (
+                              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${style.chip}`}>{d.category}</span>
+                            )}
+                            {!ss && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">+Ingress</span>
+                            )}
+                            {d.szHint && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-slate-50 text-slate-700 border-slate-200">{d.szHint}</span>
+                            )}
+                            {d.nhHint && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-slate-50 text-slate-700 border-slate-200">{d.nhHint}</span>
+                            )}
+                            {ss && d.dcs && d.dcs.length > 0 && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                                {d.dcs.length} DC{d.dcs.length > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-gray-800 group-hover:text-gray-900 truncate uppercase">{d.label}</div>
-                        <div className="text-[10px] text-gray-400 truncate">{d.szHint ? `${d.szHint} Zone` : d.appDistId}</div>
-                      </div>
-                      <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                     </button>
                   );
                 })}
               </div>
 
               {/* Custom Destination section */}
-              <div className="mt-4 pt-3 border-t border-gray-200">
+              <div className="mt-4 pt-3 border-t border-indigo-100">
                 <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Custom Destination</p>
                 <div className="space-y-2">
                   <div>
-                    <label className="text-[10px] text-gray-500 font-medium">Dest IP:</label>
-                    <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white mt-0.5" placeholder="e.g. 10.1.2.50" />
+                    <label className="text-[10px] text-gray-500 font-medium">Dest IP / CIDR:</label>
+                    <input className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white mt-0.5" placeholder="e.g. 10.1.2.50/32" />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-500 font-medium">Ports:</label>
