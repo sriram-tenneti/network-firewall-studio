@@ -6,6 +6,7 @@ IP Ranges, Naming Standards, Policy Matrix) is fully customizable via CRUD APIs.
 Data is stored in JSON files under the data/ directory and seeded on first startup.
 """
 
+import ipaddress
 import json
 import os
 import uuid
@@ -42,6 +43,7 @@ from app.seed_data import (
     SEED_SHARED_SERVICES as _SD_SHARED_SERVICES,
     SEED_SHARED_SERVICE_PRESENCES as _SD_SHARED_SERVICE_PRESENCES,
     SEED_APP_PRESENCES as _SD_APP_PRESENCES,
+    SEED_PORT_CATALOG as _SD_PORT_CATALOG,
     build_seed_migrations as _sd_build_migrations,
     build_seed_chg_requests as _sd_build_chg_requests,
 )
@@ -678,6 +680,7 @@ async def seed_database() -> None:
     _save("shared_service_presences", deepcopy(_SD_SHARED_SERVICE_PRESENCES))
     _save("app_presences", deepcopy(_SD_APP_PRESENCES))
     _save("rule_requests", [])
+    _save("port_catalog", deepcopy(_SD_PORT_CATALOG))
     # Materialize derived groups so Studio works end-to-end out of the box.
     existing_groups = _load("groups") or []
     derived = _build_derived_groups_from_presences(
@@ -825,6 +828,267 @@ async def delete_sz_cidr_binding(nh_id: str, sz: str, dc: str) -> bool:
         _save("neighbourhoods", items)
         return True
     return False
+
+
+# ============================================================
+# Forward classifier: IP → (DC, NH, SZ)
+# Hierarchy: DC → NH → SZ (SZ nested inside NH inside DC)
+# Source of truth: neighbourhoods[*].security_zones[*] = {dc, zone, cidr}
+# ============================================================
+
+def _ip_in_cidr(ip: str, cidr: str) -> int:
+    """Return containment prefix length if ip fits inside cidr; -1 otherwise.
+
+    Accepts single-IP, CIDR, or 'a.b.c.d-a.b.c.e' range for the IP operand.
+    For ranges, requires every address in the range to fit the cidr.
+    """
+    if not ip or not cidr:
+        return -1
+    try:
+        target = ipaddress.ip_network(cidr.strip(), strict=False)
+    except ValueError:
+        return -1
+    try:
+        if "-" in ip and "/" not in ip:
+            lo_s, hi_s = [s.strip() for s in ip.split("-", 1)]
+            lo = ipaddress.ip_address(lo_s)
+            hi = ipaddress.ip_address(hi_s)
+            if lo > hi:
+                lo, hi = hi, lo
+            if lo in target and hi in target:
+                return target.prefixlen
+            return -1
+        net = ipaddress.ip_network(ip.strip(), strict=False)
+        if net.subnet_of(target):
+            return target.prefixlen
+        return -1
+    except ValueError:
+        return -1
+
+
+def _classify_ip_sync(ip: str, dc_hint: str = "") -> dict[str, Any]:
+    """Classify a single IP/CIDR/range into its (DC, NH, SZ) cell.
+
+    Walks all NH.security_zones bindings and picks the longest-prefix match.
+    If dc_hint is given, DC-specific bindings win over DC-agnostic fallbacks.
+    Returns {dc, nh, sz, cidr, matched, reason}.
+    """
+    neighbourhoods = _load("neighbourhoods") or []
+    best: dict[str, Any] | None = None
+    best_len = -1
+    for n in neighbourhoods:
+        nh_id = str(n.get("nh_id", ""))
+        for e in n.get("security_zones") or []:
+            cidr = str(e.get("cidr", "")).strip()
+            if not cidr:
+                continue
+            dc = str(e.get("dc", ""))
+            if dc_hint and dc and dc != dc_hint:
+                continue
+            plen = _ip_in_cidr(ip, cidr)
+            if plen < 0:
+                continue
+            # DC-specific > DC-agnostic at same prefix length
+            effective = plen + (1 if dc else 0)
+            if effective > best_len:
+                best_len = effective
+                best = {
+                    "dc": dc,
+                    "nh": nh_id,
+                    "sz": str(e.get("zone", "")),
+                    "cidr": cidr,
+                }
+    if best:
+        return {"matched": True, **best, "reason": "longest-prefix SZ CIDR binding match"}
+    return {
+        "matched": False, "dc": "", "nh": "", "sz": "", "cidr": "",
+        "reason": "no SZ CIDR binding contains this address",
+    }
+
+
+async def classify_ip(ip: str, dc_hint: str = "") -> dict[str, Any]:
+    """Async wrapper."""
+    return _classify_ip_sync(ip, dc_hint)
+
+
+async def classify_ips(ips: list[str], dc_hint: str = "") -> list[dict[str, Any]]:
+    return [{"ip": ip, **_classify_ip_sync(ip, dc_hint)} for ip in ips if ip]
+
+
+# ============================================================
+# Reverse lookup: (DC, NH, SZ) → occupants (apps + shared services + members)
+# ============================================================
+
+async def get_occupants(dc: str = "", nh: str = "", sz: str = "",
+                         environment: str = "") -> dict[str, Any]:
+    """Return apps and shared services present in the given cell.
+
+    Any of dc/nh/sz/environment may be empty — acts as wildcard on that axis.
+    """
+    apps = _load("app_presences") or []
+    svcs = _load("shared_service_presences") or []
+
+    def _match(p: dict[str, Any]) -> bool:
+        if dc and str(p.get("dc_id", "")) != dc:
+            return False
+        if nh and str(p.get("nh_id", "")) != nh:
+            return False
+        if sz and str(p.get("sz_code", "")) != sz:
+            return False
+        if environment and str(p.get("environment", "Production")) != environment:
+            return False
+        return True
+
+    app_rows = []
+    for p in apps:
+        if not _match(p):
+            continue
+        app_rows.append({
+            "app_distributed_id": p.get("app_distributed_id", ""),
+            "dc_id": p.get("dc_id", ""),
+            "environment": p.get("environment", "Production"),
+            "nh_id": p.get("nh_id", ""),
+            "sz_code": p.get("sz_code", ""),
+            "has_ingress": bool(p.get("has_ingress", False)),
+            "egress_count": len(p.get("egress_members", []) or []),
+            "ingress_count": len(p.get("ingress_members", []) or []),
+            "egress_group": _app_egress_group_name(
+                str(p.get("app_distributed_id", "")),
+                str(p.get("nh_id", "")),
+                str(p.get("sz_code", "")),
+            ),
+            "ingress_group": (
+                _app_ingress_group_name(
+                    str(p.get("app_distributed_id", "")),
+                    str(p.get("nh_id", "")),
+                    str(p.get("sz_code", "")),
+                ) if p.get("has_ingress") else ""
+            ),
+        })
+
+    svc_rows = []
+    for p in svcs:
+        if not _match(p):
+            continue
+        svc_rows.append({
+            "service_id": p.get("service_id", ""),
+            "dc_id": p.get("dc_id", ""),
+            "environment": p.get("environment", "Production"),
+            "nh_id": p.get("nh_id", ""),
+            "sz_code": p.get("sz_code", ""),
+            "member_count": len(p.get("members", []) or []),
+            "group": _shared_service_group_name(
+                str(p.get("service_id", "")),
+                str(p.get("nh_id", "")),
+                str(p.get("sz_code", "")),
+            ),
+        })
+
+    return {
+        "filter": {"dc": dc, "nh": nh, "sz": sz, "environment": environment},
+        "applications": app_rows,
+        "shared_services": svc_rows,
+        "total": len(app_rows) + len(svc_rows),
+    }
+
+
+# ============================================================
+# Ingest members: classify IPs/CIDRs and upsert presences + derive groups
+# ============================================================
+
+async def ingest_app_members(
+    app_distributed_id: str,
+    environment: str,
+    members: list[dict[str, Any]],
+    direction: str = "egress",
+    dc_hint: str = "",
+    default_has_ingress: bool = False,
+) -> dict[str, Any]:
+    """Classify each member, upsert app_presence per (DC, NH, SZ), auto-create
+    derived groups.
+
+    Each member: {"kind": "ip"|"cidr"|"range"|"subnet"|"group", "value": "..."}
+    Returns {classified: [...], unclassified: [...], presences: [...]}.
+    """
+    app_dist_id = (app_distributed_id or "").upper()
+    classified: list[dict[str, Any]] = []
+    unclassified: list[dict[str, Any]] = []
+    # bucket: (dc, nh, sz) -> list[MemberSpec]
+    buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for m in members or []:
+        kind = str(m.get("kind", "ip")).lower()
+        value = str(m.get("value", "")).strip()
+        if not value:
+            continue
+        if kind == "group":
+            unclassified.append({"kind": kind, "value": value,
+                                 "reason": "group members cannot be auto-classified"})
+            continue
+        res = _classify_ip_sync(value, dc_hint)
+        if not res.get("matched"):
+            unclassified.append({"kind": kind, "value": value,
+                                 "reason": res.get("reason", "no match")})
+            continue
+        bucket_key = (res["dc"], res["nh"], res["sz"])
+        buckets.setdefault(bucket_key, []).append({"kind": kind, "value": value})
+        classified.append({
+            "kind": kind, "value": value, "dc": res["dc"],
+            "nh": res["nh"], "sz": res["sz"], "cidr": res["cidr"],
+        })
+
+    presences: list[dict[str, Any]] = []
+    existing = _load("app_presences") or []
+    for (dc, nh, sz), new_members in buckets.items():
+        existing_row = None
+        for p in existing:
+            if (str(p.get("app_distributed_id", "")).upper() == app_dist_id
+                    and p.get("dc_id") == dc
+                    and p.get("environment") == environment
+                    and p.get("nh_id") == nh
+                    and p.get("sz_code") == sz):
+                existing_row = p
+                break
+        merged_egress = list((existing_row or {}).get("egress_members", []) or [])
+        merged_ingress = list((existing_row or {}).get("ingress_members", []) or [])
+        if direction == "ingress":
+            # dedupe by (kind, value)
+            seen = {(str(x.get("kind")), str(x.get("value"))) for x in merged_ingress}
+            for nm in new_members:
+                k = (nm["kind"], nm["value"])
+                if k not in seen:
+                    merged_ingress.append(nm)
+                    seen.add(k)
+        else:
+            seen = {(str(x.get("kind")), str(x.get("value"))) for x in merged_egress}
+            for nm in new_members:
+                k = (nm["kind"], nm["value"])
+                if k not in seen:
+                    merged_egress.append(nm)
+                    seen.add(k)
+        row = {
+            "app_distributed_id": app_dist_id,
+            "dc_id": dc,
+            "dc_type": (existing_row or {}).get("dc_type", "NGDC"),
+            "environment": environment,
+            "nh_id": nh,
+            "sz_code": sz,
+            "has_ingress": bool((existing_row or {}).get("has_ingress",
+                                                         default_has_ingress or direction == "ingress")),
+            "egress_members": merged_egress,
+            "ingress_members": merged_ingress,
+        }
+        if direction == "ingress":
+            row["has_ingress"] = True
+        saved = await upsert_app_presence(row)
+        presences.append(saved)
+
+    return {
+        "app_distributed_id": app_dist_id,
+        "environment": environment,
+        "classified": classified,
+        "unclassified": unclassified,
+        "presences": presences,
+    }
 
 
 async def get_ngdc_datacenters() -> list[dict[str, Any]]:
@@ -7124,19 +7388,50 @@ async def get_rule_request(request_id: str) -> dict[str, Any] | None:
     return None
 
 
+def _presence_key_set(keys: list[dict[str, Any]] | None) -> set[tuple[str, str, str]] | None:
+    """Normalize a list of presence key dicts into a set of
+    (dc_id, nh_id, sz_code) tuples. Returns None when no keys were
+    supplied, meaning "no per-presence filtering" (all presences used).
+    """
+    if not keys:
+        return None
+    out: set[tuple[str, str, str]] = set()
+    for k in keys:
+        if not isinstance(k, dict):
+            continue
+        dc = str(k.get("dc_id") or "").strip()
+        nh = str(k.get("nh_id") or "").strip()
+        sz = str(k.get("sz_code") or "").strip()
+        if dc and nh and sz:
+            out.add((dc, nh, sz))
+    return out or None
+
+
+def _filter_by_presence_keys(pres: list[dict[str, Any]],
+                             keys: set[tuple[str, str, str]] | None) -> list[dict[str, Any]]:
+    if not keys:
+        return pres
+    return [p for p in pres
+            if (p.get("dc_id"), p.get("nh_id"), p.get("sz_code")) in keys]
+
+
 async def _resolve_source_presences(app_dist_id: str, env: str,
-                                    requested_dcs: list[str] | None) -> list[dict[str, Any]]:
+                                    requested_dcs: list[str] | None,
+                                    presence_keys: list[dict[str, Any]] | None = None,
+                                    ) -> list[dict[str, Any]]:
     pres = [p for p in (_load("app_presences") or [])
             if str(p.get("app_distributed_id", "")).upper() == app_dist_id.upper()
             and p.get("environment") == env]
     if requested_dcs:
         pres = [p for p in pres if p.get("dc_id") in requested_dcs]
-    return pres
+    return _filter_by_presence_keys(pres, _presence_key_set(presence_keys))
 
 
 async def _resolve_destination_presences(kind: str, dest_ref: str | None,
                                          env: str,
-                                         requested_dcs: list[str] | None) -> list[dict[str, Any]]:
+                                         requested_dcs: list[str] | None,
+                                         presence_keys: list[dict[str, Any]] | None = None,
+                                         ) -> list[dict[str, Any]]:
     if kind == "shared_service" and dest_ref:
         pres = [p for p in (_load("shared_service_presences") or [])
                 if str(p.get("service_id", "")).upper() == dest_ref.upper()
@@ -7150,7 +7445,7 @@ async def _resolve_destination_presences(kind: str, dest_ref: str | None,
         pres = []
     if requested_dcs:
         pres = [p for p in pres if p.get("dc_id") in requested_dcs]
-    return pres
+    return _filter_by_presence_keys(pres, _presence_key_set(presence_keys))
 
 
 async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
@@ -7167,8 +7462,13 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     ports = payload.get("ports", "TCP 8080")
     action = payload.get("action", "ACCEPT")
 
-    src_pres = await _resolve_source_presences(src_app, env, requested_dcs)
-    dst_pres = await _resolve_destination_presences(kind, dest_ref, env, requested_dcs)
+    source_presences = payload.get("source_presences")
+    destination_presences = payload.get("destination_presences")
+
+    src_pres = await _resolve_source_presences(
+        src_app, env, requested_dcs, source_presences)
+    dst_pres = await _resolve_destination_presences(
+        kind, dest_ref, env, requested_dcs, destination_presences)
 
     warnings: list[str] = []
     if not src_pres:
@@ -7223,16 +7523,88 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
+    """Create a multi-DC RuleRequest and also materialize each PhysicalRule
+    into the main `firewall_rules` store so submissions immediately show
+    up in the Rules table, Compile views, and Review queues with standard
+    R-#### identifiers.
+    """
     preview = await preview_rule_expansion(payload)
     request_id = f"RR-{_id()[:8].upper()}"
-    rules = []
+
+    # Determine the next R-#### counter for PhysicalRules.
+    fw_rules = _load("firewall_rules") or []
+    config = (await get_org_config()) or SEED_ORG_CONFIG
+    prefix = config.get("rule_id_prefix", "R-")
+    start = config.get("rule_id_start", 3000)
+    max_num = start - 1
+    for r in fw_rules:
+        rid = r.get("rule_id", "")
+        if rid.startswith(prefix):
+            try:
+                num = int(rid.split("-")[-1])
+                if num > max_num:
+                    max_num = num
+            except (ValueError, IndexError):
+                pass
+
+    now = _now()
+    expansion: list[dict[str, Any]] = []
     for i, p in enumerate(preview.get("physical_rules", []), start=1):
-        rules.append({
-            "rule_id": f"{request_id}-P{i:02d}",
+        max_num += 1
+        rule_id = f"{prefix}{max_num}"
+        # First two tokens of "TCP 443, TCP 8443" → split protocol/port
+        port_field = p.get("ports", "") or payload.get("ports", "")
+        first = port_field.split(",")[0].strip() if port_field else ""
+        proto, port_num = "TCP", ""
+        if first:
+            toks = first.split()
+            if len(toks) == 2:
+                proto, port_num = toks[0].upper(), toks[1]
+            elif len(toks) == 1:
+                port_num = toks[0]
+        # Persist a full FirewallRule so the Rules table can render it.
+        fw_rules.append({
+            "rule_id": rule_id,
+            "source": p.get("src_group_ref", ""),
+            "source_zone": p.get("src_sz", ""),
+            "source_nh": p.get("src_nh", ""),
+            "destination": p.get("dst_group_ref", ""),
+            "destination_zone": p.get("dst_sz", ""),
+            "destination_nh": p.get("dst_nh", ""),
+            "port": port_num,
+            "protocol": proto,
+            "action": "Allow" if (p.get("action") or "ACCEPT").upper() == "ACCEPT" else "Deny",
+            "description": payload.get("description", "") or f"Multi-DC rule request {request_id}",
+            "application": payload.get("application_ref", ""),
+            "dst_application": payload.get("destination_ref", "") if payload.get("destination_kind") == "app_ingress" else "",
+            "status": "Pending Review",
+            "rule_status": "Pending Review",
+            "rule_migration_status": "Migrated",
+            "is_group_to_group": True,
+            "environment": payload.get("environment", "Production"),
+            "datacenter": p.get("src_dc", ""),
+            "dst_datacenter": p.get("dst_dc", ""),
+            "cross_dc": bool(p.get("cross_dc", False)),
+            "rule_request_id": request_id,
+            "created_at": now,
+            "updated_at": now,
+            "certified_date": None,
+            "expiry_date": None,
+        })
+        # Record lifecycle event for the physical rule.
+        await _record_lifecycle(rule_id, "created", to_status="Pending Review",
+                                module="design-studio",
+                                details=f"Rule created via multi-DC request {request_id}")
+        # Build the expansion entry that the client sees.
+        expansion.append({
+            "rule_id": rule_id,
             "request_id": request_id,
             **p,
             "lifecycle_status": "Pending Review",
         })
+
+    _save("firewall_rules", fw_rules)
+
     record = {
         "request_id": request_id,
         "application_ref": payload.get("application_ref", ""),
@@ -7244,10 +7616,10 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
         "description": payload.get("description", ""),
         "owner": payload.get("owner", ""),
         "status": "Pending",
-        "expansion": rules,
+        "expansion": expansion,
         "warnings": preview.get("warnings", []),
-        "created_at": _now(),
-        "updated_at": _now(),
+        "created_at": now,
+        "updated_at": now,
     }
     items = _load_rule_requests()
     items.append(record)
@@ -7255,24 +7627,119 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
+# ============================================================
+# Port / Service Catalog CRUD
+# ============================================================
+
+def _load_port_catalog() -> list[dict[str, Any]]:
+    items = _load("port_catalog")
+    if items is None:
+        items = deepcopy(_SD_PORT_CATALOG)
+        _save("port_catalog", items)
+    return items
+
+
+async def list_ports() -> list[dict[str, Any]]:
+    return _load_port_catalog()
+
+
+async def create_port(payload: dict[str, Any]) -> dict[str, Any]:
+    items = _load_port_catalog()
+    pid = str(payload.get("port_id", "")).strip().upper()
+    if not pid:
+        name = str(payload.get("name", "")).strip() or "PORT"
+        pid = name.upper().replace(" ", "_")[:32]
+    # ensure unique
+    base = pid
+    i = 1
+    existing = {p.get("port_id") for p in items}
+    while pid in existing:
+        i += 1
+        pid = f"{base}_{i}"
+    record = {
+        "port_id": pid,
+        "name": str(payload.get("name", pid)),
+        "protocol": str(payload.get("protocol", "TCP")).upper(),
+        "port": int(payload.get("port") or 0),
+        "aliases": list(payload.get("aliases") or []),
+        "category": str(payload.get("category", "Custom")),
+        "description": str(payload.get("description", "")),
+    }
+    items.append(record)
+    _save("port_catalog", items)
+    return record
+
+
+async def update_port(port_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    items = _load_port_catalog()
+    for p in items:
+        if p.get("port_id") == port_id:
+            for k in ("name", "protocol", "port", "aliases", "category", "description"):
+                if k in payload:
+                    if k == "port":
+                        p[k] = int(payload[k] or 0)
+                    elif k == "protocol":
+                        p[k] = str(payload[k]).upper()
+                    elif k == "aliases":
+                        p[k] = list(payload[k] or [])
+                    else:
+                        p[k] = payload[k]
+            _save("port_catalog", items)
+            return p
+    return None
+
+
+async def delete_port(port_id: str) -> bool:
+    items = _load_port_catalog()
+    new_items = [p for p in items if p.get("port_id") != port_id]
+    if len(new_items) == len(items):
+        return False
+    _save("port_catalog", new_items)
+    return True
+
+
 async def set_rule_request_status(request_id: str, status: str, note: str | None = None) -> dict[str, Any] | None:
     items = _load_rule_requests()
+    mapping = {
+        "Approved": "Approved",
+        "Deployed": "Deployed",
+        "Rejected": "Rejected",
+        "Certified": "Certified",
+    }
     for r in items:
         if r.get("request_id") == request_id:
             r["status"] = status
             r["updated_at"] = _now()
             if note:
                 r.setdefault("review_notes", []).append({"at": _now(), "status": status, "note": note})
+            phys_ids: list[str] = []
             for phys in r.get("expansion", []):
-                # propagate high-level status to physical rules
-                mapping = {
-                    "Approved": "Approved",
-                    "Deployed": "Deployed",
-                    "Rejected": "Rejected",
-                    "Certified": "Certified",
-                }
                 if status in mapping:
                     phys["lifecycle_status"] = mapping[status]
+                rid = phys.get("rule_id")
+                if rid:
+                    phys_ids.append(rid)
+            # Propagate status to the corresponding firewall_rules records
+            if status in mapping and phys_ids:
+                fw_rules = _load("firewall_rules") or []
+                phys_id_set = set(phys_ids)
+                now = _now()
+                for fr in fw_rules:
+                    if fr.get("rule_id") in phys_id_set:
+                        fr["status"] = mapping[status]
+                        fr["rule_status"] = mapping[status]
+                        fr["updated_at"] = now
+                        if status == "Certified":
+                            fr["certified_date"] = now
+                        await _record_lifecycle(
+                            fr["rule_id"],
+                            status.lower(),
+                            to_status=mapping[status],
+                            module="design-studio",
+                            details=f"Status -> {mapping[status]} via request {request_id}"
+                                    + (f": {note}" if note else ""),
+                        )
+                _save("firewall_rules", fw_rules)
             _save("rule_requests", items)
             return r
     return None

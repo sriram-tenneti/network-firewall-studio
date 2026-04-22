@@ -6,6 +6,7 @@ import type {
   Environment,
   MemberSpec,
   MemberTypeKind,
+  PortBinding,
   SharedService,
   SharedServiceCategory,
   SharedServicePresence,
@@ -13,6 +14,7 @@ import type {
   NeighbourhoodRegistry,
   SecurityZone,
 } from '@/types';
+import type { PortCatalogEntry } from '@/lib/api';
 import * as api from '@/lib/api';
 
 const ENVIRONMENTS: Environment[] = ['Production', 'Non-Production', 'Pre-Production'];
@@ -72,6 +74,7 @@ export default function SharedServicesTab() {
   const [datacenters, setDatacenters] = useState<NGDCDataCenter[]>([]);
   const [neighbourhoods, setNeighbourhoods] = useState<NeighbourhoodRegistry[]>([]);
   const [securityZones, setSecurityZones] = useState<SecurityZone[]>([]);
+  const [portCatalog, setPortCatalog] = useState<PortCatalogEntry[]>([]);
 
   // service edit
   const [editing, setEditing] = useState<Partial<SharedService> | null>(null);
@@ -85,16 +88,18 @@ export default function SharedServicesTab() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [svcs, dcs, nhs, szs] = await Promise.all([
+      const [svcs, dcs, nhs, szs, ports] = await Promise.all([
         api.getSharedServices(),
         api.getNGDCDatacenters().catch(() => [] as NGDCDataCenter[]),
         api.getNeighbourhoods().catch(() => [] as NeighbourhoodRegistry[]),
         api.getSecurityZones().catch(() => [] as SecurityZone[]),
+        api.listPorts().catch(() => [] as PortCatalogEntry[]),
       ]);
       setServices(svcs);
       setDatacenters(dcs);
       setNeighbourhoods(nhs);
       setSecurityZones(szs);
+      setPortCatalog(ports);
       const entries = await Promise.all(
         svcs.map(async (s) => [s.service_id, await api.getSharedServicePresences(s.service_id)] as const),
       );
@@ -402,6 +407,24 @@ export default function SharedServicesTab() {
                 onChange={(e) => setEditing((s) => ({ ...(s || {}), tags: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) }))}
                 className="w-full border rounded px-2 py-1 text-sm" />
             </div>
+
+            <PortBindingsEditor
+              title="Standard Ports"
+              subtitle="Library ports (from Port Catalog) that are defaults when this service is a rule destination."
+              mode="library"
+              catalog={portCatalog}
+              standardPortIds={editing.standard_ports || []}
+              onChangeStandard={(ids) => setEditing((s) => ({ ...(s || {}), standard_ports: ids }))}
+            />
+            <PortBindingsEditor
+              title="Additional Ports (service-specific)"
+              subtitle="Custom ports that don't belong in the global catalog. Shown alongside Standard Ports in the Port Picker."
+              mode="custom"
+              catalog={portCatalog}
+              additionalPorts={editing.additional_ports || []}
+              onChangeAdditional={(list) => setEditing((s) => ({ ...(s || {}), additional_ports: list }))}
+            />
+
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => { setEditing(null); setCreatingNew(false); }}
                 className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">Cancel</button>
@@ -508,6 +531,133 @@ export default function SharedServicesTab() {
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PortBindingsEditor — reusable editor for Standard Ports (catalog refs) and
+// Additional Ports (service/app-specific customs). Used in the Shared Service
+// modal here and in the App Presence Matrix (for ingress_ports).
+// ─────────────────────────────────────────────────────────────────────────────
+
+type PortBindingsEditorProps =
+  | {
+      title: string;
+      subtitle?: string;
+      mode: 'library';
+      catalog: PortCatalogEntry[];
+      standardPortIds: string[];
+      onChangeStandard: (ids: string[]) => void;
+    }
+  | {
+      title: string;
+      subtitle?: string;
+      mode: 'custom';
+      catalog: PortCatalogEntry[];
+      additionalPorts: PortBinding[];
+      onChangeAdditional: (list: PortBinding[]) => void;
+    };
+
+export function PortBindingsEditor(props: PortBindingsEditorProps) {
+  const [q, setQ] = useState('');
+  if (props.mode === 'library') {
+    const { catalog, standardPortIds, onChangeStandard } = props;
+    const selected = new Set(standardPortIds);
+    const ql = q.trim().toLowerCase();
+    const matches = !ql ? [] : catalog.filter((p) =>
+      !selected.has(p.port_id) && (
+        p.name.toLowerCase().includes(ql) ||
+        p.port_id.toLowerCase().includes(ql) ||
+        String(p.port).includes(ql) ||
+        (p.description || '').toLowerCase().includes(ql)
+      ),
+    ).slice(0, 8);
+    return (
+      <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-2.5">
+        <div className="text-xs font-semibold text-indigo-900">{props.title}</div>
+        {props.subtitle && <div className="text-[11px] text-indigo-800/80 mb-1.5">{props.subtitle}</div>}
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {standardPortIds.length === 0 && (
+            <span className="text-[11px] italic text-gray-500">No standard ports yet.</span>
+          )}
+          {standardPortIds.map((pid) => {
+            const hit = catalog.find((c) => c.port_id === pid);
+            const label = hit ? `${hit.name} · ${hit.protocol} ${hit.port}` : pid;
+            return (
+              <span key={pid} className="inline-flex items-center gap-1 text-[11px] font-mono bg-white border border-indigo-200 text-indigo-700 rounded px-1.5 py-0.5">
+                {label}
+                <button type="button" className="text-indigo-400 hover:text-rose-600"
+                  onClick={() => onChangeStandard(standardPortIds.filter((x) => x !== pid))}>×</button>
+              </span>
+            );
+          })}
+        </div>
+        <div className="relative">
+          <input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search catalog (HTTPS, Oracle, Kafka, 1521 …)"
+            className="w-full border border-gray-300 rounded px-2 py-1 text-xs" />
+          {matches.length > 0 && (
+            <div className="absolute z-20 mt-1 left-0 right-0 bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto">
+              {matches.map((p) => (
+                <button key={p.port_id} type="button"
+                  onClick={() => { onChangeStandard([...standardPortIds, p.port_id]); setQ(''); }}
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-indigo-50 flex items-center gap-2">
+                  <span className="font-mono text-[10px] px-1 rounded border bg-gray-50">{p.protocol}</span>
+                  <span className="font-semibold">{p.port}</span>
+                  <span className="flex-1 truncate">{p.name}</span>
+                  <span className="text-[10px] text-gray-400">{p.category}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  // mode === 'custom'
+  const { additionalPorts, onChangeAdditional } = props;
+  const addRow = () => onChangeAdditional([...additionalPorts, { protocol: 'TCP', port: 0, label: '' }]);
+  const update = (i: number, patch: Partial<PortBinding>) => {
+    const next = additionalPorts.map((b, idx) => (idx === i ? { ...b, ...patch } : b));
+    onChangeAdditional(next);
+  };
+  const remove = (i: number) => onChangeAdditional(additionalPorts.filter((_, idx) => idx !== i));
+  return (
+    <div className="rounded-lg border border-amber-100 bg-amber-50/40 p-2.5">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs font-semibold text-amber-900">{props.title}</div>
+          {props.subtitle && <div className="text-[11px] text-amber-800/80">{props.subtitle}</div>}
+        </div>
+        <button type="button" onClick={addRow}
+          className="text-[11px] px-2 py-0.5 rounded bg-amber-600 text-white hover:bg-amber-700">+ Add port</button>
+      </div>
+      <div className="mt-2 space-y-1">
+        {additionalPorts.length === 0 && (
+          <div className="text-[11px] italic text-gray-500">No additional ports.</div>
+        )}
+        {additionalPorts.map((b, i) => (
+          <div key={i} className="grid grid-cols-12 gap-1 items-center">
+            <select value={b.protocol || 'TCP'}
+              onChange={(e) => update(i, { protocol: e.target.value as 'TCP' | 'UDP' | 'ICMP' })}
+              className="col-span-2 border rounded px-1 py-0.5 text-[11px]">
+              <option>TCP</option><option>UDP</option><option>ICMP</option>
+            </select>
+            <input type="number" value={b.port ?? 0}
+              onChange={(e) => update(i, { port: Number(e.target.value) })}
+              placeholder="port"
+              className="col-span-2 border rounded px-1 py-0.5 text-[11px] font-mono" />
+            <input value={b.label || ''}
+              onChange={(e) => update(i, { label: e.target.value })}
+              placeholder="label (e.g. Oracle TCPS)"
+              className="col-span-7 border rounded px-1 py-0.5 text-[11px]" />
+            <button type="button" onClick={() => remove(i)}
+              className="col-span-1 text-rose-600 hover:text-rose-800 text-xs">✕</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { useModal } from '@/hooks/useModal';
 import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
+import PortCatalogTab from './settings/PortCatalogTab';
+import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -822,6 +824,7 @@ export default function SettingsPage() {
     { id: 'datacenters', label: 'Data Centers' },
     { id: 'app_management', label: 'App Management' },
     { id: 'shared_services', label: 'Shared Services' },
+    { id: 'port_catalog', label: 'Port Configuration' },
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
@@ -1761,6 +1764,10 @@ export default function SettingsPage() {
         )}
 
         {/* ── Shared Services Tab ── */}
+        {activeTab === 'port_catalog' && (
+          <PortCatalogTab />
+        )}
+
         {activeTab === 'shared_services' && (
           <SharedServicesTab />
         )}
@@ -1954,6 +1961,18 @@ export default function SettingsPage() {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {/* Presence Matrix — per-(DC, NH, SZ) with auto-derived egress/ingress groups */}
+            {selectedAppData && (
+              <div className="p-5 bg-white border border-purple-100 rounded-2xl shadow-sm">
+                <AppPresenceMatrix
+                  appDistributedId={String(selectedAppData.app_distributed_id || selectedAppData.app_id)}
+                  appId={String(selectedAppData.app_id)}
+                  environment="Production"
+                  onChange={() => loadRefData()}
+                />
               </div>
             )}
 

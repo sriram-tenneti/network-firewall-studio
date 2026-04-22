@@ -1109,6 +1109,9 @@ import type {
   Environment,
   DestinationEntityKind,
   MemberSpec,
+  ClassifyResult,
+  OccupantsResponse,
+  IngestMembersResult,
 } from '../types';
 
 export const getSharedServices = (params?: {
@@ -1238,6 +1241,58 @@ export const deleteAppPresence = (
   );
 };
 
+// ---- Bidirectional IP ↔ (DC, NH, SZ) classifier / occupants ----
+
+export const classifyIp = (ip: string, dcHint?: string) =>
+  fetchJSON<ClassifyResult>('/api/reference/classify-ip', {
+    method: 'POST',
+    body: JSON.stringify({ ip, dc_hint: dcHint || '' }),
+  });
+
+export const classifyIps = (ips: string[], dcHint?: string) =>
+  fetchJSON<ClassifyResult[]>('/api/reference/classify-ips', {
+    method: 'POST',
+    body: JSON.stringify({ ips, dc_hint: dcHint || '' }),
+  });
+
+export const getOccupants = (params: {
+  dc?: string;
+  nh?: string;
+  sz?: string;
+  environment?: Environment | '';
+}) => {
+  const qs = new URLSearchParams();
+  if (params.dc) qs.set('dc', params.dc);
+  if (params.nh) qs.set('nh', params.nh);
+  if (params.sz) qs.set('sz', params.sz);
+  if (params.environment) qs.set('environment', params.environment);
+  const s = qs.toString();
+  return fetchJSON<OccupantsResponse>(
+    `/api/reference/occupants${s ? `?${s}` : ''}`,
+  );
+};
+
+export const ingestAppMembers = (
+  appDistributedId: string,
+  payload: {
+    environment: Environment;
+    direction: 'egress' | 'ingress';
+    members: Array<{ kind: string; value: string; description?: string }>;
+    dc_hint?: string;
+    has_ingress?: boolean;
+  },
+) =>
+  fetchJSON<IngestMembersResult>(
+    `/api/reference/applications/${encodeURIComponent(appDistributedId)}/ingest-members`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+
+export interface PresenceKey {
+  dc_id: string;
+  nh_id: string;
+  sz_code: string;
+}
+
 export interface RuleRequestInput {
   application_ref: string;
   destination_kind: DestinationEntityKind;
@@ -1249,6 +1304,13 @@ export interface RuleRequestInput {
   src_members_override?: MemberSpec[];
   dst_members_override?: MemberSpec[];
   requested_dcs?: string[];
+  /** Per-presence scoping for the source app. When provided, only these
+   *  (DC, NH, SZ) presences participate in fan-out. Leave empty to use
+   *  all of the app's presences. */
+  source_presences?: PresenceKey[];
+  /** Per-presence scoping for the destination (app_ingress or shared
+   *  service). Same semantics as source_presences. */
+  destination_presences?: PresenceKey[];
   include_cross_dc?: boolean;
   owner?: string;
 }
@@ -1286,3 +1348,36 @@ export const setRuleRequestStatus = (requestId: string, status: string, note?: s
     method: 'PUT',
     body: JSON.stringify({ status, note }),
   });
+
+// ---- Port / Service Catalog ----
+
+export interface PortCatalogEntry {
+  port_id: string;
+  name: string;
+  protocol: 'TCP' | 'UDP' | 'ICMP' | string;
+  port: number;
+  aliases?: string[];
+  category: string;
+  description?: string;
+}
+
+export const listPorts = () =>
+  fetchJSON<PortCatalogEntry[]>(`/api/reference/ports`);
+
+export const createPort = (data: Partial<PortCatalogEntry>) =>
+  fetchJSON<PortCatalogEntry>(`/api/reference/ports`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const updatePort = (portId: string, data: Partial<PortCatalogEntry>) =>
+  fetchJSON<PortCatalogEntry>(
+    `/api/reference/ports/${encodeURIComponent(portId)}`,
+    { method: 'PUT', body: JSON.stringify(data) },
+  );
+
+export const deletePort = (portId: string) =>
+  fetchJSON<{ deleted: boolean; port_id: string }>(
+    `/api/reference/ports/${encodeURIComponent(portId)}`,
+    { method: 'DELETE' },
+  );

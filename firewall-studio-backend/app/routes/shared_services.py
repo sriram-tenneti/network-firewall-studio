@@ -11,19 +11,27 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.database import (
+    classify_ip,
+    classify_ips,
+    create_port,
     create_rule_request,
     create_shared_service,
     delete_app_presence,
+    delete_port,
     delete_shared_service,
     delete_shared_service_presence,
     get_app_presences,
+    get_occupants,
     get_rule_request,
     get_rule_requests,
     get_shared_service,
     get_shared_service_presences,
     get_shared_services,
+    ingest_app_members,
+    list_ports,
     preview_rule_expansion,
     set_rule_request_status,
+    update_port,
     update_shared_service,
     upsert_app_presence,
     upsert_shared_service_presence,
@@ -161,6 +169,70 @@ async def delete_app_presence_route(app_distributed_id: str, dc_id: str,
     return {"status": "deleted"}
 
 
+# ---- Bidirectional IP ↔ (DC, NH, SZ) classifier / occupants ----
+
+@router.post("/api/reference/classify-ip")
+async def classify_ip_route(payload: dict[str, Any]) -> dict[str, Any]:
+    """Classify a single IP/CIDR/range into (DC, NH, SZ).
+
+    Body: {"ip": "10.1.2.3", "dc_hint": "DC1" (optional)}
+    """
+    ip = str(payload.get("ip", "")).strip()
+    if not ip:
+        raise HTTPException(400, "ip is required")
+    return await classify_ip(ip, str(payload.get("dc_hint", "")))
+
+
+@router.post("/api/reference/classify-ips")
+async def classify_ips_route(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Batch classifier.
+
+    Body: {"ips": ["10.1.2.3", "10.2.0.0/24"], "dc_hint": "..." (optional)}
+    """
+    ips = payload.get("ips") or []
+    if not isinstance(ips, list):
+        raise HTTPException(400, "ips must be a list")
+    return await classify_ips([str(x) for x in ips], str(payload.get("dc_hint", "")))
+
+
+@router.get("/api/reference/occupants")
+async def occupants_route(dc: str = "", nh: str = "", sz: str = "",
+                           environment: str = "") -> dict[str, Any]:
+    """Reverse lookup: apps + shared services present in a (DC, NH, SZ) cell.
+
+    Any of dc/nh/sz/environment may be empty (wildcard on that axis).
+    """
+    return await get_occupants(dc=dc, nh=nh, sz=sz, environment=environment)
+
+
+@router.post("/api/reference/applications/{app_distributed_id}/ingest-members")
+async def ingest_app_members_route(app_distributed_id: str,
+                                     payload: dict[str, Any]) -> dict[str, Any]:
+    """Classify IPs/CIDRs for an app and auto-materialize per-(DC, NH, SZ)
+    presences + derived egress/ingress groups.
+
+    Body: {
+      "environment": "Production",
+      "direction": "egress" | "ingress",
+      "dc_hint": "DC1" (optional),
+      "members": [{"kind": "ip"|"cidr"|"range"|"subnet", "value": "..."}, ...]
+    }
+    """
+    env = str(payload.get("environment", "Production"))
+    direction = str(payload.get("direction", "egress")).lower()
+    members = payload.get("members") or []
+    if not isinstance(members, list):
+        raise HTTPException(400, "members must be a list")
+    return await ingest_app_members(
+        app_distributed_id=app_distributed_id,
+        environment=env,
+        members=[dict(m) for m in members],
+        direction=direction,
+        dc_hint=str(payload.get("dc_hint", "")),
+        default_has_ingress=bool(payload.get("has_ingress", False)),
+    )
+
+
 # ---- Rule Requests (multi-DC fan-out) ----
 
 @router.post("/api/rules/preview-expansion")
@@ -207,3 +279,38 @@ async def set_rule_request_status_route(request_id: str,
     if not r:
         raise HTTPException(404, "Rule request not found")
     return r
+
+
+# ---- Port / Service Catalog ----
+
+@router.get("/api/reference/ports")
+async def list_ports_route() -> list[dict[str, Any]]:
+    """Return the catalog of well-known + custom ports used by the Rule Builder."""
+    return await list_ports()
+
+
+@router.post("/api/reference/ports")
+async def create_port_route(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload.get("name") and not payload.get("port_id"):
+        raise HTTPException(400, "name or port_id is required")
+    try:
+        int(payload.get("port") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "port must be an integer")
+    return await create_port(payload)
+
+
+@router.put("/api/reference/ports/{port_id}")
+async def update_port_route(port_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    r = await update_port(port_id, payload)
+    if not r:
+        raise HTTPException(404, "Port not found")
+    return r
+
+
+@router.delete("/api/reference/ports/{port_id}")
+async def delete_port_route(port_id: str) -> dict[str, Any]:
+    ok = await delete_port(port_id)
+    if not ok:
+        raise HTTPException(404, "Port not found")
+    return {"deleted": True, "port_id": port_id}

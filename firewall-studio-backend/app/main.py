@@ -30,13 +30,17 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# IMPORTANT: shared_services_router must be included BEFORE rules_router
+# because rules_router is mounted at prefix="/api/rules" with a
+# catch-all "/{rule_id}" route which would otherwise swallow
+# specific paths like "/api/rules/requests" and "/api/rules/preview-expansion".
+app.include_router(shared_services_router)
 app.include_router(rules_router)
 app.include_router(migrations_router)
 app.include_router(reference_router)
 app.include_router(policy_router)
 app.include_router(reviews_router)
 app.include_router(lifecycle_router)
-app.include_router(shared_services_router)
 
 
 @app.get("/healthz")

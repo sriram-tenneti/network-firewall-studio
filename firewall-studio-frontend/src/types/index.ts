@@ -625,6 +625,13 @@ export interface MemberSpec {
   dc_id?: string;
 }
 
+export interface PortBinding {
+  port_id?: string | null;
+  protocol?: 'TCP' | 'UDP' | 'ICMP' | null;
+  port?: number | null;
+  label?: string;
+}
+
 export interface AppPresence {
   app_distributed_id: string;
   dc_id: string;
@@ -635,6 +642,61 @@ export interface AppPresence {
   has_ingress: boolean;
   egress_members?: MemberSpec[];
   ingress_members?: MemberSpec[];
+  /** Listener/ingress ports exposed by this presence. Surfaced as
+   *  defaults in the rule builder's Port Picker when this app is
+   *  chosen as the destination. */
+  ingress_ports?: PortBinding[];
+}
+
+export interface ClassifyResult {
+  matched: boolean;
+  dc: string;
+  nh: string;
+  sz: string;
+  cidr: string;
+  reason: string;
+  ip?: string;
+}
+
+export interface OccupantApp {
+  app_distributed_id: string;
+  dc_id: string;
+  environment: Environment;
+  nh_id: string;
+  sz_code: string;
+  has_ingress: boolean;
+  egress_count: number;
+  ingress_count: number;
+  egress_group: string;
+  ingress_group?: string;
+}
+
+export interface OccupantSharedService {
+  service_id: string;
+  dc_id: string;
+  environment: Environment;
+  nh_id: string;
+  sz_code: string;
+  member_count: number;
+  group: string;
+}
+
+export interface OccupantsResponse {
+  filter: { dc: string; nh: string; sz: string; environment: string };
+  applications: OccupantApp[];
+  shared_services: OccupantSharedService[];
+  total: number;
+}
+
+export interface IngestMembersResult {
+  app_distributed_id: string;
+  environment: Environment;
+  classified: Array<{
+    kind: string; value: string;
+    dc: string; nh: string; sz: string; cidr: string;
+  }>;
+  unclassified: Array<{ kind: string; value: string; reason: string }>;
+  presences: AppPresence[];
 }
 
 export interface SharedServicePresence {
@@ -657,6 +719,10 @@ export interface SharedService {
   color?: string;
   environments: Environment[];
   tags?: string[];
+  /** Port-catalog IDs treated as defaults for this service. */
+  standard_ports?: string[];
+  /** Service-specific custom ports that don't belong in the shared library. */
+  additional_ports?: PortBinding[];
   created_at?: string;
   updated_at?: string;
 }

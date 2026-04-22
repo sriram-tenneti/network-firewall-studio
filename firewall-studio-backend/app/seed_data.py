@@ -435,6 +435,28 @@ SEED_APPLICATIONS = [
      "egress_ip": "svr-10.6.1.168", "has_ingress": True,
      "ingress_ips": "svr-10.6.1.16,svr-10.6.1.184", "ingress_components": "DB,API",
      "description": "Mobile banking application"},
+    # Demo app for multi-NH/SZ in a single DC — spans 3 (NH, SZ) pairs in ALPHA_NGDC
+    # plus 1 in BETA_NGDC. Group auto-materialization produces 4 egress + 4 ingress groups.
+    {"app_id": "OMS", "name": "Order Management System", "app_distributed_id": "AD-1013",
+     "owner": "Team Nu", "nh": "Core Banking, Wealth Management", "sz": "CCS, CPA, STD",
+     "criticality": "High", "pci_scope": False,
+     "neighborhoods": "Core Banking, Wealth Management",
+     "szs": "CCS, CPA, STD", "dcs": "ALPHA_NGDC,BETA_NGDC", "snow_sysid": "SYSID-OMS-013",
+     "egress_ip": "svr-10.1.1.10,svr-10.1.2.10,svr-10.3.1.70",
+     "has_ingress": True,
+     "ingress_ips": "svr-10.1.1.20,svr-10.1.2.20,svr-10.3.1.80",
+     "ingress_components": "Web,DB,Analytics",
+     "description": "Multi-tier Order Management System — web/app/db/analytics across multiple NH/SZ",
+     "presences": [
+         {"dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CCS",
+          "tier": "Web", "egress": "10.1.1.10", "ingress": "10.1.1.20"},
+         {"dc": "ALPHA_NGDC", "nh": "NH02", "sz": "CPA",
+          "tier": "DB",  "egress": "10.1.2.10", "ingress": "10.1.2.20"},
+         {"dc": "ALPHA_NGDC", "nh": "NH04", "sz": "STD",
+          "tier": "Analytics", "egress": "10.3.1.70", "ingress": "10.3.1.80"},
+         {"dc": "BETA_NGDC", "nh": "NH02", "sz": "CCS",
+          "tier": "Web-West", "egress": "172.16.1.10", "ingress": "172.16.1.20"},
+     ]},
 ]
 
 
@@ -2362,6 +2384,8 @@ SEED_SHARED_SERVICES = [
         "color": "#2563eb",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["events", "streaming", "pub-sub"],
+        "standard_ports": ["KAFKA", "KAFKA_TLS", "ZOOKEEPER"],
+        "additional_ports": [],
     },
     {
         "service_id": "MQ",
@@ -2373,6 +2397,8 @@ SEED_SHARED_SERVICES = [
         "color": "#0891b2",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["queue", "jms"],
+        "standard_ports": ["IBM_MQ"],
+        "additional_ports": [],
     },
     {
         "service_id": "ORACLE",
@@ -2384,6 +2410,10 @@ SEED_SHARED_SERVICES = [
         "color": "#db2777",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["rdbms"],
+        "standard_ports": ["ORACLE"],
+        "additional_ports": [
+            {"protocol": "TCP", "port": 2484, "label": "Oracle TCPS (TLS)"},
+        ],
     },
     {
         "service_id": "APPD",
@@ -2395,6 +2425,8 @@ SEED_SHARED_SERVICES = [
         "color": "#ea580c",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["monitoring", "apm"],
+        "standard_ports": ["APPD", "APPD_TLS", "HTTPS"],
+        "additional_ports": [],
     },
     {
         "service_id": "SPLUNK",
@@ -2406,6 +2438,8 @@ SEED_SHARED_SERVICES = [
         "color": "#16a34a",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["logs"],
+        "standard_ports": ["SPLUNK_HEC", "SPLUNK_FWD"],
+        "additional_ports": [],
     },
     {
         "service_id": "REDIS",
@@ -2417,6 +2451,8 @@ SEED_SHARED_SERVICES = [
         "color": "#dc2626",
         "environments": ["Production", "Non-Production"],
         "tags": ["cache"],
+        "standard_ports": ["REDIS"],
+        "additional_ports": [],
     },
     {
         "service_id": "LDAP",
@@ -2428,6 +2464,62 @@ SEED_SHARED_SERVICES = [
         "color": "#7c3aed",
         "environments": ["Production", "Non-Production", "Pre-Production"],
         "tags": ["identity", "auth"],
+        "standard_ports": ["LDAP", "LDAPS", "KERBEROS"],
+        "additional_ports": [],
+    },
+    {
+        "service_id": "MONGODB",
+        "name": "MongoDB (Shared Cluster)",
+        "category": "Database",
+        "owner": "DBAs — NoSQL",
+        "description": "Shared MongoDB replica set for document workloads.",
+        "icon": "🍃",
+        "color": "#059669",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["nosql", "document"],
+        "standard_ports": ["MONGODB"],
+        "additional_ports": [],
+    },
+    {
+        "service_id": "MAINFRAME",
+        "name": "Mainframe (z/OS)",
+        "category": "Legacy",
+        "owner": "Mainframe Ops",
+        "description": "IBM z/OS mainframe services (TN3270, FTP, DB2 z/OS).",
+        "icon": "🖥️",
+        "color": "#475569",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["legacy", "tn3270", "z/os"],
+        "standard_ports": ["TN3270", "TN3270_TLS", "FTP"],
+        "additional_ports": [
+            {"protocol": "TCP", "port": 446, "label": "DRDA (DB2 z/OS)"},
+        ],
+    },
+    {
+        "service_id": "DB2",
+        "name": "IBM DB2 (Shared LUW)",
+        "category": "Database",
+        "owner": "DBAs — DB2",
+        "description": "Shared DB2 LUW instance for core systems.",
+        "icon": "🗃",
+        "color": "#0ea5e9",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["rdbms", "db2"],
+        "standard_ports": ["DB2"],
+        "additional_ports": [],
+    },
+    {
+        "service_id": "MSSQL",
+        "name": "Microsoft SQL Server",
+        "category": "Database",
+        "owner": "DBAs — SQL Server",
+        "description": "Shared MSSQL instances for Windows workloads.",
+        "icon": "🪟",
+        "color": "#1d4ed8",
+        "environments": ["Production", "Non-Production", "Pre-Production"],
+        "tags": ["rdbms", "mssql"],
+        "standard_ports": ["MSSQL"],
+        "additional_ports": [],
     },
 ]
 
@@ -2540,6 +2632,55 @@ SEED_SHARED_SERVICE_PRESENCES = [
     _ss_presence("LDAP", "ALPHA_NGDC", "Non-Production", "NH13", "UGen", [
         _m("ip", "10.106.5.10", "ldap-np-01"),
     ]),
+
+    # MongoDB — Prod East/West/Central + Non-Prod
+    _ss_presence("MONGODB", "ALPHA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "10.1.17.10", "mongo-primary"),
+        _m("ip", "10.1.17.11", "mongo-secondary-01"),
+        _m("ip", "10.1.17.12", "mongo-secondary-02"),
+        _m("cidr", "10.1.17.0/28", "mongo replica set subnet"),
+    ]),
+    _ss_presence("MONGODB", "BETA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "172.16.17.10", "mongo-primary-west"),
+        _m("cidr", "172.16.17.0/28", "mongo replica set subnet (West)"),
+    ]),
+    _ss_presence("MONGODB", "ALPHA_NGDC", "Non-Production", "NH13", "UCPA", [
+        _m("ip", "10.117.17.10", "mongo-np-01"),
+    ]),
+
+    # IBM DB2 — Prod East/West + Non-Prod
+    _ss_presence("DB2", "ALPHA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "10.1.18.10", "db2-node-01"),
+        _m("ip", "10.1.18.11", "db2-node-02"),
+    ]),
+    _ss_presence("DB2", "BETA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "172.16.18.10", "db2-node-west"),
+    ]),
+    _ss_presence("DB2", "ALPHA_NGDC", "Non-Production", "NH13", "UCPA", [
+        _m("ip", "10.118.18.10", "db2-np-01"),
+    ]),
+
+    # Microsoft SQL Server — Prod East/West
+    _ss_presence("MSSQL", "ALPHA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "10.1.19.10", "mssql-primary"),
+        _m("ip", "10.1.19.11", "mssql-always-on-replica"),
+    ]),
+    _ss_presence("MSSQL", "BETA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "172.16.19.10", "mssql-primary-west"),
+    ]),
+    _ss_presence("MSSQL", "ALPHA_NGDC", "Non-Production", "NH13", "UCPA", [
+        _m("ip", "10.119.19.10", "mssql-np-01"),
+    ]),
+
+    # Mainframe (z/OS) — Prod east + central (legacy DC presence — kept as NGDC for demo)
+    _ss_presence("MAINFRAME", "ALPHA_NGDC", "Production", "NH01", "SEC", [
+        _m("ip", "10.0.101.10", "zos-lpar-01"),
+        _m("ip", "10.0.101.11", "zos-lpar-02"),
+        _m("cidr", "10.0.101.0/28", "mainframe frontend subnet"),
+    ]),
+    _ss_presence("MAINFRAME", "GAMMA_NGDC", "Production", "NH01", "SEC", [
+        _m("ip", "10.50.101.10", "zos-lpar-central"),
+    ]),
 ]
 
 
@@ -2596,5 +2737,121 @@ SEED_APP_PRESENCES = [
                   [_m("ip", "10.3.1.10", "ins-egress-01")], []),
     _app_presence("AD-1005", "BETA_NGDC", "Production", "NH04", "STD", False,
                   [_m("ip", "172.16.4.10", "ins-egress-west-01")], []),
+
+    # --- OMS (AD-1013) — demo app spanning multiple (NH, SZ) in same DC ---
+    # Web tier in ALPHA NH02/CCS
+    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH02", "CCS", True,
+                  [_m("ip", "10.1.1.10", "oms-web-egress")],
+                  [_m("ip", "10.1.1.20", "oms-web-ingress-vip")]),
+    # DB tier in ALPHA NH02/CPA — same NH, different SZ
+    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH02", "CPA", True,
+                  [_m("ip", "10.1.2.10", "oms-db-egress")],
+                  [_m("ip", "10.1.2.20", "oms-db-listener")]),
+    # Analytics tier in ALPHA NH04/STD — different NH
+    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH04", "STD", True,
+                  [_m("ip", "10.3.1.70", "oms-analytics-egress")],
+                  [_m("ip", "10.3.1.80", "oms-analytics-ingress")]),
+    # West Web tier in BETA NH02/CCS — DR/active-active
+    _app_presence("AD-1013", "BETA_NGDC", "Production", "NH02", "CCS", True,
+                  [_m("ip", "172.16.1.10", "oms-web-egress-west")],
+                  [_m("ip", "172.16.1.20", "oms-web-ingress-vip-west")]),
 ]
 SEED_LIFECYCLE_EVENTS = build_seed_lifecycle_events()
+
+
+# ============================================================
+# Port / Service Catalog — used by Rule Builder port picker and
+# Settings → Port Configuration CRUD.
+# Each entry: { port_id, name, protocol, port, aliases, category, description }
+# ============================================================
+
+def _port(port_id, name, protocol, port, category, description="", aliases=None):
+    return {
+        "port_id": port_id,
+        "name": name,
+        "protocol": protocol,
+        "port": port,
+        "aliases": aliases or [],
+        "category": category,
+        "description": description,
+    }
+
+
+SEED_PORT_CATALOG = [
+    # --- Web ---
+    _port("HTTP", "HTTP", "TCP", 80, "Web", "Plaintext HTTP"),
+    _port("HTTPS", "HTTPS", "TCP", 443, "Web", "TLS-encrypted HTTP"),
+    _port("HTTP_ALT", "HTTP Alt", "TCP", 8080, "Web", "Common alt HTTP (Jenkins/Tomcat/Proxy)"),
+    _port("HTTPS_ALT", "HTTPS Alt", "TCP", 8443, "Web", "Common alt HTTPS"),
+
+    # --- SSH / RDP / Remote ---
+    _port("SSH", "SSH", "TCP", 22, "Remote Access", "Secure Shell"),
+    _port("TELNET", "Telnet", "TCP", 23, "Remote Access", "Legacy Telnet"),
+    _port("RDP", "RDP", "TCP", 3389, "Remote Access", "Windows Remote Desktop"),
+    _port("VNC", "VNC", "TCP", 5900, "Remote Access", "Virtual Network Computing"),
+
+    # --- File / Directory ---
+    _port("FTP", "FTP", "TCP", 21, "File Transfer", "File Transfer Protocol"),
+    _port("SFTP", "SFTP", "TCP", 22, "File Transfer", "SSH File Transfer"),
+    _port("SMB", "SMB", "TCP", 445, "File Transfer", "Windows file share"),
+    _port("NFS", "NFS", "TCP", 2049, "File Transfer", "Network File System"),
+
+    # --- DNS / Mail ---
+    _port("DNS", "DNS (UDP)", "UDP", 53, "Network Services", "Domain Name System"),
+    _port("DNS_TCP", "DNS (TCP)", "TCP", 53, "Network Services", "DNS zone transfers / large queries"),
+    _port("SMTP", "SMTP", "TCP", 25, "Mail", "Simple Mail Transfer"),
+    _port("SMTP_SUBMIT", "SMTP Submission", "TCP", 587, "Mail", "Authenticated mail submission"),
+
+    # --- Directory / Auth ---
+    _port("LDAP", "LDAP", "TCP", 389, "Identity", "Lightweight Directory Access"),
+    _port("LDAPS", "LDAPS", "TCP", 636, "Identity", "TLS-wrapped LDAP"),
+    _port("KERBEROS", "Kerberos", "TCP", 88, "Identity", "Kerberos KDC"),
+    _port("RADIUS", "RADIUS", "UDP", 1812, "Identity", "Remote Authentication Dial-In"),
+
+    # --- Databases ---
+    _port("MYSQL", "MySQL", "TCP", 3306, "Database", "MySQL / MariaDB"),
+    _port("POSTGRES", "PostgreSQL", "TCP", 5432, "Database", "PostgreSQL"),
+    _port("MSSQL", "Microsoft SQL Server", "TCP", 1433, "Database", "MSSQL default"),
+    _port("ORACLE", "Oracle DB", "TCP", 1521, "Database", "Oracle TNS listener"),
+    _port("ORACLE_EM", "Oracle Enterprise Mgr", "TCP", 1158, "Database", "Oracle EM console"),
+    _port("MONGODB", "MongoDB", "TCP", 27017, "Database", "MongoDB default"),
+    _port("MONGODB_SHARD", "MongoDB Shard", "TCP", 27018, "Database", "MongoDB shard server"),
+    _port("MONGODB_CONFIG", "MongoDB Config", "TCP", 27019, "Database", "MongoDB config server"),
+    _port("DB2", "IBM DB2 LUW", "TCP", 50000, "Database", "DB2 LUW default"),
+    _port("DB2_ALT", "IBM DB2 Alt", "TCP", 50001, "Database", "DB2 alternate"),
+    _port("CASSANDRA", "Cassandra", "TCP", 9042, "Database", "CQL native protocol"),
+    _port("REDIS", "Redis", "TCP", 6379, "Cache", "Redis default"),
+    _port("MEMCACHED", "Memcached", "TCP", 11211, "Cache", "Memcached default"),
+    _port("ELASTIC", "Elasticsearch", "TCP", 9200, "Database", "Elasticsearch REST API"),
+    _port("ELASTIC_TRANS", "Elasticsearch Transport", "TCP", 9300, "Database", "ES node-to-node"),
+
+    # --- Messaging / Streaming ---
+    _port("KAFKA", "Kafka", "TCP", 9092, "Messaging", "Kafka broker plaintext"),
+    _port("KAFKA_TLS", "Kafka (TLS)", "TCP", 9093, "Messaging", "Kafka broker TLS"),
+    _port("ZOOKEEPER", "Zookeeper", "TCP", 2181, "Messaging", "Zookeeper client port"),
+    _port("IBM_MQ", "IBM MQ", "TCP", 1414, "Messaging", "IBM MQ listener"),
+    _port("RABBITMQ", "RabbitMQ AMQP", "TCP", 5672, "Messaging", "RabbitMQ AMQP"),
+    _port("RABBITMQ_MGMT", "RabbitMQ Mgmt", "TCP", 15672, "Messaging", "RabbitMQ management UI"),
+    _port("ACTIVEMQ", "ActiveMQ", "TCP", 61616, "Messaging", "ActiveMQ OpenWire"),
+
+    # --- Observability ---
+    _port("SPLUNK_HEC", "Splunk HEC", "TCP", 8088, "Observability", "Splunk HTTP Event Collector"),
+    _port("SPLUNK_FWD", "Splunk Forwarder", "TCP", 9997, "Observability", "Splunk forwarder receiver"),
+    _port("APPD", "AppDynamics Controller", "TCP", 8090, "Observability", "AppD controller"),
+    _port("APPD_TLS", "AppDynamics TLS", "TCP", 8181, "Observability", "AppD controller TLS"),
+    _port("SYSLOG", "Syslog", "UDP", 514, "Observability", "Syslog"),
+    _port("SNMP", "SNMP", "UDP", 161, "Observability", "SNMP query"),
+
+    # --- Mainframe / Legacy ---
+    _port("TN3270", "Mainframe TN3270", "TCP", 23, "Mainframe", "3270 terminal emulation"),
+    _port("TN3270_TLS", "TN3270 (TLS)", "TCP", 992, "Mainframe", "TLS 3270"),
+    _port("DB2_ZOS", "DB2 z/OS", "TCP", 446, "Mainframe", "DB2 for z/OS (DRDA)"),
+    _port("MF_FTP", "Mainframe FTP", "TCP", 21, "Mainframe", "z/OS FTP"),
+    _port("CICS", "CICS", "TCP", 3270, "Mainframe", "CICS terminals"),
+
+    # --- Clustering / Infra ---
+    _port("NTP", "NTP", "UDP", 123, "Network Services", "Network Time"),
+    _port("ICMP", "ICMP", "ICMP", 0, "Network Services", "Ping / ICMP"),
+    _port("SNMP_TRAP", "SNMP Trap", "UDP", 162, "Network Services", "SNMP trap"),
+]
+
