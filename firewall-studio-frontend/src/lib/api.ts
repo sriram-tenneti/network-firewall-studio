@@ -228,7 +228,12 @@ export const getSecurityZones = () => fetchJSON<SecurityZone[]>('/api/reference/
 export const getPredefinedDestinations = () => fetchJSON<PredefinedDestination[]>('/api/reference/predefined-destinations');
 export const getNeighbourhoods = () => fetchJSON<NeighbourhoodRegistry[]>('/api/reference/neighbourhoods');
 export const getLegacyDatacenters = () => fetchJSON<{ name: string; code: string }[]>('/api/reference/legacy-datacenters');
-export const getApplications = () => fetchJSON<Application[]>('/api/reference/applications');
+export const getApplications = (params?: { team?: string }) => {
+  const qs = new URLSearchParams();
+  if (params?.team) qs.set('team', params.team);
+  const s = qs.toString();
+  return fetchJSON<Application[]>(`/api/reference/applications${s ? `?${s}` : ''}`);
+};
 export const getEnvironments = () => fetchJSON<string[]>('/api/reference/environments');
 export const getCHGRequests = () => fetchJSON<CHGRequest[]>('/api/reference/chg-requests');
 
@@ -1118,11 +1123,13 @@ export const getSharedServices = (params?: {
   environment?: Environment;
   category?: string;
   q?: string;
+  team?: string;
 }) => {
   const qs = new URLSearchParams();
   if (params?.environment) qs.set('environment', params.environment);
   if (params?.category) qs.set('category', params.category);
   if (params?.q) qs.set('q', params.q);
+  if (params?.team) qs.set('team', params.team);
   const s = qs.toString();
   return fetchJSON<SharedService[]>(
     `/api/reference/shared-services${s ? `?${s}` : ''}`,
@@ -1337,10 +1344,12 @@ export const previewRuleExpansion = (payload: RuleRequestInput) =>
 export const listRuleRequests = (params?: {
   environment?: Environment;
   status?: string;
+  team?: string;
 }) => {
   const qs = new URLSearchParams();
   if (params?.environment) qs.set('environment', params.environment);
   if (params?.status) qs.set('status', params.status);
+  if (params?.team) qs.set('team', params.team);
   const s = qs.toString();
   return fetchJSON<RuleRequestRecord[]>(
     `/api/rules/requests${s ? `?${s}` : ''}`,

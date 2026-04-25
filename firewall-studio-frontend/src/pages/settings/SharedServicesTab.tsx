@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/shared/Modal';
 import { Notification } from '@/components/shared/Notification';
+import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
 import { useNotification } from '@/hooks/useNotification';
+import { useTeam } from '@/contexts/TeamContext';
 import type {
   Environment,
   MemberSpec,
@@ -13,6 +15,7 @@ import type {
   NGDCDataCenter,
   NeighbourhoodRegistry,
   SecurityZone,
+  TierSpec,
 } from '@/types';
 import type { PortCatalogEntry } from '@/lib/api';
 import * as api from '@/lib/api';
@@ -60,6 +63,7 @@ function emptyPresence(serviceId: string): Partial<SharedServicePresence> & { me
 
 export default function SharedServicesTab() {
   const { notification, showNotification, clearNotification } = useNotification();
+  const { team, isGodView } = useTeam();
   const showSuccess = useCallback((m: string) => showNotification(m, 'success'), [showNotification]);
   const showError = useCallback((m: string) => showNotification(m, 'error'), [showNotification]);
   const [services, setServices] = useState<SharedService[]>([]);
@@ -89,7 +93,7 @@ export default function SharedServicesTab() {
     setLoading(true);
     try {
       const [svcs, dcs, nhs, szs, ports] = await Promise.all([
-        api.getSharedServices(),
+        api.getSharedServices(isGodView ? undefined : { team }),
         api.getNGDCDatacenters().catch(() => [] as NGDCDataCenter[]),
         api.getNeighbourhoods().catch(() => [] as NeighbourhoodRegistry[]),
         api.getSecurityZones().catch(() => [] as SecurityZone[]),
@@ -111,7 +115,7 @@ export default function SharedServicesTab() {
     } finally {
       setLoading(false);
     }
-  }, [showError]);
+  }, [showError, team, isGodView]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
 
@@ -380,6 +384,50 @@ export default function SharedServicesTab() {
                   className="w-full border rounded px-2 py-1 text-sm" />
               </div>
             </div>
+            {/* Primary DC + deployment + owner team. Drives auto-fan of presences across all NGDC DCs and gates which team sees this service. */}
+            <div className="grid grid-cols-4 gap-3 p-3 border border-indigo-200 rounded-lg bg-indigo-50/50">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Primary DC <span className="text-red-500">*</span></label>
+                <select value={editing.primary_dc || 'ALPHA_NGDC'}
+                  onChange={(e) => setEditing((s) => ({ ...(s || {}), primary_dc: e.target.value }))}
+                  className="w-full border rounded px-2 py-1 text-sm">
+                  <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                  <option value="BETA_NGDC">BETA_NGDC</option>
+                  <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                  <option value="DELTA_NGDC">DELTA_NGDC</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Deployment Mode</label>
+                <select value={editing.deployment_mode || 'all_ngdc'}
+                  onChange={(e) => setEditing((s) => ({ ...(s || {}), deployment_mode: e.target.value as SharedService['deployment_mode'] }))}
+                  className="w-full border rounded px-2 py-1 text-sm">
+                  <option value="all_ngdc">All NGDC (auto-fan)</option>
+                  <option value="all_ngdc_with_exceptions">All NGDC (with exceptions)</option>
+                  <option value="selective">Selective</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Owner Team</label>
+                <input value={editing.owner_team || ''} placeholder="e.g. SNS, Platform"
+                  onChange={(e) => setEditing((s) => ({ ...(s || {}), owner_team: e.target.value }))}
+                  className="w-full border rounded px-2 py-1 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Excluded DCs</label>
+                <input value={(editing.excluded_dcs || []).join(',')}
+                  placeholder="comma-sep, e.g. DELTA_NGDC"
+                  onChange={(e) => setEditing((s) => ({ ...(s || {}), excluded_dcs: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) }))}
+                  className="w-full border rounded px-2 py-1 text-sm" />
+              </div>
+            </div>
+            <TierMatrixEditor
+              tiers={editing.tiers || []}
+              onChange={(t: TierSpec[]) => setEditing((s) => ({ ...(s || {}), tiers: t }))}
+              hideIngress
+              title="Service Tiers"
+              subtitle="Each (NH, SZ) row materializes a SharedServicePresence in every NGDC DC (auto-fan)."
+            />
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Environments</label>
               <div className="flex flex-wrap gap-2">

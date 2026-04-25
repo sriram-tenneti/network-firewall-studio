@@ -332,6 +332,8 @@ SEED_NGDC_DATACENTERS = [
      "cidr": "172.16.0.0/12", "description": "Secondary NGDC data center - US West coast"},
     {"dc_id": "GAMMA_NGDC", "name": "Gamma NGDC (Central)", "region": "US-Central", "status": "Active",
      "cidr": "10.50.0.0/16", "description": "Central NGDC data center - US Central"},
+    {"dc_id": "DELTA_NGDC", "name": "Delta NGDC (North)", "region": "US-North", "status": "Active",
+     "cidr": "10.60.0.0/16", "description": "Northern NGDC data center - US North (DR/active-active)"},
 ]
 
 SEED_LEGACY_DATACENTERS = [

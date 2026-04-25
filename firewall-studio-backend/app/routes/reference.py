@@ -294,8 +294,16 @@ async def list_legacy_datacenters():
 
 
 @router.get("/applications")
-async def list_applications():
-    return await get_applications()
+async def list_applications(team: str | None = None):
+    """List applications. When `team` is provided (and is not the SNS
+    god-team), results are filtered to apps owned by that team. SNS sees
+    every app and is the global reviewer/approver."""
+    items = await get_applications()
+    if team and team.strip().upper() != "SNS":
+        t = team.strip().lower()
+        items = [a for a in items
+                 if str(a.get("owner_team", "")).strip().lower() == t]
+    return items
 
 
 @router.get("/environments")

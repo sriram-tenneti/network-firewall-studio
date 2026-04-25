@@ -174,6 +174,17 @@ export interface Application {
   // Owning team. SNS team is the global reviewer/approver and sees
   // every app/service; everyone else sees only their own.
   owner_team?: string;
+  // Tier definition (NH x SZ x has_ingress). When deployment_mode is
+  // 'all_ngdc' or 'all_ngdc_with_exceptions', the backend auto-fans
+  // one presence per tier into every target NGDC DC.
+  tiers?: TierSpec[];
+  environments?: Environment[];
+}
+
+export interface TierSpec {
+  nh_id: string;
+  sz_code: string;
+  has_ingress?: boolean;
 }
 
 export interface OrgConfig {
@@ -736,6 +747,8 @@ export interface SharedService {
   standard_ports?: string[];
   /** Service-specific custom ports that don't belong in the shared library. */
   additional_ports?: PortBinding[];
+  /** Tier definition. Auto-fans into all NGDC DCs when deployment_mode='all_ngdc'. */
+  tiers?: TierSpec[];
   created_at?: string;
   updated_at?: string;
 }

@@ -4,11 +4,12 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
+import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone, TierSpec } from '@/types';
 import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
 import PortCatalogTab from './settings/PortCatalogTab';
 import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
+import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -1853,6 +1854,45 @@ export default function SettingsPage() {
                   <input className={inp} placeholder="DCs (e.g. ALPHA_NGDC,BETA_NGDC)" value={newAppForm.dcs || ''} onChange={e => setNewAppForm({ ...newAppForm, dcs: e.target.value })} />
                   <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
+                {/* Omnipresent / Primary DC */}
+                <div className="border border-indigo-200 rounded-lg p-3 bg-white/60 space-y-2">
+                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">— rule requests originate from this app's Primary DC</span></h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
+                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                        value={newAppForm.primary_dc || 'ALPHA_NGDC'}
+                        onChange={e => setNewAppForm({ ...newAppForm, primary_dc: e.target.value })}>
+                        <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                        <option value="BETA_NGDC">BETA_NGDC</option>
+                        <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                        <option value="DELTA_NGDC">DELTA_NGDC</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Deployment Mode</label>
+                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                        value={newAppForm.deployment_mode || 'all_ngdc'}
+                        onChange={e => setNewAppForm({ ...newAppForm, deployment_mode: e.target.value as Application['deployment_mode'] })}>
+                        <option value="all_ngdc">All NGDC (auto-fan presences)</option>
+                        <option value="all_ngdc_with_exceptions">All NGDC (with exceptions)</option>
+                        <option value="selective">Selective (manual presences)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Owner Team</label>
+                      <input className={inp} placeholder="e.g. Eta, Platform, SNS"
+                        value={newAppForm.owner_team || ''}
+                        onChange={e => setNewAppForm({ ...newAppForm, owner_team: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+                <TierMatrixEditor
+                  tiers={(newAppForm.tiers as TierSpec[]) || []}
+                  onChange={(t: TierSpec[]) => setNewAppForm({ ...newAppForm, tiers: t })}
+                  title="Tier Matrix"
+                  subtitle="Each (NH, SZ, has_ingress?) row creates a presence in every NGDC DC at save time."
+                />
                 {/* Egress/Ingress Configuration */}
                 <div className="border border-blue-200 rounded-lg p-3 bg-white/60 space-y-2">
                   <h4 className="text-xs font-semibold text-blue-800">Egress / Ingress Configuration</h4>
@@ -1927,6 +1967,33 @@ export default function SettingsPage() {
                         <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
                     </div>
                     <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
+                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                          value={editAppForm.primary_dc || 'ALPHA_NGDC'}
+                          onChange={e => setEditAppForm({ ...editAppForm, primary_dc: e.target.value })}>
+                          <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                          <option value="BETA_NGDC">BETA_NGDC</option>
+                          <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                          <option value="DELTA_NGDC">DELTA_NGDC</option>
+                        </select></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Deployment Mode</label>
+                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                          value={editAppForm.deployment_mode || 'all_ngdc'}
+                          onChange={e => setEditAppForm({ ...editAppForm, deployment_mode: e.target.value as Application['deployment_mode'] })}>
+                          <option value="all_ngdc">All NGDC (auto-fan)</option>
+                          <option value="all_ngdc_with_exceptions">All NGDC (with exceptions)</option>
+                          <option value="selective">Selective</option>
+                        </select></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner Team</label>
+                        <input className={inp} placeholder="e.g. Eta, Platform, SNS"
+                          value={editAppForm.owner_team || ''}
+                          onChange={e => setEditAppForm({ ...editAppForm, owner_team: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Excluded DCs</label>
+                        <input className={inp} placeholder="comma-separated, e.g. DELTA_NGDC"
+                          value={Array.isArray(editAppForm.excluded_dcs) ? editAppForm.excluded_dcs.join(',') : ''}
+                          onChange={e => setEditAppForm({ ...editAppForm, excluded_dcs: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Egress IP (Source)</label>
                         <input className={inp} placeholder="e.g. svr-10.50.1.10" value={editAppForm.egress_ip || ''} onChange={e => setEditAppForm({ ...editAppForm, egress_ip: e.target.value })} /></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Has Ingress?</label>
@@ -1938,6 +2005,12 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress Components</label>
                         <input className={inp} placeholder="e.g. DB,API,VIP" value={editAppForm.ingress_components || ''} onChange={e => setEditAppForm({ ...editAppForm, ingress_components: e.target.value })} disabled={!editAppForm.has_ingress} /></div>
                     </div>
+                    <TierMatrixEditor
+                      tiers={(editAppForm.tiers as TierSpec[]) || []}
+                      onChange={(t: TierSpec[]) => setEditAppForm({ ...editAppForm, tiers: t })}
+                      title="Tier Matrix"
+                      subtitle="Saving will auto-fan one presence per (NH, SZ) row into every NGDC DC."
+                    />
                   </div>
                 ) : (
                   <>

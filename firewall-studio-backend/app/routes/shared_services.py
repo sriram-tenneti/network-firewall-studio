@@ -47,6 +47,7 @@ async def list_shared_services(
     environment: str | None = None,
     category: str | None = None,
     q: str | None = None,
+    team: str | None = None,
 ) -> list[dict[str, Any]]:
     items = await get_shared_services()
     if environment:
@@ -62,6 +63,11 @@ async def list_shared_services(
             or ql in str(s.get("name", "")).lower()
             or ql in str(s.get("description", "")).lower()
         ]
+    # Team-scoped visibility. SNS = god view (sees everything).
+    if team and team.strip().upper() != "SNS":
+        t = team.strip().lower()
+        items = [s for s in items
+                 if str(s.get("owner_team", "")).strip().lower() == t]
     return items
 
 
@@ -242,21 +248,36 @@ async def preview_expansion_route(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.get("/api/rules/requests")
 async def list_rule_requests(environment: str | None = None,
-                              status: str | None = None) -> list[dict[str, Any]]:
+                              status: str | None = None,
+                              team: str | None = None) -> list[dict[str, Any]]:
+    """List rule requests. Team filter scopes results to requests raised
+    for apps/services owned by `team`. SNS sees every request (global
+    reviewer/approver)."""
     items = await get_rule_requests()
     if environment:
         items = [r for r in items if r.get("environment") == environment]
     if status:
         items = [r for r in items if r.get("status") == status]
+    if team and team.strip().upper() != "SNS":
+        t = team.strip().lower()
+        items = [r for r in items
+                 if str(r.get("owner_team", "")).strip().lower() == t]
     return items
 
 
 @router.post("/api/rules/requests")
 async def create_rule_request_route(payload: dict[str, Any]) -> dict[str, Any]:
-    if not payload.get("application_ref"):
-        raise HTTPException(400, "application_ref is required")
+    src_kind = (payload.get("source_kind") or "app").lower()
+    src_ref = payload.get("source_ref") or payload.get("application_ref")
+    if not src_ref:
+        raise HTTPException(
+            400,
+            "source_ref (or legacy application_ref) is required",
+        )
     if not payload.get("destination_kind"):
         raise HTTPException(400, "destination_kind is required")
+    payload["source_kind"] = src_kind
+    payload["source_ref"] = src_ref
     return await create_rule_request(payload)
 
 

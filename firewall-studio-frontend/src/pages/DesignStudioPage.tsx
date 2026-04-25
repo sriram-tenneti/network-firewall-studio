@@ -17,8 +17,10 @@ import type { FirewallRule, Application } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 import { createStudioRuleModification } from '@/lib/api';
 import * as api from '@/lib/api';
+import { useTeam } from '@/contexts/TeamContext';
 
 export function DesignStudioPage() {
+  const { team, isGodView } = useTeam();
   const [rules, setRules] = useState<FirewallRule[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export function DesignStudioPage() {
         hideSeed
           ? api.getRealRules().then(rawArr => rawArr.map(r => api.transformRule(r as never)))
           : api.getRules(),
-        api.getApplications(),
+        api.getApplications(isGodView ? undefined : { team }),
       ]);
       setRules(rulesData);
       setApplications(appsData);
@@ -52,7 +54,7 @@ export function DesignStudioPage() {
       showNotification('Failed to load data', 'error');
     }
     setLoading(false);
-  }, [showNotification]);
+  }, [showNotification, team, isGodView]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

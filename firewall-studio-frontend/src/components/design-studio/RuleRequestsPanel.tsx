@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Environment, PhysicalRuleExpansion, RuleRequestRecord } from '@/types';
 import * as api from '@/lib/api';
+import { useTeam } from '@/contexts/TeamContext';
 
 interface RuleRequestsPanelProps {
   environment?: Environment | '';
@@ -12,6 +13,7 @@ interface RuleRequestsPanelProps {
 const STATUSES: (RuleRequestRecord['status'] | 'All')[] = ['All', 'Pending', 'Approved', 'Rejected', 'Deployed', 'Certified'];
 
 export default function RuleRequestsPanel({ environment = '', onChanged, reloadKey = 0, highlightId = null }: RuleRequestsPanelProps) {
+  const { team, isGodView } = useTeam();
   const [items, setItems] = useState<RuleRequestRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<(typeof STATUSES)[number]>('All');
@@ -37,13 +39,14 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
       const res = await api.listRuleRequests({
         environment: environment || undefined,
         status: statusFilter === 'All' ? undefined : statusFilter,
+        team: isGodView ? undefined : team,
       });
       setItems(res);
     } catch (e) {
       setError((e as Error).message);
     }
     setLoading(false);
-  }, [environment, statusFilter]);
+  }, [environment, statusFilter, team, isGodView]);
 
   useEffect(() => { void load(); }, [load, reloadKey]);
 

@@ -2214,17 +2214,26 @@ async def delete_security_zone(code: str) -> bool:
 
 async def create_application(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("applications") or []
-    items.append(dict(data))
+    data = dict(data)
+    data.setdefault("primary_dc", "ALPHA_NGDC")
+    data.setdefault("deployment_mode", "all_ngdc")
+    data.setdefault("excluded_dcs", [])
+    items.append(data)
     _save("applications", items)
+    # Materialize presences in every NGDC DC when deployment_mode=all_ngdc
+    # and the app declared tiers. Idempotent — existing presences kept.
+    await auto_fan_app_presences(data)
     return data
 
 
 async def update_application(app_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
     items = _load("applications") or []
     for item in items:
-        if item.get("app_id") == app_id:
+        if item.get("app_id") == app_id or item.get("app_distributed_id") == app_id:
             item.update(updates)
             _save("applications", items)
+            # Re-fan to pick up newly-added tiers / DCs after edits.
+            await auto_fan_app_presences(item)
             return item
     return None
 
@@ -7164,10 +7173,15 @@ async def create_shared_service(data: dict[str, Any]) -> dict[str, Any]:
     data["service_id"] = str(data.get("service_id", "")).upper()
     data["created_at"] = _now()
     data["updated_at"] = _now()
+    data.setdefault("primary_dc", "ALPHA_NGDC")
+    data.setdefault("deployment_mode", "all_ngdc")
+    data.setdefault("excluded_dcs", [])
     # dedupe by service_id
     items = [i for i in items if str(i.get("service_id", "")).upper() != data["service_id"]]
     items.append(data)
     _save("shared_services", items)
+    # Auto-fan presences across all NGDC DCs when deployment_mode=all_ngdc.
+    await auto_fan_service_presences(data)
     return data
 
 
@@ -7178,6 +7192,10 @@ async def update_shared_service(service_id: str, updates: dict[str, Any]) -> dic
             i.update(updates)
             i["updated_at"] = _now()
             _save("shared_services", items)
+            # Re-fan after every save so newly-added tiers / DCs / mode
+            # changes auto-create the missing presences. Existing
+            # presences are preserved (idempotent upsert).
+            await auto_fan_service_presences(i)
             return i
     return None
 
@@ -7347,6 +7365,127 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
         })
     _save("groups", groups)
     return data
+
+
+def _ngdc_dc_ids() -> list[str]:
+    """All NGDC DC IDs available in seed/runtime store. Excludes Heritage."""
+    return [d.get("dc_id", "") for d in (_load("ngdc_datacenters") or [])
+            if d.get("dc_id")]
+
+
+def _resolve_target_dcs(deployment_mode: str | None,
+                         excluded_dcs: list[str] | None) -> list[str]:
+    """Compute the DCs an app/service should be present in based on its
+    deployment_mode + excluded_dcs.
+
+    - 'all_ngdc'                 → every NGDC DC.
+    - 'all_ngdc_with_exceptions' → every NGDC DC minus excluded_dcs.
+    - 'selective' / unset        → empty (caller manages presences manually).
+    """
+    mode = (deployment_mode or "").lower()
+    if mode in ("all_ngdc", "all_ngdc_with_exceptions"):
+        excluded = {str(x).upper() for x in (excluded_dcs or [])}
+        return [dc for dc in _ngdc_dc_ids() if dc.upper() not in excluded]
+    return []
+
+
+def _envs_for_entity(entity: dict[str, Any]) -> list[str]:
+    envs = entity.get("environments") or ["Production"]
+    return list(envs) if isinstance(envs, list) else [str(envs)]
+
+
+async def auto_fan_app_presences(app: dict[str, Any]) -> int:
+    """Materialize AppPresence rows in every target NGDC DC for each tier
+    on the app. Idempotent — existing presences (matched on the unique
+    key) are left untouched, so member overrides survive re-fans.
+
+    Returns the number of new presences created.
+    """
+    tiers = app.get("tiers") or []
+    if not tiers:
+        return 0
+    target_dcs = _resolve_target_dcs(app.get("deployment_mode"),
+                                      app.get("excluded_dcs"))
+    if not target_dcs:
+        return 0
+    app_id = str(app.get("app_distributed_id", "")).upper()
+    if not app_id:
+        return 0
+    items = _load("app_presences") or []
+    existing = {(str(p.get("app_distributed_id", "")).upper(),
+                 p.get("dc_id", ""), p.get("environment", ""),
+                 p.get("nh_id", ""), p.get("sz_code", ""))
+                for p in items}
+    created = 0
+    for env in _envs_for_entity(app):
+        for dc in target_dcs:
+            for tier in tiers:
+                nh = str(tier.get("nh_id", "")).strip()
+                sz = str(tier.get("sz_code", "")).strip()
+                if not nh or not sz:
+                    continue
+                key = (app_id, dc, env, nh, sz)
+                if key in existing:
+                    continue
+                await upsert_app_presence({
+                    "app_distributed_id": app_id,
+                    "dc_id": dc,
+                    "dc_type": "NGDC",
+                    "environment": env,
+                    "nh_id": nh,
+                    "sz_code": sz,
+                    "has_ingress": bool(tier.get("has_ingress")),
+                    "egress_members": [],
+                    "ingress_members": [],
+                    "ingress_ports": [],
+                })
+                existing.add(key)
+                created += 1
+    return created
+
+
+async def auto_fan_service_presences(svc: dict[str, Any]) -> int:
+    """Materialize SharedServicePresence rows for each tier across every
+    target NGDC DC. Same idempotent semantics as the app variant.
+    """
+    tiers = svc.get("tiers") or []
+    if not tiers:
+        return 0
+    target_dcs = _resolve_target_dcs(svc.get("deployment_mode"),
+                                      svc.get("excluded_dcs"))
+    if not target_dcs:
+        return 0
+    sid = str(svc.get("service_id", "")).upper()
+    if not sid:
+        return 0
+    items = _load("shared_service_presences") or []
+    existing = {(str(p.get("service_id", "")).upper(),
+                 p.get("dc_id", ""), p.get("environment", ""),
+                 p.get("nh_id", ""), p.get("sz_code", ""))
+                for p in items}
+    created = 0
+    for env in _envs_for_entity(svc):
+        for dc in target_dcs:
+            for tier in tiers:
+                nh = str(tier.get("nh_id", "")).strip()
+                sz = str(tier.get("sz_code", "")).strip()
+                if not nh or not sz:
+                    continue
+                key = (sid, dc, env, nh, sz)
+                if key in existing:
+                    continue
+                await upsert_shared_service_presence({
+                    "service_id": sid,
+                    "dc_id": dc,
+                    "dc_type": "NGDC",
+                    "environment": env,
+                    "nh_id": nh,
+                    "sz_code": sz,
+                    "members": [],
+                })
+                existing.add(key)
+                created += 1
+    return created
 
 
 async def delete_app_presence(app_dist_id: str, dc_id: str, environment: str,
@@ -7706,6 +7845,22 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
     src_ref_rec = (payload.get("source_ref")
                    or payload.get("application_ref")
                    or "")
+    # Owning team for the request — inherits from the source app/service
+    # record if the caller didn't override it. Used by team-scoped list
+    # endpoints; SNS still sees everything.
+    owner_team_rec = payload.get("owner_team") or ""
+    if not owner_team_rec and src_ref_rec:
+        if src_kind_rec == "shared_service":
+            for s in _load("shared_services") or []:
+                if str(s.get("service_id", "")).upper() == src_ref_rec.upper():
+                    owner_team_rec = str(s.get("owner_team", "")) or ""
+                    break
+        else:
+            for a in _load("applications") or []:
+                if (str(a.get("app_distributed_id", "")).upper() == src_ref_rec.upper()
+                        or str(a.get("app_id", "")).upper() == src_ref_rec.upper()):
+                    owner_team_rec = str(a.get("owner_team", "")) or ""
+                    break
     record = {
         "request_id": request_id,
         "source_kind": src_kind_rec,
@@ -7720,7 +7875,7 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
         "action": payload.get("action", "ACCEPT"),
         "description": payload.get("description", ""),
         "owner": payload.get("owner", ""),
-        "owner_team": payload.get("owner_team", ""),
+        "owner_team": owner_team_rec,
         "include_cross_dc": bool(payload.get("include_cross_dc")),
         "destination_dc_override": payload.get("destination_dc_override"),
         "status": "Pending",

@@ -59,6 +59,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   const [action, setAction] = useState<'ACCEPT' | 'DROP'>('ACCEPT');
   const [description, setDescription] = useState('');
   const [includeCrossDc, setIncludeCrossDc] = useState(false);
+  // Optional: explicit destination DC override (DR cutover / pinned active-active).
+  // Empty string ⇒ use destination's primary_dc (default behaviour).
+  const [destinationDcOverride, setDestinationDcOverride] = useState<string>('');
 
   const [services, setServices] = useState<SharedService[]>([]);
   const [ssPresences, setSsPresences] = useState<Record<string, SharedServicePresence[]>>({});
@@ -241,6 +244,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
           ports,
           action,
           include_cross_dc: includeCrossDc,
+          destination_dc_override: destinationDcOverride || undefined,
           source_presences: effectiveSrcPresences,
           destination_presences: effectiveDstPresences,
         });
@@ -251,7 +255,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
     })();
     return () => { cancelled = true; };
   }, [srcApp, srcKind, dest, environment, ports, action, includeCrossDc,
-      effectiveSrcPresences, effectiveDstPresences]);
+      destinationDcOverride, effectiveSrcPresences, effectiveDstPresences]);
 
   const onDropDestination = (e: React.DragEvent) => {
     e.preventDefault();
@@ -282,6 +286,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
         action,
         description,
         include_cross_dc: includeCrossDc,
+        destination_dc_override: destinationDcOverride || undefined,
         source_presences: effectiveSrcPresences,
         destination_presences: effectiveDstPresences,
       });
@@ -297,6 +302,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   const reset = () => {
     setStep(1); setSrcKind('app'); setSrcApp(''); setDest(null); setPorts('TCP 443');
     setAction('ACCEPT'); setDescription(''); setIncludeCrossDc(false);
+    setDestinationDcOverride('');
     setSelectedSrcKeys(new Set()); setSelectedDstKeys(new Set());
     setPreview(null); setSubmittedRecord(null); setSubmitError(null);
   };
@@ -489,10 +495,30 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 className="w-full border rounded px-2 py-1.5 text-sm"
                 placeholder="Business justification / ticket / context" />
             </div>
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input type="checkbox" checked={includeCrossDc} onChange={(e) => setIncludeCrossDc(e.target.checked)} />
-              Also fan-out cross-DC pairs (when same-DC pairings do not exist)
-            </label>
+            <div className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
+              <div className="text-[11px] font-semibold text-amber-800">Power-user Overrides</div>
+              <p className="text-[11px] text-gray-600">
+                By default, rules originate from the source's <strong>primary DC</strong> and target the destination's
+                <strong> primary DC</strong>. The destination team manages east-west routing across their other DCs.
+                Use these toggles only for active-active source / DR cutover scenarios.
+              </p>
+              <label className="flex items-center gap-2 text-xs text-gray-700">
+                <input type="checkbox" checked={includeCrossDc} onChange={(e) => setIncludeCrossDc(e.target.checked)} />
+                <span><strong>Cross-DC fan-out</strong> — also generate rules from non-primary source DCs</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-700">
+                <span className="min-w-[150px]"><strong>Destination DC override</strong></span>
+                <select value={destinationDcOverride}
+                  onChange={(e) => setDestinationDcOverride(e.target.value)}
+                  className="border rounded px-2 py-1 text-xs">
+                  <option value="">Use destination's primary DC (default)</option>
+                  <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                  <option value="BETA_NGDC">BETA_NGDC</option>
+                  <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                  <option value="DELTA_NGDC">DELTA_NGDC</option>
+                </select>
+              </label>
+            </div>
             <div className="flex justify-between">
               <button onClick={() => setStep(1)} className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">Back</button>
               <button onClick={() => setStep(3)}
@@ -519,6 +545,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   destination_ref: dest!.ref,
                   environment, ports, action,
                   include_cross_dc: includeCrossDc,
+                  destination_dc_override: destinationDcOverride || undefined,
                 });
                 setPreview(p);
               })()}

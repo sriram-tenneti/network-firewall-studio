@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { TeamProvider } from '@/contexts/TeamContext';
 import HomePage from '@/pages/HomePage';
 import { ModuleLayout } from '@/components/layout/ModuleLayout';
 import { DesignStudioPage } from '@/pages/DesignStudioPage';
@@ -12,6 +13,7 @@ import LifecycleDashboardPage from '@/pages/LifecycleDashboardPage';
 
 function App() {
   return (
+    <TeamProvider>
     <BrowserRouter>
       <Routes>
         {/* Home Screen - no header */}
@@ -108,6 +110,7 @@ function App() {
         } />
       </Routes>
     </BrowserRouter>
+    </TeamProvider>
   );
 }
 
