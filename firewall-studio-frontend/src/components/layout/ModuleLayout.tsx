@@ -4,9 +4,17 @@ import { TeamSelector } from './TeamSelector';
 
 interface ModuleLayoutProps {
   module: string;
-  title: string;
+  title?: string;
   children: ReactNode;
 }
+
+const moduleDefaultTitles: Record<string, string> = {
+  'firewall-studio': 'Firewall Studio',
+  'ngdc-standardization': 'NGDC Standardization',
+  'firewall-management': 'Network Firewall Request',
+  'settings': 'Settings',
+  'lifecycle': 'Lifecycle Management',
+};
 
 const moduleNav: Record<string, { path: string; label: string }[]> = {
   'firewall-studio': [
@@ -53,6 +61,7 @@ export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {
   const navItems = moduleNav[module] || [];
   const colorGradient = moduleColors[module] || 'from-slate-600 to-slate-700';
   const activeColor = moduleActiveColors[module] || 'bg-slate-500/20 text-slate-200 border-slate-400/30';
+  const effectiveTitle = title || moduleDefaultTitles[module] || module;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -72,7 +81,7 @@ export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {
                 </svg>
               </button>
               <div className="h-6 w-px bg-white/20" />
-              <span className="text-lg font-bold text-white">{title}</span>
+              <span className="text-lg font-bold text-white">{effectiveTitle}</span>
 
               {/* Module Nav */}
               <nav className="flex items-center gap-1 ml-4">
