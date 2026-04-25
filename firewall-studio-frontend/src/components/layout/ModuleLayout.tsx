@@ -1,6 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ReactNode } from 'react';
-import { TeamSelector } from './TeamSelector';
 
 interface ModuleLayoutProps {
   module: string;
@@ -104,8 +103,6 @@ export function ModuleLayout({ module, title, children }: ModuleLayoutProps) {
               </nav>
             </div>
             <div className="flex items-center gap-3">
-              <TeamSelector />
-              <div className="h-5 w-px bg-white/20" />
               <span className="text-xs text-white/50">Enterprise Firewall Management</span>
               <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center border border-white/20">
                 <span className="text-white text-xs font-medium">U</span>
