@@ -2855,3 +2855,69 @@ SEED_PORT_CATALOG = [
     _port("SNMP_TRAP", "SNMP Trap", "UDP", 162, "Network Services", "SNMP trap"),
 ]
 
+
+# ============================================================
+# Post-process: primary_dc + owner_team + deployment_mode
+# ============================================================
+# All NGDC apps + shared services land in **all 4 NGDC DCs** by default;
+# rule requests originate from a single **primary DC** owned by the app /
+# service team. Older seed entries didn't carry these fields — inject
+# defaults here so the rest of the codebase can rely on them.
+
+# Default primary DC when seed records don't pin one. Apps already
+# scoped to a specific DC list keep the first DC in that list as primary.
+_DEFAULT_PRIMARY_DC = "ALPHA_NGDC"
+# Owning team for the centralized SNS / Network team (global reviewer +
+# approver — sees everything in the portal).
+SNS_TEAM = "SNS"
+
+
+def _normalize_team(value: str | None, fallback: str) -> str:
+    """Coerce an owner string into a clean team label."""
+    if not value:
+        return fallback
+    txt = str(value).strip()
+    if not txt:
+        return fallback
+    # Strip leading "Team " prefix used in older seed (e.g. "Team Eta")
+    lower = txt.lower()
+    if lower.startswith("team "):
+        txt = txt[5:].strip()
+    return txt or fallback
+
+
+def _inject_app_defaults(items: list[dict[str, Any]]) -> None:
+    for a in items:
+        # Primary DC: prefer first listed DC, then ALPHA_NGDC.
+        if not a.get("primary_dc"):
+            dcs_field = (a.get("dcs") or "").strip()
+            if dcs_field:
+                first = dcs_field.split(",")[0].strip()
+                a["primary_dc"] = first or _DEFAULT_PRIMARY_DC
+            else:
+                a["primary_dc"] = _DEFAULT_PRIMARY_DC
+        if not a.get("deployment_mode"):
+            a["deployment_mode"] = "all_ngdc"
+        if "excluded_dcs" not in a:
+            a["excluded_dcs"] = []
+        if not a.get("owner_team"):
+            a["owner_team"] = _normalize_team(a.get("owner"), "AppOps")
+
+
+def _inject_service_defaults(items: list[dict[str, Any]]) -> None:
+    for s in items:
+        if not s.get("primary_dc"):
+            s["primary_dc"] = _DEFAULT_PRIMARY_DC
+        if not s.get("deployment_mode"):
+            s["deployment_mode"] = "all_ngdc"
+        if "excluded_dcs" not in s:
+            s["excluded_dcs"] = []
+        if not s.get("owner_team"):
+            # Shared services are operated by the SNS team unless the
+            # service explicitly tags a different operator (DBAs, SRE, …).
+            s["owner_team"] = _normalize_team(s.get("owner"), SNS_TEAM)
+
+
+_inject_app_defaults(SEED_APPLICATIONS)
+_inject_service_defaults(SEED_SHARED_SERVICES)
+

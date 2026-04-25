@@ -1294,7 +1294,14 @@ export interface PresenceKey {
 }
 
 export interface RuleRequestInput {
-  application_ref: string;
+  /** Source entity kind. Defaults to 'app' on the backend for back-compat. */
+  source_kind?: 'app' | 'shared_service';
+  /** Source ref — app_distributed_id when source_kind='app',
+   *  service_id when source_kind='shared_service'. */
+  source_ref?: string;
+  /** Legacy alias for app sources. Populated automatically when
+   *  source_kind='app'. */
+  application_ref?: string;
   destination_kind: DestinationEntityKind;
   destination_ref?: string | null;
   environment: Environment;
@@ -1311,8 +1318,14 @@ export interface RuleRequestInput {
   /** Per-presence scoping for the destination (app_ingress or shared
    *  service). Same semantics as source_presences. */
   destination_presences?: PresenceKey[];
+  /** Power-user toggle: opt out of primary-DC scoping and fan out across
+   *  all source/destination DCs (legacy intersect-all behaviour). */
   include_cross_dc?: boolean;
+  /** Power-user override: explicitly target a destination DC (DR cutover
+   *  scenarios). Supersedes the destination's primary_dc. */
+  destination_dc_override?: string;
   owner?: string;
+  owner_team?: string;
 }
 
 export const previewRuleExpansion = (payload: RuleRequestInput) =>

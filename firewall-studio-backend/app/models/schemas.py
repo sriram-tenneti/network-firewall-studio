@@ -83,22 +83,69 @@ class SharedServicePresence(BaseModel):
     members: list[MemberSpec] = []
 
 
+class DeploymentMode(str, Enum):
+    """How an Application or SharedService is deployed across DCs.
+
+    - ALL_NGDC (default): present in every NGDC DC with the same
+      `(NH, SZ)` tier definition. The portal auto-fans presences across
+      all NGDC DCs whenever a new tier or DC is added.
+    - SELECTIVE: per-DC presences must be created explicitly (legacy
+      behaviour, primarily used for Heritage/Legacy DCs).
+    - ALL_NGDC_WITH_EXCEPTIONS: ALL_NGDC minus a list of excluded DCs.
+    """
+
+    ALL_NGDC = "all_ngdc"
+    SELECTIVE = "selective"
+    ALL_NGDC_WITH_EXCEPTIONS = "all_ngdc_with_exceptions"
+
+
+class TierSpec(BaseModel):
+    """Tier definition shared by all NGDC presences of an App/SharedService.
+
+    Each tier replicates as one presence per NGDC DC. Heritage/Legacy DCs
+    get a single non-segmented presence per env (NH/SZ are optional).
+    """
+
+    nh_id: str
+    sz_code: str
+    has_ingress: bool = False
+    label: Optional[str] = ""  # e.g. "web", "db", "mq"
+
+
 class SharedService(BaseModel):
     """Centralized shared service (MQ, Kafka, DB, AppD, Splunk, Redis, …)
-    available as a rule destination.
+    available as a rule destination AND a rule source (e.g. Splunk
+    scraping app endpoints, Kerberos→LDAP).
 
-    Group naming: grp-<service_id>-<NH>-<SZ>
+    Group naming:
+      egress  → grp-<service_id>-<NH>-<SZ>           (per (DC, env))
+      ingress → grp-<service_id>-<NH>-<SZ>-Ingress   (when offered as
+                  a destination — the historical default for Shared
+                  Services and the only mode supported on PR #57.)
     """
 
     service_id: str  # slug, e.g. "KAFKA"
     name: str
     category: SharedServiceCategory = SharedServiceCategory.OTHER
     owner: Optional[str] = ""
+    # Owning team — used by the per-team scoping rules. Defaults to the
+    # SNS team so seed services without an explicit owner remain visible
+    # to operators.
+    owner_team: Optional[str] = "SNS"
     description: Optional[str] = ""
     icon: Optional[str] = ""   # optional emoji/symbol used by the DnD sidebar
     color: Optional[str] = ""  # optional CSS color hint for the DnD sidebar
     environments: list[Environment] = [Environment.PRODUCTION]
     tags: list[str] = []
+    # Mandatory primary DC. The Rule Builder uses this DC's presence
+    # exclusively when the service is the source/destination. Defaults to
+    # ALPHA_NGDC during migration; new services must pick one.
+    primary_dc: str = "ALPHA_NGDC"
+    deployment_mode: DeploymentMode = DeploymentMode.ALL_NGDC
+    excluded_dcs: list[str] = []
+    # Tier definition shared across NGDC DCs. Replicated as one
+    # SharedServicePresence per NGDC DC during auto-fan.
+    tiers: list[TierSpec] = []
     # Ports standard for this service — port_ids pointing into the global
     # Port Catalog. Surfaced as defaults in the rule builder's Port Picker
     # when this service is chosen as destination.
@@ -108,6 +155,32 @@ class SharedService(BaseModel):
     additional_ports: list[PortBinding] = []
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class ApplicationProfile(BaseModel):
+    """Top-level Application metadata — the App Management record.
+
+    Presences (per-(DC, NH, SZ)) live in `app_presences`; this profile
+    captures the cross-DC defaults: primary DC, deployment mode, tier
+    matrix, owning team. The portal auto-materializes presences from the
+    tier matrix whenever `deployment_mode` is ALL_NGDC.
+    """
+
+    app_distributed_id: str
+    app_id: Optional[str] = None
+    name: Optional[str] = ""
+    owner: Optional[str] = ""
+    owner_team: Optional[str] = ""
+    description: Optional[str] = ""
+    criticality: Optional[str] = "Medium"
+    pci_scope: bool = False
+    components: list[str] = []
+    # Mandatory primary DC. Rules raised by/for this app default to its
+    # primary DC; the Rule Builder hides other DCs from the LDF.
+    primary_dc: str = "ALPHA_NGDC"
+    deployment_mode: DeploymentMode = DeploymentMode.ALL_NGDC
+    excluded_dcs: list[str] = []
+    tiers: list[TierSpec] = []
 
 
 # ---- Revamp: Extended Group shape ----
@@ -145,12 +218,32 @@ class DestinationEntityKind(str, Enum):
     ADHOC = "adhoc"
 
 
+class SourceEntityKind(str, Enum):
+    """Source of a rule request. Apps remain the dominant case but
+    Shared Services (e.g. Splunk → app APIs, Kerberos → LDAP) can also
+    raise rules now."""
+
+    APP = "app"
+    SHARED_SERVICE = "shared_service"
+
+
 class RuleRequestCreate(BaseModel):
     """Logical rule request submitted in Studio — fans out into per-DC
     PhysicalRule records.
+
+    By default the engine emits ONE PhysicalRule per (src tier × dst tier)
+    in the **source's primary DC** (egress side). Destination groups are
+    resolved against the destination's primary DC; the destination team
+    is responsible for east-west routing across their other DCs. Toggle
+    `include_cross_dc=true` to override this and fan out across DCs (rare
+    DR / active-active patterns).
     """
 
-    application_ref: str  # source app_distributed_id
+    # Source entity. Both `application_ref` and `source_ref` are accepted
+    # for back-compat — `application_ref` is the legacy app id field.
+    source_kind: SourceEntityKind = SourceEntityKind.APP
+    source_ref: Optional[str] = None  # app_distributed_id OR service_id
+    application_ref: Optional[str] = ""  # legacy alias for app sources
     destination_kind: DestinationEntityKind
     destination_ref: Optional[str] = None  # app_distributed_id OR service_id
     environment: Environment = Environment.PRODUCTION
@@ -166,8 +259,15 @@ class RuleRequestCreate(BaseModel):
     # app is present in multiple NH/SZ combinations.
     source_presences: Optional[list[dict]] = None
     destination_presences: Optional[list[dict]] = None
+    # Power-user toggle: when true, fan out across all DCs (cross-DC
+    # rules). Default behaviour collapses to source's primary DC × dest's
+    # primary DC.
     include_cross_dc: bool = False
+    # Power-user override: explicitly target a destination DC (DR cutover
+    # scenarios). When set, supersedes destination's primary_dc.
+    destination_dc_override: Optional[str] = None
     owner: str = ""
+    owner_team: Optional[str] = ""
 
 
 class PhysicalRule(BaseModel):

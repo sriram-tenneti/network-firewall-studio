@@ -167,6 +167,13 @@ export interface Application {
   ingress_ips?: string;
   ingress_components?: string;
   direction?: 'egress' | 'ingress' | 'both';
+  // Mandatory primary DC. Rule Builder defaults the source to this DC.
+  primary_dc?: string;
+  deployment_mode?: 'all_ngdc' | 'selective' | 'all_ngdc_with_exceptions';
+  excluded_dcs?: string[];
+  // Owning team. SNS team is the global reviewer/approver and sees
+  // every app/service; everyone else sees only their own.
+  owner_team?: string;
 }
 
 export interface OrgConfig {
@@ -714,11 +721,17 @@ export interface SharedService {
   name: string;
   category: SharedServiceCategory;
   owner?: string;
+  /** Owning team. SNS sees everything; other teams see only their own. */
+  owner_team?: string;
   description?: string;
   icon?: string;
   color?: string;
   environments: Environment[];
   tags?: string[];
+  /** Mandatory primary DC. Rule Builder pins the destination to this DC. */
+  primary_dc?: string;
+  deployment_mode?: 'all_ngdc' | 'selective' | 'all_ngdc_with_exceptions';
+  excluded_dcs?: string[];
   /** Port-catalog IDs treated as defaults for this service. */
   standard_ports?: string[];
   /** Service-specific custom ports that don't belong in the shared library. */

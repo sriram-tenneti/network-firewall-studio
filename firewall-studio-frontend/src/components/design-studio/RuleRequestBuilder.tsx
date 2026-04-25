@@ -44,9 +44,15 @@ interface DestRef {
   hint?: string;
 }
 
+type SrcKind = 'app' | 'shared_service';
+
 export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRequestBuilderProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [environment, setEnvironment] = useState<Environment>('Production');
+  // Source can now be either an Application or a Shared Service. Default
+  // to 'app' for back-compat; switching to 'shared_service' lets ops raise
+  // SS→App / SS→SS rules (Splunk→app APIs, Kerberos→LDAP, etc.).
+  const [srcKind, setSrcKind] = useState<SrcKind>('app');
   const [srcApp, setSrcApp] = useState<string>('');
   const [dest, setDest] = useState<DestRef | null>(null);
   const [ports, setPorts] = useState('TCP 443');
@@ -116,17 +122,27 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   }, [services, appsWithIngress, environment]);
 
   const srcOptions = useMemo(() => applications.filter((a) => a.app_distributed_id), [applications]);
+  const srcServiceOptions = useMemo(
+    () => services.filter((s) => (s.environments || []).includes(environment)),
+    [services, environment],
+  );
 
   // Per-app / per-service presence candidates for the current environment.
   // When either list has >1 entry we surface checkboxes so the user picks
   // the (NH, SZ) the rule should apply to — otherwise fan-out uses all.
   const srcPresenceCandidates = useMemo<PresenceKey[]>(() => {
     if (!srcApp) return [];
+    if (srcKind === 'shared_service') {
+      const list = ssPresences[srcApp] || [];
+      return list
+        .filter((p) => p.environment === environment)
+        .map((p) => ({ dc_id: p.dc_id, nh_id: p.nh_id, sz_code: p.sz_code }));
+    }
     return appPresences
       .filter((p) => p.app_distributed_id?.toUpperCase() === srcApp.toUpperCase()
                   && p.environment === environment)
       .map((p) => ({ dc_id: p.dc_id, nh_id: p.nh_id, sz_code: p.sz_code }));
-  }, [srcApp, environment, appPresences]);
+  }, [srcApp, srcKind, environment, appPresences, ssPresences]);
 
   const dstPresenceCandidates = useMemo<PresenceKey[]>(() => {
     if (!dest?.ref) return [];
@@ -148,7 +164,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
 
   // When src/dst/env change, forget prior presence scoping (UI defaults back
   // to "all presences"). Avoids stale selections referencing a stale app.
-  useEffect(() => { setSelectedSrcKeys(new Set()); }, [srcApp, environment]);
+  useEffect(() => { setSelectedSrcKeys(new Set()); }, [srcApp, srcKind, environment]);
   useEffect(() => { setSelectedDstKeys(new Set()); }, [dest?.ref, dest?.kind, environment]);
 
   const effectiveSrcPresences = useMemo<PresenceKey[] | undefined>(() => {
@@ -216,7 +232,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
     void (async () => {
       try {
         const p = await api.previewRuleExpansion({
-          application_ref: srcApp,
+          source_kind: srcKind,
+          source_ref: srcApp,
+          application_ref: srcKind === 'app' ? srcApp : '',
           destination_kind: dest.kind,
           destination_ref: dest.ref,
           environment,
@@ -232,7 +250,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
       }
     })();
     return () => { cancelled = true; };
-  }, [srcApp, dest, environment, ports, action, includeCrossDc,
+  }, [srcApp, srcKind, dest, environment, ports, action, includeCrossDc,
       effectiveSrcPresences, effectiveDstPresences]);
 
   const onDropDestination = (e: React.DragEvent) => {
@@ -254,7 +272,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
     setSubmitError(null);
     try {
       const r = await api.createRuleRequest({
-        application_ref: srcApp,
+        source_kind: srcKind,
+        source_ref: srcApp,
+        application_ref: srcKind === 'app' ? srcApp : '',
         destination_kind: dest.kind,
         destination_ref: dest.ref,
         environment,
@@ -275,7 +295,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   };
 
   const reset = () => {
-    setStep(1); setSrcApp(''); setDest(null); setPorts('TCP 443');
+    setStep(1); setSrcKind('app'); setSrcApp(''); setDest(null); setPorts('TCP 443');
     setAction('ACCEPT'); setDescription(''); setIncludeCrossDc(false);
     setSelectedSrcKeys(new Set()); setSelectedDstKeys(new Set());
     setPreview(null); setSubmittedRecord(null); setSubmitError(null);
@@ -329,15 +349,32 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Source Application</label>
-                <select value={srcApp} onChange={(e) => setSrcApp(e.target.value)}
+                <label className="block text-xs font-medium text-gray-600 mb-1">Source (Application or Shared Service)</label>
+                <select
+                  value={srcKind === 'shared_service' ? `ss:${srcApp}` : `app:${srcApp}`}
+                  onChange={(e) => {
+                    const [k, ...rest] = e.target.value.split(':');
+                    const ref = rest.join(':');
+                    if (k === 'ss') { setSrcKind('shared_service'); setSrcApp(ref); }
+                    else { setSrcKind('app'); setSrcApp(ref); }
+                  }}
                   className="w-full border rounded px-2 py-1.5 text-sm">
-                  <option value="">— select source app —</option>
-                  {srcOptions.map((a) => (
-                    <option key={a.app_distributed_id || a.app_id} value={a.app_distributed_id || a.app_id}>
-                      {a.app_distributed_id || a.app_id} — {a.app_name ?? ''}
-                    </option>
-                  ))}
+                  <option value="app:">— select source —</option>
+                  <optgroup label="Applications">
+                    {srcOptions.map((a) => (
+                      <option key={`app-${a.app_distributed_id || a.app_id}`}
+                        value={`app:${a.app_distributed_id || a.app_id}`}>
+                        {a.app_distributed_id || a.app_id} — {a.app_name ?? ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Shared Services (as source)">
+                    {srcServiceOptions.map((s) => (
+                      <option key={`ss-${s.service_id}`} value={`ss:${s.service_id}`}>
+                        {s.icon ?? '🧩'} {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             </div>
@@ -389,10 +426,16 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 spans multiple (DC, NH, SZ) combinations. Empty selection =
                 use all presences (default behavior). */}
             <PresencePicker
-              title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source app'}?`}
-              subtitle="Each checked presence becomes one PhysicalRule with the matching grp-<App>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default)."
-              emptyHint={srcApp ? 'This app has no presence in the selected environment.' : 'Pick a source application first.'}
-              makeGroupName={(p) => appEgressGroupName(srcApp || 'APP', p.nh_id, p.sz_code)}
+              title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source'}?`}
+              subtitle={srcKind === 'shared_service'
+                ? 'Each checked presence becomes one PhysicalRule with the matching grp-<Service>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'
+                : 'Each checked presence becomes one PhysicalRule with the matching grp-<App>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'}
+              emptyHint={srcApp
+                ? `This ${srcKind === 'shared_service' ? 'service' : 'app'} has no presence in the selected environment.`
+                : 'Pick a source first.'}
+              makeGroupName={(p) => srcKind === 'shared_service'
+                ? sharedServiceGroupName(srcApp || 'SVC', p.nh_id, p.sz_code)
+                : appEgressGroupName(srcApp || 'APP', p.nh_id, p.sz_code)}
               candidates={srcPresenceCandidates}
               selected={selectedSrcKeys}
               onChange={setSelectedSrcKeys}

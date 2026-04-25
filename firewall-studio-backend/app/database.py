@@ -7415,15 +7415,69 @@ def _filter_by_presence_keys(pres: list[dict[str, Any]],
             if (p.get("dc_id"), p.get("nh_id"), p.get("sz_code")) in keys]
 
 
-async def _resolve_source_presences(app_dist_id: str, env: str,
+async def _get_primary_dc(kind: str, ref: str | None) -> str | None:
+    """Return primary_dc for an Application or SharedService, or None.
+
+    `kind` is 'app' / 'shared_service'. App lookup uses both `applications`
+    and the (newer) `application_profiles` store.
+    """
+    if not ref:
+        return None
+    ref_u = ref.upper()
+    if kind == "shared_service":
+        for s in _load("shared_services") or []:
+            if str(s.get("service_id", "")).upper() == ref_u:
+                return s.get("primary_dc") or None
+        return None
+    profiles = _load("application_profiles") or []
+    for ap in profiles:
+        if str(ap.get("app_distributed_id", "")).upper() == ref_u:
+            if ap.get("primary_dc"):
+                return ap["primary_dc"]
+            break
+    for a in _load("applications") or []:
+        if str(a.get("app_distributed_id", "")).upper() == ref_u:
+            return a.get("primary_dc") or None
+    return None
+
+
+async def _resolve_source_presences(source_ref: str, env: str,
                                     requested_dcs: list[str] | None,
                                     presence_keys: list[dict[str, Any]] | None = None,
+                                    source_kind: str = "app",
                                     ) -> list[dict[str, Any]]:
+    """Return source-side presences for fan-out.
+
+    Apps read from `app_presences` (egress side). Shared Services read
+    from `shared_service_presences` and the result is normalized to look
+    like an app presence so the engine can stay uniform.
+    """
+    if source_kind == "shared_service":
+        raw = [p for p in (_load("shared_service_presences") or [])
+               if str(p.get("service_id", "")).upper() == source_ref.upper()
+               and p.get("environment") == env]
+        if requested_dcs:
+            raw = [p for p in raw if p.get("dc_id") in requested_dcs]
+        out: list[dict[str, Any]] = []
+        for p in raw:
+            out.append({
+                **p,
+                # Normalize to the shape the engine expects on the source
+                # side. `app_distributed_id` is repurposed to carry the
+                # service_id so `_app_egress_group_name` produces the
+                # correct `grp-<SvcId>-<NH>-<SZ>` for the source group.
+                "app_distributed_id": p.get("service_id", ""),
+                "_source_kind": "shared_service",
+                "egress_members": list(p.get("members", [])),
+            })
+        return _filter_by_presence_keys(out, _presence_key_set(presence_keys))
     pres = [p for p in (_load("app_presences") or [])
-            if str(p.get("app_distributed_id", "")).upper() == app_dist_id.upper()
+            if str(p.get("app_distributed_id", "")).upper() == source_ref.upper()
             and p.get("environment") == env]
     if requested_dcs:
         pres = [p for p in pres if p.get("dc_id") in requested_dcs]
+    for p in pres:
+        p.setdefault("_source_kind", "app")
     return _filter_by_presence_keys(pres, _presence_key_set(presence_keys))
 
 
@@ -7451,35 +7505,72 @@ async def _resolve_destination_presences(kind: str, dest_ref: str | None,
 async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     """Compute the multi-DC fan-out for a proposed rule request.
 
+    By default the engine emits ONE PhysicalRule per (src_tier × dst_tier)
+    in the **source's primary DC**, with destination groups resolved to
+    the **destination's primary DC**. The destination team owns
+    east-west routing across their other DCs (per architecture: app
+    teams raise from one primary DC; destination teams handle their own
+    DC fan-out via VIP / GSLB / per-DC LBs).
+
+    Power-user toggles:
+      - `include_cross_dc=True` ⇒ legacy intersect-all-DCs behaviour.
+      - `destination_dc_override=<dc_id>` ⇒ explicitly target a non-primary
+        destination DC (DR cutover scenarios).
+
     Returns { physical_rules: [...], warnings: [...] } without persisting.
     """
     env = payload.get("environment", "Production")
-    src_app = payload.get("application_ref", "")
+    source_kind = (payload.get("source_kind") or "app").lower()
+    src_ref = (payload.get("source_ref")
+               or payload.get("application_ref")
+               or "")
     kind = payload.get("destination_kind", "shared_service")
     dest_ref = payload.get("destination_ref")
     requested_dcs = payload.get("requested_dcs")
     include_cross_dc = bool(payload.get("include_cross_dc"))
+    dest_dc_override = payload.get("destination_dc_override")
     ports = payload.get("ports", "TCP 8080")
     action = payload.get("action", "ACCEPT")
 
     source_presences = payload.get("source_presences")
     destination_presences = payload.get("destination_presences")
 
+    # Primary-DC scoping (default). When the requester didn't pass
+    # explicit `requested_dcs`, scope the source resolver to the source's
+    # primary_dc and the destination resolver to either the override DC
+    # or the destination's primary_dc.
+    src_dc_filter = list(requested_dcs) if requested_dcs else None
+    dst_dc_filter = list(requested_dcs) if requested_dcs else None
+    if not include_cross_dc:
+        if not src_dc_filter:
+            primary = await _get_primary_dc(source_kind, src_ref)
+            if primary:
+                src_dc_filter = [primary]
+        if not dst_dc_filter:
+            if dest_dc_override:
+                dst_dc_filter = [dest_dc_override]
+            else:
+                dst_kind = "shared_service" if kind == "shared_service" else "app"
+                primary = await _get_primary_dc(dst_kind, dest_ref)
+                if primary:
+                    dst_dc_filter = [primary]
+
     src_pres = await _resolve_source_presences(
-        src_app, env, requested_dcs, source_presences)
+        src_ref, env, src_dc_filter, source_presences,
+        source_kind=source_kind)
     dst_pres = await _resolve_destination_presences(
-        kind, dest_ref, env, requested_dcs, destination_presences)
+        kind, dest_ref, env, dst_dc_filter, destination_presences)
 
     warnings: list[str] = []
     if not src_pres:
         warnings.append(
-            f"No source presence for {src_app} in environment {env}"
-            + (f" / DCs {requested_dcs}" if requested_dcs else "")
+            f"No source presence for {source_kind}:{src_ref} in environment {env}"
+            + (f" / DCs {src_dc_filter}" if src_dc_filter else "")
         )
     if not dst_pres:
         warnings.append(
             f"No destination presence for {kind}:{dest_ref} in environment {env}"
-            + (f" / DCs {requested_dcs}" if requested_dcs else "")
+            + (f" / DCs {dst_dc_filter}" if dst_dc_filter else "")
         )
 
     physical: list[dict[str, Any]] = []
@@ -7563,6 +7654,10 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
             elif len(toks) == 1:
                 port_num = toks[0]
         # Persist a full FirewallRule so the Rules table can render it.
+        source_kind_norm = (payload.get("source_kind") or "app").lower()
+        src_ref_norm = (payload.get("source_ref")
+                        or payload.get("application_ref")
+                        or "")
         fw_rules.append({
             "rule_id": rule_id,
             "source": p.get("src_group_ref", ""),
@@ -7575,7 +7670,9 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
             "protocol": proto,
             "action": "Allow" if (p.get("action") or "ACCEPT").upper() == "ACCEPT" else "Deny",
             "description": payload.get("description", "") or f"Multi-DC rule request {request_id}",
-            "application": payload.get("application_ref", ""),
+            "application": src_ref_norm if source_kind_norm == "app" else "",
+            "shared_service_ref": src_ref_norm if source_kind_norm == "shared_service" else "",
+            "source_kind": source_kind_norm,
             "dst_application": payload.get("destination_ref", "") if payload.get("destination_kind") == "app_ingress" else "",
             "status": "Pending Review",
             "rule_status": "Pending Review",
@@ -7605,9 +7702,17 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
 
     _save("firewall_rules", fw_rules)
 
+    src_kind_rec = (payload.get("source_kind") or "app").lower()
+    src_ref_rec = (payload.get("source_ref")
+                   or payload.get("application_ref")
+                   or "")
     record = {
         "request_id": request_id,
-        "application_ref": payload.get("application_ref", ""),
+        "source_kind": src_kind_rec,
+        "source_ref": src_ref_rec,
+        # Back-compat: old clients still read application_ref. Populate
+        # only when the source actually IS an app.
+        "application_ref": src_ref_rec if src_kind_rec == "app" else "",
         "destination_kind": payload.get("destination_kind", "shared_service"),
         "destination_ref": payload.get("destination_ref"),
         "environment": payload.get("environment", "Production"),
@@ -7615,6 +7720,9 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
         "action": payload.get("action", "ACCEPT"),
         "description": payload.get("description", ""),
         "owner": payload.get("owner", ""),
+        "owner_team": payload.get("owner_team", ""),
+        "include_cross_dc": bool(payload.get("include_cross_dc")),
+        "destination_dc_override": payload.get("destination_dc_override"),
         "status": "Pending",
         "expansion": expansion,
         "warnings": preview.get("warnings", []),
