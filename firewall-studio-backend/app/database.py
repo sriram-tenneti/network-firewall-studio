@@ -643,44 +643,105 @@ def _build_seed_rules() -> list[dict[str, Any]]:
 # Seed / Init
 # ============================================================
 
+def _merge_seed_by_key(
+    table: str, seed: list[dict[str, Any]], key: str | tuple[str, ...],
+) -> None:
+    """Idempotent seed: insert seed rows that don't yet exist (by key);
+    leave user-added or user-edited rows alone. Use this for catalogs
+    that the user is allowed to customise from the UI (shared services,
+    SZs, NHs, applications, etc.) so reference data persists across
+    restarts even though the seed file ships defaults."""
+    existing = _load(table)
+    if existing is None:
+        _save(table, deepcopy(seed))
+        return
+    if isinstance(key, str):
+        keys = (key,)
+    else:
+        keys = key
+
+    def _k(row: dict[str, Any]) -> tuple:
+        return tuple(row.get(k) for k in keys)
+
+    seen = {_k(r) for r in existing}
+    merged = list(existing)
+    for row in seed:
+        if _k(row) in seen:
+            continue
+        merged.append(deepcopy(row))
+        seen.add(_k(row))
+    _save(table, merged)
+
+
 async def seed_database() -> None:
-    """Seed JSON files with initial data. Always re-seeds to ensure fresh data."""
+    """Seed JSON files with initial data.
+
+    Catalogs the user can customise (shared services, SZs, NHs, apps,
+    DCs, environments, predefined destinations, ports, ITSM connectors,
+    naming standards, policy/birthright matrices) are merged
+    idempotently — user additions and edits persist across restarts;
+    only rows that aren't yet present are inserted from the seed.
+
+    Operational tables (rules, requests, history, etc.) keep their
+    existing reseed semantics."""
     _ensure_dir()
-    # Always reseed — wipe old data so seed data is the single source of truth
-    _save("neighbourhoods", deepcopy(SEED_NEIGHBOURHOODS))
-    _save("security_zones", deepcopy(SEED_SECURITY_ZONES))
-    _save("ngdc_datacenters", deepcopy(SEED_NGDC_DATACENTERS))
-    _save("legacy_datacenters", deepcopy(SEED_LEGACY_DATACENTERS))
-    _save("applications", deepcopy(SEED_APPLICATIONS))
-    _save("environments", deepcopy(SEED_ENVIRONMENTS))
-    _save("predefined_destinations", deepcopy(SEED_PREDEFINED_DESTINATIONS))
-    _save("naming_standards", deepcopy(SEED_NAMING_STANDARDS))
-    _save("policy_matrix", deepcopy(SEED_POLICY_MATRIX))
-    _save("heritage_dc_matrix", deepcopy(SEED_HERITAGE_DC_MATRIX))
-    _save("ngdc_prod_matrix", deepcopy(SEED_NGDC_PROD_MATRIX))
-    _save("nonprod_matrix", deepcopy(SEED_NONPROD_MATRIX))
-    _save("preprod_matrix", deepcopy(SEED_PREPROD_MATRIX))
-    _save("org_config", deepcopy(SEED_ORG_CONFIG))
-    _save("firewall_rules", _build_seed_rules())
-    _save("rule_history", [])
-    _save("migrations", deepcopy(SEED_MIGRATIONS))
-    _save("migration_mappings", deepcopy(SEED_MIGRATION_MAPPINGS))
-    _save("chg_requests", deepcopy(SEED_CHG_REQUESTS))
-    _save("groups", deepcopy(SEED_GROUPS))
-    _save("legacy_groups", deepcopy(SEED_LEGACY_GROUPS))
-    _save("legacy_rules", deepcopy(SEED_LEGACY_RULES))
-    _save("ip_mappings", deepcopy(SEED_IP_MAPPINGS))
-    _save("firewall_devices", deepcopy(_SD_FW_DEVICES))
-    _save("app_dc_mappings", deepcopy(_SD_APP_DC_MAPPINGS))
-    _save("reviews", deepcopy(SEED_REVIEWS))
-    _save("rule_modifications", [])
-    _save("lifecycle_events", deepcopy(SEED_LIFECYCLE_EVENTS))
-    # Revamp: Shared Services + presences + per-DC app presences
-    _save("shared_services", deepcopy(_SD_SHARED_SERVICES))
-    _save("shared_service_presences", deepcopy(_SD_SHARED_SERVICE_PRESENCES))
-    _save("app_presences", deepcopy(_SD_APP_PRESENCES))
-    _save("rule_requests", [])
-    _save("port_catalog", deepcopy(_SD_PORT_CATALOG))
+    _merge_seed_by_key("neighbourhoods", SEED_NEIGHBOURHOODS, "nh_id")
+    _merge_seed_by_key("security_zones", SEED_SECURITY_ZONES, "code")
+    _merge_seed_by_key("ngdc_datacenters", SEED_NGDC_DATACENTERS, "dc_id")
+    _merge_seed_by_key("legacy_datacenters", SEED_LEGACY_DATACENTERS, "dc_id")
+    _merge_seed_by_key("applications", SEED_APPLICATIONS, "app_id")
+    _merge_seed_by_key("environments", SEED_ENVIRONMENTS, "code")
+    _merge_seed_by_key("predefined_destinations", SEED_PREDEFINED_DESTINATIONS, "name")
+    if _load("naming_standards") is None:
+        _save("naming_standards", deepcopy(SEED_NAMING_STANDARDS))
+    if _load("policy_matrix") is None:
+        _save("policy_matrix", deepcopy(SEED_POLICY_MATRIX))
+    if _load("heritage_dc_matrix") is None:
+        _save("heritage_dc_matrix", deepcopy(SEED_HERITAGE_DC_MATRIX))
+    if _load("ngdc_prod_matrix") is None:
+        _save("ngdc_prod_matrix", deepcopy(SEED_NGDC_PROD_MATRIX))
+    if _load("nonprod_matrix") is None:
+        _save("nonprod_matrix", deepcopy(SEED_NONPROD_MATRIX))
+    if _load("preprod_matrix") is None:
+        _save("preprod_matrix", deepcopy(SEED_PREPROD_MATRIX))
+    if _load("org_config") is None:
+        _save("org_config", deepcopy(SEED_ORG_CONFIG))
+    if _load("firewall_rules") is None:
+        _save("firewall_rules", _build_seed_rules())
+    if _load("rule_history") is None:
+        _save("rule_history", [])
+    _merge_seed_by_key("migrations", SEED_MIGRATIONS, "migration_id")
+    if _load("migration_mappings") is None:
+        _save("migration_mappings", deepcopy(SEED_MIGRATION_MAPPINGS))
+    _merge_seed_by_key("chg_requests", SEED_CHG_REQUESTS, "chg_id")
+    _merge_seed_by_key("groups", SEED_GROUPS, "name")
+    _merge_seed_by_key("legacy_groups", SEED_LEGACY_GROUPS, "name")
+    _merge_seed_by_key("legacy_rules", SEED_LEGACY_RULES, "id")
+    _merge_seed_by_key("ip_mappings", SEED_IP_MAPPINGS, "id")
+    _merge_seed_by_key("firewall_devices", _SD_FW_DEVICES, "device_id")
+    _merge_seed_by_key("app_dc_mappings", _SD_APP_DC_MAPPINGS, ("app_id", "dc"))
+    _merge_seed_by_key("reviews", SEED_REVIEWS, "id")
+    if _load("rule_modifications") is None:
+        _save("rule_modifications", [])
+    _merge_seed_by_key("lifecycle_events", SEED_LIFECYCLE_EVENTS, "id")
+    # Revamp: Shared Services + presences + per-DC app presences.
+    # Merge-by-id so user customisations and additions persist across
+    # restarts (the user explicitly asked for shared-services to be a
+    # real-data catalog with the same lifecycle as SZs/NHs).
+    _merge_seed_by_key("shared_services", _SD_SHARED_SERVICES, "service_id")
+    _merge_seed_by_key(
+        "shared_service_presences",
+        _SD_SHARED_SERVICE_PRESENCES,
+        ("service_id", "dc_id", "environment", "nh_id", "sz_code"),
+    )
+    _merge_seed_by_key(
+        "app_presences",
+        _SD_APP_PRESENCES,
+        ("app_distributed_id", "dc_id", "environment", "nh_id", "sz_code"),
+    )
+    if _load("rule_requests") is None:
+        _save("rule_requests", [])
+    _merge_seed_by_key("port_catalog", _SD_PORT_CATALOG, "port_id")
     # ITSM connector profiles (ServiceNow / Generic REST). Empty by
     # default; SNS configures them in Settings -> SNS Connector.
     if _load("itsm_connectors") is None:
