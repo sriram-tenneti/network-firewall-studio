@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from app.database import (
     classify_ip,
     classify_ips,
+    create_group_change_request,
     create_port,
     create_rule_request,
     create_shared_service,
@@ -21,6 +22,8 @@ from app.database import (
     delete_shared_service,
     delete_shared_service_presence,
     get_app_presences,
+    get_group_change_artifacts,
+    get_group_change_request,
     get_occupants,
     get_rule_request,
     get_rule_requests,
@@ -28,9 +31,15 @@ from app.database import (
     get_shared_service_presences,
     get_shared_services,
     ingest_app_members,
+    itsm_webhook_dispatch,
+    list_group_change_requests,
     list_ports,
+    poll_itsm_connectors_once,
     preview_rule_expansion,
+    refresh_group_change_external_status,
+    set_group_change_request_status,
     set_rule_request_status,
+    submit_group_change_request_to_itsm,
     update_port,
     update_shared_service,
     upsert_app_presence,
@@ -700,3 +709,247 @@ async def normalize_legacy_rules_bulk_route(payload: dict[str, Any]) -> dict[str
     if not isinstance(rules, list):
         raise HTTPException(400, "rules must be a list")
     return await normalize_legacy_rules_bulk([dict(r) for r in rules])
+
+
+# ============================================================
+# Group Change Requests (standalone group create / modify / delete)
+# ============================================================
+
+@router.get("/api/groups/change-requests")
+async def list_group_change_requests_route(
+    environment: str | None = None,
+    status: str | None = None,
+    team: str | None = None,
+) -> list[dict[str, Any]]:
+    return await list_group_change_requests(
+        environment=environment, status=status, team=team)
+
+
+@router.post("/api/groups/change-requests")
+async def create_group_change_request_route(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return await create_group_change_request(payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/api/groups/change-requests/{request_id}")
+async def get_group_change_request_route(request_id: str) -> dict[str, Any]:
+    res = await get_group_change_request(request_id)
+    if res is None:
+        raise HTTPException(404, "Group change request not found")
+    return res
+
+
+@router.patch("/api/groups/change-requests/{request_id}/status")
+async def set_group_change_request_status_route(
+    request_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    status = payload.get("status")
+    note = payload.get("note")
+    if not status:
+        raise HTTPException(400, "status is required")
+    try:
+        res = await set_group_change_request_status(request_id, status, note)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if res is None:
+        raise HTTPException(404, "Group change request not found")
+    return res
+
+
+@router.get("/api/groups/change-requests/{request_id}/artifacts")
+async def group_change_artifacts_route(request_id: str) -> dict[str, Any]:
+    res = await get_group_change_artifacts(request_id)
+    if res is None:
+        raise HTTPException(404, "Group change request not found")
+    return res
+
+
+@router.get("/api/groups/change-requests/{request_id}/artifacts/manifest.json")
+async def group_change_artifact_manifest_json(request_id: str) -> dict[str, Any]:
+    arts = await get_group_change_artifacts(request_id)
+    if arts is None:
+        raise HTTPException(404, "Group change request not found")
+    return arts["manifest"]
+
+
+@router.get("/api/groups/change-requests/{request_id}/artifacts/manifest.xlsx")
+async def group_change_artifact_manifest_xlsx(request_id: str):
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    from openpyxl import Workbook
+
+    arts = await get_group_change_artifacts(request_id)
+    if arts is None:
+        raise HTTPException(404, "Group change request not found")
+    wb = Workbook()
+    default = wb.active
+    wb.remove(default)
+    for name, rows in arts["xlsx_sheets"].items():
+        ws = wb.create_sheet(title=(name or "Sheet")[:31])
+        for row in rows:
+            ws.append(row)
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{request_id}-group-change.xlsx"'
+            )
+        },
+    )
+
+
+@router.get("/api/groups/change-requests/{request_id}/artifacts/device-{vendor}.txt")
+async def group_change_artifact_vendor_config(request_id: str, vendor: str):
+    from fastapi.responses import PlainTextResponse
+
+    arts = await get_group_change_artifacts(request_id)
+    if arts is None:
+        raise HTTPException(404, "Group change request not found")
+    cfg = (arts.get("vendor_configs") or {}).get(vendor.lower())
+    if cfg is None:
+        raise HTTPException(404, f"Unknown vendor {vendor!r}")
+    return PlainTextResponse(
+        cfg,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{request_id}-{vendor}.txt"'
+            )
+        },
+    )
+
+
+@router.get("/api/groups/change-requests/{request_id}/artifacts/bundle.zip")
+async def group_change_artifact_bundle_zip(request_id: str):
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+
+    arts = await get_group_change_artifacts(request_id)
+    if arts is None:
+        raise HTTPException(404, "Group change request not found")
+    payload = _build_bundle_zip(arts, request_id)
+    return StreamingResponse(
+        BytesIO(payload),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{request_id}-group-bundle.zip"'
+            )
+        },
+    )
+
+
+@router.post("/api/groups/change-requests/artifacts/bulk-bundle.zip")
+async def group_change_bulk_bundle_zip(payload: dict[str, Any]):
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    import zipfile
+    import json as _json
+    from openpyxl import Workbook
+
+    ids = payload.get("request_ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "request_ids must be a non-empty list")
+
+    buf = BytesIO()
+    included: list[str] = []
+    skipped: list[str] = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for rid in ids:
+            rid_s = str(rid)
+            arts = await get_group_change_artifacts(rid_s)
+            if arts is None:
+                skipped.append(rid_s)
+                continue
+            included.append(rid_s)
+            zf.writestr(
+                f"{rid_s}/manifest.json",
+                _json.dumps(arts["manifest"], indent=2, default=str),
+            )
+            wb = Workbook()
+            default = wb.active
+            wb.remove(default)
+            for name, rows in arts["xlsx_sheets"].items():
+                ws = wb.create_sheet(title=(name or "Sheet")[:31])
+                for row in rows:
+                    ws.append(row)
+            xlsx_buf = BytesIO()
+            wb.save(xlsx_buf)
+            zf.writestr(f"{rid_s}/manifest.xlsx", xlsx_buf.getvalue())
+            for vendor_l, cfg in (arts.get("vendor_configs") or {}).items():
+                zf.writestr(f"{rid_s}/device-{vendor_l}.txt", cfg or "")
+        index = {
+            "exported_request_ids": included,
+            "skipped_request_ids": skipped,
+            "kind": "group_change_request",
+        }
+        zf.writestr("INDEX.json", _json.dumps(index, indent=2))
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="group-change-requests-bulk-export.zip"'
+            )
+        },
+    )
+
+
+@router.post("/api/groups/change-requests/{request_id}/submit-itsm")
+async def submit_group_change_to_itsm_route(
+    request_id: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = payload or {}
+    try:
+        res = await submit_group_change_request_to_itsm(
+            request_id, payload.get("connector_id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if res is None:
+        raise HTTPException(404, "Group change request not found")
+    return res
+
+
+@router.post("/api/groups/change-requests/{request_id}/refresh-external-status")
+async def refresh_group_change_status_route(request_id: str) -> dict[str, Any]:
+    res = await refresh_group_change_external_status(request_id)
+    if res is None:
+        raise HTTPException(404, "Group change request not found")
+    return res
+
+
+# ============================================================
+# Phase B — ITSM polling worker + webhook receiver
+# ============================================================
+
+@router.post("/api/itsm/poll")
+async def itsm_poll_once_route() -> dict[str, Any]:
+    """Trigger one polling pass over every ITSM connector. Returns the
+    list of state transitions applied. Safe to invoke from a cron / k8s
+    CronJob / Celery beat — keeps things idempotent."""
+    return await poll_itsm_connectors_once()
+
+
+@router.post("/api/itsm/webhook/{connector_id}")
+async def itsm_webhook_route(
+    connector_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Receive a push from ServiceNow Business Rules / generic webhook /
+    internal tool. Body must include ``external_ticket_id`` (or
+    ``ticket_id`` / ``number``) and ``state`` (or ``status``). Matches
+    the ticket back to a RuleRequest or GroupChangeRequest and applies
+    the transition automatically."""
+    try:
+        return await itsm_webhook_dispatch(
+            connector_id=connector_id, payload=payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))

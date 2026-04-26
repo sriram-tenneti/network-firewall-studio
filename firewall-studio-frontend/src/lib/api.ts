@@ -1574,3 +1574,161 @@ export const normalizeLegacyRulesBulk = (rules: Array<Record<string, unknown>>) 
     method: 'POST',
     body: JSON.stringify({ rules }),
   });
+
+
+// ============================================================
+// Group Change Requests (standalone group create / modify / delete)
+// ============================================================
+
+export type GroupChangeOp =
+  | 'create'
+  | 'modify-add'
+  | 'modify-remove'
+  | 'delete';
+
+export type GroupChangeRequest = {
+  request_id: string;
+  kind: 'group_change';
+  op: GroupChangeOp;
+  group_name: string;
+  added_members: string[];
+  removed_members: string[];
+  environment: string;
+  owner: string;
+  owner_team: string;
+  description?: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Deployed' | 'Certified';
+  created_at: string;
+  updated_at: string;
+  external_ticket_id?: string | null;
+  external_ticket_url?: string | null;
+  external_status?: string | null;
+  external_system?: string | null;
+  external_last_synced_at?: string | null;
+};
+
+export const listGroupChangeRequests = (params: {
+  environment?: string;
+  status?: string;
+  team?: string;
+} = {}) => {
+  const q = new URLSearchParams();
+  if (params.environment) q.set('environment', params.environment);
+  if (params.status) q.set('status', params.status);
+  if (params.team) q.set('team', params.team);
+  const qs = q.toString();
+  return fetchJSON<GroupChangeRequest[]>(
+    `/api/groups/change-requests${qs ? `?${qs}` : ''}`,
+  );
+};
+
+export const getGroupChangeRequest = (request_id: string) =>
+  fetchJSON<GroupChangeRequest>(
+    `/api/groups/change-requests/${encodeURIComponent(request_id)}`,
+  );
+
+export const createGroupChangeRequest = (
+  payload: {
+    op: GroupChangeOp;
+    group_name: string;
+    added_members?: string[];
+    removed_members?: string[];
+    environment?: string;
+    owner?: string;
+    owner_team?: string;
+    description?: string;
+    group_type?: string;
+  },
+) => fetchJSON<GroupChangeRequest>('/api/groups/change-requests', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+});
+
+export const setGroupChangeRequestStatus = (
+  request_id: string, status: string, note?: string,
+) => fetchJSON<GroupChangeRequest>(
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/status`,
+  { method: 'PATCH', body: JSON.stringify({ status, note }) },
+);
+
+export const groupChangeArtifactBundleUrl = (request_id: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`;
+
+export const groupChangeArtifactJsonUrl = (request_id: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`;
+
+export const groupChangeArtifactXlsxUrl = (request_id: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`;
+
+export const groupChangeArtifactVendorUrl = (request_id: string, vendor: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/device-${encodeURIComponent(vendor)}.txt`;
+
+export const downloadGroupChangeBulkBundle = async (request_ids: string[]) => {
+  const res = await fetch(
+    '/api/groups/change-requests/artifacts/bulk-bundle.zip',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_ids }),
+    },
+  );
+  if (!res.ok) throw new Error(`Bulk export failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'group-change-requests-bulk-export.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+export const submitGroupChangeToItsm = (
+  request_id: string, connector_id?: string,
+) => fetchJSON<{
+  request_id: string;
+  connector_id: string;
+  kind: string;
+  endpoint_url: string;
+  rendered_payload: Record<string, unknown>;
+  external_ticket_id: string;
+  external_ticket_url: string;
+  external_status: string;
+}>(
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/submit-itsm`,
+  {
+    method: 'POST',
+    body: JSON.stringify(connector_id ? { connector_id } : {}),
+  },
+);
+
+export const refreshGroupChangeExternalStatus = (request_id: string) =>
+  fetchJSON<{
+    request_id: string;
+    external_ticket_id: string;
+    external_status: string;
+    external_last_synced_at: string;
+  }>(
+    `/api/groups/change-requests/${encodeURIComponent(request_id)}/refresh-external-status`,
+    { method: 'POST', body: '{}' },
+  );
+
+// ============================================================
+// Phase B — ITSM polling + webhook receiver
+// ============================================================
+
+export const pollItsmConnectors = () =>
+  fetchJSON<{
+    connectors_seen: number;
+    transitions: Array<{
+      request_id: string;
+      kind: 'rule' | 'group_change';
+      before: string;
+      after: string;
+    }>;
+    polled_at: string;
+  }>('/api/itsm/poll', { method: 'POST', body: '{}' });
+
+export const itsmWebhookUrl = (connector_id: string) =>
+  `/api/itsm/webhook/${encodeURIComponent(connector_id)}`;

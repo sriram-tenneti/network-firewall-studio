@@ -8993,65 +8993,136 @@ def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
     return {"Summary": summary_sheet, "Rules": rules_sheet, "Groups": groups_sheet}
 
 
+def _addr_obj_name(group: str, member: str) -> str:
+    """Stable address-object name derived from a group + member CIDR/IP."""
+    return f"{group}-{str(member).replace('/', '_').replace('.', '_')}"
+
+
 def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
-    out: list[str] = ["# PAN-OS / Panorama set-mode configuration",
-                      f"# Request {manifest.get('request_id')}", ""]
+    out: list[str] = [
+        "# PAN-OS / Panorama set-mode configuration",
+        f"# Request {manifest.get('request_id')}",
+        "",
+    ]
     for g in manifest.get("groups", []):
-        if g["op"] == "create" and g.get("members"):
-            for m in g["members"]:
-                out.append(f"set address {g['name']}-{m.replace('/', '_').replace('.', '_')} ip-netmask {m}")
-            members_csv = " ".join(
-                f"{g['name']}-{m.replace('/', '_').replace('.', '_')}" for m in g["members"]
-            )
-            out.append(f"set address-group {g['name']} static [ {members_csv} ]")
+        op = g.get("op") or "create"
+        name = g["name"]
+        members = g.get("members") or []
+        added = g.get("added_members") or []
+        removed = g.get("removed_members") or []
+        if op == "create" and members:
+            for m in members:
+                out.append(f"set address {_addr_obj_name(name, m)} ip-netmask {m}")
+            members_csv = " ".join(_addr_obj_name(name, m) for m in members)
+            out.append(f"set address-group {name} static [ {members_csv} ]")
+        elif op == "modify-add" and added:
+            for m in added:
+                out.append(f"set address {_addr_obj_name(name, m)} ip-netmask {m}")
+                out.append(f"set address-group {name} static {_addr_obj_name(name, m)}")
+        elif op == "modify-remove" and removed:
+            for m in removed:
+                out.append(f"delete address-group {name} static {_addr_obj_name(name, m)}")
+        elif op == "delete":
+            out.append(f"delete address-group {name}")
+        # reuse-existing emits nothing.
     for r in manifest.get("rules", []):
         out.append(
             f"set rulebase security rules {r['rule_id']} from any to any "
             f"source {r['src_group']} destination {r['dst_group']} "
-            f"service application-default action {('allow' if str(r['action']).lower().startswith('a') else 'deny')}"
+            f"service application-default action "
+            f"{'allow' if str(r['action']).lower().startswith('a') else 'deny'}"
         )
     return "\n".join(out) + "\n"
 
 
 def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
     out: list[str] = ["# Fortinet FortiGate config", ""]
-    for g in manifest.get("groups", []):
-        if g["op"] == "create" and g.get("members"):
+    rules = manifest.get("rules", []) or []
+    groups = manifest.get("groups", []) or []
+    for g in groups:
+        op = g.get("op") or "create"
+        name = g["name"]
+        members = g.get("members") or []
+        added = g.get("added_members") or []
+        removed = g.get("removed_members") or []
+        if op == "create" and members:
             out.append("config firewall address")
-            for m in g["members"]:
-                obj = f"{g['name']}-{m.replace('/', '_').replace('.', '_')}"
+            for m in members:
+                obj = _addr_obj_name(name, m)
                 out.append(f"  edit {obj}\n    set subnet {m}\n  next")
             out.append("end")
             out.append("config firewall addrgrp")
-            out.append(f"  edit {g['name']}\n    set member " +
-                       " ".join(f"{g['name']}-{m.replace('/', '_').replace('.', '_')}" for m in g["members"]) +
-                       "\n  next\nend")
-    out.append("config firewall policy")
-    for i, r in enumerate(manifest.get("rules", []), start=1):
-        out.append(
-            f"  edit 0\n    set name {r['rule_id']}\n"
-            f"    set srcaddr {r['src_group']}\n"
-            f"    set dstaddr {r['dst_group']}\n"
-            f"    set service ALL\n"
-            f"    set action {('accept' if str(r['action']).lower().startswith('a') else 'deny')}\n"
-            f"    set comments \"{manifest.get('request_id')}\"\n"
-            f"  next"
-        )
-    out.append("end")
+            out.append(
+                f"  edit {name}\n    set member "
+                + " ".join(_addr_obj_name(name, m) for m in members)
+                + "\n  next\nend"
+            )
+        elif op == "modify-add" and added:
+            out.append("config firewall address")
+            for m in added:
+                obj = _addr_obj_name(name, m)
+                out.append(f"  edit {obj}\n    set subnet {m}\n  next")
+            out.append("end")
+            out.append("config firewall addrgrp")
+            out.append(
+                f"  edit {name}\n    append member "
+                + " ".join(_addr_obj_name(name, m) for m in added)
+                + "\n  next\nend"
+            )
+        elif op == "modify-remove" and removed:
+            out.append("config firewall addrgrp")
+            out.append(
+                f"  edit {name}\n    unselect member "
+                + " ".join(_addr_obj_name(name, m) for m in removed)
+                + "\n  next\nend"
+            )
+        elif op == "delete":
+            out.append(f"config firewall addrgrp\n  delete {name}\nend")
+    if rules:
+        out.append("config firewall policy")
+        for r in rules:
+            out.append(
+                f"  edit 0\n    set name {r['rule_id']}\n"
+                f"    set srcaddr {r['src_group']}\n"
+                f"    set dstaddr {r['dst_group']}\n"
+                f"    set service ALL\n"
+                f"    set action {('accept' if str(r['action']).lower().startswith('a') else 'deny')}\n"
+                f"    set comments \"{manifest.get('request_id')}\"\n"
+                f"  next"
+            )
+        out.append("end")
     return "\n".join(out) + "\n"
 
 
 def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
     out: list[str] = ["! Cisco ASA / FTD configuration", ""]
+
+    def _net_obj(m: str) -> str:
+        if "/" in m:
+            ip, cidr = m.split("/")
+            return f"  network-object {ip} {cidr}"
+        return f"  network-object host {m}"
+
     for g in manifest.get("groups", []):
-        if g["op"] == "create" and g.get("members"):
-            out.append(f"object-group network {g['name']}")
-            for m in g["members"]:
-                if "/" in m:
-                    ip, cidr = m.split("/")
-                    out.append(f"  network-object {ip} {cidr}")
-                else:
-                    out.append(f"  network-object host {m}")
+        op = g.get("op") or "create"
+        name = g["name"]
+        members = g.get("members") or []
+        added = g.get("added_members") or []
+        removed = g.get("removed_members") or []
+        if op == "create" and members:
+            out.append(f"object-group network {name}")
+            for m in members:
+                out.append(_net_obj(m))
+        elif op == "modify-add" and added:
+            out.append(f"object-group network {name}")
+            for m in added:
+                out.append(_net_obj(m))
+        elif op == "modify-remove" and removed:
+            out.append(f"object-group network {name}")
+            for m in removed:
+                out.append(f"  no {_net_obj(m).strip()}")
+        elif op == "delete":
+            out.append(f"no object-group network {name}")
     for r in manifest.get("rules", []):
         action = "permit" if str(r["action"]).lower().startswith("a") else "deny"
         proto = str(r.get("protocol", "tcp")).lower()
@@ -9065,11 +9136,32 @@ def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
 def _vendor_compile_checkpoint(manifest: dict[str, Any]) -> str:
     out: list[str] = ["# Check Point SmartConsole CLI", ""]
     for g in manifest.get("groups", []):
-        if g["op"] == "create":
-            out.append(f"add group name \"{g['name']}\"")
-            for m in (g.get("members") or []):
-                out.append(f"add network name \"{g['name']}-{m}\" subnet \"{m}\"")
-                out.append(f"add group-with-exclusion-or-network name \"{g['name']}\" members.add \"{g['name']}-{m}\"")
+        op = g.get("op") or "create"
+        name = g["name"]
+        members = g.get("members") or []
+        added = g.get("added_members") or []
+        removed = g.get("removed_members") or []
+        if op == "create":
+            out.append(f"add group name \"{name}\"")
+            for m in members:
+                out.append(f"add network name \"{name}-{m}\" subnet \"{m}\"")
+                out.append(
+                    f"add group-with-exclusion-or-network name \"{name}\" "
+                    f"members.add \"{name}-{m}\""
+                )
+        elif op == "modify-add":
+            for m in added:
+                out.append(f"add network name \"{name}-{m}\" subnet \"{m}\"")
+                out.append(
+                    f"set group name \"{name}\" members.add \"{name}-{m}\""
+                )
+        elif op == "modify-remove":
+            for m in removed:
+                out.append(
+                    f"set group name \"{name}\" members.remove \"{name}-{m}\""
+                )
+        elif op == "delete":
+            out.append(f"delete group name \"{name}\"")
     for r in manifest.get("rules", []):
         action = "accept" if str(r["action"]).lower().startswith("a") else "drop"
         out.append(
@@ -9257,4 +9349,547 @@ async def refresh_request_external_status(request_id: str) -> dict[str, Any] | N
         "external_ticket_id": target.get("external_ticket_id"),
         "external_status": next_status,
         "external_last_synced_at": target["external_last_synced_at"],
+    }
+
+
+# ============================================================
+# Group Change Requests (standalone group create / modify / delete)
+# ============================================================
+#
+# Mirrors the RuleRequest lifecycle so SNS gets a single review queue
+# for *every* device-affecting change. A group that exists only in the
+# portal is just a draft — it doesn't become real until its create /
+# modify-add / modify-remove / delete commands have been pushed to the
+# firewalls. Same artifact pipeline (JSON + XLSX + per-vendor configs)
+# and same ITSM submit/refresh codepaths apply.
+
+GROUP_REQUEST_STATUSES = (
+    "Pending", "Approved", "Rejected", "Deployed", "Certified",
+)
+GROUP_OPS = ("create", "modify-add", "modify-remove", "delete")
+
+
+def _load_group_requests() -> list[dict[str, Any]]:
+    return _load("group_change_requests") or []
+
+
+def _next_group_request_id() -> str:
+    items = _load_group_requests()
+    n = len(items) + 1
+    return f"GRQ-{n:05d}"
+
+
+async def list_group_change_requests(
+    *,
+    environment: str | None = None,
+    status: str | None = None,
+    team: str | None = None,
+) -> list[dict[str, Any]]:
+    out = []
+    for r in _load_group_requests():
+        if environment and (r.get("environment") or "") != environment:
+            continue
+        if status and (r.get("status") or "") != status:
+            continue
+        if team and (r.get("owner_team") or "") != team:
+            continue
+        out.append(r)
+    return out
+
+
+async def get_group_change_request(request_id: str) -> dict[str, Any] | None:
+    for r in _load_group_requests():
+        if r.get("request_id") == request_id:
+            return r
+    return None
+
+
+async def create_group_change_request(payload: dict[str, Any]) -> dict[str, Any]:
+    op = (payload.get("op") or "").lower()
+    if op not in GROUP_OPS:
+        raise ValueError(
+            f"op must be one of {GROUP_OPS}, got {op!r}")
+    name = str(payload.get("group_name") or "").strip()
+    if not name:
+        raise ValueError("group_name is required")
+    added = [str(m) for m in (payload.get("added_members") or []) if str(m).strip()]
+    removed = [str(m) for m in (payload.get("removed_members") or []) if str(m).strip()]
+    if op in ("create", "modify-add") and not added:
+        raise ValueError(f"{op} requires added_members")
+    if op == "modify-remove" and not removed:
+        raise ValueError("modify-remove requires removed_members")
+
+    items = _load_group_requests()
+    rid = _next_group_request_id()
+    now = _now()
+    record = {
+        "request_id": rid,
+        "kind": "group_change",
+        "op": op,
+        "group_name": name,
+        "added_members": added,
+        "removed_members": removed,
+        "environment": payload.get("environment") or "",
+        "owner": payload.get("owner") or "",
+        "owner_team": payload.get("owner_team") or "",
+        "description": payload.get("description") or "",
+        "status": "Pending",
+        "created_at": now,
+        "updated_at": now,
+        "external_ticket_id": None,
+        "external_ticket_url": None,
+        "external_status": None,
+        "external_system": None,
+        "external_last_synced_at": None,
+        "external_history": [],
+    }
+    items.append(record)
+    _save("group_change_requests", items)
+
+    # Mark the underlying group's lifecycle so the UI can show "pending
+    # device deployment" — for a `create` op we also stamp `Draft` on
+    # the actual group record if it doesn't exist yet.
+    groups = _load("groups") or []
+    existing = next((g for g in groups if g.get("name") == name), None)
+    if op == "create" and existing is None:
+        groups.append({
+            "name": name,
+            "type": payload.get("group_type", "network"),
+            "members": [{"value": m, "type": "ip"} for m in added],
+            "lifecycle_status": "Pending",
+            "pending_change_request": rid,
+            "created_at": now,
+            "updated_at": now,
+        })
+    elif existing is not None:
+        existing["lifecycle_status"] = "Pending"
+        existing["pending_change_request"] = rid
+        existing["updated_at"] = now
+    _save("groups", groups)
+    return record
+
+
+async def set_group_change_request_status(
+    request_id: str, status: str, note: str | None = None,
+) -> dict[str, Any] | None:
+    if status not in GROUP_REQUEST_STATUSES:
+        raise ValueError(
+            f"status must be one of {GROUP_REQUEST_STATUSES}")
+    items = _load_group_requests()
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if not target:
+        return None
+    target["status"] = status
+    target["updated_at"] = _now()
+    if note:
+        target.setdefault("review_notes", []).append({
+            "at": _now(), "status": status, "note": note,
+        })
+    _save("group_change_requests", items)
+
+    # When the change is finally Deployed (or Certified) flip the group's
+    # lifecycle, applying the modify-add / modify-remove members so the
+    # group truly reflects what's on the device.
+    if status in ("Deployed", "Certified"):
+        groups = _load("groups") or []
+        g = next((x for x in groups if x.get("name") == target["group_name"]), None)
+        if g is not None:
+            members = g.get("members") or []
+            current_values = [m.get("value") for m in members if isinstance(m, dict)]
+            op = target.get("op")
+            if op == "modify-add":
+                for m in target.get("added_members", []):
+                    if m not in current_values:
+                        members.append({"value": m, "type": "ip"})
+            elif op == "modify-remove":
+                rm_set = set(target.get("removed_members", []))
+                members = [m for m in members if m.get("value") not in rm_set]
+            elif op == "delete":
+                groups = [x for x in groups if x.get("name") != target["group_name"]]
+                _save("groups", groups)
+                return target
+            g["members"] = members
+            g["lifecycle_status"] = status
+            g["pending_change_request"] = None
+            g["updated_at"] = _now()
+            _save("groups", groups)
+    elif status == "Rejected":
+        # Roll back any provisional create and unblock the existing group.
+        groups = _load("groups") or []
+        if target.get("op") == "create":
+            groups = [
+                g for g in groups
+                if not (g.get("name") == target["group_name"]
+                        and g.get("lifecycle_status") == "Pending"
+                        and g.get("pending_change_request") == request_id)
+            ]
+        else:
+            for g in groups:
+                if g.get("name") == target["group_name"]:
+                    g["lifecycle_status"] = "Deployed"
+                    g["pending_change_request"] = None
+                    g["updated_at"] = _now()
+        _save("groups", groups)
+    return target
+
+
+def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
+    """Vendor-neutral manifest for a GroupChangeRequest. Same shape as
+    the RuleRequest manifest so the existing XLSX writer + vendor
+    compilers + bundle.zip pipeline keeps working."""
+
+    op = req.get("op") or "create"
+    name = req.get("group_name") or ""
+    added = list(req.get("added_members") or [])
+    removed = list(req.get("removed_members") or [])
+    members_now = _resolve_group_members_sync(name)
+    group_entry = {
+        "name": name,
+        "op": op,
+        "members": members_now if op != "delete" else members_now,
+        "added_members": added,
+        "removed_members": removed,
+    }
+    return {
+        "request_id": req.get("request_id"),
+        "requester": req.get("owner"),
+        "owner_team": req.get("owner_team"),
+        "environment": req.get("environment"),
+        "justification": req.get("description"),
+        "kind": "group_change",
+        "approver": req.get("approver"),
+        "status": req.get("status"),
+        "created_at": req.get("created_at"),
+        "updated_at": req.get("updated_at"),
+        "external_ticket_id": req.get("external_ticket_id"),
+        "external_ticket_url": req.get("external_ticket_url"),
+        "rules": [],
+        "groups": [group_entry],
+    }
+
+
+async def get_group_change_artifacts(request_id: str) -> dict[str, Any] | None:
+    target = await get_group_change_request(request_id)
+    if target is None:
+        return None
+    manifest = _group_change_manifest(target)
+    sheets = _artifact_xlsx_rows(manifest)
+    vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
+    return {
+        "manifest": manifest,
+        "xlsx_sheets": sheets,
+        "vendor_configs": vendor_configs,
+    }
+
+
+async def submit_group_change_request_to_itsm(
+    request_id: str, connector_id: str | None = None,
+) -> dict[str, Any] | None:
+    items = _load_group_requests()
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if not target:
+        return None
+    if target.get("status") not in ("Approved", "Deployed", "Certified"):
+        raise ValueError("Group change request must be Approved before submitting to ITSM")
+
+    connectors = _load("itsm_connectors") or []
+    if connector_id:
+        connector = next((c for c in connectors if c.get("connector_id") == connector_id), None)
+    else:
+        connector = next(iter(connectors), None)
+    if connector is None:
+        connector = {
+            "connector_id": "INTERNAL",
+            "kind": "internal",
+            "endpoint_url": "internal://sns",
+        }
+
+    manifest = _group_change_manifest(target)
+    short_desc = (
+        f"NGDC Firewall: group {manifest['groups'][0]['name']} {target['op']} "
+        f"({len(target.get('added_members') or []) + len(target.get('removed_members') or [])} member(s))"
+    )
+    rendered = {
+        "short_description": short_desc,
+        "description": manifest.get("justification") or short_desc,
+        "u_environment": manifest.get("environment"),
+        "u_request_id": manifest.get("request_id"),
+        "u_owner_team": manifest.get("owner_team"),
+        "u_artifacts_json": manifest,
+    }
+    payload_template = connector.get("payload_template") or {}
+    if isinstance(payload_template, dict):
+        rendered.update(payload_template)
+
+    ext_id = (
+        f"CHG{int(_now().replace(':', '').replace('-', '').replace('T', '').replace('Z', '')[-7:]):07d}"
+    )
+    ext_url = (
+        (connector.get("endpoint_url") or "").rstrip("/") + f"/{ext_id}"
+        if connector.get("endpoint_url") else ""
+    )
+    target["external_system"] = connector.get("kind", "generic_rest")
+    target["external_connector_id"] = connector.get("connector_id")
+    target["external_ticket_id"] = ext_id
+    target["external_ticket_url"] = ext_url
+    target["external_status"] = "Submitted"
+    target["external_last_synced_at"] = _now()
+    target.setdefault("external_history", []).append({
+        "at": _now(),
+        "event": "submitted",
+        "connector": connector.get("connector_id"),
+        "external_ticket_id": ext_id,
+    })
+    _save("group_change_requests", items)
+    return {
+        "request_id": request_id,
+        "connector_id": connector.get("connector_id"),
+        "kind": connector.get("kind", "generic_rest"),
+        "endpoint_url": connector.get("endpoint_url"),
+        "rendered_payload": rendered,
+        "external_ticket_id": ext_id,
+        "external_ticket_url": ext_url,
+        "external_status": "Submitted",
+    }
+
+
+async def refresh_group_change_external_status(
+    request_id: str,
+) -> dict[str, Any] | None:
+    items = _load_group_requests()
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if not target:
+        return None
+    cur = target.get("external_status") or "Submitted"
+    next_status = {
+        "Submitted": "In Progress",
+        "In Progress": "Closed Complete",
+        "Closed Complete": "Closed Complete",
+    }.get(cur, cur)
+    target["external_status"] = next_status
+    target["external_last_synced_at"] = _now()
+    target.setdefault("external_history", []).append({
+        "at": _now(),
+        "event": "status-refreshed",
+        "external_status": next_status,
+    })
+    if next_status == "Closed Complete" and target.get("status") not in ("Certified", "Rejected"):
+        await set_group_change_request_status(
+            request_id, "Deployed",
+            note="Auto: ITSM ticket Closed Complete")
+    _save("group_change_requests", items)
+    return {
+        "request_id": request_id,
+        "external_ticket_id": target.get("external_ticket_id"),
+        "external_status": next_status,
+        "external_last_synced_at": target["external_last_synced_at"],
+    }
+
+
+# ============================================================
+# Phase B — ITSM polling + webhook receiver
+# ============================================================
+
+# Status mapping from external ITSM lifecycle → NGDC RuleRequest /
+# GroupChangeRequest lifecycle. Connectors can override per-connector.
+DEFAULT_ITSM_STATUS_MAP: dict[str, str] = {
+    "new": "Pending",
+    "in progress": "Approved",
+    "in_progress": "Approved",
+    "implementation": "Approved",
+    "closed complete": "Deployed",
+    "closed_complete": "Deployed",
+    "completed": "Deployed",
+    "deployed": "Deployed",
+    "verified": "Certified",
+    "certified": "Certified",
+    "cancelled": "Rejected",
+    "rejected": "Rejected",
+    "closed cancelled": "Rejected",
+}
+
+
+def _map_external_status(connector: dict[str, Any] | None,
+                          external_status: str) -> str | None:
+    """Translate an external ticket status into our internal lifecycle."""
+    if not external_status:
+        return None
+    s = str(external_status).strip().lower()
+    overrides: dict[str, str] = {}
+    if isinstance(connector, dict):
+        cm = connector.get("status_map") or {}
+        if isinstance(cm, dict):
+            overrides = {str(k).lower(): str(v) for k, v in cm.items()}
+    if s in overrides:
+        return overrides[s]
+    return DEFAULT_ITSM_STATUS_MAP.get(s)
+
+
+async def itsm_apply_external_status(
+    *, request_id: str, kind: str, external_status: str,
+    connector_id: str | None = None,
+    raw_payload: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Apply an external status transition to either a RuleRequest or a
+    GroupChangeRequest. Used by both the polling worker and the webhook
+    receiver. ``kind`` must be ``"rule"`` or ``"group_change"``."""
+
+    connector = None
+    if connector_id:
+        connectors = _load("itsm_connectors") or []
+        connector = next(
+            (c for c in connectors if c.get("connector_id") == connector_id),
+            None,
+        )
+
+    if kind == "rule":
+        items = _load_rule_requests()
+    elif kind == "group_change":
+        items = _load_group_requests()
+    else:
+        raise ValueError(f"Unknown kind {kind!r}")
+
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if not target:
+        return None
+
+    target["external_status"] = external_status
+    target["external_last_synced_at"] = _now()
+    target.setdefault("external_history", []).append({
+        "at": _now(),
+        "event": "external-status",
+        "external_status": external_status,
+        "connector_id": connector_id,
+        "raw_payload": raw_payload or {},
+    })
+
+    mapped = _map_external_status(connector, external_status)
+    if mapped and target.get("status") not in (mapped, "Certified", "Rejected"):
+        # Auto-progress the NGDC-side lifecycle.
+        if kind == "rule":
+            await set_rule_request_status(
+                request_id, mapped,
+                note=f"Auto: ITSM transition {external_status} → {mapped}")
+        else:
+            await set_group_change_request_status(
+                request_id, mapped,
+                note=f"Auto: ITSM transition {external_status} → {mapped}")
+
+    if kind == "rule":
+        _save("rule_requests", items)
+    else:
+        _save("group_change_requests", items)
+    return {
+        "request_id": request_id,
+        "kind": kind,
+        "external_status": external_status,
+        "mapped_status": mapped,
+        "internal_status": target.get("status"),
+    }
+
+
+async def poll_itsm_connectors_once() -> dict[str, Any]:
+    """One pass through every configured ITSM connector — for each
+    connector with submitted-but-not-closed tickets, advance their
+    external status. Today this uses the same in-memory state machine
+    as ``refresh_request_external_status`` (Submitted → In Progress →
+    Closed Complete) so testers can exercise the auto-status logic
+    without a live ITSM. Swap the inner block for a real REST call to
+    the connector's endpoint when an HTTP client is wired up."""
+
+    connectors = _load("itsm_connectors") or []
+    polled: list[dict[str, Any]] = []
+    rule_items = _load_rule_requests()
+    group_items = _load_group_requests()
+
+    state_machine = {
+        "Submitted": "In Progress",
+        "In Progress": "Closed Complete",
+    }
+
+    def _advance(record: dict[str, Any]) -> str | None:
+        cur = record.get("external_status")
+        if cur in state_machine:
+            return state_machine[cur]
+        return None
+
+    for r in rule_items:
+        if not r.get("external_ticket_id"):
+            continue
+        nxt = _advance(r)
+        if not nxt:
+            continue
+        polled.append({
+            "request_id": r["request_id"], "kind": "rule",
+            "before": r.get("external_status"), "after": nxt,
+        })
+        await itsm_apply_external_status(
+            request_id=r["request_id"], kind="rule",
+            external_status=nxt,
+            connector_id=r.get("external_connector_id"),
+            raw_payload={"poll": True},
+        )
+
+    for r in group_items:
+        if not r.get("external_ticket_id"):
+            continue
+        nxt = _advance(r)
+        if not nxt:
+            continue
+        polled.append({
+            "request_id": r["request_id"], "kind": "group_change",
+            "before": r.get("external_status"), "after": nxt,
+        })
+        await itsm_apply_external_status(
+            request_id=r["request_id"], kind="group_change",
+            external_status=nxt,
+            connector_id=r.get("external_connector_id"),
+            raw_payload={"poll": True},
+        )
+
+    return {
+        "connectors_seen": len(connectors),
+        "transitions": polled,
+        "polled_at": _now(),
+    }
+
+
+async def itsm_webhook_dispatch(
+    *, connector_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Generic webhook entrypoint. Body must include ``external_ticket_id``
+    and ``state`` (or ``status``); we match the ticket back to either a
+    RuleRequest or a GroupChangeRequest and apply the transition."""
+
+    ext_id = (payload.get("external_ticket_id")
+              or payload.get("ticket_id")
+              or payload.get("number"))
+    if not ext_id:
+        raise ValueError("payload must include external_ticket_id / ticket_id / number")
+    state = (payload.get("state") or payload.get("status")
+             or payload.get("u_status") or "")
+    if not state:
+        raise ValueError("payload must include state or status")
+
+    # Match to a rule request first, then group change request.
+    for r in _load_rule_requests():
+        if r.get("external_ticket_id") == ext_id:
+            return await itsm_apply_external_status(
+                request_id=r["request_id"], kind="rule",
+                external_status=str(state),
+                connector_id=connector_id,
+                raw_payload=payload,
+            ) or {"matched": False}
+    for r in _load_group_requests():
+        if r.get("external_ticket_id") == ext_id:
+            return await itsm_apply_external_status(
+                request_id=r["request_id"], kind="group_change",
+                external_status=str(state),
+                connector_id=connector_id,
+                raw_payload=payload,
+            ) or {"matched": False}
+    return {
+        "matched": False,
+        "external_ticket_id": ext_id,
+        "reason": "no rule or group change request matches this ticket id",
     }

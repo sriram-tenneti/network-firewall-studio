@@ -11,6 +11,8 @@ import { RuleModifyModal } from '@/components/design-studio/RuleModifyModal';
 import type { RuleModification } from '@/components/design-studio/RuleModifyModal';
 import RuleRequestBuilder from '@/components/design-studio/RuleRequestBuilder';
 import RuleRequestsPanel from '@/components/design-studio/RuleRequestsPanel';
+import GroupChangeRequestBuilder from '@/components/design-studio/GroupChangeRequestBuilder';
+import GroupChangeRequestsPanel from '@/components/design-studio/GroupChangeRequestsPanel';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
 import type { FirewallRule, Application } from '@/types';
@@ -374,6 +376,23 @@ export function DesignStudioPage() {
               environment={(selectedEnv as '' | 'Production' | 'Non-Production' | 'Pre-Production')}
               reloadKey={requestsReloadKey}
               highlightId={highlightRequestId}
+              onChanged={() => { loadData(); setRequestsReloadKey(k => k + 1); }}
+            />
+          </div>
+          <div className="mt-6 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <div className="text-sm font-semibold text-purple-800">Group Change Requests</div>
+            <div className="text-xs text-purple-600">Standalone group create / modify / delete. Lifecycle: Pending → Approved → Deployed → Certified. Until Deployed, the group is portal-only and any rule that references it is blocked from being marked Deployed.</div>
+          </div>
+          <div className="mt-3">
+            <GroupChangeRequestBuilder
+              environment={selectedEnv}
+              onSubmitted={() => setRequestsReloadKey(k => k + 1)}
+            />
+          </div>
+          <div className="mt-3">
+            <GroupChangeRequestsPanel
+              environment={selectedEnv}
+              reloadKey={requestsReloadKey}
               onChanged={() => { loadData(); setRequestsReloadKey(k => k + 1); }}
             />
           </div>
