@@ -10,6 +10,9 @@ import SharedServicesTab from './settings/SharedServicesTab';
 import PortCatalogTab from './settings/PortCatalogTab';
 import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
 import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
+import ItsmConnectorsTab from './settings/ItsmConnectorsTab';
+import BirthrightRulesTab from './settings/BirthrightRulesTab';
+import SecurityZoneNamingTab from './settings/SecurityZoneNamingTab';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -829,6 +832,9 @@ export default function SettingsPage() {
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
+    { id: 'sz_naming', label: 'SZ Naming Mode' },
+    { id: 'birthright', label: 'Birthright Rules' },
+    { id: 'itsm', label: 'ITSM Connectors' },
     { id: 'ad_groups', label: 'User Groups' },
     { id: 'ad_users', label: 'Users' },
     { id: 'ad_config', label: 'AD Configuration' },
@@ -1771,6 +1777,18 @@ export default function SettingsPage() {
 
         {activeTab === 'shared_services' && (
           <SharedServicesTab />
+        )}
+
+        {activeTab === 'sz_naming' && (
+          <SecurityZoneNamingTab />
+        )}
+
+        {activeTab === 'birthright' && (
+          <BirthrightRulesTab />
+        )}
+
+        {activeTab === 'itsm' && (
+          <ItsmConnectorsTab />
         )}
 
         {/* ── App Management Tab ── */}

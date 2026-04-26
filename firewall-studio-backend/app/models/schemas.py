@@ -458,10 +458,129 @@ class NGDCDataCenter(BaseModel):
     rule_count: int = 0
 
 
+class SZNamingMode(str, Enum):
+    """Determines how source / destination groups are named for presences
+    inside this Security Zone.
+
+    - APP_SCOPED (default): a dedicated SZ where each app owns its own
+      egress/ingress IPs. Group names embed the app distributed-id, e.g.
+      `grp-AD-1003-NH06-CDE` — matches today's convention for
+      CCS/CDE/PAA/CPA-style PCI/Critical zones.
+    - ZONE_SCOPED: a shared cluster zone (STD, GEN, Shared, OpenShift,
+      VMware tenant pools, …) where the *cluster CIDR* is the source for
+      every app in the SZ. Group names drop the app token and become
+      simply `grp-<NH>-<SZ>` (e.g. `grp-NH02-GEN`). This is critical for
+      rule-existence validation — without it, every app generates a
+      duplicate group with identical members and the dedup engine can't
+      collapse rules properly.
+    """
+
+    APP_SCOPED = "app_scoped"
+    ZONE_SCOPED = "zone_scoped"
+
+
 class SecurityZone(BaseModel):
     name: str
     code: str
     description: str = ""
+    # Defaults to APP_SCOPED. STD / GEN (and any explicit "Shared" zones
+    # configured by SNS) flip to ZONE_SCOPED in the seed/migration so
+    # group naming + dedup behave correctly.
+    naming_mode: SZNamingMode = SZNamingMode.APP_SCOPED
+
+
+# ---- Deployment Artifacts (post-approval exports) ----
+
+class DeploymentArtifactKind(str, Enum):
+    JSON_MANIFEST = "json_manifest"
+    XLSX_MANIFEST = "xlsx_manifest"
+    DEVICE_CONFIG_PAN_OS = "device_config_pan_os"
+    DEVICE_CONFIG_FORTINET = "device_config_fortinet"
+    DEVICE_CONFIG_CISCO = "device_config_cisco"
+    DEVICE_CONFIG_CHECKPOINT = "device_config_checkpoint"
+
+
+class DedupVerdict(str, Enum):
+    """Outcome of pre-submit / migration rule-existence validation."""
+
+    NEW = "new"                       # green — no overlap with existing rules
+    IDENTICAL = "identical"           # red — exact match exists
+    SUBSET = "subset"                 # red — covered by a broader rule
+    OVERLAP = "overlap"               # amber — partial overlap; allow w/ warning
+    CONFLICT = "conflict"             # red — same key but different action
+    BIRTHRIGHT_COVERED = "birthright" # red — covered by a birthright/baseline rule
+
+
+class DedupMatch(BaseModel):
+    verdict: DedupVerdict
+    matched_rule_id: Optional[str] = None
+    matched_request_id: Optional[str] = None
+    message: str = ""
+    details: list[str] = []
+
+
+# ---- ITSM Connector (ServiceNow / Generic REST) ----
+
+class ITSMConnectorKind(str, Enum):
+    SERVICENOW = "servicenow"
+    JIRA = "jira"
+    GENERIC_REST = "generic_rest"
+
+
+class ITSMAuthMode(str, Enum):
+    API_KEY = "api_key"
+    BASIC = "basic"
+    OAUTH2_CLIENT_CREDENTIALS = "oauth2_client_credentials"
+    VAULT = "vault"  # secret material is fetched from HashiCorp Vault path
+
+
+class ITSMConnector(BaseModel):
+    """Connector profile for posting approved rules to ServiceNow /
+    internal CHG/CR systems."""
+
+    connector_id: str
+    name: str
+    kind: ITSMConnectorKind = ITSMConnectorKind.GENERIC_REST
+    enabled: bool = True
+    environments: list[Environment] = [Environment.PRODUCTION]
+    base_url: str = ""
+    # ServiceNow Table API table name (e.g. "change_request"). For Jira
+    # it's the project key. Generic REST ignores this if `submit_path`
+    # is set.
+    table: Optional[str] = "change_request"
+    submit_path: Optional[str] = None        # POST path; falls back to
+                                              # /api/now/table/<table> for SN
+    status_path_template: Optional[str] = None  # e.g. "/api/now/table/change_request/{ticket_id}"
+    auth_mode: ITSMAuthMode = ITSMAuthMode.API_KEY
+    auth_secret_ref: Optional[str] = None    # env var or Vault path
+    vault_path: Optional[str] = None          # populated when auth_mode = VAULT
+    vault_field: Optional[str] = None
+    payload_template: dict = {}              # static fields merged into POST body
+    field_mapping: dict = {}                 # {"short_description": "$rule.title"} etc.
+    status_field: str = "state"              # response JSON field that holds ticket status
+    closed_states: list[str] = ["Closed", "Closed Complete", "Closed Successful", "Resolved"]
+    rejected_states: list[str] = ["Cancelled", "Closed Incomplete", "Closed Rejected"]
+    # Auto-submit RuleRequest to this connector when SNS approves it.
+    auto_submit_on_approval: bool = False
+    # Polling interval (seconds) for status sync. Phase A is manual via
+    # /refresh-status; Phase B will run a background worker.
+    poll_interval_seconds: int = 900
+    notes: Optional[str] = ""
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ExternalTicketRef(BaseModel):
+    """Captured on a RuleRequest after it's submitted to an ITSM."""
+
+    connector_id: str
+    external_system: str               # e.g. "servicenow"
+    ticket_id: str                     # e.g. "CHG0123456"
+    ticket_url: Optional[str] = None
+    raw_status: Optional[str] = None   # raw status string returned by tool
+    mapped_status: Optional[str] = None  # "Submitted" | "In Progress" | "Closed" | "Rejected"
+    submitted_at: Optional[str] = None
+    last_synced_at: Optional[str] = None
 
 
 class PredefinedDestination(BaseModel):

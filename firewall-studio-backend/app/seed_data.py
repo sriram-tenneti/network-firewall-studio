@@ -243,11 +243,11 @@ SEED_NEIGHBOURHOODS = [
 SEED_SECURITY_ZONES = [
     # ---- Production Fabric ----
     {"code": "STD", "name": "Standard Zone", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Production", "vrf_prefix": "gen/SZ01",
-     "cidr": "10.128.0.0/16", "description": "General application zone – standard workloads, non-sensitive"},
+     "fabric": "Production", "vrf_prefix": "gen/SZ01", "naming_mode": "zone_scoped",
+     "cidr": "10.128.0.0/16", "description": "General application zone – standard workloads, non-sensitive (shared cluster — group naming is grp-<NH>-<SZ>, app-id omitted)"},
     {"code": "GEN", "name": "General Zone", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Production", "vrf_prefix": "gen/SZ01",
-     "cidr": "10.129.0.0/16", "description": "General-purpose compute (alias for STD), routing/transit"},
+     "fabric": "Production", "vrf_prefix": "gen/SZ01", "naming_mode": "zone_scoped",
+     "cidr": "10.129.0.0/16", "description": "General-purpose compute (shared cluster CIDR — group naming is grp-<NH>-<SZ>, app-id omitted)"},
     {"code": "PAA", "name": "Publicly Accessible Applications", "risk_level": "High", "pci_scope": False,
      "fabric": "Production", "vrf_prefix": "paa/SZ02",
      "cidr": "10.130.0.0/16", "description": "Front-end / internet-accessible applications in DMZ"},
@@ -275,11 +275,11 @@ SEED_SECURITY_ZONES = [
 
     # ---- Non-Production Fabric ----
     {"code": "UGen", "name": "Non-Prod General", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Non-Production", "vrf_prefix": "gen",
-     "cidr": "10.200.0.0/16", "description": "General zone for non-prod routing"},
+     "fabric": "Non-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
+     "cidr": "10.200.0.0/16", "description": "General zone for non-prod routing (shared cluster — zone-scoped group naming)"},
     {"code": "USTD", "name": "Non-Prod Standard", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Non-Production", "vrf_prefix": "gen",
-     "cidr": "10.201.0.0/16", "description": "Non-prod/UAT/CTE/SIT/DEV standard workloads"},
+     "fabric": "Non-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
+     "cidr": "10.201.0.0/16", "description": "Non-prod/UAT/CTE/SIT/DEV standard workloads (shared cluster — zone-scoped group naming)"},
     {"code": "UPAA", "name": "Non-Prod PAA", "risk_level": "Medium", "pci_scope": False,
      "fabric": "Non-Production", "vrf_prefix": "paa/sz-02",
      "cidr": "10.202.0.0/16", "description": "Non-prod front-end / internet-accessible applications"},
@@ -298,10 +298,10 @@ SEED_SECURITY_ZONES = [
 
     # ---- Pre-Production Fabric ----
     {"code": "UGen", "name": "Pre-Prod General", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Pre-Production", "vrf_prefix": "gen",
-     "cidr": "10.210.0.0/16", "description": "General zone for pre-prod routing"},
+     "fabric": "Pre-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
+     "cidr": "10.210.0.0/16", "description": "General zone for pre-prod routing (shared cluster — zone-scoped group naming)"},
     {"code": "USTD", "name": "Pre-Prod Standard", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Pre-Production", "vrf_prefix": "gen",
+     "fabric": "Pre-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
      "cidr": "10.211.0.0/16", "description": "Pre-prod/staging standard workloads"},
     {"code": "UPAA", "name": "Pre-Prod PAA", "risk_level": "Medium", "pci_scope": False,
      "fabric": "Pre-Production", "vrf_prefix": "paa/sz-02",

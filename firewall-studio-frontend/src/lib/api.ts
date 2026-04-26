@@ -27,7 +27,7 @@ import type {
 } from '@/types';
 import { isLegacyGroupName } from '@/lib/nestingParser';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, {
@@ -1403,3 +1403,153 @@ export const deletePort = (portId: string) =>
     `/api/reference/ports/${encodeURIComponent(portId)}`,
     { method: 'DELETE' },
   );
+
+// ============================================================
+// Phase A — Validation, Artifacts, ITSM, Migration
+// ============================================================
+import type {
+  BirthrightRule as _BirthrightRule,
+  ItsmConnector as _ItsmConnector,
+  DeploymentArtifactsBundle as _DeploymentArtifactsBundle,
+  DedupResult as _DedupResult,
+  BirthrightResult as _BirthrightResult,
+} from '@/types';
+export type BirthrightRule = _BirthrightRule;
+export type ItsmConnector = _ItsmConnector;
+export type DeploymentArtifactsBundle = _DeploymentArtifactsBundle;
+export type DedupResult = _DedupResult;
+export type BirthrightResult = _BirthrightResult;
+
+export const validateRule = (payload: Record<string, unknown>) =>
+  fetchJSON<{
+    dedup: DedupResult;
+    birthright: BirthrightResult;
+    block_submit: boolean;
+    physical_rules?: unknown[];
+    warnings?: string[];
+  } & RuleExpansionPreview>('/api/rules/validate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const listBirthrightRules = () =>
+  fetchJSON<BirthrightRule[]>('/api/birthright-rules');
+
+export const upsertBirthrightRule = (data: BirthrightRule) =>
+  fetchJSON<BirthrightRule>('/api/birthright-rules', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const deleteBirthrightRule = (id: string) =>
+  fetchJSON<{ status: string }>(
+    `/api/birthright-rules/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+
+export const setSecurityZoneNamingMode = (
+  code: string,
+  naming_mode: 'app_scoped' | 'zone_scoped',
+) =>
+  fetchJSON<{ code: string; naming_mode: string }>(
+    `/api/reference/security-zones/${encodeURIComponent(code)}/naming-mode`,
+    { method: 'PUT', body: JSON.stringify({ naming_mode }) },
+  );
+
+export const getSecurityZonesWithMode = () =>
+  fetchJSON<Array<{ code: string; name: string; naming_mode?: string; description?: string }>>(
+    '/api/reference/security-zones-with-mode',
+  );
+
+export const getRequestArtifacts = (request_id: string) =>
+  fetchJSON<DeploymentArtifactsBundle>(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts`,
+  );
+
+export const requestArtifactJsonUrl = (request_id: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`;
+
+export const requestArtifactXlsxUrl = (request_id: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`;
+
+export const requestArtifactVendorUrl = (request_id: string, vendor: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/device.${encodeURIComponent(vendor)}`;
+
+export const listItsmConnectors = () =>
+  fetchJSON<ItsmConnector[]>('/api/itsm/connectors');
+
+export const upsertItsmConnector = (data: ItsmConnector) =>
+  fetchJSON<ItsmConnector>('/api/itsm/connectors', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const deleteItsmConnector = (id: string) =>
+  fetchJSON<{ status: string }>(
+    `/api/itsm/connectors/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+
+export const submitRequestToItsm = (
+  request_id: string,
+  connector_id?: string,
+) =>
+  fetchJSON<{
+    request_id: string;
+    connector_id: string;
+    kind: string;
+    endpoint_url: string;
+    rendered_payload: Record<string, unknown>;
+    external_ticket_id: string;
+    external_ticket_url: string;
+    external_status: string;
+  }>(`/api/rules/requests/${encodeURIComponent(request_id)}/submit-itsm`, {
+    method: 'POST',
+    body: JSON.stringify(connector_id ? { connector_id } : {}),
+  });
+
+export const refreshExternalStatus = (request_id: string) =>
+  fetchJSON<{
+    request_id: string;
+    external_ticket_id: string;
+    external_status: string;
+    external_last_synced_at: string;
+  }>(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/refresh-external-status`,
+    { method: 'POST', body: '{}' },
+  );
+
+export const normalizeLegacyRule = (rule: Record<string, unknown>) =>
+  fetchJSON<{
+    origin_legacy_rule_id: string;
+    verdict: string;
+    block: boolean;
+    physical_rule: Record<string, unknown> | null;
+    dedup_match: Record<string, unknown> | null;
+    warnings: string[];
+  }>('/api/migration/normalize', {
+    method: 'POST',
+    body: JSON.stringify(rule),
+  });
+
+export const normalizeLegacyRulesBulk = (rules: Array<Record<string, unknown>>) =>
+  fetchJSON<{
+    counters: {
+      total: number;
+      standardized: number;
+      merged_existing: number;
+      overlap_flagged: number;
+      unclassifiable: number;
+    };
+    decisions: Array<{
+      origin_legacy_rule_id: string;
+      verdict: string;
+      block: boolean;
+      physical_rule: Record<string, unknown> | null;
+      dedup_match: Record<string, unknown> | null;
+      warnings: string[];
+    }>;
+  }>('/api/migration/normalize-bulk', {
+    method: 'POST',
+    body: JSON.stringify({ rules }),
+  });

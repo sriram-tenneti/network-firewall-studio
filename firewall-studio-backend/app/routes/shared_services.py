@@ -335,3 +335,229 @@ async def delete_port_route(port_id: str) -> dict[str, Any]:
     if not ok:
         raise HTTPException(404, "Port not found")
     return {"deleted": True, "port_id": port_id}
+
+
+# ============================================================
+# Phase A: Validation, Artifacts, ITSM Connector, Migration
+# ============================================================
+from app.database import (  # noqa: E402
+    delete_birthright_rule,
+    delete_itsm_connector,
+    evaluate_dedup,
+    evaluate_birthright,
+    get_request_artifacts,
+    get_security_zones,
+    list_birthright_rules,
+    list_itsm_connectors,
+    normalize_legacy_rule,
+    normalize_legacy_rules_bulk,
+    refresh_request_external_status,
+    submit_request_to_itsm,
+    update_security_zone,
+    upsert_birthright_rule,
+    upsert_itsm_connector,
+)
+
+
+# ---- Validation: dedup + birthright on demand ----
+
+@router.post("/api/rules/validate")
+async def validate_rule(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run the same dedup + birthright engine that gates submit, without
+    persisting anything. Returns ``{ dedup, birthright, block_submit }``."""
+
+    # If the caller passes a payload that *could* be expanded, expand it
+    # first so the dedup engine can compare full PhysicalRules. Otherwise
+    # treat the payload as an already-expanded list.
+    if payload.get("source_ref") or payload.get("application_ref"):
+        from app.database import preview_rule_expansion
+        preview = await preview_rule_expansion(payload)
+        return {
+            "dedup": preview.get("dedup"),
+            "birthright": preview.get("birthright"),
+            "block_submit": preview.get("block_submit", False),
+            "physical_rules": preview.get("physical_rules", []),
+            "warnings": preview.get("warnings", []),
+        }
+    dedup = evaluate_dedup(payload)
+    birthright = evaluate_birthright(payload)
+    return {
+        "dedup": dedup,
+        "birthright": birthright,
+        "block_submit": bool(dedup.get("block") or birthright.get("covered")),
+    }
+
+
+# ---- Birthright Rule Registry ----
+
+@router.get("/api/birthright-rules")
+async def list_birthright_rules_route() -> list[dict[str, Any]]:
+    return await list_birthright_rules()
+
+
+@router.post("/api/birthright-rules")
+async def upsert_birthright_rule_route(payload: dict[str, Any]) -> dict[str, Any]:
+    return await upsert_birthright_rule(payload)
+
+
+@router.delete("/api/birthright-rules/{birthright_id}")
+async def delete_birthright_rule_route(birthright_id: str) -> dict[str, Any]:
+    ok = await delete_birthright_rule(birthright_id)
+    if not ok:
+        raise HTTPException(404, "Birthright rule not found")
+    return {"status": "deleted"}
+
+
+# ---- Security Zone naming_mode toggle ----
+
+@router.put("/api/reference/security-zones/{code}/naming-mode")
+async def set_sz_naming_mode(code: str, payload: dict[str, Any]) -> dict[str, Any]:
+    mode = str(payload.get("naming_mode") or "").lower().strip()
+    if mode not in ("app_scoped", "zone_scoped"):
+        raise HTTPException(400, "naming_mode must be app_scoped or zone_scoped")
+    r = await update_security_zone(code, {"naming_mode": mode})
+    if not r:
+        raise HTTPException(404, "Security zone not found")
+    return r
+
+
+@router.get("/api/reference/security-zones-with-mode")
+async def list_security_zones_with_mode() -> list[dict[str, Any]]:
+    """Return the SZ catalog including ``naming_mode`` for the Settings UI."""
+
+    return await get_security_zones()
+
+
+# ---- Deployment Artifacts ----
+
+@router.get("/api/rules/requests/{request_id}/artifacts")
+async def request_artifacts_route(request_id: str) -> dict[str, Any]:
+    artifacts = await get_request_artifacts(request_id)
+    if artifacts is None:
+        raise HTTPException(404, "Rule request not found")
+    return artifacts
+
+
+@router.get("/api/rules/requests/{request_id}/artifacts/manifest.json")
+async def request_artifact_manifest_json(request_id: str) -> dict[str, Any]:
+    artifacts = await get_request_artifacts(request_id)
+    if artifacts is None:
+        raise HTTPException(404, "Rule request not found")
+    return artifacts["manifest"]
+
+
+@router.get("/api/rules/requests/{request_id}/artifacts/manifest.xlsx")
+async def request_artifact_manifest_xlsx(request_id: str):
+    """Stream a real .xlsx file for ServiceNow / SNS attachments."""
+
+    from io import BytesIO
+    from openpyxl import Workbook
+    from fastapi.responses import StreamingResponse
+
+    artifacts = await get_request_artifacts(request_id)
+    if artifacts is None:
+        raise HTTPException(404, "Rule request not found")
+    sheets = artifacts["xlsx_sheets"]
+    wb = Workbook()
+    # Remove the default sheet then add ours in order.
+    default = wb.active
+    wb.remove(default)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(title=name[:31] or "Sheet")
+        for row in rows:
+            ws.append(row)
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{request_id}-manifest.xlsx"'
+            )
+        },
+    )
+
+
+@router.get("/api/rules/requests/{request_id}/artifacts/device.{vendor}")
+async def request_artifact_vendor_config(request_id: str, vendor: str):
+    from fastapi.responses import PlainTextResponse
+    artifacts = await get_request_artifacts(request_id)
+    if artifacts is None:
+        raise HTTPException(404, "Rule request not found")
+    vendor_l = vendor.lower()
+    cfg = artifacts["vendor_configs"].get(vendor_l)
+    if cfg is None:
+        raise HTTPException(
+            404, f"Unknown vendor '{vendor}'. Try one of: " +
+            ", ".join(artifacts["vendor_configs"].keys()))
+    return PlainTextResponse(
+        cfg,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{request_id}-{vendor_l}.txt"'
+            )
+        },
+    )
+
+
+# ---- ITSM Connector Framework ----
+
+@router.get("/api/itsm/connectors")
+async def list_itsm_connectors_route() -> list[dict[str, Any]]:
+    return await list_itsm_connectors()
+
+
+@router.post("/api/itsm/connectors")
+async def upsert_itsm_connector_route(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload.get("kind"):
+        raise HTTPException(400, "kind is required (servicenow | generic_rest | internal)")
+    if not payload.get("endpoint_url"):
+        raise HTTPException(400, "endpoint_url is required")
+    return await upsert_itsm_connector(payload)
+
+
+@router.delete("/api/itsm/connectors/{connector_id}")
+async def delete_itsm_connector_route(connector_id: str) -> dict[str, Any]:
+    ok = await delete_itsm_connector(connector_id)
+    if not ok:
+        raise HTTPException(404, "Connector not found")
+    return {"status": "deleted"}
+
+
+@router.post("/api/rules/requests/{request_id}/submit-itsm")
+async def submit_itsm_route(request_id: str,
+                             payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or {}
+    res = await submit_request_to_itsm(
+        request_id, payload.get("connector_id"))
+    if res is None:
+        raise HTTPException(404, "Rule request not found")
+    return res
+
+
+@router.post("/api/rules/requests/{request_id}/refresh-external-status")
+async def refresh_external_status_route(request_id: str) -> dict[str, Any]:
+    res = await refresh_request_external_status(request_id)
+    if res is None:
+        raise HTTPException(404, "Rule request not found")
+    return res
+
+
+# ---- Migration Normalizer ----
+
+@router.post("/api/migration/normalize")
+async def normalize_legacy_rule_route(payload: dict[str, Any]) -> dict[str, Any]:
+    return await normalize_legacy_rule(payload)
+
+
+@router.post("/api/migration/normalize-bulk")
+async def normalize_legacy_rules_bulk_route(payload: dict[str, Any]) -> dict[str, Any]:
+    rules = payload.get("rules") or []
+    if not isinstance(rules, list):
+        raise HTTPException(400, "rules must be a list")
+    return await normalize_legacy_rules_bulk([dict(r) for r in rules])

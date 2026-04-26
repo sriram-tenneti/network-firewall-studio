@@ -18,6 +18,7 @@ import {
 import type { AppMigrationSummary } from '@/lib/api';
 import { LDFFlowVisualization, type EgressIngressResult } from '@/components/design-studio/LDFFlowVisualization';
 import { GroupManagerModal } from '@/components/design-studio/GroupManagerModal';
+import StandardizerPanel from '@/components/migration-studio/StandardizerPanel';
 import type { LegacyRule, NGDCRecommendation, IPMapping, CompiledRule, BirthrightValidation, FirewallGroup, ComponentGroup, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, Application } from '@/types';
 import { parseExpandedToDisplayLines } from '@/lib/nestingParser';
 import { isNgdcGroupName } from '@/lib/utils';
@@ -783,6 +784,11 @@ export function MigrationStudioPage() {
           )}
         </div>
       )}
+
+      {/* NGDC Standardizer — runs legacy rules through dedup + zone_scoped naming engine */}
+      <div className="mb-4">
+        <StandardizerPanel />
+      </div>
 
       {viewMode === 'group-mappings' ? (
         <div className="space-y-4">

@@ -681,6 +681,13 @@ async def seed_database() -> None:
     _save("app_presences", deepcopy(_SD_APP_PRESENCES))
     _save("rule_requests", [])
     _save("port_catalog", deepcopy(_SD_PORT_CATALOG))
+    # ITSM connector profiles (ServiceNow / Generic REST). Empty by
+    # default; SNS configures them in Settings -> SNS Connector.
+    if _load("itsm_connectors") is None:
+        _save("itsm_connectors", [])
+    # Refresh the SZ.naming_mode cache after every reseed so the group
+    # resolver branches correctly from the very first request.
+    _refresh_naming_mode_cache()
     # Materialize derived groups so Studio works end-to-end out of the box.
     existing_groups = _load("groups") or []
     derived = _build_derived_groups_from_presences(
@@ -699,7 +706,22 @@ async def get_neighbourhoods() -> list[dict[str, Any]]:
 
 
 async def get_security_zones() -> list[dict[str, Any]]:
-    return _load("security_zones") or []
+    """Return the SZ catalog with `naming_mode` always populated.
+
+    Older records without the field default to ``app_scoped`` so legacy
+    SZs continue to work; the in-memory catalog is rewritten in place so
+    the next read is consistent."""
+
+    items = _load("security_zones") or []
+    mutated = False
+    for sz in items:
+        if not sz.get("naming_mode"):
+            sz["naming_mode"] = "app_scoped"
+            mutated = True
+    if mutated:
+        _save("security_zones", items)
+        _refresh_naming_mode_cache()
+    return items
 
 
 # ============================================================
@@ -2188,8 +2210,11 @@ async def delete_neighbourhood(nh_id: str) -> bool:
 
 async def create_security_zone(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("security_zones") or []
-    items.append(dict(data))
+    data = dict(data)
+    data.setdefault("naming_mode", "app_scoped")
+    items.append(data)
     _save("security_zones", items)
+    _refresh_naming_mode_cache()
     return data
 
 
@@ -2199,6 +2224,7 @@ async def update_security_zone(code: str, updates: dict[str, Any]) -> dict[str, 
         if item.get("code") == code:
             item.update(updates)
             _save("security_zones", items)
+            _refresh_naming_mode_cache()
             return item
     return None
 
@@ -2209,6 +2235,7 @@ async def delete_security_zone(code: str) -> bool:
     if len(new_items) == len(items):
         return False
     _save("security_zones", new_items)
+    _refresh_naming_mode_cache()
     return True
 
 
@@ -7042,18 +7069,108 @@ async def generate_hybrid_group_names(app_id: str) -> dict[str, Any]:
 # Revamp: Shared Services + Presences + Group Derivation
 # ============================================================
 
+# ---- Naming-mode-aware group name resolution ----
+#
+# Each Security Zone has a `naming_mode`:
+#   * APP_SCOPED  (default) — dedicated SZ (CCS / CDE / PAA / CPA / Swift /
+#                              3PY): each app owns its own egress IPs, so the
+#                              group name embeds the app distributed-id:
+#                                grp-<AppDistId>-<NH>-<SZ>           (egress)
+#                                grp-<AppDistId>-<NH>-<SZ>-Ingress   (ingress)
+#                                grp-<SvcId>-<NH>-<SZ>               (svc)
+#   * ZONE_SCOPED — shared cluster zone (STD / GEN / Shared / OpenShift /
+#                    VMware tenant pools): the entire SZ CIDR is the source
+#                    for every app in the SZ, so naming drops the app token:
+#                                grp-<NH>-<SZ>                       (egress)
+#                                grp-<NH>-<SZ>-Ingress               (ingress)
+#                    The same shared group is reused by every app/service in
+#                    that (NH, SZ) — which is the whole point: the dedup
+#                    engine collapses identical rules naturally.
+#
+# These helpers are sync (no await) so they can be called from anywhere.
+# The SZ catalog is loaded once per call from the in-memory store; if the
+# SZ isn't found we fall back to APP_SCOPED for safety.
+
+_NAMING_MODE_CACHE: dict[str, str] = {}
+
+
+def _refresh_naming_mode_cache() -> None:
+    """Rebuild the (sz_code → naming_mode) cache from the SZ catalog.
+
+    Called on seed and after any SZ update so subsequent lookups are O(1)
+    and don't reload the whole zones list."""
+
+    global _NAMING_MODE_CACHE
+    cache: dict[str, str] = {}
+    for sz in (_load("security_zones") or []):
+        code = str(sz.get("code", "")).strip().upper()
+        mode = str(sz.get("naming_mode") or "app_scoped").strip().lower()
+        if code:
+            cache[code] = mode if mode in ("app_scoped", "zone_scoped") else "app_scoped"
+    _NAMING_MODE_CACHE = cache
+
+
+def _get_sz_naming_mode(sz_code: str) -> str:
+    """Return the naming_mode for the given SZ code (case-insensitive).
+
+    Defaults to ``app_scoped`` when the SZ isn't in the catalog (safe
+    behaviour — the worst case is a dedicated, app-named group)."""
+
+    if not sz_code:
+        return "app_scoped"
+    if not _NAMING_MODE_CACHE:
+        _refresh_naming_mode_cache()
+    return _NAMING_MODE_CACHE.get(sz_code.upper(), "app_scoped")
+
+
+def _zone_group_name(nh_id: str, sz_code: str, suffix: str = "") -> str:
+    """Zone-scoped (shared cluster) group name. Used for STD/GEN/etc.
+
+    Format: ``grp-<NH>-<SZ>`` with an optional ``-Ingress`` suffix when
+    the group is the destination side of a rule."""
+
+    base = f"grp-{nh_id.upper()}-{sz_code.upper()}"
+    return f"{base}-{suffix}" if suffix else base
+
+
 def _shared_service_group_name(service_id: str, nh_id: str, sz_code: str) -> str:
-    """Naming for shared-service groups: grp-<SERVICE_ID>-<NH>-<SZ>."""
+    """Naming for shared-service groups.
+
+    For SZs marked ``zone_scoped`` (e.g. a Splunk forwarder cluster that
+    lives in the shared GEN pool) the group collapses to ``grp-<NH>-<SZ>``;
+    otherwise the dedicated convention ``grp-<SERVICE_ID>-<NH>-<SZ>`` is
+    preserved (the historical behaviour for Oracle/Kafka/Mainframe-style
+    services running in their own SZ)."""
+
+    if _get_sz_naming_mode(sz_code) == "zone_scoped":
+        return _zone_group_name(nh_id, sz_code)
     return f"grp-{service_id.upper()}-{nh_id.upper()}-{sz_code.upper()}"
 
 
 def _app_egress_group_name(app_dist_id: str, nh_id: str, sz_code: str) -> str:
-    """Source group naming: grp-<AppDistId>-<NH>-<SZ>."""
+    """Source (egress) group naming honouring SZ.naming_mode.
+
+    APP_SCOPED  → ``grp-<AppDistId>-<NH>-<SZ>`` (per-app dedicated groups)
+    ZONE_SCOPED → ``grp-<NH>-<SZ>`` (cluster CIDR shared by every app in
+                  the SZ — required so the dedup engine collapses
+                  redundant rules raised by different apps in the same
+                  shared zone)."""
+
+    if _get_sz_naming_mode(sz_code) == "zone_scoped":
+        return _zone_group_name(nh_id, sz_code)
     return f"grp-{app_dist_id.upper()}-{nh_id.upper()}-{sz_code.upper()}"
 
 
 def _app_ingress_group_name(app_dist_id: str, nh_id: str, sz_code: str) -> str:
-    """Destination (App-ingress) naming: grp-<AppDistId>-<NH>-<SZ>-Ingress."""
+    """Destination (App-ingress) group naming honouring SZ.naming_mode.
+
+    APP_SCOPED  → ``grp-<AppDistId>-<NH>-<SZ>-Ingress``
+    ZONE_SCOPED → ``grp-<NH>-<SZ>-Ingress`` (rare in practice — apps
+                  almost always expose ingress in dedicated SZs — but
+                  supported for symmetry)."""
+
+    if _get_sz_naming_mode(sz_code) == "zone_scoped":
+        return _zone_group_name(nh_id, sz_code, suffix="Ingress")
     return f"grp-{app_dist_id.upper()}-{nh_id.upper()}-{sz_code.upper()}-Ingress"
 
 
@@ -7749,7 +7866,35 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
             "Source and destination have no DC in common; "
             "enable 'Include cross-DC' to fan out across DCs."
         )
-    return {"physical_rules": physical, "warnings": warnings}
+    # Pre-submit validation — same engine that runs at create time so the
+    # builder can render a green/amber/red status block in Step 3.
+    dedup = evaluate_dedup({"physical_rules": physical}) if physical else {
+        "verdict": "ok", "block": False, "matches": [],
+    }
+    birthright = evaluate_birthright(payload) if physical else {
+        "covered": False, "matches": [],
+    }
+    if birthright["covered"]:
+        warnings.append(
+            "Already provided as a birthright rule "
+            f"({', '.join(m['birthright_id'] for m in birthright['matches'])}). "
+            "No request needed."
+        )
+    if dedup["block"]:
+        for m in dedup["matches"]:
+            if m["verdict"] in ("identical", "subset", "conflict"):
+                warnings.append(
+                    f"{m['verdict'].title()} of existing rule "
+                    f"{m['rule_id']} ({m['existing_ports']}, "
+                    f"{m['existing_action']}, {m['lifecycle_status']})"
+                )
+    return {
+        "physical_rules": physical,
+        "warnings": warnings,
+        "dedup": dedup,
+        "birthright": birthright,
+        "block_submit": bool(dedup.get("block") or birthright.get("covered")),
+    }
 
 
 async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
@@ -7759,6 +7904,33 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
     R-#### identifiers.
     """
     preview = await preview_rule_expansion(payload)
+    # Hard-block on identical/subset/conflict dedup verdicts and on
+    # birthright coverage, unless the caller explicitly opts in via
+    # `force_submit=True` (SNS / migration override path).
+    if preview.get("block_submit") and not payload.get("force_submit"):
+        dedup = preview.get("dedup") or {}
+        birth = preview.get("birthright") or {}
+        msg = "Submit blocked by validation."
+        if dedup.get("matches"):
+            m = dedup["matches"][0]
+            msg = (
+                f"{m['verdict'].title()} of existing rule {m['rule_id']} "
+                f"({m['existing_ports']}, {m['existing_action']}, "
+                f"{m['lifecycle_status']}). Submit cancelled."
+            )
+        elif birth.get("matches"):
+            ids = ", ".join(b["birthright_id"] for b in birth["matches"])
+            msg = f"Already provided as a birthright rule ({ids}). No request needed."
+        return {
+            "request_id": None,
+            "status": "Blocked",
+            "block_submit": True,
+            "validation_message": msg,
+            "dedup": dedup,
+            "birthright": birth,
+            "warnings": preview.get("warnings", []),
+            "expansion": preview.get("physical_rules", []),
+        }
     request_id = f"RR-{_id()[:8].upper()}"
 
     # Determine the next R-#### counter for PhysicalRules.
@@ -8006,3 +8178,877 @@ async def set_rule_request_status(request_id: str, status: str, note: str | None
             _save("rule_requests", items)
             return r
     return None
+
+
+# ============================================================
+# Dedup / Existing-Rule Validation Engine
+# ============================================================
+#
+# A standardized PhysicalRule is fully described by:
+#   (src_group, dst_group, protocol, action) — the *dedup key*
+# with the port set as the comparand.
+#
+# Verdict matrix (vs every Approved/Deployed/Certified existing rule):
+#   - identical    : same key + same port set                     → HARD-BLOCK
+#   - subset       : same key + requested ports ⊆ existing ports → HARD-BLOCK
+#   - overlap      : same key + ports overlap but not subset     → WARN
+#   - conflict     : same (src,dst,proto,ports) but ACTION differs (Allow vs Deny) → HARD-BLOCK
+#   - none         : no relation                                  → OK
+#
+# Rejected / Cancelled rules are excluded from the dedup set.
+
+_DEDUP_LIVE_STATUSES = {
+    "approved", "deployed", "certified", "active", "pending review",
+}
+
+
+def _parse_port_token(tok: str) -> tuple[str, list[tuple[int, int]]]:
+    """Parse 'TCP 443' / 'TCP 8000-8100' / 'UDP 53' / '443' into
+    (protocol, [(lo, hi), ...]). Returns ('TCP', []) when unparseable."""
+
+    tok = (tok or "").strip()
+    if not tok:
+        return ("TCP", [])
+    parts = tok.split()
+    proto = "TCP"
+    rest = tok
+    if parts and parts[0].upper() in ("TCP", "UDP", "ICMP", "ANY"):
+        proto = parts[0].upper()
+        rest = " ".join(parts[1:]).strip()
+    if not rest or rest.lower() == "any":
+        return (proto, [(0, 65535)])
+    ranges: list[tuple[int, int]] = []
+    for piece in rest.replace(";", ",").split(","):
+        piece = piece.strip()
+        if not piece:
+            continue
+        if "-" in piece:
+            try:
+                lo, hi = piece.split("-", 1)
+                lo_i = int(lo.strip())
+                hi_i = int(hi.strip())
+                if lo_i <= hi_i:
+                    ranges.append((lo_i, hi_i))
+            except ValueError:
+                continue
+        else:
+            try:
+                p = int(piece)
+                ranges.append((p, p))
+            except ValueError:
+                continue
+    return (proto, ranges)
+
+
+def _parse_ports_field(ports: str) -> dict[str, list[tuple[int, int]]]:
+    """Parse a possibly multi-protocol ports string into protocol→ranges.
+
+    Accepts: 'TCP 443', 'TCP 443, UDP 53', 'TCP 8000-8100,8443', '443'."""
+
+    out: dict[str, list[tuple[int, int]]] = {}
+    if not ports:
+        return out
+    # Split on commas but only when the next token re-declares a protocol.
+    # Simpler: split on commas and inherit last seen protocol.
+    last_proto = "TCP"
+    for tok in str(ports).split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        parts = tok.split()
+        if parts and parts[0].upper() in ("TCP", "UDP", "ICMP", "ANY"):
+            last_proto = parts[0].upper()
+            tok_full = tok
+        else:
+            tok_full = f"{last_proto} {tok}"
+        proto, ranges = _parse_port_token(tok_full)
+        if not ranges:
+            continue
+        out.setdefault(proto, []).extend(ranges)
+    # Normalize each protocol's ranges (merge overlaps/adjacent).
+    for p, rs in list(out.items()):
+        rs.sort()
+        merged: list[tuple[int, int]] = []
+        for lo, hi in rs:
+            if merged and lo <= merged[-1][1] + 1:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+            else:
+                merged.append((lo, hi))
+        out[p] = merged
+    return out
+
+
+def _ranges_subset(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> bool:
+    """True iff every port covered by ranges *a* is covered by ranges *b*."""
+
+    for lo, hi in a:
+        covered = False
+        for blo, bhi in b:
+            if blo <= lo and bhi >= hi:
+                covered = True
+                break
+        if not covered:
+            return False
+    return True
+
+
+def _ranges_overlap(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> bool:
+    """True iff any port is in both sets."""
+
+    for lo, hi in a:
+        for blo, bhi in b:
+            if not (hi < blo or lo > bhi):
+                return True
+    return False
+
+
+def _normalize_action(act: str) -> str:
+    a = (act or "").strip().lower()
+    if a in ("allow", "accept", "permit"):
+        return "ALLOW"
+    if a in ("deny", "drop", "reject", "block"):
+        return "DENY"
+    return a.upper() or "ALLOW"
+
+
+def _classify_rule_pair(
+    new_ports: dict[str, list[tuple[int, int]]],
+    existing_ports: dict[str, list[tuple[int, int]]],
+) -> str:
+    """Compare port sets of the *same* (src,dst,action) and return one of
+    ``identical | subset | overlap | none``.
+
+    Protocols are compared independently; if any protocol is identical or
+    a subset, the verdict is upgraded accordingly (worst-case wins so the
+    dedup engine errs on the safe side)."""
+
+    if not new_ports or not existing_ports:
+        return "none"
+    verdict = "none"
+    for proto, new_r in new_ports.items():
+        existing_r = existing_ports.get(proto, [])
+        if not existing_r:
+            continue
+        # Identical?
+        if sorted(new_r) == sorted(existing_r):
+            verdict = "identical"
+            continue
+        if _ranges_subset(new_r, existing_r):
+            if verdict not in ("identical",):
+                verdict = "subset"
+            continue
+        if _ranges_overlap(new_r, existing_r):
+            if verdict == "none":
+                verdict = "overlap"
+    return verdict
+
+
+def evaluate_dedup(payload_or_phys: dict[str, Any]) -> dict[str, Any]:
+    """Synchronous dedup evaluator used by preview + submit.
+
+    Accepts either a single PhysicalRule dict (with src_group_ref /
+    dst_group_ref / ports / action) OR a list under ``physical_rules``.
+    Returns ::
+
+        {
+          'verdict': 'identical' | 'subset' | 'overlap' | 'conflict' | 'ok',
+          'block': bool,
+          'matches': [
+            {
+              'rule_id', 'verdict', 'src_group', 'dst_group',
+              'existing_ports', 'existing_action', 'lifecycle_status'
+            }
+          ]
+        }
+
+    The worst-case verdict across all PhysicalRules is returned at the
+    top level; per-PhysicalRule details live under ``matches``."""
+
+    fw_rules = _load("firewall_rules") or []
+
+    def _phys_iter() -> list[dict[str, Any]]:
+        if isinstance(payload_or_phys, dict) and payload_or_phys.get("physical_rules"):
+            return list(payload_or_phys["physical_rules"])
+        if isinstance(payload_or_phys, dict) and payload_or_phys.get("src_group_ref"):
+            return [payload_or_phys]
+        return []
+
+    matches: list[dict[str, Any]] = []
+    worst = "ok"
+    severity = {"ok": 0, "overlap": 1, "subset": 2, "identical": 3, "conflict": 4}
+
+    for phys in _phys_iter():
+        new_src = str(phys.get("src_group_ref", "")).upper()
+        new_dst = str(phys.get("dst_group_ref", "")).upper()
+        new_action = _normalize_action(phys.get("action", "ALLOW"))
+        new_ports = _parse_ports_field(phys.get("ports", ""))
+        if not new_src or not new_dst or not new_ports:
+            continue
+        for r in fw_rules:
+            if str((r.get("status") or r.get("rule_status") or "")).strip().lower() not in _DEDUP_LIVE_STATUSES:
+                continue
+            ex_src = str(r.get("source", "")).upper()
+            ex_dst = str(r.get("destination", "")).upper()
+            if ex_src != new_src or ex_dst != new_dst:
+                continue
+            ex_action = _normalize_action(r.get("action", "ALLOW"))
+            # Build the existing port set as proto → [(lo,hi)]. The
+            # firewall_rules schema stores protocol+port as separate
+            # fields ('TCP', '443' or '443-1024').
+            ex_proto = (r.get("protocol") or "TCP").upper()
+            ex_port_field = str(r.get("port", "") or "").strip()
+            ex_ports = _parse_ports_field(f"{ex_proto} {ex_port_field}") if ex_port_field else {}
+            verdict = _classify_rule_pair(new_ports, ex_ports)
+            if ex_action != new_action and verdict != "none":
+                # Action collision (Allow vs Deny on same tuple) — surface
+                # as a hard-block conflict regardless of port relation.
+                verdict = "conflict"
+            if verdict == "none":
+                continue
+            matches.append({
+                "rule_id": r.get("rule_id", ""),
+                "verdict": verdict,
+                "src_group": ex_src,
+                "dst_group": ex_dst,
+                "existing_ports": f"{ex_proto} {ex_port_field}".strip(),
+                "existing_action": ex_action,
+                "lifecycle_status": r.get("rule_status") or r.get("status") or "",
+            })
+            if severity[verdict] > severity[worst]:
+                worst = verdict
+    return {
+        "verdict": worst,
+        "block": worst in ("identical", "subset", "conflict"),
+        "matches": matches,
+    }
+
+
+# ============================================================
+# Birthright Rule Registry
+# ============================================================
+
+_SD_BIRTHRIGHT_RULES: list[dict[str, Any]] = [
+    {
+        "birthright_id": "BR-DNS",
+        "scope_dc": "*",
+        "scope_nh": "*",
+        "scope_sz": "*",
+        "destination_kind": "shared_service",
+        "destination_ref": "DNS",
+        "ports": "UDP 53, TCP 53",
+        "description": "All workloads have implicit egress to enterprise DNS.",
+    },
+    {
+        "birthright_id": "BR-NTP",
+        "scope_dc": "*", "scope_nh": "*", "scope_sz": "*",
+        "destination_kind": "shared_service",
+        "destination_ref": "NTP",
+        "ports": "UDP 123",
+        "description": "Time sync is a birthright service.",
+    },
+    {
+        "birthright_id": "BR-SPLUNK-FWD",
+        "scope_dc": "*", "scope_nh": "*", "scope_sz": "*",
+        "destination_kind": "shared_service",
+        "destination_ref": "SPLUNK",
+        "ports": "TCP 9997",
+        "description": "Splunk forwarder log shipping.",
+    },
+    {
+        "birthright_id": "BR-APPD",
+        "scope_dc": "*", "scope_nh": "*", "scope_sz": "*",
+        "destination_kind": "shared_service",
+        "destination_ref": "APPD",
+        "ports": "TCP 8090, TCP 8181",
+        "description": "AppDynamics agent telemetry.",
+    },
+    {
+        "birthright_id": "BR-PKI",
+        "scope_dc": "*", "scope_nh": "*", "scope_sz": "*",
+        "destination_kind": "shared_service",
+        "destination_ref": "PKI",
+        "ports": "TCP 80, TCP 443",
+        "description": "Internal PKI / CRL / OCSP fetch.",
+    },
+    {
+        "birthright_id": "BR-AD-AUTH",
+        "scope_dc": "*", "scope_nh": "*", "scope_sz": "*",
+        "destination_kind": "shared_service",
+        "destination_ref": "KERBEROS",
+        "ports": "TCP 88, UDP 88, TCP 464, UDP 464",
+        "description": "Active Directory / Kerberos authentication.",
+    },
+]
+
+
+def _load_birthright_rules() -> list[dict[str, Any]]:
+    items = _load("birthright_rules")
+    if items is None:
+        items = deepcopy(_SD_BIRTHRIGHT_RULES)
+        _save("birthright_rules", items)
+    return items
+
+
+async def list_birthright_rules() -> list[dict[str, Any]]:
+    return _load_birthright_rules()
+
+
+async def upsert_birthright_rule(payload: dict[str, Any]) -> dict[str, Any]:
+    items = _load_birthright_rules()
+    bid = str(payload.get("birthright_id", "")).strip()
+    if not bid:
+        bid = f"BR-{_id()[:6].upper()}"
+        payload["birthright_id"] = bid
+    for i, r in enumerate(items):
+        if r.get("birthright_id") == bid:
+            items[i] = {**r, **payload}
+            _save("birthright_rules", items)
+            return items[i]
+    items.append(dict(payload))
+    _save("birthright_rules", items)
+    return payload
+
+
+async def delete_birthright_rule(bid: str) -> bool:
+    items = _load_birthright_rules()
+    new_items = [r for r in items if r.get("birthright_id") != bid]
+    if len(new_items) == len(items):
+        return False
+    _save("birthright_rules", new_items)
+    return True
+
+
+def evaluate_birthright(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return whether the proposed rule is already covered by a birthright.
+
+    A birthright covers a request when:
+      - destination_kind matches AND destination_ref matches (case-insensitive)
+      - scope DC/NH/SZ are wildcard or include the request's primary scope
+      - the requested port set is a subset of the birthright's port set
+    """
+
+    items = _load_birthright_rules()
+    dest_kind = (payload.get("destination_kind") or "").lower()
+    dest_ref = str(payload.get("destination_ref") or "").upper()
+    req_ports = _parse_ports_field(payload.get("ports", ""))
+    matches: list[dict[str, Any]] = []
+    for br in items:
+        if str(br.get("destination_kind", "")).lower() != dest_kind:
+            continue
+        if str(br.get("destination_ref", "")).upper() != dest_ref:
+            continue
+        br_ports = _parse_ports_field(br.get("ports", ""))
+        is_covered = True
+        for proto, rng in req_ports.items():
+            if not _ranges_subset(rng, br_ports.get(proto, [])):
+                is_covered = False
+                break
+        if is_covered and req_ports:
+            matches.append({
+                "birthright_id": br.get("birthright_id"),
+                "destination_ref": br.get("destination_ref"),
+                "ports": br.get("ports"),
+                "description": br.get("description", ""),
+            })
+    return {"covered": bool(matches), "matches": matches}
+
+
+# ============================================================
+# Migration Normalizer  — legacy / non-standard → standardized
+# ============================================================
+
+def _normalize_group_prefix(name: str) -> str:
+    """`g-XYZ` → `grp-XYZ`. Trim. Upper-case prefix tokens."""
+
+    if not name:
+        return ""
+    n = name.strip()
+    if n.lower().startswith("g-") and not n.lower().startswith("grp-"):
+        n = "grp-" + n[2:]
+    return n
+
+
+async def normalize_legacy_rule(legacy_rule: dict[str, Any]) -> dict[str, Any]:
+    """Standardize a legacy / non-standard rule into the NGDC model.
+
+    Steps:
+      1. Resolve src + dst IPs → (DC, NH, SZ) via the existing classifier
+         (when an IP-style source/destination is given).
+      2. Apply SZ.naming_mode: ZONE_SCOPED → ``grp-<NH>-<SZ>``;
+         APP_SCOPED → ``grp-<App>-<NH>-<SZ>``.
+      3. Normalize prefixes (`g-` → `grp-`).
+      4. Run the dedup engine: identical / subset → mark ``merged_into``
+         the existing rule; overlap → flag for SNS review; new → create
+         standardized PhysicalRule with ``origin_legacy_rule_id``.
+    """
+
+    out: dict[str, Any] = {
+        "origin_legacy_rule_id": legacy_rule.get("rule_id", ""),
+        "verdict": "new",
+        "block": False,
+        "physical_rule": None,
+        "dedup_match": None,
+        "warnings": [],
+    }
+    src_obj = legacy_rule.get("source", "")
+    dst_obj = legacy_rule.get("destination", "")
+    proto = (legacy_rule.get("protocol") or "TCP").upper()
+    port = str(legacy_rule.get("port", "") or "")
+    action = _normalize_action(legacy_rule.get("action", "Allow"))
+    env = legacy_rule.get("environment", "Production")
+    src_dc = legacy_rule.get("datacenter") or legacy_rule.get("source_dc") or ""
+    dst_dc = legacy_rule.get("dst_datacenter") or src_dc
+    src_nh = legacy_rule.get("source_nh") or ""
+    src_sz = legacy_rule.get("source_zone") or ""
+    dst_nh = legacy_rule.get("destination_nh") or ""
+    dst_sz = legacy_rule.get("destination_zone") or ""
+
+    src_group = _normalize_group_prefix(src_obj)
+    dst_group = _normalize_group_prefix(dst_obj)
+    if src_nh and src_sz:
+        if _get_sz_naming_mode(src_sz) == "zone_scoped":
+            src_group = _zone_group_name(src_nh, src_sz)
+    if dst_nh and dst_sz:
+        if _get_sz_naming_mode(dst_sz) == "zone_scoped":
+            dst_group = _zone_group_name(dst_nh, dst_sz)
+
+    physical = {
+        "src_dc": src_dc, "dst_dc": dst_dc,
+        "src_group_ref": src_group, "dst_group_ref": dst_group,
+        "src_nh": src_nh, "src_sz": src_sz,
+        "dst_nh": dst_nh, "dst_sz": dst_sz,
+        "ports": f"{proto} {port}".strip(),
+        "action": "ACCEPT" if action == "ALLOW" else "DENY",
+        "environment": env,
+        "lifecycle_status": "Migration-Preview",
+    }
+    out["physical_rule"] = physical
+
+    dedup = evaluate_dedup({"physical_rules": [physical]})
+    if dedup["matches"]:
+        out["dedup_match"] = dedup["matches"][0]
+        out["verdict"] = dedup["verdict"]
+        out["block"] = dedup["block"]
+    if not src_group or not dst_group:
+        out["verdict"] = "unclassifiable"
+        out["block"] = True
+        out["warnings"].append(
+            "Could not resolve source or destination into a managed group; "
+            "rule moved to quarantine for manual review."
+        )
+    return out
+
+
+async def normalize_legacy_rules_bulk(rules: list[dict[str, Any]]) -> dict[str, Any]:
+    """Batch normalizer. Returns counters + per-rule decisions for the
+    Migration screen."""
+
+    decisions: list[dict[str, Any]] = []
+    counters = {
+        "total": len(rules),
+        "standardized": 0,
+        "merged_existing": 0,
+        "overlap_flagged": 0,
+        "unclassifiable": 0,
+    }
+    for rule in rules:
+        d = await normalize_legacy_rule(rule)
+        if d["verdict"] in ("identical", "subset"):
+            counters["merged_existing"] += 1
+        elif d["verdict"] == "overlap":
+            counters["overlap_flagged"] += 1
+        elif d["verdict"] == "unclassifiable":
+            counters["unclassifiable"] += 1
+        else:
+            counters["standardized"] += 1
+        decisions.append(d)
+    return {"counters": counters, "decisions": decisions}
+
+
+# ============================================================
+# Deployment Artifact Generators
+# ============================================================
+
+def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
+    """Build the vendor-neutral JSON manifest for a RuleRequest."""
+
+    expansion = req.get("expansion") or []
+    groups_seen: dict[str, dict[str, Any]] = {}
+    fw_rules = _load("firewall_rules") or []
+    fw_by_id = {r.get("rule_id"): r for r in fw_rules}
+    rules_out: list[dict[str, Any]] = []
+    for phys in expansion:
+        rid = phys.get("rule_id")
+        fw = fw_by_id.get(rid, {})
+        # Group create/modify decisions: if the group already exists in
+        # the groups store with members, mark `reuse-existing`; otherwise
+        # `create`.
+        for grp_name in (phys.get("src_group_ref"), phys.get("dst_group_ref")):
+            if not grp_name or grp_name in groups_seen:
+                continue
+            members = _resolve_group_members_sync(grp_name)
+            groups_seen[grp_name] = {
+                "name": grp_name,
+                "op": "reuse-existing" if members else "create",
+                "members": members,
+            }
+        rules_out.append({
+            "rule_id": rid,
+            "src_dc": phys.get("src_dc"),
+            "dst_dc": phys.get("dst_dc"),
+            "src_group": phys.get("src_group_ref"),
+            "dst_group": phys.get("dst_group_ref"),
+            "src_nh": phys.get("src_nh"), "src_sz": phys.get("src_sz"),
+            "dst_nh": phys.get("dst_nh"), "dst_sz": phys.get("dst_sz"),
+            "protocol": fw.get("protocol", "TCP"),
+            "ports": phys.get("ports") or fw.get("port", ""),
+            "action": fw.get("action") or phys.get("action") or "Allow",
+            "lifecycle_status": phys.get("lifecycle_status")
+                                or fw.get("rule_status") or "Pending Review",
+        })
+    return {
+        "request_id": req.get("request_id"),
+        "requester": req.get("owner"),
+        "owner_team": req.get("owner_team"),
+        "environment": req.get("environment"),
+        "justification": req.get("description"),
+        "source_kind": req.get("source_kind"),
+        "source_ref": req.get("source_ref"),
+        "destination_kind": req.get("destination_kind"),
+        "destination_ref": req.get("destination_ref"),
+        "approver": req.get("approver"),
+        "status": req.get("status"),
+        "created_at": req.get("created_at"),
+        "updated_at": req.get("updated_at"),
+        "external_ticket_id": req.get("external_ticket_id"),
+        "external_ticket_url": req.get("external_ticket_url"),
+        "rules": rules_out,
+        "groups": list(groups_seen.values()),
+    }
+
+
+def _resolve_group_members_sync(name: str) -> list[str]:
+    """Look up an existing group's members from the groups store."""
+
+    if not name:
+        return []
+    for g in _load("groups") or []:
+        if str(g.get("name", "")).upper() == name.upper():
+            ms = g.get("members") or g.get("ips") or []
+            return [str(m) for m in ms]
+    return []
+
+
+def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
+    """Flatten the manifest into spreadsheet rows for an XLSX writer.
+
+    Returns ``{ sheet_name: [[header_row], [...data...]] }`` so the route
+    can stream it via openpyxl without needing the Pydantic model."""
+
+    rules_sheet = [[
+        "rule_id", "src_dc", "dst_dc", "src_group", "dst_group",
+        "src_nh", "src_sz", "dst_nh", "dst_sz",
+        "protocol", "ports", "action", "lifecycle_status",
+    ]]
+    for r in manifest.get("rules", []):
+        rules_sheet.append([
+            str(r.get("rule_id", "")),
+            str(r.get("src_dc", "")),
+            str(r.get("dst_dc", "")),
+            str(r.get("src_group", "")),
+            str(r.get("dst_group", "")),
+            str(r.get("src_nh", "")),
+            str(r.get("src_sz", "")),
+            str(r.get("dst_nh", "")),
+            str(r.get("dst_sz", "")),
+            str(r.get("protocol", "")),
+            str(r.get("ports", "")),
+            str(r.get("action", "")),
+            str(r.get("lifecycle_status", "")),
+        ])
+    groups_sheet = [["group", "op", "members"]]
+    for g in manifest.get("groups", []):
+        groups_sheet.append([
+            str(g.get("name", "")),
+            str(g.get("op", "")),
+            ", ".join(g.get("members") or []),
+        ])
+    summary_sheet = [
+        ["field", "value"],
+        ["request_id", str(manifest.get("request_id") or "")],
+        ["requester", str(manifest.get("requester") or "")],
+        ["owner_team", str(manifest.get("owner_team") or "")],
+        ["environment", str(manifest.get("environment") or "")],
+        ["status", str(manifest.get("status") or "")],
+        ["external_ticket_id", str(manifest.get("external_ticket_id") or "")],
+        ["external_ticket_url", str(manifest.get("external_ticket_url") or "")],
+        ["justification", str(manifest.get("justification") or "")],
+    ]
+    return {"Summary": summary_sheet, "Rules": rules_sheet, "Groups": groups_sheet}
+
+
+def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
+    out: list[str] = ["# PAN-OS / Panorama set-mode configuration",
+                      f"# Request {manifest.get('request_id')}", ""]
+    for g in manifest.get("groups", []):
+        if g["op"] == "create" and g.get("members"):
+            for m in g["members"]:
+                out.append(f"set address {g['name']}-{m.replace('/', '_').replace('.', '_')} ip-netmask {m}")
+            members_csv = " ".join(
+                f"{g['name']}-{m.replace('/', '_').replace('.', '_')}" for m in g["members"]
+            )
+            out.append(f"set address-group {g['name']} static [ {members_csv} ]")
+    for r in manifest.get("rules", []):
+        out.append(
+            f"set rulebase security rules {r['rule_id']} from any to any "
+            f"source {r['src_group']} destination {r['dst_group']} "
+            f"service application-default action {('allow' if str(r['action']).lower().startswith('a') else 'deny')}"
+        )
+    return "\n".join(out) + "\n"
+
+
+def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
+    out: list[str] = ["# Fortinet FortiGate config", ""]
+    for g in manifest.get("groups", []):
+        if g["op"] == "create" and g.get("members"):
+            out.append("config firewall address")
+            for m in g["members"]:
+                obj = f"{g['name']}-{m.replace('/', '_').replace('.', '_')}"
+                out.append(f"  edit {obj}\n    set subnet {m}\n  next")
+            out.append("end")
+            out.append("config firewall addrgrp")
+            out.append(f"  edit {g['name']}\n    set member " +
+                       " ".join(f"{g['name']}-{m.replace('/', '_').replace('.', '_')}" for m in g["members"]) +
+                       "\n  next\nend")
+    out.append("config firewall policy")
+    for i, r in enumerate(manifest.get("rules", []), start=1):
+        out.append(
+            f"  edit 0\n    set name {r['rule_id']}\n"
+            f"    set srcaddr {r['src_group']}\n"
+            f"    set dstaddr {r['dst_group']}\n"
+            f"    set service ALL\n"
+            f"    set action {('accept' if str(r['action']).lower().startswith('a') else 'deny')}\n"
+            f"    set comments \"{manifest.get('request_id')}\"\n"
+            f"  next"
+        )
+    out.append("end")
+    return "\n".join(out) + "\n"
+
+
+def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
+    out: list[str] = ["! Cisco ASA / FTD configuration", ""]
+    for g in manifest.get("groups", []):
+        if g["op"] == "create" and g.get("members"):
+            out.append(f"object-group network {g['name']}")
+            for m in g["members"]:
+                if "/" in m:
+                    ip, cidr = m.split("/")
+                    out.append(f"  network-object {ip} {cidr}")
+                else:
+                    out.append(f"  network-object host {m}")
+    for r in manifest.get("rules", []):
+        action = "permit" if str(r["action"]).lower().startswith("a") else "deny"
+        proto = str(r.get("protocol", "tcp")).lower()
+        out.append(
+            f"access-list NGDC-OUTSIDE extended {action} {proto} "
+            f"object-group {r['src_group']} object-group {r['dst_group']}"
+        )
+    return "\n".join(out) + "\n"
+
+
+def _vendor_compile_checkpoint(manifest: dict[str, Any]) -> str:
+    out: list[str] = ["# Check Point SmartConsole CLI", ""]
+    for g in manifest.get("groups", []):
+        if g["op"] == "create":
+            out.append(f"add group name \"{g['name']}\"")
+            for m in (g.get("members") or []):
+                out.append(f"add network name \"{g['name']}-{m}\" subnet \"{m}\"")
+                out.append(f"add group-with-exclusion-or-network name \"{g['name']}\" members.add \"{g['name']}-{m}\"")
+    for r in manifest.get("rules", []):
+        action = "accept" if str(r["action"]).lower().startswith("a") else "drop"
+        out.append(
+            f"add access-rule layer \"NGDC\" position top "
+            f"name \"{r['rule_id']}\" "
+            f"source.1 \"{r['src_group']}\" destination.1 \"{r['dst_group']}\" "
+            f"service.1 \"any\" action \"{action}\""
+        )
+    return "\n".join(out) + "\n"
+
+
+VENDOR_COMPILERS: dict[str, Any] = {
+    "panos": _vendor_compile_panos,
+    "fortinet": _vendor_compile_fortinet,
+    "cisco": _vendor_compile_cisco,
+    "checkpoint": _vendor_compile_checkpoint,
+}
+
+
+async def get_request_artifacts(request_id: str) -> dict[str, Any] | None:
+    items = _load_rule_requests()
+    for r in items:
+        if r.get("request_id") == request_id:
+            manifest = _artifact_manifest_for_request(r)
+            sheets = _artifact_xlsx_rows(manifest)
+            vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
+            return {
+                "manifest": manifest,
+                "xlsx_sheets": sheets,
+                "vendor_configs": vendor_configs,
+            }
+    return None
+
+
+# ============================================================
+# ITSM Connector Framework  (ServiceNow / Generic REST)
+# ============================================================
+
+async def list_itsm_connectors() -> list[dict[str, Any]]:
+    items = _load("itsm_connectors")
+    if items is None:
+        items = []
+        _save("itsm_connectors", items)
+    # Mask secrets on read.
+    out = []
+    for c in items:
+        copy = {**c}
+        if copy.get("auth_secret"):
+            copy["auth_secret"] = "***"
+        out.append(copy)
+    return out
+
+
+async def upsert_itsm_connector(payload: dict[str, Any]) -> dict[str, Any]:
+    items = _load("itsm_connectors") or []
+    cid = str(payload.get("connector_id", "")).strip()
+    if not cid:
+        cid = f"ITSM-{_id()[:6].upper()}"
+        payload["connector_id"] = cid
+    for i, c in enumerate(items):
+        if c.get("connector_id") == cid:
+            # Preserve existing secret when payload sends ***
+            if payload.get("auth_secret") in (None, "", "***"):
+                payload["auth_secret"] = c.get("auth_secret")
+            items[i] = {**c, **payload}
+            _save("itsm_connectors", items)
+            return items[i]
+    payload.setdefault("auto_submit_on_approval", False)
+    items.append(dict(payload))
+    _save("itsm_connectors", items)
+    return payload
+
+
+async def delete_itsm_connector(cid: str) -> bool:
+    items = _load("itsm_connectors") or []
+    new_items = [c for c in items if c.get("connector_id") != cid]
+    if len(new_items) == len(items):
+        return False
+    _save("itsm_connectors", new_items)
+    return True
+
+
+async def submit_request_to_itsm(
+    request_id: str,
+    connector_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Render the ServiceNow / Generic REST payload for a RuleRequest and
+    record the external ticket on the request.
+
+    The HTTP call itself is intentionally *not* performed in this in-VM
+    sample (no outbound credentials configured); we record the rendered
+    payload + a stub external_ticket_id so the lifecycle UI can be
+    exercised end-to-end. Phase B will replace the stub with a real
+    httpx.AsyncClient POST + retry/backoff."""
+
+    items = _load_rule_requests()
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if not target:
+        return None
+    connectors = _load("itsm_connectors") or []
+    connector = None
+    if connector_id:
+        connector = next((c for c in connectors if c.get("connector_id") == connector_id), None)
+    if connector is None and connectors:
+        connector = connectors[0]
+    if connector is None:
+        connector = {"connector_id": "INTERNAL", "kind": "internal", "endpoint_url": "internal://sns"}
+
+    manifest = _artifact_manifest_for_request(target)
+    short_desc = (
+        f"NGDC Firewall: {manifest.get('source_kind')}:{manifest.get('source_ref')} "
+        f"-> {manifest.get('destination_kind')}:{manifest.get('destination_ref')} "
+        f"({len(manifest.get('rules') or [])} rule(s))"
+    )
+    payload_template = connector.get("payload_template") or {}
+    rendered = {
+        "short_description": short_desc,
+        "description": manifest.get("justification") or short_desc,
+        "u_environment": manifest.get("environment"),
+        "u_request_id": manifest.get("request_id"),
+        "u_owner_team": manifest.get("owner_team"),
+        "u_artifacts_json": manifest,
+    }
+    if isinstance(payload_template, dict):
+        rendered.update(payload_template)
+
+    # Stub external ticket id — replace with real REST call response in
+    # Phase B when polling/webhook lands.
+    ext_id = f"CHG{int(_now().replace(':', '').replace('-', '').replace('T', '').replace('Z', '')[-7:]):07d}"
+    ext_url = (connector.get("endpoint_url") or "").rstrip("/") + f"/{ext_id}" if connector.get("endpoint_url") else ""
+    target["external_system"] = connector.get("kind", "generic_rest")
+    target["external_connector_id"] = connector.get("connector_id")
+    target["external_ticket_id"] = ext_id
+    target["external_ticket_url"] = ext_url
+    target["external_status"] = "Submitted"
+    target["external_last_synced_at"] = _now()
+    target.setdefault("external_history", []).append({
+        "at": _now(),
+        "event": "submitted",
+        "connector": connector.get("connector_id"),
+        "external_ticket_id": ext_id,
+    })
+    _save("rule_requests", items)
+    return {
+        "request_id": request_id,
+        "connector_id": connector.get("connector_id"),
+        "kind": connector.get("kind", "generic_rest"),
+        "endpoint_url": connector.get("endpoint_url"),
+        "rendered_payload": rendered,
+        "external_ticket_id": ext_id,
+        "external_ticket_url": ext_url,
+        "external_status": "Submitted",
+    }
+
+
+async def refresh_request_external_status(request_id: str) -> dict[str, Any] | None:
+    """Manual status refresh — Phase A only marks the request as `In Progress`
+    on first refresh and `Closed` on the second so testers can drive the
+    lifecycle without a live ITSM. Phase B replaces this with real polling."""
+
+    items = _load_rule_requests()
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if not target:
+        return None
+    cur = target.get("external_status") or "Submitted"
+    next_status = {
+        "Submitted": "In Progress",
+        "In Progress": "Closed Complete",
+        "Closed Complete": "Closed Complete",
+    }.get(cur, cur)
+    target["external_status"] = next_status
+    target["external_last_synced_at"] = _now()
+    target.setdefault("external_history", []).append({
+        "at": _now(),
+        "event": "status-refreshed",
+        "external_status": next_status,
+    })
+    if next_status == "Closed Complete" and target.get("status") not in ("Certified", "Rejected"):
+        # Auto-progress NGDC-side lifecycle on ITSM closure.
+        await set_rule_request_status(request_id, "Deployed",
+                                      note="Auto: ITSM ticket Closed Complete")
+    _save("rule_requests", items)
+    return {
+        "request_id": request_id,
+        "external_ticket_id": target.get("external_ticket_id"),
+        "external_status": next_status,
+        "external_last_synced_at": target["external_last_synced_at"],
+    }
