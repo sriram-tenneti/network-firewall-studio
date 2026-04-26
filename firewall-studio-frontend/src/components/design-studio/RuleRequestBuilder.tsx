@@ -700,13 +700,18 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       {hardMatches.length > 0 && (
         <div className="space-y-1">
           <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Hard-block — already exists</div>
-          {hardMatches.map((m: DedupMatch) => (
-            <div key={m.rule_id} className="bg-white/60 border border-rose-200 rounded p-2 flex flex-wrap items-center gap-2">
+          {hardMatches.map((m: DedupMatch, idx: number) => (
+            <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-rose-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-rose-100 border border-rose-200 text-[10px] font-bold uppercase">{m.verdict}</span>
               <code className="font-mono text-[11px]">{m.rule_id}</code>
               <span className="font-mono text-[10px] text-indigo-700">{m.src_group} → {m.dst_group}</span>
               <span className="font-mono text-[10px]">{m.existing_ports}</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800">{m.lifecycle_status}</span>
+              {m.match_kind === 'member' && (
+                <span title={`src ${m.src_relation} · dst ${m.dst_relation}`} className="text-[10px] px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-800 font-mono">
+                  via members of {m.via_src_group}{m.via_dst_group && m.via_dst_group !== m.via_src_group ? ` / ${m.via_dst_group}` : ''}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -714,12 +719,17 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       {overlap.length > 0 && (
         <div className="space-y-1">
           <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Overlap — proceed with care</div>
-          {overlap.map((m: DedupMatch) => (
-            <div key={m.rule_id} className="bg-white/60 border border-amber-200 rounded p-2 flex flex-wrap items-center gap-2">
+          {overlap.map((m: DedupMatch, idx: number) => (
+            <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-amber-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-[10px] font-bold uppercase">overlap</span>
               <code className="font-mono text-[11px]">{m.rule_id}</code>
               <span className="font-mono text-[10px] text-indigo-700">{m.src_group} → {m.dst_group}</span>
               <span className="font-mono text-[10px]">{m.existing_ports}</span>
+              {m.match_kind === 'member' && (
+                <span title={`src ${m.src_relation} · dst ${m.dst_relation}`} className="text-[10px] px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-800 font-mono">
+                  via members of {m.via_src_group}{m.via_dst_group && m.via_dst_group !== m.via_src_group ? ` / ${m.via_dst_group}` : ''}
+                </span>
+              )}
             </div>
           ))}
         </div>

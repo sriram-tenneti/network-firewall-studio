@@ -175,11 +175,21 @@ function PhysicalRulePreview({ rule }: { rule: Record<string, unknown> }) {
 
 function DedupMatchPreview({ match }: { match: Record<string, unknown> }) {
   const m = match as Record<string, string | undefined>;
+  const memberMatch = m.match_kind === 'member';
   return (
     <div>
       <div className="text-rose-700"><strong>{m.rule_id}</strong> · {m.lifecycle_status}</div>
       <div>{m.src_group} → {m.dst_group}</div>
       <div className="text-gray-600">{m.existing_ports} {m.existing_action}</div>
+      {memberMatch && (
+        <div
+          className="mt-1 inline-block px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-800 text-[10px] font-mono"
+          title={`src ${m.src_relation || 'subset'} · dst ${m.dst_relation || 'subset'}`}
+        >
+          via members of {m.via_src_group}
+          {m.via_dst_group && m.via_dst_group !== m.via_src_group ? ` / ${m.via_dst_group}` : ''}
+        </div>
+      )}
     </div>
   );
 }

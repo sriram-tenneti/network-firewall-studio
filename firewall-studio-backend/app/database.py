@@ -8343,6 +8343,116 @@ def _classify_rule_pair(
     return verdict
 
 
+def _resolve_group_members_sync_lookup(name: str) -> list[str]:
+    """Public-style alias used by member-level dedup. Mirrors
+    _resolve_group_members_sync without forward-declaration order
+    issues."""
+
+    if not name:
+        return []
+    for g in _load("groups") or []:
+        if str(g.get("name", "")).upper() == name.upper():
+            ms = g.get("members") or g.get("ips") or []
+            return [str(m) for m in ms]
+    return []
+
+
+def _to_networks(members: list[str]) -> list["ipaddress._BaseNetwork"]:
+    """Normalize a list of IP / CIDR strings to ipaddress networks.
+
+    Non-IP entries (FQDNs, group references, host-object names) are
+    skipped — member-level dedup only applies to literal IPs/CIDRs.
+    /32 is implicit for bare IPs."""
+
+    out: list[ipaddress._BaseNetwork] = []
+    for m in members or []:
+        s = str(m).strip()
+        if not s:
+            continue
+        try:
+            out.append(ipaddress.ip_network(s, strict=False))
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def _net_subset(a: list["ipaddress._BaseNetwork"], b: list["ipaddress._BaseNetwork"]) -> bool:
+    """Every network in *a* is fully contained in some network in *b*."""
+
+    if not a:
+        return False
+    for na in a:
+        if not any(na.subnet_of(nb) for nb in b if na.version == nb.version):
+            return False
+    return True
+
+
+def _net_overlap(a: list["ipaddress._BaseNetwork"], b: list["ipaddress._BaseNetwork"]) -> bool:
+    """Any IP is in both sets (either direction of containment, or partial)."""
+
+    for na in a:
+        for nb in b:
+            if na.version != nb.version:
+                continue
+            if na.subnet_of(nb) or nb.subnet_of(na) or na.overlaps(nb):
+                return True
+    return False
+
+
+def _classify_member_relation(
+    new_members: list[str], existing_members: list[str]
+) -> str:
+    """Return the containment relation of new members vs existing members.
+
+    One of: ``exact`` | ``subset`` | ``superset`` | ``overlap`` | ``disjoint``.
+
+    Comparison happens at IP/CIDR level (so 10.0.0.5 is recognized as a
+    subset of 10.0.0.0/24 even though the literal strings differ). Bare
+    group-name members are ignored."""
+
+    a = _to_networks(new_members)
+    b = _to_networks(existing_members)
+    if not a or not b:
+        return "disjoint"
+    a_in_b = _net_subset(a, b)
+    b_in_a = _net_subset(b, a)
+    if a_in_b and b_in_a:
+        return "exact"
+    if a_in_b:
+        return "subset"
+    if b_in_a:
+        return "superset"
+    if _net_overlap(a, b):
+        return "overlap"
+    return "disjoint"
+
+
+def _combine_member_verdict(src_rel: str, dst_rel: str, port_verdict: str) -> str:
+    """Combine src/dst member relations + port verdict into a single
+    rule verdict. Conservative — when in doubt, escalate.
+
+    Both sides must be at least 'overlap'-compatible; otherwise no
+    relation."""
+
+    if src_rel == "disjoint" or dst_rel == "disjoint":
+        return "none"
+    if port_verdict == "none":
+        return "none"
+    # If either side is only a 'superset' (existing is fully inside new)
+    # then the new request is BROADER — that's not a coverage match,
+    # but it's still an overlap worth warning about.
+    if src_rel == "superset" or dst_rel == "superset":
+        return "overlap"
+    # If both sides exact AND ports identical → identical.
+    if src_rel == "exact" and dst_rel == "exact" and port_verdict == "identical":
+        return "identical"
+    # If both sides ⊆ existing AND ports ⊆ existing → subset (covered).
+    if src_rel in ("exact", "subset") and dst_rel in ("exact", "subset") and port_verdict in ("identical", "subset"):
+        return "subset"
+    # Otherwise overlap.
+    return "overlap"
+
+
 def evaluate_dedup(payload_or_phys: dict[str, Any]) -> dict[str, Any]:
     """Synchronous dedup evaluator used by preview + submit.
 
@@ -8356,13 +8466,23 @@ def evaluate_dedup(payload_or_phys: dict[str, Any]) -> dict[str, Any]:
           'matches': [
             {
               'rule_id', 'verdict', 'src_group', 'dst_group',
-              'existing_ports', 'existing_action', 'lifecycle_status'
+              'existing_ports', 'existing_action', 'lifecycle_status',
+              'match_kind': 'name' | 'member',
+              'via_src_group', 'via_dst_group',  # only on member matches
+              'src_relation', 'dst_relation',    # exact|subset|superset|overlap
             }
           ]
         }
 
     The worst-case verdict across all PhysicalRules is returned at the
-    top level; per-PhysicalRule details live under ``matches``."""
+    top level; per-PhysicalRule details live under ``matches``.
+
+    Member-level matching: in addition to comparing group names, the
+    engine resolves each side's members (IPs/CIDRs) and compares
+    against every existing rule's members. So if the requested src
+    `grp-A` happens to contain 10.0.0.5 and an existing rule already
+    covers 10.0.0.0/24 via a *different* group `grp-B`, the request is
+    flagged as covered (subset) — even though the group names differ."""
 
     fw_rules = _load("firewall_rules") or []
 
@@ -8377,6 +8497,20 @@ def evaluate_dedup(payload_or_phys: dict[str, Any]) -> dict[str, Any]:
     worst = "ok"
     severity = {"ok": 0, "overlap": 1, "subset": 2, "identical": 3, "conflict": 4}
 
+    # Cache resolved members so we don't re-walk the groups store for
+    # every existing rule.
+    member_cache: dict[str, list[str]] = {}
+
+    def _members(name: str) -> list[str]:
+        if not name:
+            return []
+        key = name.upper()
+        if key not in member_cache:
+            member_cache[key] = _resolve_group_members_sync_lookup(name)
+        return member_cache[key]
+
+    seen_match_keys: set[tuple[str, str, str, str, str]] = set()
+
     for phys in _phys_iter():
         new_src = str(phys.get("src_group_ref", "")).upper()
         new_dst = str(phys.get("dst_group_ref", "")).upper()
@@ -8384,27 +8518,73 @@ def evaluate_dedup(payload_or_phys: dict[str, Any]) -> dict[str, Any]:
         new_ports = _parse_ports_field(phys.get("ports", ""))
         if not new_src or not new_dst or not new_ports:
             continue
+        # Optionally allow callers to pass literal members for the new
+        # rule (used by migration normalizer when the legacy rule
+        # didn't yet have a standardized group name).
+        new_src_members = list(phys.get("src_members") or _members(new_src))
+        new_dst_members = list(phys.get("dst_members") or _members(new_dst))
         for r in fw_rules:
             if str((r.get("status") or r.get("rule_status") or "")).strip().lower() not in _DEDUP_LIVE_STATUSES:
                 continue
             ex_src = str(r.get("source", "")).upper()
             ex_dst = str(r.get("destination", "")).upper()
-            if ex_src != new_src or ex_dst != new_dst:
-                continue
             ex_action = _normalize_action(r.get("action", "ALLOW"))
-            # Build the existing port set as proto → [(lo,hi)]. The
-            # firewall_rules schema stores protocol+port as separate
-            # fields ('TCP', '443' or '443-1024').
             ex_proto = (r.get("protocol") or "TCP").upper()
             ex_port_field = str(r.get("port", "") or "").strip()
             ex_ports = _parse_ports_field(f"{ex_proto} {ex_port_field}") if ex_port_field else {}
-            verdict = _classify_rule_pair(new_ports, ex_ports)
-            if ex_action != new_action and verdict != "none":
-                # Action collision (Allow vs Deny on same tuple) — surface
-                # as a hard-block conflict regardless of port relation.
-                verdict = "conflict"
+
+            # ── Path A: name-level dedup (fast path) ───────────────────
+            if ex_src == new_src and ex_dst == new_dst:
+                verdict = _classify_rule_pair(new_ports, ex_ports)
+                if ex_action != new_action and verdict != "none":
+                    verdict = "conflict"
+                if verdict != "none":
+                    key = (str(r.get("rule_id", "")), new_src, new_dst, verdict, "name")
+                    if key not in seen_match_keys:
+                        seen_match_keys.add(key)
+                        matches.append({
+                            "rule_id": r.get("rule_id", ""),
+                            "verdict": verdict,
+                            "src_group": ex_src,
+                            "dst_group": ex_dst,
+                            "existing_ports": f"{ex_proto} {ex_port_field}".strip(),
+                            "existing_action": ex_action,
+                            "lifecycle_status": r.get("rule_status") or r.get("status") or "",
+                            "match_kind": "name",
+                            "via_src_group": "",
+                            "via_dst_group": "",
+                            "src_relation": "exact",
+                            "dst_relation": "exact",
+                        })
+                        if severity[verdict] > severity[worst]:
+                            worst = verdict
+                continue  # name-level handled this rule; skip member-level
+
+            # ── Path B: member-level dedup ─────────────────────────────
+            # Resolve the existing rule's src/dst members and compute IP/CIDR
+            # containment vs the requested rule's members.
+            ex_src_members = _members(ex_src)
+            ex_dst_members = _members(ex_dst)
+            # Skip if neither side has any literal IPs/CIDRs at all — no
+            # signal possible.
+            if not (ex_src_members and ex_dst_members and new_src_members and new_dst_members):
+                continue
+            src_rel = _classify_member_relation(new_src_members, ex_src_members)
+            if src_rel == "disjoint":
+                continue
+            dst_rel = _classify_member_relation(new_dst_members, ex_dst_members)
+            if dst_rel == "disjoint":
+                continue
+            port_v = _classify_rule_pair(new_ports, ex_ports)
+            verdict = _combine_member_verdict(src_rel, dst_rel, port_v)
             if verdict == "none":
                 continue
+            if ex_action != new_action:
+                verdict = "conflict"
+            key = (str(r.get("rule_id", "")), ex_src, ex_dst, verdict, "member")
+            if key in seen_match_keys:
+                continue
+            seen_match_keys.add(key)
             matches.append({
                 "rule_id": r.get("rule_id", ""),
                 "verdict": verdict,
@@ -8413,6 +8593,11 @@ def evaluate_dedup(payload_or_phys: dict[str, Any]) -> dict[str, Any]:
                 "existing_ports": f"{ex_proto} {ex_port_field}".strip(),
                 "existing_action": ex_action,
                 "lifecycle_status": r.get("rule_status") or r.get("status") or "",
+                "match_kind": "member",
+                "via_src_group": ex_src,
+                "via_dst_group": ex_dst,
+                "src_relation": src_rel,
+                "dst_relation": dst_rel,
             })
             if severity[verdict] > severity[worst]:
                 worst = verdict
@@ -8624,7 +8809,28 @@ async def normalize_legacy_rule(legacy_rule: dict[str, Any]) -> dict[str, Any]:
     }
     out["physical_rule"] = physical
 
-    dedup = evaluate_dedup({"physical_rules": [physical]})
+    # If the legacy rule source/destination is itself an IP / CIDR (not
+    # a group name), feed those literal members to the dedup engine so
+    # the member-level path can find existing rules where this IP is
+    # already a member of *some* group (possibly a different name).
+    def _maybe_literal_members(obj: Any) -> list[str]:
+        s = str(obj or "").strip()
+        if not s:
+            return []
+        try:
+            ipaddress.ip_network(s, strict=False)
+            return [s]
+        except (ValueError, TypeError):
+            return []
+
+    literal_src = _maybe_literal_members(src_obj)
+    literal_dst = _maybe_literal_members(dst_obj)
+    dedup_payload = dict(physical)
+    if literal_src:
+        dedup_payload["src_members"] = literal_src
+    if literal_dst:
+        dedup_payload["dst_members"] = literal_dst
+    dedup = evaluate_dedup({"physical_rules": [dedup_payload]})
     if dedup["matches"]:
         out["dedup_match"] = dedup["matches"][0]
         out["verdict"] = dedup["verdict"]

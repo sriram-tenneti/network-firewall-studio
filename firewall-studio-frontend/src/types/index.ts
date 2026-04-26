@@ -781,6 +781,17 @@ export interface DedupMatch {
   existing_ports: string;
   existing_action: string;
   lifecycle_status: string;
+  /** 'name' = src/dst group names match exactly; 'member' = the IP/CIDR
+   * of the requested rule is contained in some existing group's members
+   * even though the group names differ. */
+  match_kind?: 'name' | 'member';
+  /** When match_kind=='member', which existing group's members
+   * contained the requested src/dst. */
+  via_src_group?: string;
+  via_dst_group?: string;
+  /** IP/CIDR containment relation of new vs existing src/dst members. */
+  src_relation?: 'exact' | 'subset' | 'superset' | 'overlap' | 'disjoint';
+  dst_relation?: 'exact' | 'subset' | 'superset' | 'overlap' | 'disjoint';
 }
 
 export interface DedupResult {
