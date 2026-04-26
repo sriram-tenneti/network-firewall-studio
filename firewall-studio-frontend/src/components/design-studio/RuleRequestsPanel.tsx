@@ -20,6 +20,29 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
   const [expanded, setExpanded] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const toggleSelected = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const exportSelected = async () => {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.downloadRequestArtifactBulkBundle(Array.from(selected));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   // Auto-expand newly-submitted requests and scroll into view.
   useEffect(() => {
@@ -74,6 +97,11 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
           <div className="text-xs text-gray-500">Multi-DC fan-out requests. Approve/Reject/Certify entire requests or inspect per-DC physical rules.</div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => void exportSelected()} disabled={selected.size === 0 || bulkBusy}
+            title="Pack JSON + XLSX + every vendor config for each selected request into a single zip — manual fallback while ITSM integration is being set up."
+            className="text-xs px-2 py-1 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+            {bulkBusy ? 'Exporting…' : `Export selected (${selected.size})`}
+          </button>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
             className="text-xs border rounded px-2 py-1">
             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -100,6 +128,11 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
                 className={`border rounded-lg transition-all ${isHighlighted ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-md' : 'border-gray-200'}`}
               >
                 <div className={`p-2.5 flex items-center gap-2 flex-wrap ${isHighlighted ? 'bg-emerald-50' : 'bg-slate-50'}`}>
+                  <input type="checkbox"
+                    aria-label={`Select ${r.request_id} for export`}
+                    checked={r.request_id ? selected.has(r.request_id) : false}
+                    onChange={() => r.request_id && toggleSelected(r.request_id)}
+                    className="h-3.5 w-3.5 accent-emerald-600 cursor-pointer" />
                   <code className="text-[11px] font-mono text-gray-700">{r.request_id}</code>
                   <span className="text-[11px] font-semibold text-gray-900">{r.application_ref}</span>
                   <span className="text-gray-400">→</span>
@@ -129,7 +162,7 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
                   <div className="p-3 space-y-2">
                     {r.description && <div className="text-xs text-gray-700">{r.description}</div>}
                     <FanOutCompact rows={r.expansion || []} />
-                    {r.request_id && ['Approved', 'Deployed', 'Certified'].includes(r.status) && (
+                    {r.request_id && r.status !== 'Rejected' && (
                       <ArtifactsAndItsmPanel record={r} onChanged={() => void load()} />
                     )}
                     <div className="flex items-center gap-2">
@@ -189,6 +222,7 @@ function ArtifactsAndItsmPanel({ record, onChanged }: { record: RuleRequestRecor
   const requestId = record.request_id!;
   const jsonHref = `${api.API_BASE}${api.requestArtifactJsonUrl(requestId)}`;
   const xlsxHref = `${api.API_BASE}${api.requestArtifactXlsxUrl(requestId)}`;
+  const bundleHref = `${api.API_BASE}${api.requestArtifactBundleUrl(requestId)}`;
   const vendors: Array<{ key: string; label: string; ext: string }> = [
     { key: 'panos', label: 'Palo Alto (PAN-OS)', ext: 'panos' },
     { key: 'fortinet', label: 'Fortinet', ext: 'fortinet' },
@@ -226,6 +260,11 @@ function ArtifactsAndItsmPanel({ record, onChanged }: { record: RuleRequestRecor
     <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[10px] uppercase tracking-widest font-bold text-indigo-700">Deployment Artifacts</span>
+        <a href={bundleHref} target="_blank" rel="noreferrer"
+          title="Single zip with JSON + XLSX + every vendor config — manual fallback while ITSM integration is being set up"
+          className="text-[11px] px-2 py-0.5 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold">
+          Download All (.zip)
+        </a>
         <a href={jsonHref} target="_blank" rel="noreferrer"
           className="text-[11px] px-2 py-0.5 rounded border border-indigo-200 bg-white hover:bg-indigo-100 text-indigo-800">JSON manifest</a>
         <a href={xlsxHref} target="_blank" rel="noreferrer"
@@ -237,9 +276,19 @@ function ArtifactsAndItsmPanel({ record, onChanged }: { record: RuleRequestRecor
             className="text-[11px] px-2 py-0.5 rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-700">{v.label}</a>
         ))}
       </div>
+      <div className="text-[10px] text-gray-500 italic">
+        Available regardless of approval/ITSM status — attach to a CR manually,
+        email to SNS, or feed into device pipelines while the automated ITSM
+        connector is being wired up.
+      </div>
 
       <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-indigo-100">
         <span className="text-[10px] uppercase tracking-widest font-bold text-indigo-700">Submit to SNS / ITSM</span>
+        {record.status === 'Pending' && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800">
+            Draft — submit unlocks after approval. Manual export above is always available.
+          </span>
+        )}
         {connectors && connectors.length > 0 ? (
           <select value={chosenConnector} onChange={(e) => setChosenConnector(e.target.value)}
             className="text-xs border rounded px-2 py-1">
@@ -255,7 +304,8 @@ function ArtifactsAndItsmPanel({ record, onChanged }: { record: RuleRequestRecor
             {connectors === null ? 'Loading connectors…' : 'No ITSM connectors configured (Settings → ITSM Connectors)'}
           </span>
         )}
-        <button onClick={() => void submit()} disabled={submitting || (connectors !== null && connectors.length === 0)}
+        <button onClick={() => void submit()}
+          disabled={submitting || (connectors !== null && connectors.length === 0) || record.status === 'Pending' || record.status === 'Rejected'}
           className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300">
           {submitting ? 'Submitting…' : (record.external_ticket_id ? 'Re-submit' : 'Submit to SNS')}
         </button>

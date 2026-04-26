@@ -505,6 +505,145 @@ async def request_artifact_vendor_config(request_id: str, vendor: str):
     )
 
 
+def _build_bundle_zip(artifacts: dict[str, Any], request_id: str) -> bytes:
+    """Pack JSON manifest + XLSX + every vendor config into a single zip
+    so SNS can grab everything in one click and attach it to a CR even
+    while the ITSM integration is still being wired up."""
+
+    import io
+    import json as _json
+    import zipfile
+    from openpyxl import Workbook
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # JSON manifest
+        zf.writestr(
+            f"{request_id}/manifest.json",
+            _json.dumps(artifacts["manifest"], indent=2, default=str),
+        )
+        # XLSX manifest
+        wb = Workbook()
+        default = wb.active
+        wb.remove(default)
+        for name, rows in artifacts["xlsx_sheets"].items():
+            ws = wb.create_sheet(title=(name or "Sheet")[:31])
+            for row in rows:
+                ws.append(row)
+        xlsx_buf = io.BytesIO()
+        wb.save(xlsx_buf)
+        zf.writestr(f"{request_id}/manifest.xlsx", xlsx_buf.getvalue())
+        # Each vendor config as a .txt
+        for vendor_l, cfg in (artifacts.get("vendor_configs") or {}).items():
+            zf.writestr(f"{request_id}/device-{vendor_l}.txt", cfg or "")
+        # README so SNS / consumers know what's in the bundle
+        readme = (
+            f"NGDC Firewall Studio — Rule Request {request_id} export bundle\n"
+            f"================================================\n"
+            f"manifest.json     Vendor-neutral deployment manifest\n"
+            f"manifest.xlsx     Same data flattened to spreadsheet rows\n"
+            f"device-*.txt      Vendor-compiled configs (groups + rules)\n"
+            f"\n"
+            f"Use any of the above to deploy manually if the ITSM "
+            f"integration is not yet wired up.\n"
+        )
+        zf.writestr(f"{request_id}/README.txt", readme)
+    return buf.getvalue()
+
+
+@router.get("/api/rules/requests/{request_id}/artifacts/bundle.zip")
+async def request_artifact_bundle_zip(request_id: str):
+    """Single-click "Download All" — every artifact format zipped together
+    so it can be manually attached to a ServiceNow CR / emailed / handed
+    off to SNS while the automated ITSM integration is being set up."""
+
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+
+    artifacts = await get_request_artifacts(request_id)
+    if artifacts is None:
+        raise HTTPException(404, "Rule request not found")
+    payload = _build_bundle_zip(artifacts, request_id)
+    return StreamingResponse(
+        BytesIO(payload),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{request_id}-bundle.zip"'
+            )
+        },
+    )
+
+
+@router.post("/api/rules/requests/artifacts/bulk-bundle.zip")
+async def request_artifact_bulk_bundle_zip(payload: dict[str, Any]):
+    """Bulk export — pack one folder per requested rule into a single
+    zip. Body: ``{"request_ids": ["RQ-1", "RQ-2", ...]}``. Skips IDs
+    that don't resolve to a rule request (returns the rest)."""
+
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    import zipfile
+    import json as _json
+    from openpyxl import Workbook
+
+    ids = payload.get("request_ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "request_ids must be a non-empty list")
+
+    buf = BytesIO()
+    included: list[str] = []
+    skipped: list[str] = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for rid in ids:
+            rid_s = str(rid)
+            arts = await get_request_artifacts(rid_s)
+            if arts is None:
+                skipped.append(rid_s)
+                continue
+            included.append(rid_s)
+            # JSON
+            zf.writestr(
+                f"{rid_s}/manifest.json",
+                _json.dumps(arts["manifest"], indent=2, default=str),
+            )
+            # XLSX
+            wb = Workbook()
+            default = wb.active
+            wb.remove(default)
+            for name, rows in arts["xlsx_sheets"].items():
+                ws = wb.create_sheet(title=(name or "Sheet")[:31])
+                for row in rows:
+                    ws.append(row)
+            xlsx_buf = BytesIO()
+            wb.save(xlsx_buf)
+            zf.writestr(f"{rid_s}/manifest.xlsx", xlsx_buf.getvalue())
+            # Vendor configs
+            for vendor_l, cfg in (arts.get("vendor_configs") or {}).items():
+                zf.writestr(f"{rid_s}/device-{vendor_l}.txt", cfg or "")
+        # Index file at the root.
+        index = {
+            "exported_request_ids": included,
+            "skipped_request_ids": skipped,
+            "format_legend": {
+                "manifest.json": "Vendor-neutral deployment manifest",
+                "manifest.xlsx": "Same data flattened to spreadsheet rows",
+                "device-*.txt": "Vendor-compiled configs (groups + rules)",
+            },
+        }
+        zf.writestr("INDEX.json", _json.dumps(index, indent=2))
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="rule-requests-bulk-export.zip"'
+            )
+        },
+    )
+
+
 # ---- ITSM Connector Framework ----
 
 @router.get("/api/itsm/connectors")

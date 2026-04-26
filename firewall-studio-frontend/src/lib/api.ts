@@ -1475,6 +1475,27 @@ export const requestArtifactXlsxUrl = (request_id: string) =>
 export const requestArtifactVendorUrl = (request_id: string, vendor: string) =>
   `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/device.${encodeURIComponent(vendor)}`;
 
+export const requestArtifactBundleUrl = (request_id: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`;
+
+export const downloadRequestArtifactBulkBundle = async (request_ids: string[]) => {
+  const res = await fetch('/api/rules/requests/artifacts/bulk-bundle.zip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_ids }),
+  });
+  if (!res.ok) throw new Error(`Bulk export failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rule-requests-bulk-export.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
 export const listItsmConnectors = () =>
   fetchJSON<ItsmConnector[]>('/api/itsm/connectors');
 
