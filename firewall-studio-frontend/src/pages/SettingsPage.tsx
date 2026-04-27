@@ -4,11 +4,16 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
+import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone, TierSpec } from '@/types';
 import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
 import PortCatalogTab from './settings/PortCatalogTab';
 import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
+import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
+import HeritageTierMatrixEditor from '@/components/shared/HeritageTierMatrixEditor';
+import ItsmConnectorsTab from './settings/ItsmConnectorsTab';
+import BirthrightRulesTab from './settings/BirthrightRulesTab';
+import SecurityZoneNamingTab from './settings/SecurityZoneNamingTab';
 
 const INITIAL_GROUPS: ADUserGroup[] = [
   { id: 'g1', group_name: 'FW-Admins', access_type: 'Admin', description: 'Full administrative access to all features', member_count: 5, applications: ['*'] },
@@ -753,20 +758,21 @@ export default function SettingsPage() {
       showNotification(`Binding added: ${nh} · ${sz} · ${dc || 'any-DC'} → ${cidr}`, 'success');
     } catch (e) { showNotification(`Failed to add binding: ${(e as Error).message}`, 'error'); }
   };
-  const handleSaveSzBindingEdit = async (nh: string, sz: string, dc: string) => {
+  const handleSaveSzBindingEdit = async (nh: string, sz: string, dc: string, oldCidr: string) => {
     if (!editSzBindingCidr) { showNotification('CIDR is required', 'error'); return; }
     try {
-      await api.upsertSzCidrBinding({ nh, sz, dc, cidr: editSzBindingCidr });
+      await api.upsertSzCidrBinding({ nh, sz, dc, cidr: editSzBindingCidr, old_cidr: oldCidr });
       setEditingSzBindingKey(null);
       setEditSzBindingCidr('');
       await reloadSzCidrMap();
       showNotification(`Binding updated: ${nh} · ${sz} · ${dc || 'any-DC'}`, 'success');
     } catch (e) { showNotification(`Failed to update binding: ${(e as Error).message}`, 'error'); }
   };
-  const handleDeleteSzBinding = async (nh: string, sz: string, dc: string) => {
-    if (!confirm(`Delete CIDR binding ${nh} · ${sz}${dc ? ' · ' + dc : ''}?`)) return;
+  const handleDeleteSzBinding = async (nh: string, sz: string, dc: string, cidr: string = '') => {
+    const cidrLabel = cidr ? ` · ${cidr}` : '';
+    if (!confirm(`Delete CIDR binding ${nh} · ${sz}${dc ? ' · ' + dc : ''}${cidrLabel}?`)) return;
     try {
-      await api.deleteSzCidrBinding(nh, sz, dc || '');
+      await api.deleteSzCidrBinding(nh, sz, dc || '', cidr);
       await reloadSzCidrMap();
       showNotification('Binding deleted', 'success');
     } catch (e) { showNotification(`Failed to delete binding: ${(e as Error).message}`, 'error'); }
@@ -828,6 +834,9 @@ export default function SettingsPage() {
     { id: 'policy_matrix', label: 'Policy Matrix' },
     { id: 'naming_standards', label: 'Naming Standards' },
     { id: 'fw_devices', label: 'Firewall Devices' },
+    { id: 'sz_naming', label: 'SZ Naming Mode' },
+    { id: 'birthright', label: 'Birthright Rules' },
+    { id: 'itsm', label: 'ITSM Connectors' },
     { id: 'ad_groups', label: 'User Groups' },
     { id: 'ad_users', label: 'Users' },
     { id: 'ad_config', label: 'AD Configuration' },
@@ -1550,7 +1559,7 @@ export default function SettingsPage() {
                                       </thead>
                                       <tbody className="divide-y divide-emerald-50">
                                         {szBindings.map((b) => {
-                                          const bkey = `${b.nh}|${code}|${b.dc || ''}`;
+                                          const bkey = `${b.nh}|${code}|${b.dc || ''}|${b.cidr || ''}`;
                                           const isEdit = editingSzBindingKey === bkey;
                                           return (
                                             <tr key={bkey} className="hover:bg-emerald-50/40">
@@ -1577,13 +1586,13 @@ export default function SettingsPage() {
                                               <td className="px-2 py-1 text-right">
                                                 {isEdit ? (
                                                   <div className="inline-flex gap-1">
-                                                    <button onClick={() => handleSaveSzBindingEdit(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-white bg-emerald-600 rounded hover:bg-emerald-700">Save</button>
+                                                    <button onClick={() => handleSaveSzBindingEdit(b.nh, code, b.dc || '', b.cidr || '')} className="px-2 py-0.5 text-[11px] text-white bg-emerald-600 rounded hover:bg-emerald-700">Save</button>
                                                     <button onClick={() => { setEditingSzBindingKey(null); setEditSzBindingCidr(''); }} className="px-2 py-0.5 text-[11px] text-gray-600 border border-gray-200 rounded hover:bg-gray-50">Cancel</button>
                                                   </div>
                                                 ) : (
                                                   <div className="inline-flex gap-1">
                                                     <button onClick={() => { setEditingSzBindingKey(bkey); setEditSzBindingCidr(b.cidr || ''); }} className="px-2 py-0.5 text-[11px] text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-50 font-medium">Edit</button>
-                                                    <button onClick={() => handleDeleteSzBinding(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-rose-700 border border-rose-200 rounded hover:bg-rose-50 font-medium">Delete</button>
+                                                    <button onClick={() => handleDeleteSzBinding(b.nh, code, b.dc || '', b.cidr || '')} className="px-2 py-0.5 text-[11px] text-rose-700 border border-rose-200 rounded hover:bg-rose-50 font-medium">Delete</button>
                                                   </div>
                                                 )}
                                               </td>
@@ -1772,6 +1781,18 @@ export default function SettingsPage() {
           <SharedServicesTab />
         )}
 
+        {activeTab === 'sz_naming' && (
+          <SecurityZoneNamingTab />
+        )}
+
+        {activeTab === 'birthright' && (
+          <BirthrightRulesTab />
+        )}
+
+        {activeTab === 'itsm' && (
+          <ItsmConnectorsTab />
+        )}
+
         {/* ── App Management Tab ── */}
         {activeTab === 'app_management' && (
           <div className="space-y-6">
@@ -1853,6 +1874,51 @@ export default function SettingsPage() {
                   <input className={inp} placeholder="DCs (e.g. ALPHA_NGDC,BETA_NGDC)" value={newAppForm.dcs || ''} onChange={e => setNewAppForm({ ...newAppForm, dcs: e.target.value })} />
                   <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
+                {/* Omnipresent / Primary DC */}
+                <div className="border border-indigo-200 rounded-lg p-3 bg-white/60 space-y-2">
+                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">— rule requests originate from this app's Primary DC</span></h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
+                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                        value={newAppForm.primary_dc || 'ALPHA_NGDC'}
+                        onChange={e => setNewAppForm({ ...newAppForm, primary_dc: e.target.value })}>
+                        <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                        <option value="BETA_NGDC">BETA_NGDC</option>
+                        <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                        <option value="DELTA_NGDC">DELTA_NGDC</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Deployment Mode</label>
+                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                        value={newAppForm.deployment_mode || 'all_ngdc'}
+                        onChange={e => setNewAppForm({ ...newAppForm, deployment_mode: e.target.value as Application['deployment_mode'] })}>
+                        <option value="all_ngdc">All NGDC (auto-fan presences)</option>
+                        <option value="all_ngdc_with_exceptions">All NGDC (with exceptions)</option>
+                        <option value="selective">Selective (manual presences)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Owner Team</label>
+                      <input className={inp} placeholder="e.g. Eta, Platform, SNS"
+                        value={newAppForm.owner_team || ''}
+                        onChange={e => setNewAppForm({ ...newAppForm, owner_team: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+                <TierMatrixEditor
+                  tiers={(newAppForm.tiers as TierSpec[]) || []}
+                  onChange={(t: TierSpec[]) => setNewAppForm({ ...newAppForm, tiers: t })}
+                  title="NGDC Tier Matrix"
+                  subtitle="Each (NH, SZ, has_ingress?) row creates a presence in every NGDC DC at save time."
+                />
+                <HeritageTierMatrixEditor
+                  tiers={(newAppForm.heritage_tiers as { dc_id: string; has_ingress?: boolean; label?: string }[]) || []}
+                  onChange={(t) => setNewAppForm({ ...newAppForm, heritage_tiers: t })}
+                  title="Heritage DCs (apps not yet on NGDC)"
+                  subtitle="Add a row per Heritage DC where this app still serves traffic from. Materialises a flat presence + `grp-<APP>-HERITAGE-<DC>` group automatically."
+                />
                 {/* Egress/Ingress Configuration */}
                 <div className="border border-blue-200 rounded-lg p-3 bg-white/60 space-y-2">
                   <h4 className="text-xs font-semibold text-blue-800">Egress / Ingress Configuration</h4>
@@ -1927,6 +1993,33 @@ export default function SettingsPage() {
                         <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
                     </div>
                     <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
+                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                          value={editAppForm.primary_dc || 'ALPHA_NGDC'}
+                          onChange={e => setEditAppForm({ ...editAppForm, primary_dc: e.target.value })}>
+                          <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                          <option value="BETA_NGDC">BETA_NGDC</option>
+                          <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                          <option value="DELTA_NGDC">DELTA_NGDC</option>
+                        </select></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Deployment Mode</label>
+                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                          value={editAppForm.deployment_mode || 'all_ngdc'}
+                          onChange={e => setEditAppForm({ ...editAppForm, deployment_mode: e.target.value as Application['deployment_mode'] })}>
+                          <option value="all_ngdc">All NGDC (auto-fan)</option>
+                          <option value="all_ngdc_with_exceptions">All NGDC (with exceptions)</option>
+                          <option value="selective">Selective</option>
+                        </select></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner Team</label>
+                        <input className={inp} placeholder="e.g. Eta, Platform, SNS"
+                          value={editAppForm.owner_team || ''}
+                          onChange={e => setEditAppForm({ ...editAppForm, owner_team: e.target.value })} /></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Excluded DCs</label>
+                        <input className={inp} placeholder="comma-separated, e.g. DELTA_NGDC"
+                          value={Array.isArray(editAppForm.excluded_dcs) ? editAppForm.excluded_dcs.join(',') : ''}
+                          onChange={e => setEditAppForm({ ...editAppForm, excluded_dcs: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Egress IP (Source)</label>
                         <input className={inp} placeholder="e.g. svr-10.50.1.10" value={editAppForm.egress_ip || ''} onChange={e => setEditAppForm({ ...editAppForm, egress_ip: e.target.value })} /></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Has Ingress?</label>
@@ -1938,6 +2031,18 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress Components</label>
                         <input className={inp} placeholder="e.g. DB,API,VIP" value={editAppForm.ingress_components || ''} onChange={e => setEditAppForm({ ...editAppForm, ingress_components: e.target.value })} disabled={!editAppForm.has_ingress} /></div>
                     </div>
+                    <TierMatrixEditor
+                      tiers={(editAppForm.tiers as TierSpec[]) || []}
+                      onChange={(t: TierSpec[]) => setEditAppForm({ ...editAppForm, tiers: t })}
+                      title="NGDC Tier Matrix"
+                      subtitle="Saving will auto-fan one presence per (NH, SZ) row into every NGDC DC."
+                    />
+                    <HeritageTierMatrixEditor
+                      tiers={(editAppForm.heritage_tiers as { dc_id: string; has_ingress?: boolean; label?: string }[]) || []}
+                      onChange={(t) => setEditAppForm({ ...editAppForm, heritage_tiers: t })}
+                      title="Heritage DCs (apps not yet on NGDC)"
+                      subtitle="Saving will auto-fan one flat presence per Heritage DC; group naming switches to `grp-<APP>-HERITAGE-<DC>`."
+                    />
                   </div>
                 ) : (
                   <>

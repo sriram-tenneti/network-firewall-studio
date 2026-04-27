@@ -97,9 +97,17 @@ async def compile_rule_endpoint(rule_id: str, vendor: str = Query("generic")):
     rule = await get_rule(rule_id)
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    # Compile is only available for Deployed rules
-    if rule.get("rule_status", "Submitted") != "Deployed":
-        raise HTTPException(status_code=400, detail="Compile is only available for Deployed rules")
+    # Compile is a preview/export operation and is safe to run for any
+    # post-Draft status. SNS routinely needs to view the device-vendor
+    # output during review (Approved) and during operations (Deployed /
+    # Certified). Blocking compile for Approved rules left no path to
+    # download per-vendor configs before deployment.
+    allowed = {"Pending Review", "Approved", "Deployed", "Certified"}
+    if rule.get("rule_status", "Submitted") not in allowed and rule.get("status") not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Compile is only available for Pending Review / Approved / Deployed / Certified rules",
+        )
     result = await compile_rule(rule_id, vendor)
     if not result:
         raise HTTPException(status_code=404, detail="Rule not found")

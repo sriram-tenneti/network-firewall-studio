@@ -243,11 +243,11 @@ SEED_NEIGHBOURHOODS = [
 SEED_SECURITY_ZONES = [
     # ---- Production Fabric ----
     {"code": "STD", "name": "Standard Zone", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Production", "vrf_prefix": "gen/SZ01",
-     "cidr": "10.128.0.0/16", "description": "General application zone – standard workloads, non-sensitive"},
+     "fabric": "Production", "vrf_prefix": "gen/SZ01", "naming_mode": "zone_scoped",
+     "cidr": "10.128.0.0/16", "description": "General application zone – standard workloads, non-sensitive (shared cluster — group naming is grp-<NH>-<SZ>, app-id omitted)"},
     {"code": "GEN", "name": "General Zone", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Production", "vrf_prefix": "gen/SZ01",
-     "cidr": "10.129.0.0/16", "description": "General-purpose compute (alias for STD), routing/transit"},
+     "fabric": "Production", "vrf_prefix": "gen/SZ01", "naming_mode": "zone_scoped",
+     "cidr": "10.129.0.0/16", "description": "General-purpose compute (shared cluster CIDR — group naming is grp-<NH>-<SZ>, app-id omitted)"},
     {"code": "PAA", "name": "Publicly Accessible Applications", "risk_level": "High", "pci_scope": False,
      "fabric": "Production", "vrf_prefix": "paa/SZ02",
      "cidr": "10.130.0.0/16", "description": "Front-end / internet-accessible applications in DMZ"},
@@ -275,11 +275,11 @@ SEED_SECURITY_ZONES = [
 
     # ---- Non-Production Fabric ----
     {"code": "UGen", "name": "Non-Prod General", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Non-Production", "vrf_prefix": "gen",
-     "cidr": "10.200.0.0/16", "description": "General zone for non-prod routing"},
+     "fabric": "Non-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
+     "cidr": "10.200.0.0/16", "description": "General zone for non-prod routing (shared cluster — zone-scoped group naming)"},
     {"code": "USTD", "name": "Non-Prod Standard", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Non-Production", "vrf_prefix": "gen",
-     "cidr": "10.201.0.0/16", "description": "Non-prod/UAT/CTE/SIT/DEV standard workloads"},
+     "fabric": "Non-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
+     "cidr": "10.201.0.0/16", "description": "Non-prod/UAT/CTE/SIT/DEV standard workloads (shared cluster — zone-scoped group naming)"},
     {"code": "UPAA", "name": "Non-Prod PAA", "risk_level": "Medium", "pci_scope": False,
      "fabric": "Non-Production", "vrf_prefix": "paa/sz-02",
      "cidr": "10.202.0.0/16", "description": "Non-prod front-end / internet-accessible applications"},
@@ -298,10 +298,10 @@ SEED_SECURITY_ZONES = [
 
     # ---- Pre-Production Fabric ----
     {"code": "UGen", "name": "Pre-Prod General", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Pre-Production", "vrf_prefix": "gen",
-     "cidr": "10.210.0.0/16", "description": "General zone for pre-prod routing"},
+     "fabric": "Pre-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
+     "cidr": "10.210.0.0/16", "description": "General zone for pre-prod routing (shared cluster — zone-scoped group naming)"},
     {"code": "USTD", "name": "Pre-Prod Standard", "risk_level": "Low", "pci_scope": False,
-     "fabric": "Pre-Production", "vrf_prefix": "gen",
+     "fabric": "Pre-Production", "vrf_prefix": "gen", "naming_mode": "zone_scoped",
      "cidr": "10.211.0.0/16", "description": "Pre-prod/staging standard workloads"},
     {"code": "UPAA", "name": "Pre-Prod PAA", "risk_level": "Medium", "pci_scope": False,
      "fabric": "Pre-Production", "vrf_prefix": "paa/sz-02",
@@ -332,6 +332,8 @@ SEED_NGDC_DATACENTERS = [
      "cidr": "172.16.0.0/12", "description": "Secondary NGDC data center - US West coast"},
     {"dc_id": "GAMMA_NGDC", "name": "Gamma NGDC (Central)", "region": "US-Central", "status": "Active",
      "cidr": "10.50.0.0/16", "description": "Central NGDC data center - US Central"},
+    {"dc_id": "DELTA_NGDC", "name": "Delta NGDC (North)", "region": "US-North", "status": "Active",
+     "cidr": "10.60.0.0/16", "description": "Northern NGDC data center - US North (DR/active-active)"},
 ]
 
 SEED_LEGACY_DATACENTERS = [
@@ -2854,4 +2856,70 @@ SEED_PORT_CATALOG = [
     _port("ICMP", "ICMP", "ICMP", 0, "Network Services", "Ping / ICMP"),
     _port("SNMP_TRAP", "SNMP Trap", "UDP", 162, "Network Services", "SNMP trap"),
 ]
+
+
+# ============================================================
+# Post-process: primary_dc + owner_team + deployment_mode
+# ============================================================
+# All NGDC apps + shared services land in **all 4 NGDC DCs** by default;
+# rule requests originate from a single **primary DC** owned by the app /
+# service team. Older seed entries didn't carry these fields — inject
+# defaults here so the rest of the codebase can rely on them.
+
+# Default primary DC when seed records don't pin one. Apps already
+# scoped to a specific DC list keep the first DC in that list as primary.
+_DEFAULT_PRIMARY_DC = "ALPHA_NGDC"
+# Owning team for the centralized SNS / Network team (global reviewer +
+# approver — sees everything in the portal).
+SNS_TEAM = "SNS"
+
+
+def _normalize_team(value: str | None, fallback: str) -> str:
+    """Coerce an owner string into a clean team label."""
+    if not value:
+        return fallback
+    txt = str(value).strip()
+    if not txt:
+        return fallback
+    # Strip leading "Team " prefix used in older seed (e.g. "Team Eta")
+    lower = txt.lower()
+    if lower.startswith("team "):
+        txt = txt[5:].strip()
+    return txt or fallback
+
+
+def _inject_app_defaults(items: list[dict[str, Any]]) -> None:
+    for a in items:
+        # Primary DC: prefer first listed DC, then ALPHA_NGDC.
+        if not a.get("primary_dc"):
+            dcs_field = (a.get("dcs") or "").strip()
+            if dcs_field:
+                first = dcs_field.split(",")[0].strip()
+                a["primary_dc"] = first or _DEFAULT_PRIMARY_DC
+            else:
+                a["primary_dc"] = _DEFAULT_PRIMARY_DC
+        if not a.get("deployment_mode"):
+            a["deployment_mode"] = "all_ngdc"
+        if "excluded_dcs" not in a:
+            a["excluded_dcs"] = []
+        if not a.get("owner_team"):
+            a["owner_team"] = _normalize_team(a.get("owner"), "AppOps")
+
+
+def _inject_service_defaults(items: list[dict[str, Any]]) -> None:
+    for s in items:
+        if not s.get("primary_dc"):
+            s["primary_dc"] = _DEFAULT_PRIMARY_DC
+        if not s.get("deployment_mode"):
+            s["deployment_mode"] = "all_ngdc"
+        if "excluded_dcs" not in s:
+            s["excluded_dcs"] = []
+        if not s.get("owner_team"):
+            # Shared services are operated by the SNS team unless the
+            # service explicitly tags a different operator (DBAs, SRE, …).
+            s["owner_team"] = _normalize_team(s.get("owner"), SNS_TEAM)
+
+
+_inject_app_defaults(SEED_APPLICATIONS)
+_inject_service_defaults(SEED_SHARED_SERVICES)
 

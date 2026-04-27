@@ -4,6 +4,7 @@ import PortPicker from './PortPicker';
 import type {
   Application,
   AppPresence,
+  DedupMatch,
   DestinationEntityKind,
   Environment,
   PhysicalRuleExpansion,
@@ -14,6 +15,7 @@ import type {
 } from '@/types';
 import type { PresenceKey } from '@/lib/api';
 import * as api from '@/lib/api';
+import { useTeam } from '@/contexts/TeamContext';
 
 const presenceKey = (dc: string, nh: string, sz: string) => `${dc}|${nh}|${sz}`;
 const fromKey = (k: string): PresenceKey => {
@@ -44,15 +46,37 @@ interface DestRef {
   hint?: string;
 }
 
+type SrcKind = 'app' | 'shared_service';
+
 export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRequestBuilderProps) {
+  // Power-user toggles (cross-DC / destination-DC override) are SNS-only —
+  // app teams must not see destination DC complexity (they don't think in
+  // those terms). The TeamContext today defaults to SNS = god-view, so
+  // until SSO/AD-group integration lands these stay visible to admins
+  // only.
+  const { isGodView } = useTeam();
+  // Architectural choice: app users do NOT pick (DC · NH · SZ) presences.
+  // The backend auto-derives the per-DC fan-out from App Management
+  // (source = every DC's egress IPs/CIDRs for the source app, destination
+  // = the shared service VIP/LB or the destination app's ingress per DC).
+  // SNS / power users can still override via this Advanced toggle when
+  // they need surgical scoping (DR cutover, pinned active-active, etc.).
+  const [advancedMode, setAdvancedMode] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [environment, setEnvironment] = useState<Environment>('Production');
+  // Source can now be either an Application or a Shared Service. Default
+  // to 'app' for back-compat; switching to 'shared_service' lets ops raise
+  // SS→App / SS→SS rules (Splunk→app APIs, Kerberos→LDAP, etc.).
+  const [srcKind, setSrcKind] = useState<SrcKind>('app');
   const [srcApp, setSrcApp] = useState<string>('');
   const [dest, setDest] = useState<DestRef | null>(null);
   const [ports, setPorts] = useState('TCP 443');
   const [action, setAction] = useState<'ACCEPT' | 'DROP'>('ACCEPT');
   const [description, setDescription] = useState('');
   const [includeCrossDc, setIncludeCrossDc] = useState(false);
+  // Optional: explicit destination DC override (DR cutover / pinned active-active).
+  // Empty string ⇒ use destination's primary_dc (default behaviour).
+  const [destinationDcOverride, setDestinationDcOverride] = useState<string>('');
 
   const [services, setServices] = useState<SharedService[]>([]);
   const [ssPresences, setSsPresences] = useState<Record<string, SharedServicePresence[]>>({});
@@ -116,17 +140,27 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   }, [services, appsWithIngress, environment]);
 
   const srcOptions = useMemo(() => applications.filter((a) => a.app_distributed_id), [applications]);
+  const srcServiceOptions = useMemo(
+    () => services.filter((s) => (s.environments || []).includes(environment)),
+    [services, environment],
+  );
 
   // Per-app / per-service presence candidates for the current environment.
   // When either list has >1 entry we surface checkboxes so the user picks
   // the (NH, SZ) the rule should apply to — otherwise fan-out uses all.
   const srcPresenceCandidates = useMemo<PresenceKey[]>(() => {
     if (!srcApp) return [];
+    if (srcKind === 'shared_service') {
+      const list = ssPresences[srcApp] || [];
+      return list
+        .filter((p) => p.environment === environment)
+        .map((p) => ({ dc_id: p.dc_id, nh_id: p.nh_id, sz_code: p.sz_code }));
+    }
     return appPresences
       .filter((p) => p.app_distributed_id?.toUpperCase() === srcApp.toUpperCase()
                   && p.environment === environment)
       .map((p) => ({ dc_id: p.dc_id, nh_id: p.nh_id, sz_code: p.sz_code }));
-  }, [srcApp, environment, appPresences]);
+  }, [srcApp, srcKind, environment, appPresences, ssPresences]);
 
   const dstPresenceCandidates = useMemo<PresenceKey[]>(() => {
     if (!dest?.ref) return [];
@@ -148,7 +182,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
 
   // When src/dst/env change, forget prior presence scoping (UI defaults back
   // to "all presences"). Avoids stale selections referencing a stale app.
-  useEffect(() => { setSelectedSrcKeys(new Set()); }, [srcApp, environment]);
+  useEffect(() => { setSelectedSrcKeys(new Set()); }, [srcApp, srcKind, environment]);
   useEffect(() => { setSelectedDstKeys(new Set()); }, [dest?.ref, dest?.kind, environment]);
 
   const effectiveSrcPresences = useMemo<PresenceKey[] | undefined>(() => {
@@ -216,13 +250,16 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
     void (async () => {
       try {
         const p = await api.previewRuleExpansion({
-          application_ref: srcApp,
+          source_kind: srcKind,
+          source_ref: srcApp,
+          application_ref: srcKind === 'app' ? srcApp : '',
           destination_kind: dest.kind,
           destination_ref: dest.ref,
           environment,
           ports,
           action,
           include_cross_dc: includeCrossDc,
+          destination_dc_override: destinationDcOverride || undefined,
           source_presences: effectiveSrcPresences,
           destination_presences: effectiveDstPresences,
         });
@@ -232,8 +269,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
       }
     })();
     return () => { cancelled = true; };
-  }, [srcApp, dest, environment, ports, action, includeCrossDc,
-      effectiveSrcPresences, effectiveDstPresences]);
+  }, [srcApp, srcKind, dest, environment, ports, action, includeCrossDc,
+      destinationDcOverride, effectiveSrcPresences, effectiveDstPresences]);
 
   const onDropDestination = (e: React.DragEvent) => {
     e.preventDefault();
@@ -254,7 +291,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
     setSubmitError(null);
     try {
       const r = await api.createRuleRequest({
-        application_ref: srcApp,
+        source_kind: srcKind,
+        source_ref: srcApp,
+        application_ref: srcKind === 'app' ? srcApp : '',
         destination_kind: dest.kind,
         destination_ref: dest.ref,
         environment,
@@ -262,11 +301,19 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
         action,
         description,
         include_cross_dc: includeCrossDc,
+        destination_dc_override: destinationDcOverride || undefined,
         source_presences: effectiveSrcPresences,
         destination_presences: effectiveDstPresences,
       });
-      setSubmittedRecord(r);
-      onSubmitted?.(r.request_id);
+      // Backend returns ``request_id=null`` + ``block_submit=true`` when
+      // the dedup engine refuses the submit. Surface that as a validation
+      // banner instead of treating it as a successful submission.
+      if (!r.request_id || r.block_submit) {
+        setSubmitError(r.validation_message || 'Submit blocked by validation.');
+      } else {
+        setSubmittedRecord(r);
+        onSubmitted?.(r.request_id ?? undefined);
+      }
     } catch (e) {
       setSubmitError((e as Error).message);
     } finally {
@@ -275,8 +322,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   };
 
   const reset = () => {
-    setStep(1); setSrcApp(''); setDest(null); setPorts('TCP 443');
+    setStep(1); setSrcKind('app'); setSrcApp(''); setDest(null); setPorts('TCP 443');
     setAction('ACCEPT'); setDescription(''); setIncludeCrossDc(false);
+    setDestinationDcOverride('');
     setSelectedSrcKeys(new Set()); setSelectedDstKeys(new Set());
     setPreview(null); setSubmittedRecord(null); setSubmitError(null);
   };
@@ -329,15 +377,32 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Source Application</label>
-                <select value={srcApp} onChange={(e) => setSrcApp(e.target.value)}
+                <label className="block text-xs font-medium text-gray-600 mb-1">Source (Application or Shared Service)</label>
+                <select
+                  value={srcKind === 'shared_service' ? `ss:${srcApp}` : `app:${srcApp}`}
+                  onChange={(e) => {
+                    const [k, ...rest] = e.target.value.split(':');
+                    const ref = rest.join(':');
+                    if (k === 'ss') { setSrcKind('shared_service'); setSrcApp(ref); }
+                    else { setSrcKind('app'); setSrcApp(ref); }
+                  }}
                   className="w-full border rounded px-2 py-1.5 text-sm">
-                  <option value="">— select source app —</option>
-                  {srcOptions.map((a) => (
-                    <option key={a.app_distributed_id || a.app_id} value={a.app_distributed_id || a.app_id}>
-                      {a.app_distributed_id || a.app_id} — {a.app_name ?? ''}
-                    </option>
-                  ))}
+                  <option value="app:">— select source —</option>
+                  <optgroup label="Applications">
+                    {srcOptions.map((a) => (
+                      <option key={`app-${a.app_distributed_id || a.app_id}`}
+                        value={`app:${a.app_distributed_id || a.app_id}`}>
+                        {a.app_distributed_id || a.app_id} — {a.app_name ?? ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Shared Services (as source)">
+                    {srcServiceOptions.map((s) => (
+                      <option key={`ss-${s.service_id}`} value={`ss:${s.service_id}`}>
+                        {s.icon ?? '🧩'} {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             </div>
@@ -385,14 +450,48 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               </div>
             </div>
 
-            {/* Per-presence scoping — surfaces only when the chosen app/service
-                spans multiple (DC, NH, SZ) combinations. Empty selection =
-                use all presences (default behavior). */}
+            {/* Per-presence scoping — gated behind Advanced (SNS only).
+                App users never see this: the backend auto-derives per-DC
+                fan-out from App Management (source = all DC egress IPs/
+                CIDRs of source app; destination = shared service VIP/LB
+                or destination app's ingress VIP per DC). */}
+            {isGodView && (
+              <div className="flex items-center justify-between p-2 rounded border border-amber-200 bg-amber-50">
+                <div className="text-xs">
+                  <span className="font-semibold text-amber-800">Advanced (SNS):</span>
+                  <span className="text-amber-700 ml-2">
+                    Manually scope which (DC · NH · SZ) presences this rule applies to.
+                    Off = backend auto-derives the full fan-out from App Management.
+                  </span>
+                </div>
+                <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={advancedMode}
+                    onChange={(e) => {
+                      setAdvancedMode(e.target.checked);
+                      if (!e.target.checked) {
+                        setSelectedSrcKeys(new Set());
+                        setSelectedDstKeys(new Set());
+                      }
+                    }}
+                  />
+                  <span className="font-medium">Manual presence override</span>
+                </label>
+              </div>
+            )}
+            {isGodView && advancedMode && (<>
             <PresencePicker
-              title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source app'}?`}
-              subtitle="Each checked presence becomes one PhysicalRule with the matching grp-<App>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default)."
-              emptyHint={srcApp ? 'This app has no presence in the selected environment.' : 'Pick a source application first.'}
-              makeGroupName={(p) => appEgressGroupName(srcApp || 'APP', p.nh_id, p.sz_code)}
+              title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source'}?`}
+              subtitle={srcKind === 'shared_service'
+                ? 'Each checked presence becomes one PhysicalRule with the matching grp-<Service>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'
+                : 'Each checked presence becomes one PhysicalRule with the matching grp-<App>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'}
+              emptyHint={srcApp
+                ? `This ${srcKind === 'shared_service' ? 'service' : 'app'} has no presence in the selected environment.`
+                : 'Pick a source first.'}
+              makeGroupName={(p) => srcKind === 'shared_service'
+                ? sharedServiceGroupName(srcApp || 'SVC', p.nh_id, p.sz_code)
+                : appEgressGroupName(srcApp || 'APP', p.nh_id, p.sz_code)}
               candidates={srcPresenceCandidates}
               selected={selectedSrcKeys}
               onChange={setSelectedSrcKeys}
@@ -410,6 +509,14 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               selected={selectedDstKeys}
               onChange={setSelectedDstKeys}
             />
+            </>)}
+            {!isGodView && (
+              <div className="text-xs text-gray-500 italic px-2">
+                Per-DC fan-out is auto-derived from App Management — source presences map to
+                every DC's egress IPs/CIDRs of the source app, and destination resolves to the
+                shared service VIP/LB or the destination app's ingress VIP per DC.
+              </div>
+            )}
 
             <div className="flex justify-end">
               <button disabled={!srcApp || !dest} onClick={() => setStep(2)}
@@ -446,10 +553,36 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 className="w-full border rounded px-2 py-1.5 text-sm"
                 placeholder="Business justification / ticket / context" />
             </div>
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input type="checkbox" checked={includeCrossDc} onChange={(e) => setIncludeCrossDc(e.target.checked)} />
-              Also fan-out cross-DC pairs (when same-DC pairings do not exist)
-            </label>
+            {isGodView ? (
+              <details className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
+                <summary className="text-[11px] font-semibold text-amber-800 cursor-pointer">Advanced (SNS only) — Power-user Overrides</summary>
+                <p className="text-[11px] text-gray-600 mt-2">
+                  By default, rules originate from the source's <strong>primary DC</strong> and target the destination's
+                  <strong> primary DC</strong>. The destination team manages east-west routing across their other DCs.
+                  Use these toggles only for active-active source / DR cutover scenarios.
+                </p>
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input type="checkbox" checked={includeCrossDc} onChange={(e) => setIncludeCrossDc(e.target.checked)} />
+                  <span><strong>Cross-DC fan-out</strong> — also generate rules from non-primary source DCs</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <span className="min-w-[150px]"><strong>Destination DC override</strong></span>
+                  <select value={destinationDcOverride}
+                    onChange={(e) => setDestinationDcOverride(e.target.value)}
+                    className="border rounded px-2 py-1 text-xs">
+                    <option value="">Use destination's primary DC (default)</option>
+                    <option value="ALPHA_NGDC">ALPHA_NGDC</option>
+                    <option value="BETA_NGDC">BETA_NGDC</option>
+                    <option value="GAMMA_NGDC">GAMMA_NGDC</option>
+                    <option value="DELTA_NGDC">DELTA_NGDC</option>
+                  </select>
+                </label>
+              </details>
+            ) : (
+              <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-2 text-[11px] text-emerald-800">
+                Your rule will originate from your app's primary DC. The destination team handles east-west routing across their other DCs — you don't need to think in DC terms.
+              </div>
+            )}
             <div className="flex justify-between">
               <button onClick={() => setStep(1)} className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">Back</button>
               <button onClick={() => setStep(3)}
@@ -476,6 +609,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   destination_ref: dest!.ref,
                   environment, ports, action,
                   include_cross_dc: includeCrossDc,
+                  destination_dc_override: destinationDcOverride || undefined,
                 });
                 setPreview(p);
               })()}
@@ -483,6 +617,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 Recompute
               </button>
             </div>
+
+            <ValidationStatus preview={preview} />
 
             {preview?.warnings?.length ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
@@ -558,9 +694,10 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 <div className="flex gap-2">
                   <button onClick={() => setStep(2)} className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">Back</button>
                   <button onClick={() => void submit()}
-                    disabled={submitting || !preview || preview.physical_rules.length === 0}
+                    disabled={submitting || !preview || preview.physical_rules.length === 0 || preview.block_submit}
+                    title={preview?.block_submit ? 'Submit blocked — see validation status above' : undefined}
                     className="px-4 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-300">
-                    {submitting ? 'Submitting…' : 'Submit Rule Request'}
+                    {submitting ? 'Submitting…' : (preview?.block_submit ? 'Blocked by validation' : 'Submit Rule Request')}
                   </button>
                 </div>
               </div>
@@ -571,6 +708,88 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null }) {
+  if (!preview) return null;
+  const dedup = preview.dedup;
+  const birth = preview.birthright;
+  const block = preview.block_submit;
+  const overlap = (dedup?.matches ?? []).filter((m) => m.verdict === 'overlap');
+  const hardMatches = (dedup?.matches ?? []).filter(
+    (m) => m.verdict === 'identical' || m.verdict === 'subset' || m.verdict === 'conflict',
+  );
+  const birthMatches = birth?.matches ?? [];
+
+  // Green: no matches.
+  if (!block && hardMatches.length === 0 && overlap.length === 0 && birthMatches.length === 0) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800 flex items-center gap-2">
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-bold">✓</span>
+        <span><strong>Validation passed</strong> — no overlap with existing rules; no birthright coverage. Safe to submit.</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`rounded-lg border p-3 text-xs space-y-2 ${block ? 'border-rose-300 bg-rose-50 text-rose-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+      <div className="flex items-center gap-2 font-semibold">
+        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-[11px] font-bold ${block ? 'bg-rose-600' : 'bg-amber-500'}`}>
+          {block ? '✕' : '!'}
+        </span>
+        <span>{block ? 'Submit blocked by validation' : 'Submit allowed with warning'}</span>
+      </div>
+      {hardMatches.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Hard-block — already exists</div>
+          {hardMatches.map((m: DedupMatch, idx: number) => (
+            <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-rose-200 rounded p-2 flex flex-wrap items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded bg-rose-100 border border-rose-200 text-[10px] font-bold uppercase">{m.verdict}</span>
+              <code className="font-mono text-[11px]">{m.rule_id}</code>
+              <span className="font-mono text-[10px] text-indigo-700">{m.src_group} → {m.dst_group}</span>
+              <span className="font-mono text-[10px]">{m.existing_ports}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800">{m.lifecycle_status}</span>
+              {m.match_kind === 'member' && (
+                <span title={`src ${m.src_relation} · dst ${m.dst_relation}`} className="text-[10px] px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-800 font-mono">
+                  via members of {m.via_src_group}{m.via_dst_group && m.via_dst_group !== m.via_src_group ? ` / ${m.via_dst_group}` : ''}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {overlap.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Overlap — proceed with care</div>
+          {overlap.map((m: DedupMatch, idx: number) => (
+            <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-amber-200 rounded p-2 flex flex-wrap items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-[10px] font-bold uppercase">overlap</span>
+              <code className="font-mono text-[11px]">{m.rule_id}</code>
+              <span className="font-mono text-[10px] text-indigo-700">{m.src_group} → {m.dst_group}</span>
+              <span className="font-mono text-[10px]">{m.existing_ports}</span>
+              {m.match_kind === 'member' && (
+                <span title={`src ${m.src_relation} · dst ${m.dst_relation}`} className="text-[10px] px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-800 font-mono">
+                  via members of {m.via_src_group}{m.via_dst_group && m.via_dst_group !== m.via_src_group ? ` / ${m.via_dst_group}` : ''}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {birthMatches.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Birthright — already provided cluster-wide</div>
+          {birthMatches.map((b) => (
+            <div key={b.birthright_id} className="bg-white/60 border border-emerald-200 rounded p-2 flex flex-wrap items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-100 border border-emerald-200 text-[10px] font-bold uppercase">{b.birthright_id}</span>
+              <span className="font-mono text-[10px]">{b.destination_ref}</span>
+              <span className="font-mono text-[10px]">{b.ports}</span>
+              {b.description ? <span className="text-[10px] opacity-80">— {b.description}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

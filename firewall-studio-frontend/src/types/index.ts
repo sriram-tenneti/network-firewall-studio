@@ -167,6 +167,35 @@ export interface Application {
   ingress_ips?: string;
   ingress_components?: string;
   direction?: 'egress' | 'ingress' | 'both';
+  // Mandatory primary DC. Rule Builder defaults the source to this DC.
+  primary_dc?: string;
+  deployment_mode?: 'all_ngdc' | 'selective' | 'all_ngdc_with_exceptions';
+  excluded_dcs?: string[];
+  // Owning team. SNS team is the global reviewer/approver and sees
+  // every app/service; everyone else sees only their own.
+  owner_team?: string;
+  // Tier definition (NH x SZ x has_ingress). When deployment_mode is
+  // 'all_ngdc' or 'all_ngdc_with_exceptions', the backend auto-fans
+  // one presence per tier into every target NGDC DC.
+  tiers?: TierSpec[];
+  // Heritage tiers — one per Heritage DC the app/service still
+  // serves from. Materialises into a flat presence (no NH/SZ) and a
+  // `grp-<APP>-HERITAGE-<DC>` group during auto-fan.
+  heritage_tiers?: HeritageTierSpec[];
+  environments?: Environment[];
+}
+
+export interface TierSpec {
+  nh_id: string;
+  sz_code: string;
+  has_ingress?: boolean;
+  label?: string;
+}
+
+export interface HeritageTierSpec {
+  dc_id: string;
+  has_ingress?: boolean;
+  label?: string;
 }
 
 export interface OrgConfig {
@@ -714,15 +743,26 @@ export interface SharedService {
   name: string;
   category: SharedServiceCategory;
   owner?: string;
+  /** Owning team. SNS sees everything; other teams see only their own. */
+  owner_team?: string;
   description?: string;
   icon?: string;
   color?: string;
   environments: Environment[];
   tags?: string[];
+  /** Mandatory primary DC. Rule Builder pins the destination to this DC. */
+  primary_dc?: string;
+  deployment_mode?: 'all_ngdc' | 'selective' | 'all_ngdc_with_exceptions';
+  excluded_dcs?: string[];
   /** Port-catalog IDs treated as defaults for this service. */
   standard_ports?: string[];
   /** Service-specific custom ports that don't belong in the shared library. */
   additional_ports?: PortBinding[];
+  /** Tier definition. Auto-fans into all NGDC DCs when deployment_mode='all_ngdc'. */
+  tiers?: TierSpec[];
+  /** Heritage tiers — one per Heritage DC. Materialises into flat
+   * (no NH/SZ) presences with `grp-<SVC>-HERITAGE-<DC>` groups. */
+  heritage_tiers?: HeritageTierSpec[];
   created_at?: string;
   updated_at?: string;
 }
@@ -745,11 +785,65 @@ export interface PhysicalRuleExpansion {
   policy_result?: PolicyResult | null;
   compiled_text?: string | null;
   lifecycle_status?: string;
+  /** True when the side has no NH/SZ and the DC is a Heritage DC.
+   * Surfaces in the UI so the rule preview shows
+   * `grp-<APP>-HERITAGE-<DC>` / VRF=`HERITAGE-<DC>` instead of the
+   * NGDC convention. */
+  src_is_heritage?: boolean;
+  dst_is_heritage?: boolean;
+  /** Zone-scoped CIDR expansion. Populated by the backend when the
+   * source SZ is one of the shared/zone-scoped zones (GEN/STD/Shared/
+   * UGen/USTD): the rule's "true" source IP space is the SZ's
+   * registered CIDRs, not the per-app egress IPs. */
+  src_cidrs?: string[];
+  dst_cidrs?: string[];
+  vrf?: string;
+}
+
+export interface DedupMatch {
+  rule_id: string;
+  verdict: 'identical' | 'subset' | 'overlap' | 'conflict' | 'none';
+  src_group: string;
+  dst_group: string;
+  existing_ports: string;
+  existing_action: string;
+  lifecycle_status: string;
+  /** 'name' = src/dst group names match exactly; 'member' = the IP/CIDR
+   * of the requested rule is contained in some existing group's members
+   * even though the group names differ. */
+  match_kind?: 'name' | 'member';
+  /** When match_kind=='member', which existing group's members
+   * contained the requested src/dst. */
+  via_src_group?: string;
+  via_dst_group?: string;
+  /** IP/CIDR containment relation of new vs existing src/dst members. */
+  src_relation?: 'exact' | 'subset' | 'superset' | 'overlap' | 'disjoint';
+  dst_relation?: 'exact' | 'subset' | 'superset' | 'overlap' | 'disjoint';
+}
+
+export interface DedupResult {
+  verdict: 'identical' | 'subset' | 'overlap' | 'conflict' | 'ok';
+  block: boolean;
+  matches: DedupMatch[];
+}
+
+export interface BirthrightMatch {
+  birthright_id: string;
+  destination_ref: string;
+  ports: string;
+  description?: string;
+}
+
+export interface BirthrightResult {
+  covered: boolean;
+  matches: BirthrightMatch[];
 }
 
 export interface RuleRequestRecord {
-  request_id: string;
+  request_id: string | null;
   application_ref: string;
+  source_kind?: 'app' | 'shared_service';
+  source_ref?: string;
   destination_kind: DestinationEntityKind;
   destination_ref?: string | null;
   environment: Environment;
@@ -757,14 +851,65 @@ export interface RuleRequestRecord {
   action: string;
   description?: string;
   owner?: string;
+  owner_team?: string;
   status: string;
   expansion: PhysicalRuleExpansion[];
   warnings?: string[];
   created_at?: string;
   updated_at?: string;
+  // Submit hard-block fields
+  block_submit?: boolean;
+  validation_message?: string;
+  dedup?: DedupResult;
+  birthright?: BirthrightResult;
+  // ITSM / external ticket plumbing
+  external_system?: string | null;
+  external_connector_id?: string | null;
+  external_ticket_id?: string | null;
+  external_ticket_url?: string | null;
+  external_status?: string | null;
+  external_last_synced_at?: string | null;
 }
 
 export interface RuleExpansionPreview {
   physical_rules: PhysicalRuleExpansion[];
   warnings: string[];
+  dedup?: DedupResult;
+  birthright?: BirthrightResult;
+  block_submit?: boolean;
+}
+
+export interface ItsmConnector {
+  connector_id?: string;
+  kind: 'servicenow' | 'generic_rest' | 'internal';
+  name?: string;
+  endpoint_url: string;
+  auth_mode?: 'api_key' | 'basic' | 'oauth2' | 'vault' | 'none';
+  auth_user?: string;
+  auth_secret?: string;
+  vault_path?: string;
+  payload_template?: Record<string, unknown>;
+  status_mapping?: Record<string, string>;
+  auto_submit_on_approval?: boolean;
+}
+
+export interface BirthrightRule {
+  birthright_id?: string;
+  scope_dc?: string;
+  scope_nh?: string;
+  scope_sz?: string;
+  destination_kind: 'shared_service' | 'app_ingress';
+  destination_ref: string;
+  ports: string;
+  description?: string;
+}
+
+export interface DeploymentArtifactsBundle {
+  manifest: Record<string, unknown> & {
+    request_id: string;
+    rules: Array<Record<string, unknown>>;
+    groups: Array<Record<string, unknown>>;
+  };
+  xlsx_sheets: Record<string, string[][]>;
+  vendor_configs: Record<string, string>;
 }

@@ -27,7 +27,7 @@ import type {
 } from '@/types';
 import { isLegacyGroupName } from '@/lib/nestingParser';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, {
@@ -228,7 +228,12 @@ export const getSecurityZones = () => fetchJSON<SecurityZone[]>('/api/reference/
 export const getPredefinedDestinations = () => fetchJSON<PredefinedDestination[]>('/api/reference/predefined-destinations');
 export const getNeighbourhoods = () => fetchJSON<NeighbourhoodRegistry[]>('/api/reference/neighbourhoods');
 export const getLegacyDatacenters = () => fetchJSON<{ name: string; code: string }[]>('/api/reference/legacy-datacenters');
-export const getApplications = () => fetchJSON<Application[]>('/api/reference/applications');
+export const getApplications = (params?: { team?: string }) => {
+  const qs = new URLSearchParams();
+  if (params?.team) qs.set('team', params.team);
+  const s = qs.toString();
+  return fetchJSON<Application[]>(`/api/reference/applications${s ? `?${s}` : ''}`);
+};
 export const getEnvironments = () => fetchJSON<string[]>('/api/reference/environments');
 export const getCHGRequests = () => fetchJSON<CHGRequest[]>('/api/reference/chg-requests');
 
@@ -644,7 +649,11 @@ export const getNhSecurityZones = (nhId: string, dc?: string) => {
 
 // SZ-level CIDR binding CRUD (DC-specific)
 export const upsertSzCidrBinding = (payload: {
-  nh: string; sz: string; dc: string; cidr: string; vrf_id?: string; description?: string;
+  nh: string; sz: string; dc: string; cidr: string;
+  vrf_id?: string; description?: string;
+  /** When supplied, the existing row keyed by (nh, sz, dc, old_cidr)
+   *  is *renamed* to ``cidr`` instead of a new row being created. */
+  old_cidr?: string;
 }) =>
   fetchJSON<NhSecurityZone>('/api/reference/sz-cidr-bindings', {
     method: 'POST',
@@ -652,8 +661,9 @@ export const upsertSzCidrBinding = (payload: {
     body: JSON.stringify(payload),
   });
 
-export const deleteSzCidrBinding = (nh: string, sz: string, dc: string) => {
+export const deleteSzCidrBinding = (nh: string, sz: string, dc: string, cidr: string = '') => {
   const params = new URLSearchParams({ nh, sz, dc });
+  if (cidr) params.set('cidr', cidr);
   return fetchJSON<{ message: string }>(`/api/reference/sz-cidr-bindings?${params}`, { method: 'DELETE' });
 };
 
@@ -1118,11 +1128,13 @@ export const getSharedServices = (params?: {
   environment?: Environment;
   category?: string;
   q?: string;
+  team?: string;
 }) => {
   const qs = new URLSearchParams();
   if (params?.environment) qs.set('environment', params.environment);
   if (params?.category) qs.set('category', params.category);
   if (params?.q) qs.set('q', params.q);
+  if (params?.team) qs.set('team', params.team);
   const s = qs.toString();
   return fetchJSON<SharedService[]>(
     `/api/reference/shared-services${s ? `?${s}` : ''}`,
@@ -1294,7 +1306,14 @@ export interface PresenceKey {
 }
 
 export interface RuleRequestInput {
-  application_ref: string;
+  /** Source entity kind. Defaults to 'app' on the backend for back-compat. */
+  source_kind?: 'app' | 'shared_service';
+  /** Source ref — app_distributed_id when source_kind='app',
+   *  service_id when source_kind='shared_service'. */
+  source_ref?: string;
+  /** Legacy alias for app sources. Populated automatically when
+   *  source_kind='app'. */
+  application_ref?: string;
   destination_kind: DestinationEntityKind;
   destination_ref?: string | null;
   environment: Environment;
@@ -1311,8 +1330,14 @@ export interface RuleRequestInput {
   /** Per-presence scoping for the destination (app_ingress or shared
    *  service). Same semantics as source_presences. */
   destination_presences?: PresenceKey[];
+  /** Power-user toggle: opt out of primary-DC scoping and fan out across
+   *  all source/destination DCs (legacy intersect-all behaviour). */
   include_cross_dc?: boolean;
+  /** Power-user override: explicitly target a destination DC (DR cutover
+   *  scenarios). Supersedes the destination's primary_dc. */
+  destination_dc_override?: string;
   owner?: string;
+  owner_team?: string;
 }
 
 export const previewRuleExpansion = (payload: RuleRequestInput) =>
@@ -1324,10 +1349,12 @@ export const previewRuleExpansion = (payload: RuleRequestInput) =>
 export const listRuleRequests = (params?: {
   environment?: Environment;
   status?: string;
+  team?: string;
 }) => {
   const qs = new URLSearchParams();
   if (params?.environment) qs.set('environment', params.environment);
   if (params?.status) qs.set('status', params.status);
+  if (params?.team) qs.set('team', params.team);
   const s = qs.toString();
   return fetchJSON<RuleRequestRecord[]>(
     `/api/rules/requests${s ? `?${s}` : ''}`,
@@ -1381,3 +1408,332 @@ export const deletePort = (portId: string) =>
     `/api/reference/ports/${encodeURIComponent(portId)}`,
     { method: 'DELETE' },
   );
+
+// ============================================================
+// Phase A — Validation, Artifacts, ITSM, Migration
+// ============================================================
+import type {
+  BirthrightRule as _BirthrightRule,
+  ItsmConnector as _ItsmConnector,
+  DeploymentArtifactsBundle as _DeploymentArtifactsBundle,
+  DedupResult as _DedupResult,
+  BirthrightResult as _BirthrightResult,
+} from '@/types';
+export type BirthrightRule = _BirthrightRule;
+export type ItsmConnector = _ItsmConnector;
+export type DeploymentArtifactsBundle = _DeploymentArtifactsBundle;
+export type DedupResult = _DedupResult;
+export type BirthrightResult = _BirthrightResult;
+
+export const validateRule = (payload: Record<string, unknown>) =>
+  fetchJSON<{
+    dedup: DedupResult;
+    birthright: BirthrightResult;
+    block_submit: boolean;
+    physical_rules?: unknown[];
+    warnings?: string[];
+  } & RuleExpansionPreview>('/api/rules/validate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const listBirthrightRules = () =>
+  fetchJSON<BirthrightRule[]>('/api/birthright-rules');
+
+export const upsertBirthrightRule = (data: BirthrightRule) =>
+  fetchJSON<BirthrightRule>('/api/birthright-rules', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const deleteBirthrightRule = (id: string) =>
+  fetchJSON<{ status: string }>(
+    `/api/birthright-rules/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+
+export const setSecurityZoneNamingMode = (
+  code: string,
+  naming_mode: 'app_scoped' | 'zone_scoped',
+) =>
+  fetchJSON<{ code: string; naming_mode: string }>(
+    `/api/reference/security-zones/${encodeURIComponent(code)}/naming-mode`,
+    { method: 'PUT', body: JSON.stringify({ naming_mode }) },
+  );
+
+export const getSecurityZonesWithMode = () =>
+  fetchJSON<Array<{ code: string; name: string; naming_mode?: string; description?: string }>>(
+    '/api/reference/security-zones-with-mode',
+  );
+
+export const getRequestArtifacts = (request_id: string) =>
+  fetchJSON<DeploymentArtifactsBundle>(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts`,
+  );
+
+export const requestArtifactJsonUrl = (request_id: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`;
+
+export const requestArtifactXlsxUrl = (request_id: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`;
+
+export const requestArtifactVendorUrl = (request_id: string, vendor: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/device.${encodeURIComponent(vendor)}`;
+
+export const requestArtifactBundleUrl = (request_id: string) =>
+  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`;
+
+export const downloadRequestArtifactBulkBundle = async (request_ids: string[]) => {
+  const res = await fetch('/api/rules/requests/artifacts/bulk-bundle.zip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_ids }),
+  });
+  if (!res.ok) throw new Error(`Bulk export failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rule-requests-bulk-export.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+export const listItsmConnectors = () =>
+  fetchJSON<ItsmConnector[]>('/api/itsm/connectors');
+
+export const upsertItsmConnector = (data: ItsmConnector) =>
+  fetchJSON<ItsmConnector>('/api/itsm/connectors', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const deleteItsmConnector = (id: string) =>
+  fetchJSON<{ status: string }>(
+    `/api/itsm/connectors/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+
+export const submitRequestToItsm = (
+  request_id: string,
+  connector_id?: string,
+) =>
+  fetchJSON<{
+    request_id: string;
+    connector_id: string;
+    kind: string;
+    endpoint_url: string;
+    rendered_payload: Record<string, unknown>;
+    external_ticket_id: string;
+    external_ticket_url: string;
+    external_status: string;
+  }>(`/api/rules/requests/${encodeURIComponent(request_id)}/submit-itsm`, {
+    method: 'POST',
+    body: JSON.stringify(connector_id ? { connector_id } : {}),
+  });
+
+export const refreshExternalStatus = (request_id: string) =>
+  fetchJSON<{
+    request_id: string;
+    external_ticket_id: string;
+    external_status: string;
+    external_last_synced_at: string;
+  }>(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/refresh-external-status`,
+    { method: 'POST', body: '{}' },
+  );
+
+export const normalizeLegacyRule = (rule: Record<string, unknown>) =>
+  fetchJSON<{
+    origin_legacy_rule_id: string;
+    verdict: string;
+    block: boolean;
+    physical_rule: Record<string, unknown> | null;
+    dedup_match: Record<string, unknown> | null;
+    warnings: string[];
+  }>('/api/migration/normalize', {
+    method: 'POST',
+    body: JSON.stringify(rule),
+  });
+
+export const normalizeLegacyRulesBulk = (rules: Array<Record<string, unknown>>) =>
+  fetchJSON<{
+    counters: {
+      total: number;
+      standardized: number;
+      merged_existing: number;
+      overlap_flagged: number;
+      unclassifiable: number;
+    };
+    decisions: Array<{
+      origin_legacy_rule_id: string;
+      verdict: string;
+      block: boolean;
+      physical_rule: Record<string, unknown> | null;
+      dedup_match: Record<string, unknown> | null;
+      warnings: string[];
+    }>;
+  }>('/api/migration/normalize-bulk', {
+    method: 'POST',
+    body: JSON.stringify({ rules }),
+  });
+
+
+// ============================================================
+// Group Change Requests (standalone group create / modify / delete)
+// ============================================================
+
+export type GroupChangeOp =
+  | 'create'
+  | 'modify-add'
+  | 'modify-remove'
+  | 'delete';
+
+export type GroupChangeRequest = {
+  request_id: string;
+  kind: 'group_change';
+  op: GroupChangeOp;
+  group_name: string;
+  added_members: string[];
+  removed_members: string[];
+  environment: string;
+  owner: string;
+  owner_team: string;
+  description?: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Deployed' | 'Certified';
+  created_at: string;
+  updated_at: string;
+  external_ticket_id?: string | null;
+  external_ticket_url?: string | null;
+  external_status?: string | null;
+  external_system?: string | null;
+  external_last_synced_at?: string | null;
+};
+
+export const listGroupChangeRequests = (params: {
+  environment?: string;
+  status?: string;
+  team?: string;
+} = {}) => {
+  const q = new URLSearchParams();
+  if (params.environment) q.set('environment', params.environment);
+  if (params.status) q.set('status', params.status);
+  if (params.team) q.set('team', params.team);
+  const qs = q.toString();
+  return fetchJSON<GroupChangeRequest[]>(
+    `/api/groups/change-requests${qs ? `?${qs}` : ''}`,
+  );
+};
+
+export const getGroupChangeRequest = (request_id: string) =>
+  fetchJSON<GroupChangeRequest>(
+    `/api/groups/change-requests/${encodeURIComponent(request_id)}`,
+  );
+
+export const createGroupChangeRequest = (
+  payload: {
+    op: GroupChangeOp;
+    group_name: string;
+    added_members?: string[];
+    removed_members?: string[];
+    environment?: string;
+    owner?: string;
+    owner_team?: string;
+    description?: string;
+    group_type?: string;
+  },
+) => fetchJSON<GroupChangeRequest>('/api/groups/change-requests', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+});
+
+export const setGroupChangeRequestStatus = (
+  request_id: string, status: string, note?: string,
+) => fetchJSON<GroupChangeRequest>(
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/status`,
+  { method: 'PATCH', body: JSON.stringify({ status, note }) },
+);
+
+export const groupChangeArtifactBundleUrl = (request_id: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`;
+
+export const groupChangeArtifactJsonUrl = (request_id: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`;
+
+export const groupChangeArtifactXlsxUrl = (request_id: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`;
+
+export const groupChangeArtifactVendorUrl = (request_id: string, vendor: string) =>
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/artifacts/device-${encodeURIComponent(vendor)}.txt`;
+
+export const downloadGroupChangeBulkBundle = async (request_ids: string[]) => {
+  const res = await fetch(
+    '/api/groups/change-requests/artifacts/bulk-bundle.zip',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_ids }),
+    },
+  );
+  if (!res.ok) throw new Error(`Bulk export failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'group-change-requests-bulk-export.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+export const submitGroupChangeToItsm = (
+  request_id: string, connector_id?: string,
+) => fetchJSON<{
+  request_id: string;
+  connector_id: string;
+  kind: string;
+  endpoint_url: string;
+  rendered_payload: Record<string, unknown>;
+  external_ticket_id: string;
+  external_ticket_url: string;
+  external_status: string;
+}>(
+  `/api/groups/change-requests/${encodeURIComponent(request_id)}/submit-itsm`,
+  {
+    method: 'POST',
+    body: JSON.stringify(connector_id ? { connector_id } : {}),
+  },
+);
+
+export const refreshGroupChangeExternalStatus = (request_id: string) =>
+  fetchJSON<{
+    request_id: string;
+    external_ticket_id: string;
+    external_status: string;
+    external_last_synced_at: string;
+  }>(
+    `/api/groups/change-requests/${encodeURIComponent(request_id)}/refresh-external-status`,
+    { method: 'POST', body: '{}' },
+  );
+
+// ============================================================
+// Phase B — ITSM polling + webhook receiver
+// ============================================================
+
+export const pollItsmConnectors = () =>
+  fetchJSON<{
+    connectors_seen: number;
+    transitions: Array<{
+      request_id: string;
+      kind: 'rule' | 'group_change';
+      before: string;
+      after: string;
+    }>;
+    polled_at: string;
+  }>('/api/itsm/poll', { method: 'POST', body: '{}' });
+
+export const itsmWebhookUrl = (connector_id: string) =>
+  `/api/itsm/webhook/${encodeURIComponent(connector_id)}`;
