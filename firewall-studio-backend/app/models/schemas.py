@@ -112,6 +112,28 @@ class TierSpec(BaseModel):
     label: Optional[str] = ""  # e.g. "web", "db", "mq"
 
 
+class HeritageTierSpec(BaseModel):
+    """Tier definition for apps/services that still live on Heritage
+    infrastructure that doesn't have NH/SZ segmentation.
+
+    A Heritage tier is bound to a specific Heritage DC (one tier per
+    Heritage DC presence). The portal auto-materialises one
+    AppPresence (with ``dc_type=Heritage``, no NH/SZ) per tier and
+    derives groups using the flat ``grp-<APP>-HERITAGE-<DC>``
+    convention. (Pre-rename name: ``LegacyTierSpec`` — alias kept for
+    backward compat.)
+    """
+
+    dc_id: str
+    has_ingress: bool = False
+    label: Optional[str] = ""
+
+
+# Backward-compatible alias — older payloads / imports may still
+# reference ``LegacyTierSpec``.
+LegacyTierSpec = HeritageTierSpec
+
+
 class SharedService(BaseModel):
     """Centralized shared service (MQ, Kafka, DB, AppD, Splunk, Redis, …)
     available as a rule destination AND a rule source (e.g. Splunk
@@ -146,6 +168,17 @@ class SharedService(BaseModel):
     # Tier definition shared across NGDC DCs. Replicated as one
     # SharedServicePresence per NGDC DC during auto-fan.
     tiers: list[TierSpec] = []
+    # Heritage tiers — one per Heritage DC the service still serves
+    # from. Each materialises into a SharedServicePresence with no
+    # NH/SZ; the rule pipeline detects heritage presences and falls
+    # back to the flat ``grp-<SVC>-HERITAGE-<DC>`` group +
+    # ``HERITAGE-<DC>`` VRF convention. ``legacy_tiers`` accepted as
+    # an alias for back-compat with older payloads.
+    heritage_tiers: list[HeritageTierSpec] = Field(
+        default_factory=list, alias="legacy_tiers"
+    )
+
+    model_config = {"populate_by_name": True}
     # Ports standard for this service — port_ids pointing into the global
     # Port Catalog. Surfaced as defaults in the rule builder's Port Picker
     # when this service is chosen as destination.
@@ -181,6 +214,14 @@ class ApplicationProfile(BaseModel):
     deployment_mode: DeploymentMode = DeploymentMode.ALL_NGDC
     excluded_dcs: list[str] = []
     tiers: list[TierSpec] = []
+    # Heritage tiers — same model as SharedService.heritage_tiers.
+    # Apps in transition between Heritage DCs and NGDC may carry both.
+    # ``legacy_tiers`` accepted as an alias for back-compat.
+    heritage_tiers: list[HeritageTierSpec] = Field(
+        default_factory=list, alias="legacy_tiers"
+    )
+
+    model_config = {"populate_by_name": True}
 
 
 # ---- Revamp: Extended Group shape ----

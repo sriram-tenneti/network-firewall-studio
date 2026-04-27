@@ -55,6 +55,13 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   // until SSO/AD-group integration lands these stay visible to admins
   // only.
   const { isGodView } = useTeam();
+  // Architectural choice: app users do NOT pick (DC · NH · SZ) presences.
+  // The backend auto-derives the per-DC fan-out from App Management
+  // (source = every DC's egress IPs/CIDRs for the source app, destination
+  // = the shared service VIP/LB or the destination app's ingress per DC).
+  // SNS / power users can still override via this Advanced toggle when
+  // they need surgical scoping (DR cutover, pinned active-active, etc.).
+  const [advancedMode, setAdvancedMode] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [environment, setEnvironment] = useState<Environment>('Production');
   // Source can now be either an Application or a Shared Service. Default
@@ -443,9 +450,37 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               </div>
             </div>
 
-            {/* Per-presence scoping — surfaces only when the chosen app/service
-                spans multiple (DC, NH, SZ) combinations. Empty selection =
-                use all presences (default behavior). */}
+            {/* Per-presence scoping — gated behind Advanced (SNS only).
+                App users never see this: the backend auto-derives per-DC
+                fan-out from App Management (source = all DC egress IPs/
+                CIDRs of source app; destination = shared service VIP/LB
+                or destination app's ingress VIP per DC). */}
+            {isGodView && (
+              <div className="flex items-center justify-between p-2 rounded border border-amber-200 bg-amber-50">
+                <div className="text-xs">
+                  <span className="font-semibold text-amber-800">Advanced (SNS):</span>
+                  <span className="text-amber-700 ml-2">
+                    Manually scope which (DC · NH · SZ) presences this rule applies to.
+                    Off = backend auto-derives the full fan-out from App Management.
+                  </span>
+                </div>
+                <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={advancedMode}
+                    onChange={(e) => {
+                      setAdvancedMode(e.target.checked);
+                      if (!e.target.checked) {
+                        setSelectedSrcKeys(new Set());
+                        setSelectedDstKeys(new Set());
+                      }
+                    }}
+                  />
+                  <span className="font-medium">Manual presence override</span>
+                </label>
+              </div>
+            )}
+            {isGodView && advancedMode && (<>
             <PresencePicker
               title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source'}?`}
               subtitle={srcKind === 'shared_service'
@@ -474,6 +509,14 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               selected={selectedDstKeys}
               onChange={setSelectedDstKeys}
             />
+            </>)}
+            {!isGodView && (
+              <div className="text-xs text-gray-500 italic px-2">
+                Per-DC fan-out is auto-derived from App Management — source presences map to
+                every DC's egress IPs/CIDRs of the source app, and destination resolves to the
+                shared service VIP/LB or the destination app's ingress VIP per DC.
+              </div>
+            )}
 
             <div className="flex justify-end">
               <button disabled={!srcApp || !dest} onClick={() => setStep(2)}

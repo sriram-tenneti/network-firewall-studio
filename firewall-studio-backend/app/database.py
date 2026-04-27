@@ -105,12 +105,22 @@ def get_data_mode() -> str:
 
 
 def set_data_mode(mode: str) -> str:
-    """Switch data mode. 'seed' = test data, 'live' = real data."""
+    """Switch data mode. 'seed' = test data, 'live' = real data.
+
+    On the *first* activation of live mode the seed reference catalogs
+    (security zones, neighbourhoods, applications, shared services,
+    shared-service presences, app presences, groups, port catalog,
+    matrices, naming standards, etc.) are copied once into the
+    `live-data` directory so the user has a starting point identical
+    to seed mode. From that point on live mode owns those files —
+    nothing is re-merged from seed on subsequent mode flips, so user
+    edits and deletions stand on their own. This matches production
+    intent: seed is a one-shot template, not a sticky source of
+    truth."""
     global _data_mode
     if mode not in ("seed", "live"):
         raise ValueError("mode must be 'seed' or 'live'")
     _data_mode = mode
-    # Ensure live-data dir exists when switching to live
     if mode == "live":
         LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
         _bootstrap_live_reference_data()
@@ -126,6 +136,14 @@ _REFERENCE_DATA_FILES = [
     "policy_matrix", "heritage_dc_matrix", "ngdc_prod_matrix", "nonprod_matrix",
     "preprod_matrix", "org_config", "firewall_devices", "ip_mappings",
     "app_dc_mappings",
+    # Shared Services + presences are first-class catalogs (same lifecycle
+    # as SZs / NHs / Apps): when the user flips into live mode they must
+    # see the same reference set they were curating in seed mode, then
+    # edit / extend it from there. Without these in the bootstrap list
+    # the SharedServicesTab in live mode shows an empty grid even though
+    # the seed catalog has 12+ services pre-loaded.
+    "shared_services", "shared_service_presences", "app_presences",
+    "groups", "port_catalog",
 ]
 
 
@@ -850,10 +868,18 @@ async def get_all_sz_cidr_map() -> list[dict[str, Any]]:
 async def upsert_sz_cidr_binding(
     nh_id: str, sz: str, dc: str, cidr: str,
     vrf_id: str = "", description: str = "",
+    old_cidr: str | None = None,
 ) -> dict[str, Any] | None:
-    """Add or update a single (DC, NH, SZ) CIDR binding on a neighbourhood.
+    """Add or update a (DC, NH, SZ, CIDR) binding on a neighbourhood.
 
-    Keyed by (nh_id, sz, dc). DC may be empty string for a DC-agnostic fallback.
+    Multiple CIDRs per (nh_id, sz, dc) are supported — each CIDR is its
+    own row. Dedup key is the full (nh_id, sz, dc, cidr) tuple so a
+    second add with the same cidr is idempotent (description / vrf_id
+    fields refreshed). When ``old_cidr`` is supplied the row at
+    (nh_id, sz, dc, old_cidr) is *renamed* to ``cidr`` instead of a
+    new row being created — that's the edit path.
+
+    DC may be empty string for a DC-agnostic fallback (back-compat).
     Returns the resulting binding or None if the NH does not exist.
     """
     items = _load("neighbourhoods") or []
@@ -861,11 +887,13 @@ async def upsert_sz_cidr_binding(
         if str(n.get("nh_id", "")) != str(nh_id):
             continue
         szs = list(n.get("security_zones") or [])
+        target_cidr = old_cidr if old_cidr is not None else cidr
         found = None
         for entry in szs:
             if (
                 str(entry.get("zone", "")) == str(sz)
                 and str(entry.get("dc", "")) == str(dc)
+                and str(entry.get("cidr", "")) == str(target_cidr)
             ):
                 found = entry
                 break
@@ -891,20 +919,29 @@ async def upsert_sz_cidr_binding(
     return None
 
 
-async def delete_sz_cidr_binding(nh_id: str, sz: str, dc: str) -> bool:
-    """Remove a CIDR binding for (nh_id, sz, dc). Returns True if removed."""
+async def delete_sz_cidr_binding(
+    nh_id: str, sz: str, dc: str, cidr: str = "",
+) -> bool:
+    """Remove CIDR binding(s) for (nh_id, sz, dc).
+
+    When ``cidr`` is supplied, only the matching (nh, sz, dc, cidr)
+    row is removed — leaving sibling CIDRs for the same (nh, sz, dc)
+    intact. When ``cidr`` is empty, *every* row matching
+    (nh, sz, dc) is removed (legacy single-CIDR behaviour, used by
+    callers that haven't yet been updated for multi-CIDR).
+    Returns True if at least one row was removed.
+    """
     items = _load("neighbourhoods") or []
     for n in items:
         if str(n.get("nh_id", "")) != str(nh_id):
             continue
         szs = list(n.get("security_zones") or [])
-        new_szs = [
-            e for e in szs
-            if not (
-                str(e.get("zone", "")) == str(sz)
-                and str(e.get("dc", "")) == str(dc)
-            )
-        ]
+        def _match(e: dict[str, Any]) -> bool:
+            same_zone = str(e.get("zone", "")) == str(sz)
+            same_dc = str(e.get("dc", "")) == str(dc)
+            same_cidr = (not cidr) or str(e.get("cidr", "")) == str(cidr)
+            return same_zone and same_dc and same_cidr
+        new_szs = [e for e in szs if not _match(e)]
         if len(new_szs) == len(szs):
             return False
         n["security_zones"] = new_szs
@@ -7194,6 +7231,102 @@ def _zone_group_name(nh_id: str, sz_code: str, suffix: str = "") -> str:
     return f"{base}-{suffix}" if suffix else base
 
 
+def _heritage_app_group_name(app_or_svc_id: str, dc_id: str,
+                             direction: str = "egress") -> str:
+    """Group naming for apps/services that still live on Heritage
+    infrastructure (no NH/SZ segmentation).
+
+    Format: ``grp-<APP>-HERITAGE-<DC>`` with optional ``-Ingress``
+    suffix for destination-side groups. Architectural rationale:
+    Heritage DCs are flat — they don't have neighbourhood +
+    security-zone routing boundaries — so the only stable identity is
+    the app/service name + DC. The dedup engine still works because
+    the (group_name, protocol, action, members) tuple stays unique
+    per Heritage DC."""
+
+    base = f"grp-{app_or_svc_id.upper()}-HERITAGE-{dc_id.upper()}"
+    if direction == "ingress":
+        return f"{base}-Ingress"
+    return base
+
+
+def _heritage_vrf(dc_id: str) -> str:
+    """VRF (routing-context) string for a Heritage-DC rule.
+
+    Heritage devices generally don't expose multi-VRF semantics, but
+    the vendor compilers still need a label so policies can be scoped
+    distinctly. Convention: ``HERITAGE-<DC>``."""
+
+    d = str(dc_id or "").strip().upper()
+    return f"HERITAGE-{d}" if d else ""
+
+
+def _is_heritage_presence(presence: dict[str, Any]) -> bool:
+    """A presence is 'heritage' when its DC has kind=heritage OR when
+    the presence record itself was tagged as heritage (dc_type in
+    {heritage, legacy} or is_heritage/is_legacy=True or no NH/SZ
+    assigned and the DC is registered in the heritage / legacy DC
+    catalog). The legacy_* fallbacks exist purely so old data files
+    don't break — the canonical name everywhere is Heritage."""
+
+    if presence is None:
+        return False
+    dctype = str(presence.get("dc_type") or "").strip().lower()
+    if dctype in ("heritage", "legacy"):
+        return True
+    if presence.get("is_heritage") is True or presence.get("is_legacy") is True:
+        return True
+    nh = str(presence.get("nh_id") or "").strip()
+    sz = str(presence.get("sz_code") or "").strip()
+    if not nh and not sz:
+        # No segmentation info → only heritage presences are valid in
+        # that shape; NGDC presences always carry NH and SZ.
+        dc = str(presence.get("dc_id") or "").strip()
+        if dc:
+            # `legacy_datacenters` is the historical table name; keep
+            # it as the sole heritage DC catalog so we don't fork the
+            # data model just for the rename.
+            for d in (_load("legacy_datacenters") or []):
+                if str(d.get("dc_id") or "").upper() == dc.upper():
+                    return True
+    return False
+
+
+def _zone_cidrs_for(nh_id: str, sz_code: str,
+                    dc_id: str | None = None) -> list[str]:
+    """Aggregate every CIDR registered for a (NH, SZ[, DC]) tuple.
+
+    The schema stores CIDRs as a list of `{zone, dc, cidr}` rows on
+    each Neighbourhood (`security_zones[]`). Multiple rows with the
+    same (zone, dc) tuple are intentional — a single SZ inside a DC
+    can span several CIDR blocks (typical large-cluster reality).
+    This helper collapses that list into a deduplicated list of CIDRs
+    so the rule-builder and manifest generator can use *all* of them
+    when the source app is zone-scoped (GEN/STD/Shared/UGen/USTD)."""
+
+    n = str(nh_id or "").strip().upper()
+    s = str(sz_code or "").strip().upper()
+    if not n or not s:
+        return []
+    target_dc = str(dc_id or "").strip().upper() or None
+    out: list[str] = []
+    seen: set[str] = set()
+    for nh in (_load("neighbourhoods") or []):
+        if str(nh.get("nh_id") or "").strip().upper() != n:
+            continue
+        for row in (nh.get("security_zones") or []):
+            if str(row.get("zone") or "").strip().upper() != s:
+                continue
+            if target_dc and str(row.get("dc") or "").strip().upper() != target_dc:
+                continue
+            cidr = str(row.get("cidr") or "").strip()
+            if not cidr or cidr in seen:
+                continue
+            seen.add(cidr)
+            out.append(cidr)
+    return out
+
+
 def _shared_service_group_name(service_id: str, nh_id: str, sz_code: str) -> str:
     """Naming for shared-service groups.
 
@@ -7407,7 +7540,12 @@ async def get_shared_service_presences(service_id: str | None = None) -> list[di
 
 
 async def upsert_shared_service_presence(data: dict[str, Any]) -> dict[str, Any]:
-    """Create or update a presence row keyed by (service_id, dc_id, environment, nh_id, sz_code)."""
+    """Create or update a presence row keyed by (service_id, dc_id, environment, nh_id, sz_code).
+
+    For legacy DCs the (nh_id, sz_code) tuple is empty and the derived
+    group uses the flat `grp-<SVC>-LEGACY-<DC>` convention; for NGDC
+    the existing `grp-<SVC>-<NH>-<SZ>` (or zone-scoped collapse)
+    naming applies."""
     items = _load("shared_service_presences") or []
     data = dict(data)
     data["service_id"] = str(data.get("service_id", "")).upper()
@@ -7428,7 +7566,15 @@ async def upsert_shared_service_presence(data: dict[str, Any]) -> dict[str, Any]
     _save("shared_service_presences", items)
     # Re-materialize the derived group for this presence.
     groups = _load("groups") or []
-    gname = _shared_service_group_name(data["service_id"], data["nh_id"], data["sz_code"])
+    is_heritage = _is_heritage_presence(data)
+    if is_heritage:
+        gname = _heritage_app_group_name(data["service_id"],
+                                        data.get("dc_id", ""),
+                                        "ingress")
+    else:
+        gname = _shared_service_group_name(
+            data["service_id"], data.get("nh_id", ""),
+            data.get("sz_code", ""))
     # drop existing derived row with same (name, dc_id) before inserting
     groups = [g for g in groups
               if not (g.get("name") == gname and g.get("dc_id") == data.get("dc_id"))]
@@ -7437,6 +7583,7 @@ async def upsert_shared_service_presence(data: dict[str, Any]) -> dict[str, Any]
         "owner_kind": "shared_service",
         "owner_ref": data["service_id"],
         "dc_id": data.get("dc_id", ""),
+        "dc_type": "Heritage" if is_heritage else (data.get("dc_type") or "NGDC"),
         "environment": data.get("environment", "Production"),
         "nh_id": data.get("nh_id", ""),
         "sz_code": data.get("sz_code", ""),
@@ -7446,7 +7593,13 @@ async def upsert_shared_service_presence(data: dict[str, Any]) -> dict[str, Any]
         "subtype": "SVC",
         "direction": "ingress",
         "members": list(data.get("members", [])),
-        "description": f"Shared Service {data['service_id']} @ {data.get('dc_id', '')}",
+        "is_heritage": is_heritage,
+        "lifecycle_status": "Draft",
+        "description": (
+            f"Shared Service {data['service_id']} @ "
+            f"{data.get('dc_id', '')}"
+            + (" (Heritage)" if is_heritage else "")
+        ),
         "created_at": _now(),
         "updated_at": _now(),
     })
@@ -7503,12 +7656,25 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
     if not updated:
         items.append(data)
     _save("app_presences", items)
-    # rebuild derived app groups for this presence
+    # Auto-materialize derived FirewallGroups so apps in App Management
+    # acquire their groups *the moment* a presence is created — no
+    # extra rule submission required. Group name varies by DC kind:
+    #   * NGDC presence → grp-<APP>-<NH>-<SZ> (or zone-scoped collapse)
+    #   * Heritage presence → grp-<APP>-HERITAGE-<DC> (flat, no NH/SZ)
     groups = _load("groups") or []
-    egr_name = _app_egress_group_name(
-        data["app_distributed_id"], data["nh_id"], data["sz_code"])
-    ing_name = _app_ingress_group_name(
-        data["app_distributed_id"], data["nh_id"], data["sz_code"])
+    is_heritage = _is_heritage_presence(data)
+    if is_heritage:
+        egr_name = _heritage_app_group_name(
+            data["app_distributed_id"], data.get("dc_id", ""), "egress")
+        ing_name = _heritage_app_group_name(
+            data["app_distributed_id"], data.get("dc_id", ""), "ingress")
+    else:
+        egr_name = _app_egress_group_name(
+            data["app_distributed_id"], data.get("nh_id", ""),
+            data.get("sz_code", ""))
+        ing_name = _app_ingress_group_name(
+            data["app_distributed_id"], data.get("nh_id", ""),
+            data.get("sz_code", ""))
     groups = [g for g in groups
               if not (g.get("name") in (egr_name, ing_name)
                       and g.get("dc_id") == data.get("dc_id"))]
@@ -7516,6 +7682,7 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
         "name": egr_name, "owner_kind": "app_egress",
         "owner_ref": data["app_distributed_id"],
         "dc_id": data.get("dc_id", ""),
+        "dc_type": "Heritage" if is_heritage else (data.get("dc_type") or "NGDC"),
         "environment": data.get("environment", "Production"),
         "nh_id": data.get("nh_id", ""), "sz_code": data.get("sz_code", ""),
         "nh": data.get("nh_id", ""), "sz": data.get("sz_code", ""),
@@ -7523,7 +7690,13 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
         "app_distributed_id": data["app_distributed_id"],
         "subtype": "APP", "direction": "egress",
         "members": list(data.get("egress_members", [])),
-        "description": f"App {data['app_distributed_id']} egress @ {data.get('dc_id', '')}",
+        "is_heritage": is_heritage,
+        "lifecycle_status": "Draft",
+        "description": (
+            f"App {data['app_distributed_id']} egress @ "
+            f"{data.get('dc_id', '')}"
+            + (" (Heritage)" if is_heritage else "")
+        ),
         "created_at": _now(), "updated_at": _now(),
     })
     if data.get("has_ingress"):
@@ -7531,6 +7704,7 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
             "name": ing_name, "owner_kind": "app_ingress",
             "owner_ref": data["app_distributed_id"],
             "dc_id": data.get("dc_id", ""),
+            "dc_type": "Heritage" if is_heritage else (data.get("dc_type") or "NGDC"),
             "environment": data.get("environment", "Production"),
             "nh_id": data.get("nh_id", ""), "sz_code": data.get("sz_code", ""),
             "nh": data.get("nh_id", ""), "sz": data.get("sz_code", ""),
@@ -7538,7 +7712,13 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
             "app_distributed_id": data["app_distributed_id"],
             "subtype": "APP", "direction": "ingress",
             "members": list(data.get("ingress_members", [])),
-            "description": f"App {data['app_distributed_id']} ingress @ {data.get('dc_id', '')}",
+            "is_heritage": is_heritage,
+            "lifecycle_status": "Draft",
+            "description": (
+                f"App {data['app_distributed_id']} ingress @ "
+                f"{data.get('dc_id', '')}"
+                + (" (Heritage)" if is_heritage else "")
+            ),
             "created_at": _now(), "updated_at": _now(),
         })
     _save("groups", groups)
@@ -7573,18 +7753,19 @@ def _envs_for_entity(entity: dict[str, Any]) -> list[str]:
 
 
 async def auto_fan_app_presences(app: dict[str, Any]) -> int:
-    """Materialize AppPresence rows in every target NGDC DC for each tier
-    on the app. Idempotent — existing presences (matched on the unique
-    key) are left untouched, so member overrides survive re-fans.
+    """Materialize AppPresence rows for every NGDC tier (across every
+    target NGDC DC) AND every legacy tier (one per legacy DC). Both
+    paths emit groups via upsert_app_presence so a fresh app in App
+    Management acquires its full group set the moment it's saved.
+
+    Idempotent — existing presences (matched on the unique key) are
+    left untouched, so member overrides survive re-fans.
 
     Returns the number of new presences created.
     """
     tiers = app.get("tiers") or []
-    if not tiers:
-        return 0
-    target_dcs = _resolve_target_dcs(app.get("deployment_mode"),
-                                      app.get("excluded_dcs"))
-    if not target_dcs:
+    heritage_tiers = app.get("heritage_tiers") or app.get("legacy_tiers") or []
+    if not tiers and not heritage_tiers:
         return 0
     app_id = str(app.get("app_distributed_id", "")).upper()
     if not app_id:
@@ -7595,43 +7776,73 @@ async def auto_fan_app_presences(app: dict[str, Any]) -> int:
                  p.get("nh_id", ""), p.get("sz_code", ""))
                 for p in items}
     created = 0
+    # ---- NGDC fan-out ----
+    target_dcs = _resolve_target_dcs(app.get("deployment_mode"),
+                                      app.get("excluded_dcs"))
+    if tiers and target_dcs:
+        for env in _envs_for_entity(app):
+            for dc in target_dcs:
+                for tier in tiers:
+                    nh = str(tier.get("nh_id", "")).strip()
+                    sz = str(tier.get("sz_code", "")).strip()
+                    if not nh or not sz:
+                        continue
+                    key = (app_id, dc, env, nh, sz)
+                    if key in existing:
+                        continue
+                    await upsert_app_presence({
+                        "app_distributed_id": app_id,
+                        "dc_id": dc,
+                        "dc_type": "NGDC",
+                        "environment": env,
+                        "nh_id": nh,
+                        "sz_code": sz,
+                        "has_ingress": bool(tier.get("has_ingress")),
+                        "egress_members": [],
+                        "ingress_members": [],
+                        "ingress_ports": [],
+                    })
+                    existing.add(key)
+                    created += 1
+    # ---- Heritage fan-out ----
+    # One presence per (env, heritage_dc) — Heritage DCs don't have
+    # NH/SZ segmentation so the presence is flat. Group materialisation
+    # in upsert_app_presence detects is_heritage and emits
+    # `grp-<APP>-HERITAGE-<DC>`.
     for env in _envs_for_entity(app):
-        for dc in target_dcs:
-            for tier in tiers:
-                nh = str(tier.get("nh_id", "")).strip()
-                sz = str(tier.get("sz_code", "")).strip()
-                if not nh or not sz:
-                    continue
-                key = (app_id, dc, env, nh, sz)
-                if key in existing:
-                    continue
-                await upsert_app_presence({
-                    "app_distributed_id": app_id,
-                    "dc_id": dc,
-                    "dc_type": "NGDC",
-                    "environment": env,
-                    "nh_id": nh,
-                    "sz_code": sz,
-                    "has_ingress": bool(tier.get("has_ingress")),
-                    "egress_members": [],
-                    "ingress_members": [],
-                    "ingress_ports": [],
-                })
-                existing.add(key)
-                created += 1
+        for htier in heritage_tiers:
+            dc = str(htier.get("dc_id", "")).strip()
+            if not dc:
+                continue
+            key = (app_id, dc, env, "", "")
+            if key in existing:
+                continue
+            await upsert_app_presence({
+                "app_distributed_id": app_id,
+                "dc_id": dc,
+                "dc_type": "Heritage",
+                "is_heritage": True,
+                "environment": env,
+                "nh_id": "",
+                "sz_code": "",
+                "has_ingress": bool(htier.get("has_ingress")),
+                "egress_members": [],
+                "ingress_members": [],
+                "ingress_ports": [],
+            })
+            existing.add(key)
+            created += 1
     return created
 
 
 async def auto_fan_service_presences(svc: dict[str, Any]) -> int:
     """Materialize SharedServicePresence rows for each tier across every
-    target NGDC DC. Same idempotent semantics as the app variant.
+    target NGDC DC AND every legacy tier. Same idempotent semantics as
+    the app variant.
     """
     tiers = svc.get("tiers") or []
-    if not tiers:
-        return 0
-    target_dcs = _resolve_target_dcs(svc.get("deployment_mode"),
-                                      svc.get("excluded_dcs"))
-    if not target_dcs:
+    heritage_tiers = svc.get("heritage_tiers") or svc.get("legacy_tiers") or []
+    if not tiers and not heritage_tiers:
         return 0
     sid = str(svc.get("service_id", "")).upper()
     if not sid:
@@ -7642,27 +7853,52 @@ async def auto_fan_service_presences(svc: dict[str, Any]) -> int:
                  p.get("nh_id", ""), p.get("sz_code", ""))
                 for p in items}
     created = 0
+    # ---- NGDC fan-out ----
+    target_dcs = _resolve_target_dcs(svc.get("deployment_mode"),
+                                      svc.get("excluded_dcs"))
+    if tiers and target_dcs:
+        for env in _envs_for_entity(svc):
+            for dc in target_dcs:
+                for tier in tiers:
+                    nh = str(tier.get("nh_id", "")).strip()
+                    sz = str(tier.get("sz_code", "")).strip()
+                    if not nh or not sz:
+                        continue
+                    key = (sid, dc, env, nh, sz)
+                    if key in existing:
+                        continue
+                    await upsert_shared_service_presence({
+                        "service_id": sid,
+                        "dc_id": dc,
+                        "dc_type": "NGDC",
+                        "environment": env,
+                        "nh_id": nh,
+                        "sz_code": sz,
+                        "members": [],
+                    })
+                    existing.add(key)
+                    created += 1
+    # ---- Heritage fan-out ----
     for env in _envs_for_entity(svc):
-        for dc in target_dcs:
-            for tier in tiers:
-                nh = str(tier.get("nh_id", "")).strip()
-                sz = str(tier.get("sz_code", "")).strip()
-                if not nh or not sz:
-                    continue
-                key = (sid, dc, env, nh, sz)
-                if key in existing:
-                    continue
-                await upsert_shared_service_presence({
-                    "service_id": sid,
-                    "dc_id": dc,
-                    "dc_type": "NGDC",
-                    "environment": env,
-                    "nh_id": nh,
-                    "sz_code": sz,
-                    "members": [],
-                })
-                existing.add(key)
-                created += 1
+        for htier in heritage_tiers:
+            dc = str(htier.get("dc_id", "")).strip()
+            if not dc:
+                continue
+            key = (sid, dc, env, "", "")
+            if key in existing:
+                continue
+            await upsert_shared_service_presence({
+                "service_id": sid,
+                "dc_id": dc,
+                "dc_type": "Heritage",
+                "is_heritage": True,
+                "environment": env,
+                "nh_id": "",
+                "sz_code": "",
+                "members": [],
+            })
+            existing.add(key)
+            created += 1
     return created
 
 
@@ -8959,6 +9195,38 @@ def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
                 "op": "reuse-existing" if members else "create",
                 "members": members,
             }
+        # VRF per rule = (NH, SZ) tuple of the rule's source side. This is
+        # how the network architects express routing-context boundaries:
+        # every (NH, SZ) is its own routing instance (vsys/vdom/context/
+        # policy-package), so the rule's VRF is `{src_nh}-{src_sz}`
+        # (e.g. NH02-GEN). Per-rule overrides (phys.vrf / fw.vrf /
+        # req.vrf) still win — that's how Shared Services configured
+        # with an explicit (NH, SZ) propagate their VRF to dependent
+        # rules.
+        # Heritage detection: a side is heritage when it lacks NH/SZ
+        # AND its DC is registered as a heritage DC. In that case the
+        # VRF / group convention switches to HERITAGE-<DC> /
+        # grp-<APP>-HERITAGE-<DC>.
+        src_is_heritage = (
+            not phys.get("src_nh") and not phys.get("src_sz")
+            and _is_heritage_presence({"dc_id": phys.get("src_dc"),
+                                     "nh_id": "", "sz_code": ""})
+        )
+        dst_is_heritage = (
+            not phys.get("dst_nh") and not phys.get("dst_sz")
+            and _is_heritage_presence({"dc_id": phys.get("dst_dc"),
+                                     "nh_id": "", "sz_code": ""})
+        )
+        rule_vrf = (
+            phys.get("vrf")
+            or fw.get("vrf")
+            or _vrf_from_nh_sz(phys.get("src_nh"), phys.get("src_sz"))
+            or _vrf_from_nh_sz(phys.get("dst_nh"), phys.get("dst_sz"))
+            or (_heritage_vrf(phys.get("src_dc")) if src_is_heritage else "")
+            or (_heritage_vrf(phys.get("dst_dc")) if dst_is_heritage else "")
+            or req.get("vrf")
+            or _vrf_for_environment(req.get("environment") or "")
+        )
         rules_out.append({
             "rule_id": rid,
             "src_dc": phys.get("src_dc"),
@@ -8967,17 +9235,65 @@ def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
             "dst_group": phys.get("dst_group_ref"),
             "src_nh": phys.get("src_nh"), "src_sz": phys.get("src_sz"),
             "dst_nh": phys.get("dst_nh"), "dst_sz": phys.get("dst_sz"),
+            "src_is_heritage": src_is_heritage,
+            "dst_is_heritage": dst_is_heritage,
+            # Source CIDR expansion: when the source SZ is zone-scoped
+            # (GEN/STD/Shared/UGen/USTD), the rule's "true" source IP
+            # space is *every* CIDR registered for that (NH, SZ, DC) —
+            # not the per-app egress IPs. Surface this as
+            # `src_cidrs[]` so the manifest, vendor compilers and
+            # XLSX expansion column can show the right thing.
+            "src_cidrs": (
+                _zone_cidrs_for(
+                    phys.get("src_nh") or "",
+                    phys.get("src_sz") or "",
+                    phys.get("src_dc") or "",
+                )
+                if (phys.get("src_nh") and phys.get("src_sz")
+                    and _get_sz_naming_mode(phys.get("src_sz") or "")
+                    == "zone_scoped")
+                else []
+            ),
+            "dst_cidrs": (
+                _zone_cidrs_for(
+                    phys.get("dst_nh") or "",
+                    phys.get("dst_sz") or "",
+                    phys.get("dst_dc") or "",
+                )
+                if (phys.get("dst_nh") and phys.get("dst_sz")
+                    and _get_sz_naming_mode(phys.get("dst_sz") or "")
+                    == "zone_scoped")
+                else []
+            ),
             "protocol": fw.get("protocol", "TCP"),
             "ports": phys.get("ports") or fw.get("port", ""),
             "action": fw.get("action") or phys.get("action") or "Allow",
+            "vrf": rule_vrf,
             "lifecycle_status": phys.get("lifecycle_status")
                                 or fw.get("rule_status") or "Pending Review",
         })
+    # Distinct VRFs touched by this request; one rule may span multiple
+    # (NH, SZ) tuples (cross-zone), so we aggregate. Manifest's top-level
+    # `vrf` is the first distinct VRF for backward-compat; `vrfs` carries
+    # the full set so vendor compilers can emit one block per VRF.
+    distinct_vrfs: list[str] = []
+    seen_vrfs: set[str] = set()
+    for r in rules_out:
+        v = r.get("vrf")
+        if v and v not in seen_vrfs:
+            distinct_vrfs.append(v)
+            seen_vrfs.add(v)
     return {
         "request_id": req.get("request_id"),
         "requester": req.get("owner"),
         "owner_team": req.get("owner_team"),
         "environment": req.get("environment"),
+        "vrf": (
+            req.get("vrf")
+            or (distinct_vrfs[0] if distinct_vrfs else
+                _vrf_for_environment(req.get("environment") or ""))
+        ),
+        "vrfs": distinct_vrfs,
         "justification": req.get("description"),
         "source_kind": req.get("source_kind"),
         "source_ref": req.get("source_ref"),
@@ -8994,6 +9310,38 @@ def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _vrf_from_nh_sz(nh: Any, sz: Any) -> str:
+    """Build the VRF string for a (NH, SZ) tuple.
+
+    Network architects model every (NH, SZ) as its own routing instance:
+    that's the routing-context boundary that maps onto vendor primitives
+    (PAN-OS vsys, Fortinet vdom, Cisco ASA context, Check Point policy-
+    package). The canonical VRF name is therefore ``<NH>-<SZ>``
+    (e.g. ``NH02-GEN``, ``NH04-CCS``). Returns empty string if either
+    side is missing so the caller can fall back to the env default."""
+    n = str(nh or "").strip()
+    s = str(sz or "").strip()
+    if not n or not s:
+        return ""
+    return f"{n}-{s}"
+
+
+def _vrf_for_environment(env: str) -> str:
+    """Last-resort per-environment VRF default — only used when the rule
+    has no (NH, SZ) tuple to derive a real VRF from. Every PhysicalRule
+    in production today carries (src_nh, src_sz), so this fallback is
+    almost never hit. Kept so vendor compilers always have a non-empty
+    routing-context to emit."""
+    e = (env or "").strip().lower()
+    if e.startswith("prod"):
+        return "VRF-PROD"
+    if "pre" in e:
+        return "VRF-PREPROD"
+    if "non" in e:
+        return "VRF-NONPROD"
+    return "VRF-DEFAULT"
+
+
 def _resolve_group_members_sync(name: str) -> list[str]:
     """Look up an existing group's members from the groups store."""
 
@@ -9006,24 +9354,76 @@ def _resolve_group_members_sync(name: str) -> list[str]:
     return []
 
 
+def _expansion_block(group_name: str, members: list[str] | None = None) -> str:
+    """Build a multi-line "Source/Destination Expansion" cell:
+
+        grp-NH02-GEN
+          10.20.30.0/24
+          10.20.31.0/24
+
+    Group name on row 1, every member indented by 2 spaces below it.
+    Used by the XLSX exporter so SNS / approvers can see exactly which
+    IPs/CIDRs are in each group without cracking open a separate sheet.
+    """
+    if not group_name:
+        return ""
+    if members is None:
+        members = _resolve_group_members_sync(group_name)
+    lines = [str(group_name)]
+    for m in members or []:
+        lines.append(f"  {m}")
+    return "\n".join(lines)
+
+
 def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
     """Flatten the manifest into spreadsheet rows for an XLSX writer.
 
     Returns ``{ sheet_name: [[header_row], [...data...]] }`` so the route
-    can stream it via openpyxl without needing the Pydantic model."""
+    can stream it via openpyxl without needing the Pydantic model.
+
+    Each rule row carries the canonical group columns *plus* a
+    pretty-printed ``Source Expansion`` / ``Destination Expansion``
+    column where group members are indented under the group name in the
+    same cell — see ``_expansion_block``."""
+
+    # Pre-resolve groups referenced in this manifest so the expansion
+    # columns don't hit the groups store N times per rule (the manifest
+    # already carries members for create / modify ops).
+    member_index: dict[str, list[str]] = {}
+    for g in manifest.get("groups", []) or []:
+        gn = str(g.get("name", ""))
+        if not gn:
+            continue
+        if g.get("members"):
+            member_index[gn.upper()] = [str(m) for m in g["members"]]
+
+    def _members_for(name: str) -> list[str]:
+        if not name:
+            return []
+        cached = member_index.get(name.upper())
+        if cached is not None:
+            return cached
+        cached = _resolve_group_members_sync(name)
+        member_index[name.upper()] = cached
+        return cached
 
     rules_sheet = [[
-        "rule_id", "src_dc", "dst_dc", "src_group", "dst_group",
+        "rule_id", "vrf", "src_dc", "dst_dc",
+        "src_group", "dst_group",
         "src_nh", "src_sz", "dst_nh", "dst_sz",
         "protocol", "ports", "action", "lifecycle_status",
+        "Source Expansion", "Destination Expansion",
     ]]
     for r in manifest.get("rules", []):
+        src_g = str(r.get("src_group", ""))
+        dst_g = str(r.get("dst_group", ""))
         rules_sheet.append([
             str(r.get("rule_id", "")),
+            str(r.get("vrf", "")),
             str(r.get("src_dc", "")),
             str(r.get("dst_dc", "")),
-            str(r.get("src_group", "")),
-            str(r.get("dst_group", "")),
+            src_g,
+            dst_g,
             str(r.get("src_nh", "")),
             str(r.get("src_sz", "")),
             str(r.get("dst_nh", "")),
@@ -9032,13 +9432,17 @@ def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
             str(r.get("ports", "")),
             str(r.get("action", "")),
             str(r.get("lifecycle_status", "")),
+            _expansion_block(src_g, _members_for(src_g)),
+            _expansion_block(dst_g, _members_for(dst_g)),
         ])
-    groups_sheet = [["group", "op", "members"]]
+    groups_sheet = [["group", "op", "members", "added_members", "removed_members"]]
     for g in manifest.get("groups", []):
         groups_sheet.append([
             str(g.get("name", "")),
             str(g.get("op", "")),
-            ", ".join(g.get("members") or []),
+            "\n".join(str(m) for m in (g.get("members") or [])),
+            "\n".join(str(m) for m in (g.get("added_members") or [])),
+            "\n".join(str(m) for m in (g.get("removed_members") or [])),
         ])
     summary_sheet = [
         ["field", "value"],
@@ -9046,6 +9450,8 @@ def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
         ["requester", str(manifest.get("requester") or "")],
         ["owner_team", str(manifest.get("owner_team") or "")],
         ["environment", str(manifest.get("environment") or "")],
+        ["vrf", str(manifest.get("vrf") or "")],
+        ["vrfs", ", ".join(str(v) for v in (manifest.get("vrfs") or []))],
         ["status", str(manifest.get("status") or "")],
         ["external_ticket_id", str(manifest.get("external_ticket_id") or "")],
         ["external_ticket_url", str(manifest.get("external_ticket_url") or "")],
@@ -9059,12 +9465,29 @@ def _addr_obj_name(group: str, member: str) -> str:
     return f"{group}-{str(member).replace('/', '_').replace('.', '_')}"
 
 
+def _manifest_vrfs(manifest: dict[str, Any]) -> list[str]:
+    """Return the list of distinct VRFs (`<NH>-<SZ>`) this manifest
+    touches. Falls back to the manifest-level `vrf` if no per-rule
+    VRFs were derived (e.g. group-only change requests). Vendor
+    compilers iterate over this list to emit one routing-context
+    block per VRF, matching how real devices model the boundary."""
+    vrfs = manifest.get("vrfs") or []
+    if vrfs:
+        return list(vrfs)
+    fallback = manifest.get("vrf")
+    return [fallback] if fallback else []
+
+
 def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
+    vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
     out: list[str] = [
         "# PAN-OS / Panorama set-mode configuration",
         f"# Request {manifest.get('request_id')}",
+        f"# VRFs / virtual-routers touched: {', '.join(vrfs)}",
         "",
     ]
+    # Address objects + groups are device-scoped (not VRF-scoped) on
+    # PAN-OS, so emit them once at the top.
     for g in manifest.get("groups", []):
         op = g.get("op") or "create"
         name = g["name"]
@@ -9086,20 +9509,41 @@ def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
         elif op == "delete":
             out.append(f"delete address-group {name}")
         # reuse-existing emits nothing.
-    for r in manifest.get("rules", []):
-        out.append(
-            f"set rulebase security rules {r['rule_id']} from any to any "
-            f"source {r['src_group']} destination {r['dst_group']} "
-            f"service application-default action "
-            f"{'allow' if str(r['action']).lower().startswith('a') else 'deny'}"
-        )
+    out.append("")
+    # Per-VRF block: declare the virtual-router + emit only the rules
+    # that live in that VRF.
+    rules = manifest.get("rules", []) or []
+    for vrf in vrfs:
+        out.append(f"# --- VRF {vrf} ---")
+        out.append(f"set network virtual-router {vrf}")
+        for r in rules:
+            if (r.get("vrf") or "") != vrf:
+                continue
+            out.append(
+                f"set rulebase security rules {r['rule_id']} "
+                f"from {vrf} to {vrf} "
+                f"source {r['src_group']} destination {r['dst_group']} "
+                f"service application-default action "
+                f"{'allow' if str(r['action']).lower().startswith('a') else 'deny'}"
+            )
+        out.append("")
     return "\n".join(out) + "\n"
 
 
 def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
-    out: list[str] = ["# Fortinet FortiGate config", ""]
+    vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    out: list[str] = [
+        "# Fortinet FortiGate config",
+        f"# VRFs / vdoms touched: {', '.join(vrfs)}",
+        "",
+    ]
     rules = manifest.get("rules", []) or []
     groups = manifest.get("groups", []) or []
+    # Fortinet address objects + groups live inside a vdom — but for
+    # cross-vdom requests the convention is to define them in every
+    # touched vdom (so each vdom's policy can resolve them). Most
+    # requests touch one VRF / vdom so this collapses to the simple
+    # case.
     for g in groups:
         op = g.get("op") or "create"
         name = g["name"]
@@ -9139,24 +9583,41 @@ def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
             )
         elif op == "delete":
             out.append(f"config firewall addrgrp\n  delete {name}\nend")
-    if rules:
-        out.append("config firewall policy")
-        for r in rules:
-            out.append(
-                f"  edit 0\n    set name {r['rule_id']}\n"
-                f"    set srcaddr {r['src_group']}\n"
-                f"    set dstaddr {r['dst_group']}\n"
-                f"    set service ALL\n"
-                f"    set action {('accept' if str(r['action']).lower().startswith('a') else 'deny')}\n"
-                f"    set comments \"{manifest.get('request_id')}\"\n"
-                f"  next"
-            )
+    out.append("")
+    # Per-vdom policy block — wrap each VRF's rules.
+    for vrf in vrfs:
+        out.append(f"# --- vdom {vrf} ---")
+        out.append("config vdom")
+        out.append(f"edit {vrf}")
+        rules_in_vrf = [r for r in rules if (r.get("vrf") or "") == vrf]
+        if rules_in_vrf:
+            out.append("config firewall policy")
+            for r in rules_in_vrf:
+                out.append(
+                    f"  edit 0\n    set name {r['rule_id']}\n"
+                    f"    set srcintf any\n"
+                    f"    set dstintf any\n"
+                    f"    set srcaddr {r['src_group']}\n"
+                    f"    set dstaddr {r['dst_group']}\n"
+                    f"    set service ALL\n"
+                    f"    set action {('accept' if str(r['action']).lower().startswith('a') else 'deny')}\n"
+                    f"    set comments \"{manifest.get('request_id')} VRF={vrf}\"\n"
+                    f"  next"
+                )
+            out.append("end")
+        out.append("next")
         out.append("end")
+        out.append("")
     return "\n".join(out) + "\n"
 
 
 def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
-    out: list[str] = ["! Cisco ASA / FTD configuration", ""]
+    vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    out: list[str] = [
+        "! Cisco ASA / FTD configuration",
+        f"! VRFs / contexts touched: {', '.join(vrfs)}",
+        "",
+    ]
 
     def _net_obj(m: str) -> str:
         if "/" in m:
@@ -9164,6 +9625,7 @@ def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
             return f"  network-object {ip} {cidr}"
         return f"  network-object host {m}"
 
+    # Object-groups are device-scoped on Cisco ASA — emit once.
     for g in manifest.get("groups", []):
         op = g.get("op") or "create"
         name = g["name"]
@@ -9184,18 +9646,35 @@ def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
                 out.append(f"  no {_net_obj(m).strip()}")
         elif op == "delete":
             out.append(f"no object-group network {name}")
-    for r in manifest.get("rules", []):
-        action = "permit" if str(r["action"]).lower().startswith("a") else "deny"
-        proto = str(r.get("protocol", "tcp")).lower()
-        out.append(
-            f"access-list NGDC-OUTSIDE extended {action} {proto} "
-            f"object-group {r['src_group']} object-group {r['dst_group']}"
-        )
+    out.append("")
+    # Per-context block (each VRF on ASA = a security context).
+    rules = manifest.get("rules", []) or []
+    for vrf in vrfs:
+        out.append(f"! --- context {vrf} ---")
+        out.append(f"changeto context {vrf}")
+        for r in rules:
+            if (r.get("vrf") or "") != vrf:
+                continue
+            action = "permit" if str(r["action"]).lower().startswith("a") else "deny"
+            proto = str(r.get("protocol", "tcp")).lower()
+            out.append(
+                f"! rule {r['rule_id']} VRF={vrf}\n"
+                f"access-list NGDC-OUTSIDE extended {action} {proto} "
+                f"object-group {r['src_group']} object-group {r['dst_group']}"
+            )
+        out.append("")
     return "\n".join(out) + "\n"
 
 
 def _vendor_compile_checkpoint(manifest: dict[str, Any]) -> str:
-    out: list[str] = ["# Check Point SmartConsole CLI", ""]
+    vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    out: list[str] = [
+        "# Check Point SmartConsole CLI",
+        f"# VRFs / policy packages touched: {', '.join(vrfs)}",
+        "",
+    ]
+    # Network + group objects are management-server scoped (not policy-
+    # package scoped), so emit once.
     for g in manifest.get("groups", []):
         op = g.get("op") or "create"
         name = g["name"]
@@ -9223,14 +9702,24 @@ def _vendor_compile_checkpoint(manifest: dict[str, Any]) -> str:
                 )
         elif op == "delete":
             out.append(f"delete group name \"{name}\"")
-    for r in manifest.get("rules", []):
-        action = "accept" if str(r["action"]).lower().startswith("a") else "drop"
-        out.append(
-            f"add access-rule layer \"NGDC\" position top "
-            f"name \"{r['rule_id']}\" "
-            f"source.1 \"{r['src_group']}\" destination.1 \"{r['dst_group']}\" "
-            f"service.1 \"any\" action \"{action}\""
-        )
+    out.append("")
+    # Per-policy-package block — one VRF = one policy package on Check
+    # Point, so every rule is added to its own layer/package.
+    rules = manifest.get("rules", []) or []
+    for vrf in vrfs:
+        out.append(f"# --- policy package {vrf} ---")
+        out.append(f"set package name \"{vrf}\"")
+        for r in rules:
+            if (r.get("vrf") or "") != vrf:
+                continue
+            action = "accept" if str(r["action"]).lower().startswith("a") else "drop"
+            out.append(
+                f"add access-rule layer \"{vrf}\" position top "
+                f"name \"{r['rule_id']}\" "
+                f"source.1 \"{r['src_group']}\" destination.1 \"{r['dst_group']}\" "
+                f"service.1 \"any\" action \"{action}\""
+            )
+        out.append("")
     return "\n".join(out) + "\n"
 
 
@@ -9242,6 +9731,206 @@ VENDOR_COMPILERS: dict[str, Any] = {
 }
 
 
+# ----------------------------------------------------------------
+# Structured JSON vendor compilers
+# ----------------------------------------------------------------
+# Same source-of-truth manifest, but emitted as a vendor-specific JSON
+# document (no CLI). This lets ops automation, ServiceNow CR attachments
+# and SOAR playbooks consume a parsed payload directly without having to
+# screen-scrape device-vendor CLI output. Every JSON document carries:
+#   - vendor:           the device family (panos | fortinet | cisco | checkpoint)
+#   - vrf:              the routing context for the request (vsys / vdom / context / package)
+#   - request_id:       the originating change ticket
+#   - groups[]:         create / modify-add / modify-remove / delete operations
+#                       with the address-objects (network-objects) they imply
+#   - rules[]:          per-rule push payload — same fields as the CLI but
+#                       structured (id, vrf, src_group, dst_group, ports, action)
+# ----------------------------------------------------------------
+
+
+def _group_op_payload(g: dict[str, Any]) -> dict[str, Any]:
+    """Common-shape group operation entry used by every vendor JSON
+    compiler. Carries the canonical op + members / added / removed
+    members so consumers can dispatch onto the right device API."""
+    return {
+        "name": g.get("name"),
+        "op": g.get("op") or "create",
+        "members": list(g.get("members") or []),
+        "added_members": list(g.get("added_members") or []),
+        "removed_members": list(g.get("removed_members") or []),
+    }
+
+
+def _vendor_compile_panos_json(manifest: dict[str, Any]) -> dict[str, Any]:
+    vrf = manifest.get("vrf") or "VRF-DEFAULT"
+    groups_out: list[dict[str, Any]] = []
+    for g in manifest.get("groups", []) or []:
+        entry = _group_op_payload(g)
+        # Mirror PAN-OS XML-API endpoints so the CR engineer can paste
+        # straight into the integration adapter.
+        entry["address_objects"] = [
+            {"name": _addr_obj_name(g["name"], m), "ip-netmask": m}
+            for m in entry["members"] or entry["added_members"]
+        ]
+        entry["xml_api_path"] = f"/config/devices/entry/vsys/entry[@name='{vrf}']/address-group/entry[@name='{g['name']}']"
+        groups_out.append(entry)
+    rules_out: list[dict[str, Any]] = []
+    for r in manifest.get("rules", []) or []:
+        rvrf = r.get("vrf") or vrf
+        rules_out.append({
+            "rule_id": r.get("rule_id"),
+            "vrf": rvrf,
+            "from_zone": rvrf,
+            "to_zone": rvrf,
+            "source": [r.get("src_group")],
+            "destination": [r.get("dst_group")],
+            "service": "application-default",
+            "application": "any",
+            "action": "allow" if str(r.get("action", "")).lower().startswith("a") else "deny",
+            "ports": r.get("ports", ""),
+            "protocol": r.get("protocol", "TCP"),
+            "src_dc": r.get("src_dc"), "dst_dc": r.get("dst_dc"),
+            "src_nh": r.get("src_nh"), "src_sz": r.get("src_sz"),
+            "dst_nh": r.get("dst_nh"), "dst_sz": r.get("dst_sz"),
+            "xml_api_path": (
+                f"/config/devices/entry/vsys/entry[@name='{rvrf}']/rulebase/security/rules/entry[@name='{r.get('rule_id')}']"
+            ),
+        })
+    return {
+        "vendor": "panos",
+        "vrf": vrf,
+        "vrfs": _manifest_vrfs(manifest) or [vrf],
+        "virtual_router": vrf,
+        "request_id": manifest.get("request_id"),
+        "groups": groups_out,
+        "rules": rules_out,
+    }
+
+
+def _vendor_compile_fortinet_json(manifest: dict[str, Any]) -> dict[str, Any]:
+    vrf = manifest.get("vrf") or "VRF-DEFAULT"
+    groups_out: list[dict[str, Any]] = []
+    for g in manifest.get("groups", []) or []:
+        entry = _group_op_payload(g)
+        entry["address_objects"] = [
+            {"name": _addr_obj_name(g["name"], m), "subnet": m}
+            for m in entry["members"] or entry["added_members"]
+        ]
+        entry["api_path"] = f"/api/v2/cmdb/firewall/addrgrp/{g['name']}?vdom={vrf}"
+        groups_out.append(entry)
+    rules_out: list[dict[str, Any]] = []
+    for r in manifest.get("rules", []) or []:
+        rvrf = r.get("vrf") or vrf
+        rules_out.append({
+            "rule_id": r.get("rule_id"),
+            "vdom": rvrf,
+            "name": r.get("rule_id"),
+            "srcintf": ["any"],
+            "dstintf": ["any"],
+            "srcaddr": [r.get("src_group")],
+            "dstaddr": [r.get("dst_group")],
+            "service": ["ALL"],
+            "action": "accept" if str(r.get("action", "")).lower().startswith("a") else "deny",
+            "ports": r.get("ports", ""),
+            "protocol": r.get("protocol", "TCP"),
+            "comments": f"{manifest.get('request_id')} VRF={rvrf}",
+            "api_path": f"/api/v2/cmdb/firewall/policy?vdom={rvrf}",
+        })
+    return {
+        "vendor": "fortinet",
+        "vrf": vrf,
+        "vrfs": _manifest_vrfs(manifest) or [vrf],
+        "vdom": vrf,
+        "request_id": manifest.get("request_id"),
+        "groups": groups_out,
+        "rules": rules_out,
+    }
+
+
+def _vendor_compile_cisco_json(manifest: dict[str, Any]) -> dict[str, Any]:
+    vrf = manifest.get("vrf") or "VRF-DEFAULT"
+    groups_out: list[dict[str, Any]] = []
+    for g in manifest.get("groups", []) or []:
+        entry = _group_op_payload(g)
+        members = entry["members"] or entry["added_members"]
+        entry["network_objects"] = [
+            ({"host": m} if "/" not in str(m) else
+             {"network": str(m).split("/")[0], "prefix": str(m).split("/")[1]})
+            for m in members
+        ]
+        entry["context"] = vrf
+        groups_out.append(entry)
+    rules_out: list[dict[str, Any]] = []
+    for r in manifest.get("rules", []) or []:
+        rvrf = r.get("vrf") or vrf
+        rules_out.append({
+            "rule_id": r.get("rule_id"),
+            "context": rvrf,
+            "acl_name": "NGDC-OUTSIDE",
+            "action": "permit" if str(r.get("action", "")).lower().startswith("a") else "deny",
+            "protocol": str(r.get("protocol", "tcp")).lower(),
+            "src_object_group": r.get("src_group"),
+            "dst_object_group": r.get("dst_group"),
+            "ports": r.get("ports", ""),
+        })
+    return {
+        "vendor": "cisco",
+        "vrf": vrf,
+        "vrfs": _manifest_vrfs(manifest) or [vrf],
+        "context": vrf,
+        "request_id": manifest.get("request_id"),
+        "groups": groups_out,
+        "rules": rules_out,
+    }
+
+
+def _vendor_compile_checkpoint_json(manifest: dict[str, Any]) -> dict[str, Any]:
+    vrf = manifest.get("vrf") or "VRF-DEFAULT"
+    groups_out: list[dict[str, Any]] = []
+    for g in manifest.get("groups", []) or []:
+        entry = _group_op_payload(g)
+        members = entry["members"] or entry["added_members"]
+        entry["network_objects"] = [
+            {"name": f"{g['name']}-{m}", "subnet": m}
+            for m in members
+        ]
+        entry["package"] = vrf
+        groups_out.append(entry)
+    rules_out: list[dict[str, Any]] = []
+    for r in manifest.get("rules", []) or []:
+        rvrf = r.get("vrf") or vrf
+        rules_out.append({
+            "rule_id": r.get("rule_id"),
+            "layer": rvrf,
+            "package": rvrf,
+            "name": r.get("rule_id"),
+            "source": [r.get("src_group")],
+            "destination": [r.get("dst_group")],
+            "service": ["any"],
+            "action": "accept" if str(r.get("action", "")).lower().startswith("a") else "drop",
+            "ports": r.get("ports", ""),
+            "protocol": r.get("protocol", "TCP"),
+            "position": "top",
+        })
+    return {
+        "vendor": "checkpoint",
+        "vrf": vrf,
+        "vrfs": _manifest_vrfs(manifest) or [vrf],
+        "policy_package": vrf,
+        "request_id": manifest.get("request_id"),
+        "groups": groups_out,
+        "rules": rules_out,
+    }
+
+
+VENDOR_COMPILERS_JSON: dict[str, Any] = {
+    "panos": _vendor_compile_panos_json,
+    "fortinet": _vendor_compile_fortinet_json,
+    "cisco": _vendor_compile_cisco_json,
+    "checkpoint": _vendor_compile_checkpoint_json,
+}
+
+
 async def get_request_artifacts(request_id: str) -> dict[str, Any] | None:
     items = _load_rule_requests()
     for r in items:
@@ -9249,10 +9938,12 @@ async def get_request_artifacts(request_id: str) -> dict[str, Any] | None:
             manifest = _artifact_manifest_for_request(r)
             sheets = _artifact_xlsx_rows(manifest)
             vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
+            vendor_configs_json = {v: fn(manifest) for v, fn in VENDOR_COMPILERS_JSON.items()}
             return {
                 "manifest": manifest,
                 "xlsx_sheets": sheets,
                 "vendor_configs": vendor_configs,
+                "vendor_configs_json": vendor_configs_json,
             }
     return None
 
@@ -9594,6 +10285,23 @@ async def set_group_change_request_status(
     return target
 
 
+def _vrf_from_group_name(name: str) -> str:
+    """Derive the VRF (`<NH>-<SZ>`) from a standardized group name.
+
+    The NGDC naming convention is ``grp-[<APP>-[<COMP>-]]<NH>-<SZ>``,
+    so the last two ``-``-separated tokens are always (NH, SZ). This
+    lets a Group Change Request emit the right routing-context block
+    in vendor configs without us having to plumb a separate VRF field
+    through the wire — the group itself encodes the routing-context."""
+    parts = [p for p in str(name or "").split("-") if p]
+    if len(parts) < 2:
+        return ""
+    nh, sz = parts[-2], parts[-1]
+    if not nh.upper().startswith("NH"):
+        return ""
+    return f"{nh}-{sz}"
+
+
 def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
     """Vendor-neutral manifest for a GroupChangeRequest. Same shape as
     the RuleRequest manifest so the existing XLSX writer + vendor
@@ -9611,6 +10319,7 @@ def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
         "added_members": added,
         "removed_members": removed,
     }
+    derived_vrf = _vrf_from_group_name(name)
     return {
         "request_id": req.get("request_id"),
         "requester": req.get("owner"),
@@ -9624,6 +10333,8 @@ def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
         "updated_at": req.get("updated_at"),
         "external_ticket_id": req.get("external_ticket_id"),
         "external_ticket_url": req.get("external_ticket_url"),
+        "vrf": derived_vrf or req.get("vrf") or "",
+        "vrfs": [derived_vrf] if derived_vrf else [],
         "rules": [],
         "groups": [group_entry],
     }
@@ -9634,12 +10345,21 @@ async def get_group_change_artifacts(request_id: str) -> dict[str, Any] | None:
     if target is None:
         return None
     manifest = _group_change_manifest(target)
+    # Group change requests carry a VRF too — defaults to env-derived
+    # if not explicitly set so vendor compilers always emit context.
+    if not manifest.get("vrf"):
+        manifest["vrf"] = (
+            target.get("vrf")
+            or _vrf_for_environment(target.get("environment") or "")
+        )
     sheets = _artifact_xlsx_rows(manifest)
     vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
+    vendor_configs_json = {v: fn(manifest) for v, fn in VENDOR_COMPILERS_JSON.items()}
     return {
         "manifest": manifest,
         "xlsx_sheets": sheets,
         "vendor_configs": vendor_configs,
+        "vendor_configs_json": vendor_configs_json,
     }
 
 

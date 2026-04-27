@@ -1391,18 +1391,28 @@ async def list_nh_security_zones(nh_id: str, dc: str = ""):
 
 @router.post("/sz-cidr-bindings")
 async def upsert_sz_cidr_binding_endpoint(data: dict):
-    """Add or update a (DC, NH, SZ) CIDR binding. Keyed by (nh, sz, dc)."""
+    """Add or update a (DC, NH, SZ, CIDR) binding.
+
+    Multiple CIDRs per (nh, sz, dc) are supported — each CIDR is its own
+    row. Pass ``old_cidr`` to *rename* an existing CIDR row instead of
+    creating a new one (edit-in-place).
+    """
     from app.database import upsert_sz_cidr_binding
     nh = str(data.get("nh", "")).strip()
     sz = str(data.get("sz", "")).strip()
     dc = str(data.get("dc", "")).strip()
     cidr = str(data.get("cidr", "")).strip()
+    old_cidr_raw = data.get("old_cidr")
+    old_cidr = (
+        str(old_cidr_raw).strip() if old_cidr_raw is not None else None
+    )
     if not nh or not sz or not cidr:
         raise HTTPException(status_code=400, detail="nh, sz, cidr are required")
     result = await upsert_sz_cidr_binding(
         nh_id=nh, sz=sz, dc=dc, cidr=cidr,
         vrf_id=str(data.get("vrf_id", "")).strip(),
         description=str(data.get("description", "")).strip(),
+        old_cidr=old_cidr,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Neighbourhood not found")
@@ -1410,12 +1420,19 @@ async def upsert_sz_cidr_binding_endpoint(data: dict):
 
 
 @router.delete("/sz-cidr-bindings")
-async def delete_sz_cidr_binding_endpoint(nh: str = "", sz: str = "", dc: str = ""):
-    """Delete a (DC, NH, SZ) CIDR binding."""
+async def delete_sz_cidr_binding_endpoint(
+    nh: str = "", sz: str = "", dc: str = "", cidr: str = "",
+):
+    """Delete a (DC, NH, SZ, CIDR) binding.
+
+    When ``cidr`` is supplied, only that one row is removed. When
+    omitted, *every* CIDR row for (nh, sz, dc) is wiped (legacy
+    single-CIDR callers).
+    """
     from app.database import delete_sz_cidr_binding
     if not nh or not sz:
         raise HTTPException(status_code=400, detail="nh and sz are required")
-    ok = await delete_sz_cidr_binding(nh_id=nh, sz=sz, dc=dc)
+    ok = await delete_sz_cidr_binding(nh_id=nh, sz=sz, dc=dc, cidr=cidr)
     if not ok:
         raise HTTPException(status_code=404, detail="Binding not found")
     return {"message": "Binding deleted"}

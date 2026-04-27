@@ -178,6 +178,10 @@ export interface Application {
   // 'all_ngdc' or 'all_ngdc_with_exceptions', the backend auto-fans
   // one presence per tier into every target NGDC DC.
   tiers?: TierSpec[];
+  // Heritage tiers — one per Heritage DC the app/service still
+  // serves from. Materialises into a flat presence (no NH/SZ) and a
+  // `grp-<APP>-HERITAGE-<DC>` group during auto-fan.
+  heritage_tiers?: HeritageTierSpec[];
   environments?: Environment[];
 }
 
@@ -185,6 +189,13 @@ export interface TierSpec {
   nh_id: string;
   sz_code: string;
   has_ingress?: boolean;
+  label?: string;
+}
+
+export interface HeritageTierSpec {
+  dc_id: string;
+  has_ingress?: boolean;
+  label?: string;
 }
 
 export interface OrgConfig {
@@ -749,6 +760,9 @@ export interface SharedService {
   additional_ports?: PortBinding[];
   /** Tier definition. Auto-fans into all NGDC DCs when deployment_mode='all_ngdc'. */
   tiers?: TierSpec[];
+  /** Heritage tiers — one per Heritage DC. Materialises into flat
+   * (no NH/SZ) presences with `grp-<SVC>-HERITAGE-<DC>` groups. */
+  heritage_tiers?: HeritageTierSpec[];
   created_at?: string;
   updated_at?: string;
 }
@@ -771,6 +785,19 @@ export interface PhysicalRuleExpansion {
   policy_result?: PolicyResult | null;
   compiled_text?: string | null;
   lifecycle_status?: string;
+  /** True when the side has no NH/SZ and the DC is a Heritage DC.
+   * Surfaces in the UI so the rule preview shows
+   * `grp-<APP>-HERITAGE-<DC>` / VRF=`HERITAGE-<DC>` instead of the
+   * NGDC convention. */
+  src_is_heritage?: boolean;
+  dst_is_heritage?: boolean;
+  /** Zone-scoped CIDR expansion. Populated by the backend when the
+   * source SZ is one of the shared/zone-scoped zones (GEN/STD/Shared/
+   * UGen/USTD): the rule's "true" source IP space is the SZ's
+   * registered CIDRs, not the per-app egress IPs. */
+  src_cidrs?: string[];
+  dst_cidrs?: string[];
+  vrf?: string;
 }
 
 export interface DedupMatch {

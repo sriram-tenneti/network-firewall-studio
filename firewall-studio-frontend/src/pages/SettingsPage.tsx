@@ -10,6 +10,7 @@ import SharedServicesTab from './settings/SharedServicesTab';
 import PortCatalogTab from './settings/PortCatalogTab';
 import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
 import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
+import HeritageTierMatrixEditor from '@/components/shared/HeritageTierMatrixEditor';
 import ItsmConnectorsTab from './settings/ItsmConnectorsTab';
 import BirthrightRulesTab from './settings/BirthrightRulesTab';
 import SecurityZoneNamingTab from './settings/SecurityZoneNamingTab';
@@ -757,20 +758,21 @@ export default function SettingsPage() {
       showNotification(`Binding added: ${nh} · ${sz} · ${dc || 'any-DC'} → ${cidr}`, 'success');
     } catch (e) { showNotification(`Failed to add binding: ${(e as Error).message}`, 'error'); }
   };
-  const handleSaveSzBindingEdit = async (nh: string, sz: string, dc: string) => {
+  const handleSaveSzBindingEdit = async (nh: string, sz: string, dc: string, oldCidr: string) => {
     if (!editSzBindingCidr) { showNotification('CIDR is required', 'error'); return; }
     try {
-      await api.upsertSzCidrBinding({ nh, sz, dc, cidr: editSzBindingCidr });
+      await api.upsertSzCidrBinding({ nh, sz, dc, cidr: editSzBindingCidr, old_cidr: oldCidr });
       setEditingSzBindingKey(null);
       setEditSzBindingCidr('');
       await reloadSzCidrMap();
       showNotification(`Binding updated: ${nh} · ${sz} · ${dc || 'any-DC'}`, 'success');
     } catch (e) { showNotification(`Failed to update binding: ${(e as Error).message}`, 'error'); }
   };
-  const handleDeleteSzBinding = async (nh: string, sz: string, dc: string) => {
-    if (!confirm(`Delete CIDR binding ${nh} · ${sz}${dc ? ' · ' + dc : ''}?`)) return;
+  const handleDeleteSzBinding = async (nh: string, sz: string, dc: string, cidr: string = '') => {
+    const cidrLabel = cidr ? ` · ${cidr}` : '';
+    if (!confirm(`Delete CIDR binding ${nh} · ${sz}${dc ? ' · ' + dc : ''}${cidrLabel}?`)) return;
     try {
-      await api.deleteSzCidrBinding(nh, sz, dc || '');
+      await api.deleteSzCidrBinding(nh, sz, dc || '', cidr);
       await reloadSzCidrMap();
       showNotification('Binding deleted', 'success');
     } catch (e) { showNotification(`Failed to delete binding: ${(e as Error).message}`, 'error'); }
@@ -1557,7 +1559,7 @@ export default function SettingsPage() {
                                       </thead>
                                       <tbody className="divide-y divide-emerald-50">
                                         {szBindings.map((b) => {
-                                          const bkey = `${b.nh}|${code}|${b.dc || ''}`;
+                                          const bkey = `${b.nh}|${code}|${b.dc || ''}|${b.cidr || ''}`;
                                           const isEdit = editingSzBindingKey === bkey;
                                           return (
                                             <tr key={bkey} className="hover:bg-emerald-50/40">
@@ -1584,13 +1586,13 @@ export default function SettingsPage() {
                                               <td className="px-2 py-1 text-right">
                                                 {isEdit ? (
                                                   <div className="inline-flex gap-1">
-                                                    <button onClick={() => handleSaveSzBindingEdit(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-white bg-emerald-600 rounded hover:bg-emerald-700">Save</button>
+                                                    <button onClick={() => handleSaveSzBindingEdit(b.nh, code, b.dc || '', b.cidr || '')} className="px-2 py-0.5 text-[11px] text-white bg-emerald-600 rounded hover:bg-emerald-700">Save</button>
                                                     <button onClick={() => { setEditingSzBindingKey(null); setEditSzBindingCidr(''); }} className="px-2 py-0.5 text-[11px] text-gray-600 border border-gray-200 rounded hover:bg-gray-50">Cancel</button>
                                                   </div>
                                                 ) : (
                                                   <div className="inline-flex gap-1">
                                                     <button onClick={() => { setEditingSzBindingKey(bkey); setEditSzBindingCidr(b.cidr || ''); }} className="px-2 py-0.5 text-[11px] text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-50 font-medium">Edit</button>
-                                                    <button onClick={() => handleDeleteSzBinding(b.nh, code, b.dc || '')} className="px-2 py-0.5 text-[11px] text-rose-700 border border-rose-200 rounded hover:bg-rose-50 font-medium">Delete</button>
+                                                    <button onClick={() => handleDeleteSzBinding(b.nh, code, b.dc || '', b.cidr || '')} className="px-2 py-0.5 text-[11px] text-rose-700 border border-rose-200 rounded hover:bg-rose-50 font-medium">Delete</button>
                                                   </div>
                                                 )}
                                               </td>
@@ -1908,8 +1910,14 @@ export default function SettingsPage() {
                 <TierMatrixEditor
                   tiers={(newAppForm.tiers as TierSpec[]) || []}
                   onChange={(t: TierSpec[]) => setNewAppForm({ ...newAppForm, tiers: t })}
-                  title="Tier Matrix"
+                  title="NGDC Tier Matrix"
                   subtitle="Each (NH, SZ, has_ingress?) row creates a presence in every NGDC DC at save time."
+                />
+                <HeritageTierMatrixEditor
+                  tiers={(newAppForm.heritage_tiers as { dc_id: string; has_ingress?: boolean; label?: string }[]) || []}
+                  onChange={(t) => setNewAppForm({ ...newAppForm, heritage_tiers: t })}
+                  title="Heritage DCs (apps not yet on NGDC)"
+                  subtitle="Add a row per Heritage DC where this app still serves traffic from. Materialises a flat presence + `grp-<APP>-HERITAGE-<DC>` group automatically."
                 />
                 {/* Egress/Ingress Configuration */}
                 <div className="border border-blue-200 rounded-lg p-3 bg-white/60 space-y-2">
@@ -2026,8 +2034,14 @@ export default function SettingsPage() {
                     <TierMatrixEditor
                       tiers={(editAppForm.tiers as TierSpec[]) || []}
                       onChange={(t: TierSpec[]) => setEditAppForm({ ...editAppForm, tiers: t })}
-                      title="Tier Matrix"
+                      title="NGDC Tier Matrix"
                       subtitle="Saving will auto-fan one presence per (NH, SZ) row into every NGDC DC."
+                    />
+                    <HeritageTierMatrixEditor
+                      tiers={(editAppForm.heritage_tiers as { dc_id: string; has_ingress?: boolean; label?: string }[]) || []}
+                      onChange={(t) => setEditAppForm({ ...editAppForm, heritage_tiers: t })}
+                      title="Heritage DCs (apps not yet on NGDC)"
+                      subtitle="Saving will auto-fan one flat presence per Heritage DC; group naming switches to `grp-<APP>-HERITAGE-<DC>`."
                     />
                   </div>
                 ) : (

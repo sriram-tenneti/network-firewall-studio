@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/shared/Modal';
 import { Notification } from '@/components/shared/Notification';
 import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
+import HeritageTierMatrixEditor from '@/components/shared/HeritageTierMatrixEditor';
 import { useNotification } from '@/hooks/useNotification';
 import { useTeam } from '@/contexts/TeamContext';
 import type {
@@ -425,8 +426,15 @@ export default function SharedServicesTab() {
               tiers={editing.tiers || []}
               onChange={(t: TierSpec[]) => setEditing((s) => ({ ...(s || {}), tiers: t }))}
               hideIngress
-              title="Service Tiers"
+              title="NGDC Service Tiers"
               subtitle="Each (NH, SZ) row materializes a SharedServicePresence in every NGDC DC (auto-fan)."
+            />
+            <HeritageTierMatrixEditor
+              tiers={editing.heritage_tiers || []}
+              onChange={(t) => setEditing((s) => ({ ...(s || {}), heritage_tiers: t }))}
+              hideIngress
+              title="Heritage DCs (services not yet on NGDC)"
+              subtitle="Add a row per Heritage DC where this service still lives. Materialises a flat presence + `grp-<SVC>-HERITAGE-<DC>` group automatically."
             />
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Environments</label>

@@ -649,7 +649,11 @@ export const getNhSecurityZones = (nhId: string, dc?: string) => {
 
 // SZ-level CIDR binding CRUD (DC-specific)
 export const upsertSzCidrBinding = (payload: {
-  nh: string; sz: string; dc: string; cidr: string; vrf_id?: string; description?: string;
+  nh: string; sz: string; dc: string; cidr: string;
+  vrf_id?: string; description?: string;
+  /** When supplied, the existing row keyed by (nh, sz, dc, old_cidr)
+   *  is *renamed* to ``cidr`` instead of a new row being created. */
+  old_cidr?: string;
 }) =>
   fetchJSON<NhSecurityZone>('/api/reference/sz-cidr-bindings', {
     method: 'POST',
@@ -657,8 +661,9 @@ export const upsertSzCidrBinding = (payload: {
     body: JSON.stringify(payload),
   });
 
-export const deleteSzCidrBinding = (nh: string, sz: string, dc: string) => {
+export const deleteSzCidrBinding = (nh: string, sz: string, dc: string, cidr: string = '') => {
   const params = new URLSearchParams({ nh, sz, dc });
+  if (cidr) params.set('cidr', cidr);
   return fetchJSON<{ message: string }>(`/api/reference/sz-cidr-bindings?${params}`, { method: 'DELETE' });
 };
 

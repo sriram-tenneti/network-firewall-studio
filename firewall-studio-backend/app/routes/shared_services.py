@@ -514,6 +514,29 @@ async def request_artifact_vendor_config(request_id: str, vendor: str):
     )
 
 
+@router.get("/api/rules/requests/{request_id}/artifacts/device-{vendor}.json")
+async def request_artifact_vendor_config_json(
+    request_id: str, vendor: str,
+) -> dict[str, Any]:
+    """Structured JSON twin of the vendor-compiled device config.
+    Same content as the .txt CLI but as a parseable payload, so SOAR /
+    ServiceNow CR engineers and integration adapters don't have to
+    screen-scrape CLI output. Carries VRF context (vsys / vdom /
+    context / package), per-rule action, port, src/dst groups and
+    every group create / modify-add / modify-remove / delete op."""
+
+    artifacts = await get_request_artifacts(request_id)
+    if artifacts is None:
+        raise HTTPException(404, "Rule request not found")
+    vendor_l = vendor.lower()
+    cfg_json = (artifacts.get("vendor_configs_json") or {}).get(vendor_l)
+    if cfg_json is None:
+        raise HTTPException(
+            404, f"Unknown vendor '{vendor}'. Try one of: " +
+            ", ".join((artifacts.get("vendor_configs_json") or {}).keys()))
+    return cfg_json
+
+
 def _build_bundle_zip(artifacts: dict[str, Any], request_id: str) -> bytes:
     """Pack JSON manifest + XLSX + every vendor config into a single zip
     so SNS can grab everything in one click and attach it to a CR even
@@ -542,16 +565,26 @@ def _build_bundle_zip(artifacts: dict[str, Any], request_id: str) -> bytes:
         xlsx_buf = io.BytesIO()
         wb.save(xlsx_buf)
         zf.writestr(f"{request_id}/manifest.xlsx", xlsx_buf.getvalue())
-        # Each vendor config as a .txt
+        # Each vendor config as a .txt CLI document
         for vendor_l, cfg in (artifacts.get("vendor_configs") or {}).items():
             zf.writestr(f"{request_id}/device-{vendor_l}.txt", cfg or "")
+        # ...and the structured JSON twin so ops automation / SOAR can
+        # consume the payload directly without screen-scraping the CLI.
+        for vendor_l, cfg_json in (
+            artifacts.get("vendor_configs_json") or {}
+        ).items():
+            zf.writestr(
+                f"{request_id}/device-{vendor_l}.json",
+                _json.dumps(cfg_json, indent=2, default=str),
+            )
         # README so SNS / consumers know what's in the bundle
         readme = (
             f"NGDC Firewall Studio — Rule Request {request_id} export bundle\n"
             f"================================================\n"
-            f"manifest.json     Vendor-neutral deployment manifest\n"
-            f"manifest.xlsx     Same data flattened to spreadsheet rows\n"
-            f"device-*.txt      Vendor-compiled configs (groups + rules)\n"
+            f"manifest.json       Vendor-neutral deployment manifest (carries VRF)\n"
+            f"manifest.xlsx       Same data flattened to spreadsheet rows + group expansions\n"
+            f"device-*.txt        Vendor-compiled CLI configs (PAN-OS / Fortinet / Cisco / Check Point)\n"
+            f"device-*.json       Vendor-compiled JSON payloads — parseable, ready for SOAR / API push\n"
             f"\n"
             f"Use any of the above to deploy manually if the ITSM "
             f"integration is not yet wired up.\n"
@@ -627,17 +660,26 @@ async def request_artifact_bulk_bundle_zip(payload: dict[str, Any]):
             xlsx_buf = BytesIO()
             wb.save(xlsx_buf)
             zf.writestr(f"{rid_s}/manifest.xlsx", xlsx_buf.getvalue())
-            # Vendor configs
+            # Vendor configs (CLI text)
             for vendor_l, cfg in (arts.get("vendor_configs") or {}).items():
                 zf.writestr(f"{rid_s}/device-{vendor_l}.txt", cfg or "")
+            # Vendor configs (structured JSON twin)
+            for vendor_l, cfg_json in (
+                arts.get("vendor_configs_json") or {}
+            ).items():
+                zf.writestr(
+                    f"{rid_s}/device-{vendor_l}.json",
+                    _json.dumps(cfg_json, indent=2, default=str),
+                )
         # Index file at the root.
         index = {
             "exported_request_ids": included,
             "skipped_request_ids": skipped,
             "format_legend": {
-                "manifest.json": "Vendor-neutral deployment manifest",
-                "manifest.xlsx": "Same data flattened to spreadsheet rows",
-                "device-*.txt": "Vendor-compiled configs (groups + rules)",
+                "manifest.json": "Vendor-neutral deployment manifest (carries VRF)",
+                "manifest.xlsx": "Same data flattened to spreadsheet rows + group expansions",
+                "device-*.txt": "Vendor-compiled CLI configs (PAN-OS / Fortinet / Cisco / Check Point)",
+                "device-*.json": "Vendor-compiled JSON payloads — parseable, ready for SOAR / API push",
             },
         }
         zf.writestr("INDEX.json", _json.dumps(index, indent=2))
@@ -826,6 +868,25 @@ async def group_change_artifact_vendor_config(request_id: str, vendor: str):
     )
 
 
+@router.get(
+    "/api/groups/change-requests/{request_id}/artifacts/device-{vendor}.json"
+)
+async def group_change_artifact_vendor_config_json(
+    request_id: str, vendor: str,
+) -> dict[str, Any]:
+    """Structured JSON twin of the group-change vendor config — same op
+    vocabulary as the .txt CLI (create / modify-add / modify-remove /
+    delete) plus address/network objects, ready for SOAR consumption."""
+
+    arts = await get_group_change_artifacts(request_id)
+    if arts is None:
+        raise HTTPException(404, "Group change request not found")
+    cfg_json = (arts.get("vendor_configs_json") or {}).get(vendor.lower())
+    if cfg_json is None:
+        raise HTTPException(404, f"Unknown vendor {vendor!r}")
+    return cfg_json
+
+
 @router.get("/api/groups/change-requests/{request_id}/artifacts/bundle.zip")
 async def group_change_artifact_bundle_zip(request_id: str):
     from fastapi.responses import StreamingResponse
@@ -885,10 +946,23 @@ async def group_change_bulk_bundle_zip(payload: dict[str, Any]):
             zf.writestr(f"{rid_s}/manifest.xlsx", xlsx_buf.getvalue())
             for vendor_l, cfg in (arts.get("vendor_configs") or {}).items():
                 zf.writestr(f"{rid_s}/device-{vendor_l}.txt", cfg or "")
+            for vendor_l, cfg_json in (
+                arts.get("vendor_configs_json") or {}
+            ).items():
+                zf.writestr(
+                    f"{rid_s}/device-{vendor_l}.json",
+                    _json.dumps(cfg_json, indent=2, default=str),
+                )
         index = {
             "exported_request_ids": included,
             "skipped_request_ids": skipped,
             "kind": "group_change_request",
+            "format_legend": {
+                "manifest.json": "Vendor-neutral group change manifest (carries VRF)",
+                "manifest.xlsx": "Spreadsheet view with member expansions",
+                "device-*.txt": "Vendor-compiled CLI configs (PAN-OS / Fortinet / Cisco / Check Point)",
+                "device-*.json": "Vendor-compiled JSON payloads — ready for SOAR / API push",
+            },
         }
         zf.writestr("INDEX.json", _json.dumps(index, indent=2))
     buf.seek(0)
