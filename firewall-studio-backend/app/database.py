@@ -1771,6 +1771,37 @@ async def create_rule(rule_data: dict[str, Any]) -> dict[str, Any]:
 
 
 async def update_rule(rule_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    # The frontend rule-edit modal posts richly typed
+    # {source: {source_type, group_name|ip_address|cidr, ports,
+    # security_zone}, destination: {name|dest_ip, ports, security_zone}}
+    # objects, but this collection's rule schema is *flat* — `source` /
+    # `destination` are strings, `source_zone` / `destination_zone` /
+    # `port` live as siblings. If we wrote the structured payload back
+    # untouched, ``transformRule`` on the next reload would call
+    # ``str.startsWith`` on a dict and the whole rules list would
+    # fail to parse — surfacing as the "Failed to load data" toast on
+    # Design Studio after every edit. Flatten here so storage stays
+    # string-keyed.
+    updates = dict(updates)
+    src = updates.get("source")
+    if isinstance(src, dict):
+        flat_src = (
+            src.get("group_name") or src.get("cidr")
+            or src.get("ip_address") or ""
+        )
+        updates["source"] = str(flat_src)
+        if src.get("security_zone"):
+            updates["source_zone"] = src["security_zone"]
+        if src.get("ports"):
+            updates["port"] = src["ports"]
+    dst = updates.get("destination")
+    if isinstance(dst, dict):
+        flat_dst = dst.get("name") or dst.get("dest_ip") or ""
+        updates["destination"] = str(flat_dst)
+        if dst.get("security_zone"):
+            updates["destination_zone"] = dst["security_zone"]
+        if dst.get("ports"):
+            updates["port"] = dst["ports"]
     rules = _load("firewall_rules") or []
     for r in rules:
         if r.get("rule_id") == rule_id:
@@ -2357,18 +2388,42 @@ async def update_application(app_id: str, updates: dict[str, Any]) -> dict[str, 
         if item.get("app_id") == app_id or item.get("app_distributed_id") == app_id:
             item.update(updates)
             _save("applications", items)
-            # Re-fan to pick up newly-added tiers / DCs after edits.
+            # Re-fan to pick up newly-added tiers / DCs after edits, AND
+            # prune presences (+ derived groups) that the latest tier /
+            # heritage_tier set no longer covers — keeps Group catalog
+            # in lock-step with App Management on every save.
             await auto_fan_app_presences(item)
+            await prune_app_presences(item)
             return item
     return None
 
 
 async def delete_application(app_id: str) -> bool:
     items = _load("applications") or []
-    new_items = [i for i in items if i.get("app_id") != app_id]
-    if len(new_items) == len(items):
+    target = next((i for i in items
+                   if i.get("app_id") == app_id
+                   or i.get("app_distributed_id") == app_id), None)
+    if target is None:
         return False
+    new_items = [i for i in items
+                 if i.get("app_id") != app_id
+                 and i.get("app_distributed_id") != app_id]
     _save("applications", new_items)
+    # Cascade: drop every presence + derived group owned by this app
+    # (egress AND ingress groups, NGDC AND Heritage). Without this,
+    # deleting an app left orphan groups behind.
+    adid = str(target.get("app_distributed_id") or app_id).upper()
+    pres = _load("app_presences") or []
+    _save("app_presences",
+          [p for p in pres
+           if str(p.get("app_distributed_id", "")).upper() != adid])
+    groups = _load("groups") or []
+    _save("groups",
+          [g for g in groups
+           if not (g.get("owner_kind") == "application"
+                   and str(g.get("owner_ref", "")).upper() == adid)
+           and not (g.get("app_id", "").upper() == adid
+                    and g.get("subtype") in (None, "", "APP"))])
     return True
 
 
@@ -2509,11 +2564,24 @@ async def create_datacenter(data: dict[str, Any], dc_type: str = "ngdc") -> dict
     return data
 
 
+def _dc_matches(item: dict[str, Any], code: str) -> bool:
+    """Match a DC record by either ``code`` or ``dc_id``.
+
+    Seed records (and the Settings UI) treat the DC's stable id as
+    ``dc_id`` (e.g. ``ALPHA_NGDC``); a few imported / legacy rows still
+    carry it under the older ``code`` key. The Edit / Delete actions on
+    the Data Centers settings page send whichever value is present, so
+    we accept both — otherwise Delete silently 404s on every row whose
+    canonical id lives under ``dc_id``.
+    """
+    return item.get("code") == code or item.get("dc_id") == code
+
+
 async def update_datacenter(code: str, updates: dict[str, Any], dc_type: str = "ngdc") -> dict[str, Any] | None:
     coll = "ngdc_datacenters" if dc_type == "ngdc" else "legacy_datacenters"
     items = _load(coll) or []
     for item in items:
-        if item.get("code") == code:
+        if _dc_matches(item, code):
             item.update(updates)
             _save(coll, items)
             return item
@@ -2523,7 +2591,7 @@ async def update_datacenter(code: str, updates: dict[str, Any], dc_type: str = "
 async def delete_datacenter(code: str, dc_type: str = "ngdc") -> bool:
     coll = "ngdc_datacenters" if dc_type == "ngdc" else "legacy_datacenters"
     items = _load(coll) or []
-    new_items = [i for i in items if i.get("code") != code]
+    new_items = [i for i in items if not _dc_matches(i, code)]
     if len(new_items) == len(items):
         return False
     _save(coll, new_items)
@@ -7504,9 +7572,11 @@ async def update_shared_service(service_id: str, updates: dict[str, Any]) -> dic
             i["updated_at"] = _now()
             _save("shared_services", items)
             # Re-fan after every save so newly-added tiers / DCs / mode
-            # changes auto-create the missing presences. Existing
-            # presences are preserved (idempotent upsert).
+            # changes auto-create the missing presences (idempotent),
+            # AND prune presences + derived ``grp-<SVC>-…`` groups that
+            # the latest tier / heritage_tier set no longer covers.
             await auto_fan_service_presences(i)
+            await prune_service_presences(i)
             return i
     return None
 
@@ -7900,6 +7970,156 @@ async def auto_fan_service_presences(svc: dict[str, Any]) -> int:
             existing.add(key)
             created += 1
     return created
+
+
+def _desired_app_presence_keys(app: dict[str, Any]) -> set[tuple[str, str, str, str, str]]:
+    """Compute the *desired* presence key set for an Application based on
+    its declared tiers (NGDC) + heritage_tiers (Heritage). Mirrors the
+    fan-out logic in ``auto_fan_app_presences`` so the prune step uses
+    the same shape.
+    """
+    tiers = app.get("tiers") or []
+    heritage_tiers = app.get("heritage_tiers") or app.get("legacy_tiers") or []
+    app_id = str(app.get("app_distributed_id", "")).upper()
+    desired: set[tuple[str, str, str, str, str]] = set()
+    if not app_id:
+        return desired
+    target_dcs = _resolve_target_dcs(app.get("deployment_mode"),
+                                      app.get("excluded_dcs"))
+    for env in _envs_for_entity(app):
+        if tiers and target_dcs:
+            for dc in target_dcs:
+                for tier in tiers:
+                    nh = str(tier.get("nh_id", "")).strip()
+                    sz = str(tier.get("sz_code", "")).strip()
+                    if not nh or not sz:
+                        continue
+                    desired.add((app_id, dc, env, nh, sz))
+        for htier in heritage_tiers:
+            dc = str(htier.get("dc_id", "")).strip()
+            if not dc:
+                continue
+            desired.add((app_id, dc, env, "", ""))
+    return desired
+
+
+def _desired_service_presence_keys(svc: dict[str, Any]) -> set[tuple[str, str, str, str, str]]:
+    tiers = svc.get("tiers") or []
+    heritage_tiers = svc.get("heritage_tiers") or svc.get("legacy_tiers") or []
+    sid = str(svc.get("service_id", "")).upper()
+    desired: set[tuple[str, str, str, str, str]] = set()
+    if not sid:
+        return desired
+    target_dcs = _resolve_target_dcs(svc.get("deployment_mode"),
+                                      svc.get("excluded_dcs"))
+    for env in _envs_for_entity(svc):
+        if tiers and target_dcs:
+            for dc in target_dcs:
+                for tier in tiers:
+                    nh = str(tier.get("nh_id", "")).strip()
+                    sz = str(tier.get("sz_code", "")).strip()
+                    if not nh or not sz:
+                        continue
+                    desired.add((sid, dc, env, nh, sz))
+        for htier in heritage_tiers:
+            dc = str(htier.get("dc_id", "")).strip()
+            if not dc:
+                continue
+            desired.add((sid, dc, env, "", ""))
+    return desired
+
+
+async def prune_app_presences(app: dict[str, Any]) -> int:
+    """Drop any AppPresence rows for this app that no longer match the
+    declared tiers / heritage_tiers / deployment scope, and cascade
+    delete their derived ``grp-<APP>-…-<NH>-<SZ>`` /
+    ``grp-<APP>-…-HERITAGE-<DC>`` groups. Mirror of the additive
+    ``auto_fan_app_presences`` — together they keep the materialised
+    catalog in sync with the App Management form.
+    """
+    app_id = str(app.get("app_distributed_id", "")).upper()
+    if not app_id:
+        return 0
+    desired = _desired_app_presence_keys(app)
+    items = _load("app_presences") or []
+    keep: list[dict[str, Any]] = []
+    drop: list[dict[str, Any]] = []
+    for p in items:
+        if str(p.get("app_distributed_id", "")).upper() != app_id:
+            keep.append(p)
+            continue
+        pkey = (app_id, p.get("dc_id", ""), p.get("environment", ""),
+                p.get("nh_id", ""), p.get("sz_code", ""))
+        if pkey in desired:
+            keep.append(p)
+        else:
+            drop.append(p)
+    if not drop:
+        return 0
+    _save("app_presences", keep)
+    groups = _load("groups") or []
+    drop_keys: set[tuple[str, str]] = set()
+    for p in drop:
+        nh = p.get("nh_id", "")
+        sz = p.get("sz_code", "")
+        dc = p.get("dc_id", "")
+        if _is_heritage_presence(p):
+            egr = _heritage_app_group_name(app_id, dc, "egress")
+            ing = _heritage_app_group_name(app_id, dc, "ingress")
+        else:
+            egr = _app_egress_group_name(app_id, nh, sz)
+            ing = _app_ingress_group_name(app_id, nh, sz)
+        drop_keys.add((egr, dc))
+        drop_keys.add((ing, dc))
+    new_groups = [g for g in groups
+                  if (g.get("name", ""), g.get("dc_id", "")) not in drop_keys]
+    if len(new_groups) != len(groups):
+        _save("groups", new_groups)
+    return len(drop)
+
+
+async def prune_service_presences(svc: dict[str, Any]) -> int:
+    """Same prune contract as :func:`prune_app_presences`, but for
+    SharedService presences. Drops orphan presence rows after a tier /
+    heritage_tier removal and cascades delete on the derived
+    ``grp-<SVC>-<NH>-<SZ>`` / ``grp-<SVC>-HERITAGE-<DC>`` groups.
+    """
+    sid = str(svc.get("service_id", "")).upper()
+    if not sid:
+        return 0
+    desired = _desired_service_presence_keys(svc)
+    items = _load("shared_service_presences") or []
+    keep: list[dict[str, Any]] = []
+    drop: list[dict[str, Any]] = []
+    for p in items:
+        if str(p.get("service_id", "")).upper() != sid:
+            keep.append(p)
+            continue
+        pkey = (sid, p.get("dc_id", ""), p.get("environment", ""),
+                p.get("nh_id", ""), p.get("sz_code", ""))
+        if pkey in desired:
+            keep.append(p)
+        else:
+            drop.append(p)
+    if not drop:
+        return 0
+    _save("shared_service_presences", keep)
+    groups = _load("groups") or []
+    drop_keys: set[tuple[str, str]] = set()
+    for p in drop:
+        nh = p.get("nh_id", "")
+        sz = p.get("sz_code", "")
+        dc = p.get("dc_id", "")
+        if _is_heritage_presence(p):
+            gname = _heritage_app_group_name(sid, dc, "ingress")
+        else:
+            gname = _shared_service_group_name(sid, nh, sz)
+        drop_keys.add((gname, dc))
+    new_groups = [g for g in groups
+                  if (g.get("name", ""), g.get("dc_id", "")) not in drop_keys]
+    if len(new_groups) != len(groups):
+        _save("groups", new_groups)
+    return len(drop)
 
 
 async def delete_app_presence(app_dist_id: str, dc_id: str, environment: str,

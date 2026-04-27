@@ -117,6 +117,7 @@ export default function SettingsPage() {
   const [newSzBindingForm, setNewSzBindingForm] = useState<{ dc: string; nh: string; cidr: string; vrf_id: string }>({ dc: '', nh: '', cidr: '', vrf_id: '' });
   const [editingSzBindingKey, setEditingSzBindingKey] = useState<string | null>(null);
   const [editSzBindingCidr, setEditSzBindingCidr] = useState<string>('');
+  const [editSzBindingVrf, setEditSzBindingVrf] = useState<string>('');
 
   // Data Mode state (seed vs live)
   const [dataMode, setDataModeState] = useState<string>('seed');
@@ -761,9 +762,15 @@ export default function SettingsPage() {
   const handleSaveSzBindingEdit = async (nh: string, sz: string, dc: string, oldCidr: string) => {
     if (!editSzBindingCidr) { showNotification('CIDR is required', 'error'); return; }
     try {
-      await api.upsertSzCidrBinding({ nh, sz, dc, cidr: editSzBindingCidr, old_cidr: oldCidr });
+      await api.upsertSzCidrBinding({
+        nh, sz, dc,
+        cidr: editSzBindingCidr,
+        old_cidr: oldCidr,
+        vrf_id: editSzBindingVrf,
+      });
       setEditingSzBindingKey(null);
       setEditSzBindingCidr('');
+      setEditSzBindingVrf('');
       await reloadSzCidrMap();
       showNotification(`Binding updated: ${nh} · ${sz} · ${dc || 'any-DC'}`, 'success');
     } catch (e) { showNotification(`Failed to update binding: ${(e as Error).message}`, 'error'); }
@@ -1582,16 +1589,27 @@ export default function SettingsPage() {
                                                   </span>
                                                 )}
                                               </td>
-                                              <td className="px-2 py-1 font-mono text-[10px] text-gray-600">{b.vrf_id || '—'}</td>
+                                              <td className="px-2 py-1">
+                                                {isEdit ? (
+                                                  <input
+                                                    className={inp + ' font-mono text-[10px]'}
+                                                    placeholder="VRF e.g. NH02-PAA"
+                                                    value={editSzBindingVrf}
+                                                    onChange={e => setEditSzBindingVrf(e.target.value)}
+                                                  />
+                                                ) : (
+                                                  <span className="font-mono text-[10px] text-gray-600">{b.vrf_id || '—'}</span>
+                                                )}
+                                              </td>
                                               <td className="px-2 py-1 text-right">
                                                 {isEdit ? (
                                                   <div className="inline-flex gap-1">
                                                     <button onClick={() => handleSaveSzBindingEdit(b.nh, code, b.dc || '', b.cidr || '')} className="px-2 py-0.5 text-[11px] text-white bg-emerald-600 rounded hover:bg-emerald-700">Save</button>
-                                                    <button onClick={() => { setEditingSzBindingKey(null); setEditSzBindingCidr(''); }} className="px-2 py-0.5 text-[11px] text-gray-600 border border-gray-200 rounded hover:bg-gray-50">Cancel</button>
+                                                    <button onClick={() => { setEditingSzBindingKey(null); setEditSzBindingCidr(''); setEditSzBindingVrf(''); }} className="px-2 py-0.5 text-[11px] text-gray-600 border border-gray-200 rounded hover:bg-gray-50">Cancel</button>
                                                   </div>
                                                 ) : (
                                                   <div className="inline-flex gap-1">
-                                                    <button onClick={() => { setEditingSzBindingKey(bkey); setEditSzBindingCidr(b.cidr || ''); }} className="px-2 py-0.5 text-[11px] text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-50 font-medium">Edit</button>
+                                                    <button onClick={() => { setEditingSzBindingKey(bkey); setEditSzBindingCidr(b.cidr || ''); setEditSzBindingVrf(b.vrf_id || ''); }} className="px-2 py-0.5 text-[11px] text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-50 font-medium">Edit</button>
                                                     <button onClick={() => handleDeleteSzBinding(b.nh, code, b.dc || '', b.cidr || '')} className="px-2 py-0.5 text-[11px] text-rose-700 border border-rose-200 rounded hover:bg-rose-50 font-medium">Delete</button>
                                                   </div>
                                                 )}
