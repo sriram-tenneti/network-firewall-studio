@@ -70,6 +70,31 @@ export default function BirthrightRulesTab() {
         </button>
       </div>
 
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-[11px] text-emerald-900 space-y-1.5">
+        <div className="font-semibold">What are Birthright Rules?</div>
+        <p>
+          Implicit, pre-approved baseline access every workload gets the moment it lands on the
+          network &mdash; <strong>no rule request needed</strong>. They cover the common
+          infrastructure paths every server depends on so SNS doesn't drown in duplicate
+          requests for the same boilerplate flows.
+        </p>
+        <div className="font-semibold mt-1">Typical baseline (editable here)</div>
+        <ul className="list-disc list-inside space-y-0.5 ml-1">
+          <li>DNS resolution &mdash; UDP/TCP 53 to internal resolvers</li>
+          <li>NTP &mdash; UDP 123 to time servers</li>
+          <li>Splunk Forwarder &mdash; TCP 9997 to log collectors</li>
+          <li>AppDynamics agent &mdash; TCP 8090 / 8181 to controller</li>
+          <li>Internal PKI / OCSP / CRL &mdash; TCP 80 / 443 to CA endpoints</li>
+          <li>AD / Kerberos &mdash; TCP 88, UDP 88, TCP 464, UDP 464 to DCs</li>
+        </ul>
+        <div className="font-semibold mt-1">How they're enforced</div>
+        <ul className="list-disc list-inside space-y-0.5 ml-1">
+          <li>Validation engine compares every new rule request against the active birthright set.</li>
+          <li>If the (destination, ports) tuple is already covered, the request is rejected with a "covered by birthright" warning.</li>
+          <li>Scope filters (DC / NH / SZ) let you limit a birthright to specific zones (use <code>*</code> for "everywhere").</li>
+        </ul>
+      </div>
+
       {error && <div className="rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
 
       {loading ? (

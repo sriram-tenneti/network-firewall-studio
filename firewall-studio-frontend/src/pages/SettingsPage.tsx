@@ -1899,12 +1899,15 @@ export default function SettingsPage() {
                     <div>
                       <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
                       <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                        value={newAppForm.primary_dc || 'ALPHA_NGDC'}
+                        value={String(newAppForm.primary_dc || ngdcDatacenters[0]?.dc_id || ngdcDatacenters[0]?.code || '')}
                         onChange={e => setNewAppForm({ ...newAppForm, primary_dc: e.target.value })}>
-                        <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                        <option value="BETA_NGDC">BETA_NGDC</option>
-                        <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                        <option value="DELTA_NGDC">DELTA_NGDC</option>
+                        {ngdcDatacenters.length === 0 && (
+                          <option value="" disabled>— no NGDC DCs configured —</option>
+                        )}
+                        {ngdcDatacenters.map(dc => {
+                          const code = String(dc.dc_id || dc.code || '');
+                          return <option key={code} value={code}>{code}</option>;
+                        })}
                       </select>
                     </div>
                     <div>
@@ -2013,12 +2016,15 @@ export default function SettingsPage() {
                     <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
                         <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                          value={editAppForm.primary_dc || 'ALPHA_NGDC'}
+                          value={String(editAppForm.primary_dc || ngdcDatacenters[0]?.dc_id || ngdcDatacenters[0]?.code || '')}
                           onChange={e => setEditAppForm({ ...editAppForm, primary_dc: e.target.value })}>
-                          <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                          <option value="BETA_NGDC">BETA_NGDC</option>
-                          <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                          <option value="DELTA_NGDC">DELTA_NGDC</option>
+                          {ngdcDatacenters.length === 0 && (
+                            <option value="" disabled>— no NGDC DCs configured —</option>
+                          )}
+                          {ngdcDatacenters.map(dc => {
+                            const code = String(dc.dc_id || dc.code || '');
+                            return <option key={code} value={code}>{code}</option>;
+                          })}
                         </select></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Deployment Mode</label>
                         <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"

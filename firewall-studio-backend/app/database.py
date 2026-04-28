@@ -2371,7 +2371,12 @@ async def delete_security_zone(code: str) -> bool:
 async def create_application(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("applications") or []
     data = dict(data)
-    data.setdefault("primary_dc", "ALPHA_NGDC")
+    # Default primary_dc to the first NGDC datacenter currently registered
+    # rather than a hardcoded ALPHA_NGDC — keeps the App Management form
+    # in lock-step with Settings → Data Centers when ops add/rename DCs.
+    if not data.get("primary_dc"):
+        ngdcs = _ngdc_dc_ids()
+        data["primary_dc"] = ngdcs[0] if ngdcs else ""
     data.setdefault("deployment_mode", "all_ngdc")
     data.setdefault("excluded_dcs", [])
     items.append(data)

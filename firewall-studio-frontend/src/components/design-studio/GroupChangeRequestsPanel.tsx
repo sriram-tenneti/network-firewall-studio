@@ -14,7 +14,10 @@ const STATUS_PILL: Record<string, string> = {
   Approved: 'bg-blue-100 text-blue-800 border-blue-300',
   Rejected: 'bg-rose-100 text-rose-800 border-rose-300',
   Deployed: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  Certified: 'bg-purple-100 text-purple-800 border-purple-300',
+  // NOTE: groups intentionally stop at Deployed — certification is a
+  // compliance attestation on running rules, not on groups. Mapping is
+  // kept defensively in case historical group requests still carry it.
+  Certified: 'bg-emerald-100 text-emerald-800 border-emerald-300',
 };
 
 const OP_LABEL: Record<string, string> = {
@@ -274,7 +277,7 @@ export default function GroupChangeRequestsPanel({
                               <button onClick={() => handleSetStatus(r.request_id, 'Deployed')} disabled={busyId === r.request_id} className="px-2 py-0.5 text-[11px] border rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700">Mark Deployed</button>
                             )}
                             {r.status === 'Deployed' && (
-                              <button onClick={() => handleSetStatus(r.request_id, 'Certified')} disabled={busyId === r.request_id} className="px-2 py-0.5 text-[11px] border rounded bg-purple-50 hover:bg-purple-100 text-purple-700">Certify</button>
+                              <span className="px-2 py-0.5 text-[11px] border rounded bg-emerald-50 text-emerald-700 italic">Lifecycle complete (groups stop at Deployed)</span>
                             )}
                             {(r.status === 'Approved' || r.status === 'Deployed') && (
                               <button

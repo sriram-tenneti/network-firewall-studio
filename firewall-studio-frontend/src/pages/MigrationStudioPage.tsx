@@ -2248,13 +2248,15 @@ export function MigrationStudioPage() {
         )}
       </Modal>
 
-      {/* App Groups Modal (same as Studio) */}
+      {/* App Groups Modal (same as Studio) — read-only listing.
+          Group mutations flow through Group Change Requests. */}
       <GroupManagerModal
         isOpen={showAppGroupsModal}
         onClose={() => setShowAppGroupsModal(false)}
         appId={selectedApp || undefined}
         applications={applications.map(a => ({ app_id: a.app_id, app_distributed_id: a.app_distributed_id, name: a.name }))}
         environment={selectedEnv || undefined}
+        readOnly
       />
 
       {/* Create New Group During Migration Modal */}

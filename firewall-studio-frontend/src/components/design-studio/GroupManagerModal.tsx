@@ -10,9 +10,18 @@ interface GroupManagerModalProps {
   appId?: string;
   applications?: { app_id: string; app_distributed_id?: string; name: string }[];
   environment?: string;
+  /**
+   * When true the modal is a *listing only* — no Create / Add-member /
+   * Remove / Submit-policy controls. Eliminates the redundancy between
+   * Studio's "App Groups" view and the Group Change Request flow:
+   * mutations only happen via Group Change Requests, this surface just
+   * shows what's currently materialised. Default false to preserve the
+   * Migration Studio create-during-rename flow that pre-dates this.
+   */
+  readOnly?: boolean;
 }
 
-export function GroupManagerModal({ isOpen, onClose, appId, applications = [], environment }: GroupManagerModalProps) {
+export function GroupManagerModal({ isOpen, onClose, appId, applications = [], environment, readOnly = false }: GroupManagerModalProps) {
   const [groups, setGroups] = useState<FirewallGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<FirewallGroup | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -506,12 +515,20 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
           </div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-700">Groups ({filteredGroups.length})</h3>
-            <button onClick={() => setShowCreate(!showCreate)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-              {showCreate ? 'Cancel' : '+ New'}
-            </button>
+            {!readOnly && (
+              <button onClick={() => setShowCreate(!showCreate)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                {showCreate ? 'Cancel' : '+ New'}
+              </button>
+            )}
           </div>
 
-          {showCreate && (
+          {readOnly && (
+            <div className="mb-3 p-2 rounded border border-amber-200 bg-amber-50 text-[11px] text-amber-800">
+              <strong>Read-only.</strong> Group Management is viewable here. To create or modify a group, raise a <em>Group Change Request</em> from the Studio &mdash; it goes through the same Pending &rarr; Approved &rarr; Deployed lifecycle as a rule.
+            </div>
+          )}
+
+          {!readOnly && showCreate && (
             <div className="mb-3 p-3 bg-blue-50 rounded-lg space-y-2">
               {/* Standards notice */}
               <div className="p-2 bg-blue-100 border border-blue-200 rounded text-[10px] text-blue-800">
@@ -720,17 +737,19 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
               </div>
 
               {/* Add member form */}
-              <div className="flex gap-2 mb-3">
-                <select className="px-2 py-1.5 border border-gray-300 rounded-md text-xs" value={newMember.type} onChange={e => setNewMember({ ...newMember, type: e.target.value as GroupMember['type'] })}>
-                  <option value="ip">IP Address</option>
-                  <option value="cidr">Subnet (CIDR)</option>
-                  <option value="range">IP Range</option>
-                  <option value="group">Nested Group</option>
-                </select>
-                <input className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-xs" placeholder={newMember.type === 'cidr' ? '10.0.1.0/24' : newMember.type === 'range' ? '10.0.1.1-10.0.1.50' : '10.0.1.1'} value={newMember.value} onChange={e => setNewMember({ ...newMember, value: e.target.value })} />
-                <input className="w-32 px-2 py-1.5 border border-gray-300 rounded-md text-xs" placeholder="Description" value={newMember.description} onChange={e => setNewMember({ ...newMember, description: e.target.value })} />
-                <button onClick={handleAddMember} className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 whitespace-nowrap">Add</button>
-              </div>
+              {!readOnly && (
+                <div className="flex gap-2 mb-3">
+                  <select className="px-2 py-1.5 border border-gray-300 rounded-md text-xs" value={newMember.type} onChange={e => setNewMember({ ...newMember, type: e.target.value as GroupMember['type'] })}>
+                    <option value="ip">IP Address</option>
+                    <option value="cidr">Subnet (CIDR)</option>
+                    <option value="range">IP Range</option>
+                    <option value="group">Nested Group</option>
+                  </select>
+                  <input className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-xs" placeholder={newMember.type === 'cidr' ? '10.0.1.0/24' : newMember.type === 'range' ? '10.0.1.1-10.0.1.50' : '10.0.1.1'} value={newMember.value} onChange={e => setNewMember({ ...newMember, value: e.target.value })} />
+                  <input className="w-32 px-2 py-1.5 border border-gray-300 rounded-md text-xs" placeholder="Description" value={newMember.description} onChange={e => setNewMember({ ...newMember, description: e.target.value })} />
+                  <button onClick={handleAddMember} className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 whitespace-nowrap">Add</button>
+                </div>
+              )}
 
               {/* Members list */}
               <div className="border rounded-lg overflow-hidden">
@@ -759,7 +778,11 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                         <td className="px-3 py-2 font-mono">{m.value}</td>
                         <td className="px-3 py-2 text-gray-500">{m.description}</td>
                         <td className="px-3 py-2 text-right">
-                          <button onClick={() => handleRemoveMember(m.value)} className="text-red-500 hover:text-red-700 font-medium">Remove</button>
+                          {readOnly ? (
+                            <span className="text-[10px] text-gray-400 italic">view-only</span>
+                          ) : (
+                            <button onClick={() => handleRemoveMember(m.value)} className="text-red-500 hover:text-red-700 font-medium">Remove</button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -779,7 +802,7 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
       </div>
 
       {/* Policy change notification bar */}
-      {pendingChanges.length > 0 && affectedRulesCount > 0 && (
+      {!readOnly && pendingChanges.length > 0 && affectedRulesCount > 0 && (
         <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
