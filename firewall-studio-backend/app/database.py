@@ -8393,12 +8393,82 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     dedup = evaluate_dedup({"physical_rules": physical}) if physical else {
         "verdict": "ok", "block": False, "matches": [],
     }
+    # Policy Matrix is the architectural source of truth for "what's already
+    # allowed at the zone-pair level" — cross-SZ / cross-NH / cross-DC. Run
+    # validate_birthright (which resolves the matrix) per unique
+    # (src_sz, dst_sz, src_nh, dst_nh, src_dc, dst_dc) tuple and aggregate.
+    # Service-level birthright (DNS/NTP/Splunk overlay) sits ON TOP of this:
+    # it only matters when the matrix says "Firewall Request Required".
+    policy_matrix: dict[str, Any] = {
+        "permitted": [], "rule_required": [], "blocked": [],
+    }
+    if physical:
+        seen_tuples: set[tuple[str, str, str, str, str, str]] = set()
+        for pr in physical:
+            tup = (
+                pr.get("src_sz", ""), pr.get("dst_sz", ""),
+                pr.get("src_nh", ""), pr.get("dst_nh", ""),
+                pr.get("src_dc", ""), pr.get("dst_dc", ""),
+            )
+            if tup in seen_tuples:
+                continue
+            seen_tuples.add(tup)
+            br = await validate_birthright({
+                "source_zone": pr.get("src_sz", ""),
+                "destination_zone": pr.get("dst_sz", ""),
+                "source_sz": pr.get("src_sz", ""),
+                "destination_sz": pr.get("dst_sz", ""),
+                "source_nh": pr.get("src_nh", ""),
+                "destination_nh": pr.get("dst_nh", ""),
+                "source_dc": pr.get("src_dc", ""),
+                "destination_dc": pr.get("dst_dc", ""),
+                "environment": env,
+            })
+            row = {
+                "src_sz": pr.get("src_sz", ""), "dst_sz": pr.get("dst_sz", ""),
+                "src_nh": pr.get("src_nh", ""), "dst_nh": pr.get("dst_nh", ""),
+                "src_dc": pr.get("src_dc", ""), "dst_dc": pr.get("dst_dc", ""),
+            }
+            if br.get("violations"):
+                row["matches"] = br["violations"]
+                policy_matrix["blocked"].append(row)
+            elif br.get("warnings"):
+                row["matches"] = br["warnings"]
+                policy_matrix["rule_required"].append(row)
+            elif br.get("permitted"):
+                row["matches"] = br["permitted"]
+                policy_matrix["permitted"].append(row)
+            else:
+                # Matrix had no opinion — treat as rule_required so the
+                # downstream service-level overlay (DNS/NTP/etc) gets a chance.
+                row["matches"] = []
+                policy_matrix["rule_required"].append(row)
+    pm_all_permitted = bool(physical) and not policy_matrix["rule_required"] and not policy_matrix["blocked"]
+    pm_any_blocked = bool(policy_matrix["blocked"])
+    policy_matrix["all_permitted"] = pm_all_permitted
+    policy_matrix["any_blocked"] = pm_any_blocked
+    if pm_any_blocked:
+        for row in policy_matrix["blocked"]:
+            for m in row["matches"]:
+                warnings.append(
+                    "Blocked by Policy Matrix "
+                    f"(SZ:{row['src_sz']} -> SZ:{row['dst_sz']}): {m.get('reason', '')}"
+                )
+    elif pm_all_permitted:
+        warnings.append(
+            "Already permitted by Policy Matrix at the zone-pair level "
+            "(implicit allow / birthright). No firewall rule needed."
+        )
+
+    # Service-level birthright (DNS/NTP/Splunk/AppD/PKI/AD overlay) only
+    # applies to physical rules where the matrix said "rule required" —
+    # if the matrix already permits or blocks the flow, the overlay is moot.
     birthright = evaluate_birthright(payload) if physical else {
         "covered": False, "matches": [],
     }
-    if birthright["covered"]:
+    if birthright["covered"] and not pm_any_blocked and not pm_all_permitted:
         warnings.append(
-            "Already provided as a birthright rule "
+            "Already provided as a birthright service overlay "
             f"({', '.join(m['birthright_id'] for m in birthright['matches'])}). "
             "No request needed."
         )
@@ -8415,7 +8485,13 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
         "warnings": warnings,
         "dedup": dedup,
         "birthright": birthright,
-        "block_submit": bool(dedup.get("block") or birthright.get("covered")),
+        "policy_matrix": policy_matrix,
+        "block_submit": bool(
+            dedup.get("block")
+            or birthright.get("covered")
+            or pm_all_permitted
+            or pm_any_blocked
+        ),
     }
 
 
