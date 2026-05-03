@@ -1580,6 +1580,71 @@ export const normalizeLegacyRulesBulk = (rules: Array<Record<string, unknown>>) 
     body: JSON.stringify({ rules }),
   });
 
+// Migration Studio: enriched legacy -> classified -> proposed NGDC transition view.
+export type LegacyAtomKind = 'ip' | 'cidr' | 'range' | 'group' | 'fqdn' | 'empty';
+export interface LegacyClassifiedSide {
+  kind: LegacyAtomKind | string;
+  value: string;
+  dc: string;
+  nh: string;
+  sz: string;
+  app: string;
+  app_distributed_id: string;
+  service_id: string;
+  presence_kind: 'egress' | 'ingress' | 'shared_service' | 'group' | 'unknown' | string;
+  matched: boolean;
+  reason: string;
+}
+export interface LegacyProposed {
+  src_group: string;
+  dst_group: string;
+  src_vrf: string;
+  dst_vrf: string;
+  src_dc: string;
+  dst_dc: string;
+  ports: string;
+  action: string;
+  environment: string;
+  app_management_changes: Array<Record<string, unknown>>;
+  group_changes: Array<Record<string, unknown>>;
+  physical_rule: Record<string, unknown>;
+}
+export interface LegacyTransition {
+  origin_legacy_rule_id: string;
+  original: {
+    source: string;
+    destination: string;
+    protocol: string;
+    ports: string;
+    action: string;
+    environment: string;
+  };
+  classified: {
+    source: LegacyClassifiedSide;
+    destination: LegacyClassifiedSide;
+  };
+  proposed: LegacyProposed;
+  verdict: 'new' | 'merge' | 'conflict' | 'overlap' | 'unclassifiable' | string;
+  dedup_match: Record<string, unknown> | null;
+  warnings: string[];
+}
+export const buildLegacyTransitionsBulk = (rules: Array<Record<string, unknown>>) =>
+  fetchJSON<{
+    counters: {
+      total: number;
+      new: number;
+      merge: number;
+      conflict: number;
+      overlap: number;
+      unclassifiable: number;
+      needs_app_attachment: number;
+    };
+    transitions: LegacyTransition[];
+  }>('/api/migration/transitions-bulk', {
+    method: 'POST',
+    body: JSON.stringify({ rules }),
+  });
+
 
 // ============================================================
 // Group Change Requests (standalone group create / modify / delete)

@@ -358,6 +358,8 @@ from app.database import (  # noqa: E402
     get_security_zones,
     list_birthright_rules,
     list_itsm_connectors,
+    build_legacy_transition,
+    build_legacy_transitions_bulk,
     normalize_legacy_rule,
     normalize_legacy_rules_bulk,
     refresh_request_external_status,
@@ -751,6 +753,24 @@ async def normalize_legacy_rules_bulk_route(payload: dict[str, Any]) -> dict[str
     if not isinstance(rules, list):
         raise HTTPException(400, "rules must be a list")
     return await normalize_legacy_rules_bulk([dict(r) for r in rules])
+
+
+@router.post("/api/migration/transition")
+async def build_legacy_transition_route(payload: dict[str, Any]) -> dict[str, Any]:
+    """Single-rule legacy -> classified -> proposed NGDC transition view
+    used by the Migration Studio side-by-side panel."""
+    return await build_legacy_transition(payload)
+
+
+@router.post("/api/migration/transitions-bulk")
+async def build_legacy_transitions_bulk_route(payload: dict[str, Any]) -> dict[str, Any]:
+    """Bulk legacy -> NGDC transition view. Returns counters + per-rule
+    {original, classified, proposed, verdict, warnings} blocks for the
+    Migration Studio side-by-side panel."""
+    rules = payload.get("rules") or []
+    if not isinstance(rules, list):
+        raise HTTPException(400, "rules must be a list")
+    return await build_legacy_transitions_bulk([dict(r) for r in rules])
 
 
 # ============================================================
