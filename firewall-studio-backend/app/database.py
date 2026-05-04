@@ -8141,6 +8141,12 @@ async def apply_app_presence_overrides(
         if is_heritage:
             nh, sz = "", ""
         env = str(row.get("environment", "")).strip() or envs[0]
+        ngdc_source_dcs = []
+        if is_heritage:
+            for x in (row.get("ngdc_source_dcs") or []):
+                s = str(x).strip().upper()
+                if s and s not in ngdc_source_dcs:
+                    ngdc_source_dcs.append(s)
         await upsert_app_presence({
             "app_distributed_id": app_id,
             "dc_id": dc,
@@ -8153,6 +8159,7 @@ async def apply_app_presence_overrides(
             "egress_members": _normalise_chips(row.get("egress_members")),
             "ingress_members": _normalise_chips(row.get("ingress_members")),
             "ingress_ports": list(row.get("ingress_ports") or []),
+            "ngdc_source_dcs": ngdc_source_dcs,
         })
         written += 1
     return written
@@ -8193,6 +8200,12 @@ async def apply_service_presence_overrides(
             + (row.get("egress_members") or [])
             + (row.get("ingress_members") or []),
         )
+        ngdc_source_dcs = []
+        if is_heritage:
+            for x in (row.get("ngdc_source_dcs") or []):
+                s = str(x).strip().upper()
+                if s and s not in ngdc_source_dcs:
+                    ngdc_source_dcs.append(s)
         await upsert_shared_service_presence({
             "service_id": sid,
             "dc_id": dc,
@@ -8202,6 +8215,7 @@ async def apply_service_presence_overrides(
             "nh_id": nh,
             "sz_code": sz,
             "members": members,
+            "ngdc_source_dcs": ngdc_source_dcs,
         })
         written += 1
     return written
@@ -8456,17 +8470,32 @@ async def _resolve_destination_presences(kind: str, dest_ref: str | None,
 async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     """Compute the multi-DC fan-out for a proposed rule request.
 
-    By default the engine emits ONE PhysicalRule per (src_tier × dst_tier)
-    in the **source's primary DC**, with destination groups resolved to
-    the **destination's primary DC**. The destination team owns
-    east-west routing across their other DCs (per architecture: app
-    teams raise from one primary DC; destination teams handle their own
-    DC fan-out via VIP / GSLB / per-DC LBs).
+    Default behaviour (matches the architecture: every NGDC app/service
+    has presence in all 4 NGDC DCs; one logical submit must materialise
+    one firewall request **per source DC per destination**):
+
+      - Source side fans out across **all** NGDC DCs the source has
+        presence in (no primary-DC scoping by default).
+      - For NGDC ↔ NGDC flows, src_dc and dst_dc are **paired same-DC**
+        (ALPHA → ALPHA, BETA → BETA …) so a 4-DC source talking to a
+        4-DC destination produces 4 R-#### rules under one parent
+        RR-####. Cross-DC NGDC ↔ NGDC pairs are emitted only when the
+        caller passes `include_cross_dc=True`.
+      - For NGDC → Heritage (or Heritage → NGDC), the **Heritage
+        presence's `ngdc_source_dcs[]` mapping** drives which NGDC DCs
+        route into / out of that Heritage DC. This is the architectural
+        hook for the 2-NGDC-servers-→-1-Heritage-DC pattern: the app
+        team declares the routing on the Heritage row of the editor.
+        Empty mapping = all NGDC DCs (a warning is surfaced telling
+        the user to declare the mapping explicitly).
+      - Each emitted physical row carries `dc_to_dc_path`,
+        `egress_ip_dependency`, and `ingress_ip_dependency` so the
+        manifest export and Review queue can document the hop.
 
     Power-user toggles:
-      - `include_cross_dc=True` ⇒ legacy intersect-all-DCs behaviour.
-      - `destination_dc_override=<dc_id>` ⇒ explicitly target a non-primary
-        destination DC (DR cutover scenarios).
+      - `requested_dcs` — explicit src+dst DC scope (overrides the all-DC default).
+      - `include_cross_dc=True` — full cross-product across NGDC DCs (DR / cutover).
+      - `destination_dc_override=<dc_id>` — pin destination DC.
 
     Returns { physical_rules: [...], warnings: [...] } without persisting.
     """
@@ -8486,25 +8515,15 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     source_presences = payload.get("source_presences")
     destination_presences = payload.get("destination_presences")
 
-    # Primary-DC scoping (default). When the requester didn't pass
-    # explicit `requested_dcs`, scope the source resolver to the source's
-    # primary_dc and the destination resolver to either the override DC
-    # or the destination's primary_dc.
+    # Default = all-DC fan-out. The engine no longer collapses to the
+    # source's primary DC; the architectural rule is "one firewall
+    # request per source DC per destination DC". Callers that still want
+    # primary-DC scoping must pass `requested_dcs` explicitly or set
+    # `destination_dc_override`.
     src_dc_filter = list(requested_dcs) if requested_dcs else None
     dst_dc_filter = list(requested_dcs) if requested_dcs else None
-    if not include_cross_dc:
-        if not src_dc_filter:
-            primary = await _get_primary_dc(source_kind, src_ref)
-            if primary:
-                src_dc_filter = [primary]
-        if not dst_dc_filter:
-            if dest_dc_override:
-                dst_dc_filter = [dest_dc_override]
-            else:
-                dst_kind = "shared_service" if kind == "shared_service" else "app"
-                primary = await _get_primary_dc(dst_kind, dest_ref)
-                if primary:
-                    dst_dc_filter = [primary]
+    if dest_dc_override and not dst_dc_filter:
+        dst_dc_filter = [dest_dc_override]
 
     src_pres = await _resolve_source_presences(
         src_ref, env, src_dc_filter, source_presences,
@@ -8524,38 +8543,128 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
             + (f" / DCs {dst_dc_filter}" if dst_dc_filter else "")
         )
 
+    def _chip_values(chips: Any) -> list[str]:
+        out: list[str] = []
+        for chip in chips or []:
+            if isinstance(chip, dict):
+                v = str(chip.get("value", "")).strip()
+                if v:
+                    out.append(v)
+            elif isinstance(chip, str):
+                v = chip.strip()
+                if v:
+                    out.append(v)
+        return out
+
+    def _routing_allowed(s_pres: dict[str, Any], d_pres: dict[str, Any]) -> bool:
+        """DC-to-DC pairing rules.
+
+        - Heritage destination: src_dc must be listed in d_pres's
+          `ngdc_source_dcs[]` (or the list is empty = "all NGDC DCs").
+        - Heritage source: dst_dc must be listed in s_pres's
+          `ngdc_source_dcs[]` (mirror semantics: which NGDC DCs this
+          Heritage DC sends traffic out to).
+        - NGDC <-> NGDC: same-DC pairing only by default. Set
+          `include_cross_dc=True` to allow ALPHA->BETA etc.
+        - Heritage <-> Heritage: free pairing (no NH/SZ to constrain).
+        """
+        s_h = _is_heritage_presence(s_pres)
+        d_h = _is_heritage_presence(d_pres)
+        if d_h and not s_h:
+            allowed = [str(x).upper().strip()
+                       for x in (d_pres.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and s_pres["dc_id"].upper() not in allowed:
+                return False
+            return True
+        if s_h and not d_h:
+            allowed = [str(x).upper().strip()
+                       for x in (s_pres.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and d_pres["dc_id"].upper() not in allowed:
+                return False
+            return True
+        if not s_h and not d_h:
+            if include_cross_dc:
+                return True
+            return s_pres["dc_id"] == d_pres["dc_id"]
+        # heritage <-> heritage: allow all
+        return True
+
     physical: list[dict[str, Any]] = []
     seen_pairs: set[tuple[str, str, str, str]] = set()
+    heritage_unmapped_warned: set[str] = set()
     for s in src_pres:
         for d in dst_pres:
-            if s["dc_id"] != d["dc_id"] and not include_cross_dc:
+            if not _routing_allowed(s, d):
                 continue
-            # source group name (egress)
-            src_group = _app_egress_group_name(
-                s["app_distributed_id"], s["nh_id"], s["sz_code"])
+            # source group name (egress) — Heritage uses the flat per-DC
+            # naming (`grp-<APP>-HERITAGE-<DC>`); NGDC uses NH/SZ.
+            if _is_heritage_presence(s):
+                src_group = _heritage_app_group_name(
+                    s.get("app_distributed_id", ""), s.get("dc_id", ""))
+            else:
+                src_group = _app_egress_group_name(
+                    s["app_distributed_id"], s["nh_id"], s["sz_code"])
             # destination group name
             if kind == "shared_service":
-                dst_group = _shared_service_group_name(
-                    d["service_id"], d["nh_id"], d["sz_code"])
+                if _is_heritage_presence(d):
+                    dst_group = _heritage_app_group_name(
+                        d.get("service_id", ""), d.get("dc_id", ""))
+                else:
+                    dst_group = _shared_service_group_name(
+                        d["service_id"], d["nh_id"], d["sz_code"])
             else:
-                dst_group = _app_ingress_group_name(
-                    d["app_distributed_id"], d["nh_id"], d["sz_code"])
+                if _is_heritage_presence(d):
+                    dst_group = _heritage_app_group_name(
+                        d.get("app_distributed_id", ""), d.get("dc_id", ""))
+                else:
+                    dst_group = _app_ingress_group_name(
+                        d["app_distributed_id"], d["nh_id"], d["sz_code"])
             key = (s["dc_id"], d["dc_id"], src_group, dst_group)
             if key in seen_pairs:
                 continue
             seen_pairs.add(key)
+            # Source / dest IP dependency atoms — picked from the
+            # presence chips so the manifest documents per-DC IPs.
+            src_ips = _chip_values(s.get("egress_members"))
+            dst_ips = _chip_values(
+                d.get("ingress_members") if not _is_heritage_presence(d)
+                else d.get("egress_members") or d.get("members"))
+            if not dst_ips:
+                # Shared service heritage rows store under "members"; some
+                # legacy app rows under "members" too. Fallback.
+                dst_ips = _chip_values(d.get("members"))
             physical.append({
                 "src_dc": s["dc_id"],
                 "dst_dc": d["dc_id"],
                 "src_group_ref": src_group,
                 "dst_group_ref": dst_group,
-                "src_nh": s["nh_id"], "src_sz": s["sz_code"],
-                "dst_nh": d["nh_id"], "dst_sz": d["sz_code"],
+                "src_nh": s.get("nh_id", ""), "src_sz": s.get("sz_code", ""),
+                "dst_nh": d.get("nh_id", ""), "dst_sz": d.get("sz_code", ""),
                 "ports": ports, "action": action,
                 "environment": env,
                 "cross_dc": s["dc_id"] != d["dc_id"],
+                "src_is_heritage": _is_heritage_presence(s),
+                "dst_is_heritage": _is_heritage_presence(d),
+                "dc_to_dc_path": f"{s['dc_id']} -> {d['dc_id']}",
+                "egress_ip_dependency": src_ips,
+                "ingress_ip_dependency": dst_ips,
                 "lifecycle_status": "Preview",
             })
+            # Surface unmapped Heritage destinations once per dst_dc so
+            # the SME can declare ngdc_source_dcs[] explicitly.
+            if (_is_heritage_presence(d) and not _is_heritage_presence(s)
+                    and not (d.get("ngdc_source_dcs") or [])):
+                if d["dc_id"] not in heritage_unmapped_warned:
+                    heritage_unmapped_warned.add(d["dc_id"])
+                    warnings.append(
+                        f"Heritage destination DC {d['dc_id']} has no "
+                        "explicit `ngdc_source_dcs[]` mapping — fanning "
+                        "out across all NGDC source DCs. Declare the "
+                        "mapping on the Heritage presence row to pin "
+                        "which NGDC DCs route into this Heritage DC."
+                    )
     if not physical and not warnings:
         warnings.append(
             "Source and destination have no DC in common; "

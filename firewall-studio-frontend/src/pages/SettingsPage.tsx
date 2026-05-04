@@ -364,9 +364,14 @@ export default function SettingsPage() {
     try {
       const res = await api.getAppPresences({ app: appId });
       const rows: PresenceRow[] = (res || []).map((p) => {
+        const raw = p as unknown as Record<string, unknown>;
         const isHeritage =
-          (p as { dc_type?: string }).dc_type === 'Legacy' ||
-          String((p as { dc_type?: string }).dc_type ?? '').toLowerCase() === 'heritage';
+          raw.dc_type === 'Legacy' ||
+          String((raw.dc_type as string | undefined) ?? '').toLowerCase() === 'heritage' ||
+          raw.is_heritage === true;
+        const ngdcSourceDcs = Array.isArray(raw.ngdc_source_dcs)
+          ? (raw.ngdc_source_dcs as unknown[]).map((x) => String(x))
+          : [];
         return {
           dc_id: p.dc_id,
           nh_id: p.nh_id || '',
@@ -376,6 +381,7 @@ export default function SettingsPage() {
           egress_members: (p.egress_members || []).map((m) => ({ ...m })),
           ingress_members: (p.ingress_members || []).map((m) => ({ ...m })),
           environment: p.environment,
+          ngdc_source_dcs: ngdcSourceDcs,
         };
       });
       setEditAppPresences(rows);

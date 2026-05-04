@@ -293,8 +293,13 @@ export default function SharedServicesTab() {
                         setEditing({ ...s });
                         const existing = presencesByService[s.service_id] || [];
                         const rows: PresenceRow[] = existing.map((p) => {
+                          const raw = p as unknown as Record<string, unknown>;
                           const isHeritage = p.dc_type === 'Legacy' ||
-                            String(p.dc_type ?? '').toLowerCase() === 'heritage';
+                            String(p.dc_type ?? '').toLowerCase() === 'heritage' ||
+                            raw.is_heritage === true;
+                          const ngdcSourceDcs = Array.isArray(raw.ngdc_source_dcs)
+                            ? (raw.ngdc_source_dcs as unknown[]).map((x) => String(x))
+                            : [];
                           return {
                             dc_id: p.dc_id,
                             nh_id: p.nh_id || '',
@@ -304,6 +309,7 @@ export default function SharedServicesTab() {
                             egress_members: (p.members || []).map((m) => ({ ...m })),
                             ingress_members: [],
                             environment: p.environment,
+                            ngdc_source_dcs: ngdcSourceDcs,
                           };
                         });
                         setEditingPresences(rows);
