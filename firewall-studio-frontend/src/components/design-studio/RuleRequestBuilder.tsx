@@ -73,7 +73,11 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   const [ports, setPorts] = useState('TCP 443');
   const [action, setAction] = useState<'ACCEPT' | 'DROP'>('ACCEPT');
   const [description, setDescription] = useState('');
-  const [includeCrossDc, setIncludeCrossDc] = useState(false);
+  // Cross-DC pairing inside NGDC is intentionally not exposed: every
+  // app/service lives in all 4 NGDC DCs, so traffic always pairs
+  // same-DC (ALPHA→ALPHA, …). Cross-DC reasoning only applies to
+  // NGDC↔Heritage, governed by the Heritage presence's
+  // `ngdc_source_dcs[]` mapping declared on the editor.
   // Optional: explicit destination DC override (DR cutover / pinned active-active).
   // Empty string ⇒ use destination's primary_dc (default behaviour).
   const [destinationDcOverride, setDestinationDcOverride] = useState<string>('');
@@ -258,7 +262,6 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
           environment,
           ports,
           action,
-          include_cross_dc: includeCrossDc,
           destination_dc_override: destinationDcOverride || undefined,
           source_presences: effectiveSrcPresences,
           destination_presences: effectiveDstPresences,
@@ -269,7 +272,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
       }
     })();
     return () => { cancelled = true; };
-  }, [srcApp, srcKind, dest, environment, ports, action, includeCrossDc,
+  }, [srcApp, srcKind, dest, environment, ports, action,
       destinationDcOverride, effectiveSrcPresences, effectiveDstPresences]);
 
   const onDropDestination = (e: React.DragEvent) => {
@@ -300,7 +303,6 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
         ports,
         action,
         description,
-        include_cross_dc: includeCrossDc,
         destination_dc_override: destinationDcOverride || undefined,
         source_presences: effectiveSrcPresences,
         destination_presences: effectiveDstPresences,
@@ -323,7 +325,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
 
   const reset = () => {
     setStep(1); setSrcKind('app'); setSrcApp(''); setDest(null); setPorts('TCP 443');
-    setAction('ACCEPT'); setDescription(''); setIncludeCrossDc(false);
+    setAction('ACCEPT'); setDescription('');
     setDestinationDcOverride('');
     setSelectedSrcKeys(new Set()); setSelectedDstKeys(new Set());
     setPreview(null); setSubmittedRecord(null); setSubmitError(null);
@@ -557,14 +559,11 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               <details className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
                 <summary className="text-[11px] font-semibold text-amber-800 cursor-pointer">Advanced (SNS only) — Power-user Overrides</summary>
                 <p className="text-[11px] text-gray-600 mt-2">
-                  By default, rules originate from the source's <strong>primary DC</strong> and target the destination's
-                  <strong> primary DC</strong>. The destination team manages east-west routing across their other DCs.
-                  Use these toggles only for active-active source / DR cutover scenarios.
+                  Rules fan out automatically across <strong>all 4 NGDC DCs</strong> with strict
+                  same-DC pairing (ALPHA→ALPHA, BETA→BETA, …). NGDC↔Heritage routing follows
+                  the Heritage presence's <code className="font-mono">ngdc_source_dcs[]</code>
+                  mapping. Use the override below only for DR cutover / pinned active-active.
                 </p>
-                <label className="flex items-center gap-2 text-xs text-gray-700">
-                  <input type="checkbox" checked={includeCrossDc} onChange={(e) => setIncludeCrossDc(e.target.checked)} />
-                  <span><strong>Cross-DC fan-out</strong> — also generate rules from non-primary source DCs</span>
-                </label>
                 <label className="flex items-center gap-2 text-xs text-gray-700">
                   <span className="min-w-[150px]"><strong>Destination DC override</strong></span>
                   <select value={destinationDcOverride}
@@ -608,7 +607,6 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   destination_kind: dest!.kind,
                   destination_ref: dest!.ref,
                   environment, ports, action,
-                  include_cross_dc: includeCrossDc,
                   destination_dc_override: destinationDcOverride || undefined,
                 });
                 setPreview(p);

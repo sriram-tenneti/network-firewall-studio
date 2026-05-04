@@ -8476,11 +8476,13 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
 
       - Source side fans out across **all** NGDC DCs the source has
         presence in (no primary-DC scoping by default).
-      - For NGDC ↔ NGDC flows, src_dc and dst_dc are **paired same-DC**
-        (ALPHA → ALPHA, BETA → BETA …) so a 4-DC source talking to a
-        4-DC destination produces 4 R-#### rules under one parent
-        RR-####. Cross-DC NGDC ↔ NGDC pairs are emitted only when the
-        caller passes `include_cross_dc=True`.
+      - For NGDC ↔ NGDC flows, src_dc and dst_dc are **strictly paired
+        same-DC** (ALPHA → ALPHA, BETA → BETA …) so a 4-DC source
+        talking to a 4-DC destination produces exactly 4 R-#### rules
+        under one parent RR-####. Cross-DC reasoning does not apply
+        within NGDC (every app lives in every DC); the legacy
+        `include_cross_dc` toggle is ignored for NGDC↔NGDC and only
+        matters for Heritage routing exceptions.
       - For NGDC → Heritage (or Heritage → NGDC), the **Heritage
         presence's `ngdc_source_dcs[]` mapping** drives which NGDC DCs
         route into / out of that Heritage DC. This is the architectural
@@ -8564,8 +8566,10 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
         - Heritage source: dst_dc must be listed in s_pres's
           `ngdc_source_dcs[]` (mirror semantics: which NGDC DCs this
           Heritage DC sends traffic out to).
-        - NGDC <-> NGDC: same-DC pairing only by default. Set
-          `include_cross_dc=True` to allow ALPHA->BETA etc.
+        - NGDC <-> NGDC: **strictly same-DC pairing**. Apps live in all
+          4 NGDC DCs, so traffic always pairs same-DC (ALPHA->ALPHA,
+          BETA->BETA, ...). Cross-DC NGDC<->NGDC is meaningless and
+          intentionally not emitted.
         - Heritage <-> Heritage: free pairing (no NH/SZ to constrain).
         """
         s_h = _is_heritage_presence(s_pres)
@@ -8585,8 +8589,10 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
                 return False
             return True
         if not s_h and not d_h:
-            if include_cross_dc:
-                return True
+            # Strict same-DC pairing for NGDC<->NGDC. The legacy
+            # `include_cross_dc` toggle is intentionally ignored here
+            # \u2014 cross-DC reasoning is reserved for NGDC<->Heritage
+            # flows governed by `ngdc_source_dcs[]`.
             return s_pres["dc_id"] == d_pres["dc_id"]
         # heritage <-> heritage: allow all
         return True

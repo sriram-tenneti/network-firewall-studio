@@ -97,7 +97,6 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [, setValidatingBR] = useState(false);
   const [fanOutPreview, setFanOutPreview] = useState<RuleExpansionPreview | null>(null);
-  const [includeCrossDc, setIncludeCrossDc] = useState(false);
 
   /* ---------- Group creation modal ---------- */
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
@@ -502,11 +501,11 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   /*                                                                     */
   /*  Calls the backend `preview_rule_expansion` so the user sees, before
    *  they click Submit, how many R-#### physical rules will materialise
-   *  under one parent RR-####. NGDC↔NGDC pairs same-DC by default
-   *  (ALPHA→ALPHA, BETA→BETA, …); enabling include_cross_dc lets the
-   *  user also see the off-diagonal pairs. Heritage destinations are
-   *  filtered by their declared `ngdc_source_dcs[]` mapping (or warn
-   *  if no mapping is declared).                                       */
+   *  under one parent RR-####. NGDC↔NGDC pairs are STRICTLY same-DC
+   *  (ALPHA→ALPHA, BETA→BETA, …) — every app lives in all 4 NGDC DCs,
+   *  so cross-DC reasoning inside NGDC is meaningless. Cross-DC only
+   *  applies to NGDC↔Heritage flows, governed by the Heritage
+   *  presence's `ngdc_source_dcs[]` mapping declared on the editor.   */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     if (step !== 3 || !form.application || !form.dst_application
@@ -526,7 +525,6 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
           environment: form.environment as 'Production' | 'Non-Production' | 'Pre-Production',
           ports: effectivePort,
           action: form.action === 'Allow' ? 'ACCEPT' : 'DROP',
-          include_cross_dc: includeCrossDc,
         });
         if (!cancelled) setFanOutPreview(p);
       } catch (e) {
@@ -540,7 +538,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
     })();
     return () => { cancelled = true; };
   }, [step, form.application, form.dst_application, form.environment,
-      effectivePort, form.action, includeCrossDc]);
+      effectivePort, form.action]);
 
   /* ------------------------------------------------------------------ */
   /*  Submit handler                                                     */
@@ -1153,27 +1151,23 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
 
               {/* Multi-DC fan-out preview — shows how this single submit
                   will materialise as N R-#### rules under one RR-####
-                  parent. NGDC↔NGDC pairs same-DC by default; cross-DC
-                  is opt-in via the toggle. Heritage destinations follow
-                  the `ngdc_source_dcs[]` mapping declared on the
-                  Heritage presence row. */}
+                  parent. NGDC↔NGDC is strictly same-DC (every app lives
+                  in all 4 NGDC DCs, so cross-DC pairing inside NGDC is
+                  meaningless). NGDC↔Heritage routing follows the
+                  `ngdc_source_dcs[]` mapping declared on the Heritage
+                  presence row. */}
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
-                      Step 4 &middot; Multi-DC Fan-out Preview
-                    </h4>
-                    <p className="text-[11px] text-gray-600 mt-0.5">
-                      One submit auto-creates one rule request per (src DC &rarr; dst DC) pair.
-                      Same-DC pairing by default for NGDC&harr;NGDC. Heritage routing follows the
-                      app team&rsquo;s <code className="font-mono text-[10px]">ngdc_source_dcs[]</code> mapping.
-                    </p>
-                  </div>
-                  <label className="inline-flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer select-none">
-                    <input type="checkbox" checked={includeCrossDc}
-                      onChange={(e) => setIncludeCrossDc(e.target.checked)} />
-                    Include cross-DC pairs
-                  </label>
+                <div className="mb-2">
+                  <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
+                    Step 4 &middot; Multi-DC Fan-out Preview
+                  </h4>
+                  <p className="text-[11px] text-gray-600 mt-0.5">
+                    One submit auto-creates one rule request per (src DC &rarr; dst DC) pair.
+                    NGDC&harr;NGDC is <strong>strictly same-DC</strong> (ALPHA&rarr;ALPHA,
+                    BETA&rarr;BETA, &hellip;) since every app lives in all 4 NGDC DCs.
+                    NGDC&harr;Heritage routing follows the Heritage presence&rsquo;s
+                    {' '}<code className="font-mono text-[10px]">ngdc_source_dcs[]</code> mapping.
+                  </p>
                 </div>
                 {!fanOutPreview && (
                   <div className="text-[11px] text-gray-500 italic">Computing fan-out&hellip;</div>
