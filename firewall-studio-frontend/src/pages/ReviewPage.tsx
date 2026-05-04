@@ -6,8 +6,9 @@ import { Notification } from '@/components/shared/Notification';
 import { ApprovalModal } from '@/components/review/ApprovalModal';
 import { useModal } from '@/hooks/useModal';
 import { useNotification } from '@/hooks/useNotification';
-import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification, approvePolicyChange, rejectPolicyChange } from '@/lib/api';
-import type { ReviewRequest, RuleModification } from '@/types';
+import { getReviewRequests, approveReview, rejectReview, compileRule, getRuleModifications, approveRuleModification, rejectRuleModification, approvePolicyChange, rejectPolicyChange, listRuleRequests, listGroupChangeRequests, setRuleRequestStatus, setGroupChangeRequestStatus } from '@/lib/api';
+import type { GroupChangeRequest } from '@/lib/api';
+import type { ReviewRequest, RuleModification, RuleRequestRecord } from '@/types';
 import type { Column } from '@/components/shared/DataTable';
 
 /** Convert a RuleModification into a ReviewRequest shape so both appear in the same table. */
@@ -36,6 +37,82 @@ function modToReview(m: RuleModification): ReviewRequest {
   };
 }
 
+// Rule-request status -> Review status. Approved/Deployed/Certified all
+// land under "Approved" in the Review tab so the queue stays focused on
+// "what still needs human attention" while still being inspectable in
+// the Approved tab. Rejected stays Rejected.
+const RR_STATUS_TO_REVIEW: Record<string, ReviewRequest['status']> = {
+  'Pending Review': 'Pending',
+  'Pending': 'Pending',
+  'Approved': 'Approved',
+  'Deployed': 'Approved',
+  'Certified': 'Approved',
+  'Rejected': 'Rejected',
+};
+
+/** Convert a backend RuleRequest into a ReviewRequest row so the
+ * Review & Approval tab shows it inline with legacy reviews. The
+ * `id` is prefixed `RR-` so handleApprove/handleReject can route
+ * the transition back to /api/rules/requests/{id}/status. */
+function ruleRequestToReview(r: RuleRequestRecord): ReviewRequest {
+  const reqId = String(r.request_id || '').trim();
+  return {
+    id: `RR-${reqId}`,
+    rule_id: reqId,
+    rule_name: reqId,
+    request_type: 'new_rule',
+    requestor: r.owner || r.owner_team || 'app_user',
+    reviewer: '',
+    status: RR_STATUS_TO_REVIEW[r.status] || 'Pending',
+    submitted_at: (r as unknown as { created_at?: string }).created_at || '',
+    reviewed_at: null,
+    comments: '',
+    review_notes: null,
+    rule_summary: {
+      application: r.application_ref || '',
+      source: r.source_ref || r.source_kind || '',
+      destination: r.destination_ref || r.destination_kind || '',
+      ports: r.ports || '',
+      environment: r.environment || '',
+    },
+    module: 'design-studio',
+  };
+}
+
+/** Convert a Group Change Request into a ReviewRequest row so the
+ * Review tab reflects the group lifecycle (which stops at Deployed
+ * — Certified is mapped to Approved for display only). */
+function groupRequestToReview(g: GroupChangeRequest): ReviewRequest {
+  // Group ops collapse onto the existing ReviewRequest.request_type
+  // union: create + member changes → 'group_member_change';
+  // delete → 'group_policy_change'. Keeps the Review queue typed
+  // without expanding the shared union just for studio plumbing.
+  const reqType: ReviewRequest['request_type'] = g.op === 'delete'
+    ? 'group_policy_change'
+    : 'group_member_change';
+  return {
+    id: `GR-${g.request_id}`,
+    rule_id: g.group_name,
+    rule_name: g.group_name,
+    request_type: reqType,
+    requestor: g.owner || g.owner_team || 'app_user',
+    reviewer: '',
+    status: RR_STATUS_TO_REVIEW[g.status] || 'Pending',
+    submitted_at: g.created_at,
+    reviewed_at: null,
+    comments: g.description || '',
+    review_notes: null,
+    rule_summary: {
+      application: g.group_name.split('-')[1] || 'N/A',
+      source: g.added_members.join(', ') || '—',
+      destination: g.removed_members.join(', ') || '—',
+      ports: '',
+      environment: g.environment || '',
+    },
+    module: 'design-studio',
+  };
+}
+
 // Map route context to backend module values
 const CONTEXT_TO_MODULE: Record<string, string> = {
   'firewall-studio': 'design-studio',
@@ -59,16 +136,23 @@ export default function ReviewPage(props: { context?: string }) {
   const loadReviews = useCallback(async () => {
     setLoading(true);
     try {
-      const [reviewData, modData] = await Promise.all([
+      // Pull every queue that drives the rule + group lifecycle so the
+      // Review & Approval tab is the canonical "what needs human
+      // attention" view. Without this it drifted out of sync with
+      // Studio's RuleRequestsPanel + GroupChangeRequestsPanel because
+      // those wrote to different collections.
+      const [reviewData, modData, ruleRequests, groupRequests] = await Promise.all([
         getReviewRequests(),
         getRuleModifications(),
+        listRuleRequests().catch(() => [] as RuleRequestRecord[]),
+        listGroupChangeRequests().catch(() => [] as GroupChangeRequest[]),
       ]);
-      // Merge rule modifications into reviews as modify_rule entries
       const modReviews = modData.map(modToReview);
-      // Avoid duplicates — if a review already references the same modification_id, skip
       const existingModIds = new Set(reviewData.filter(r => r.modification_id).map(r => r.modification_id));
       const uniqueModReviews = modReviews.filter(mr => !existingModIds.has(mr.modification_id));
-      setReviews([...reviewData, ...uniqueModReviews]);
+      const rrReviews = (ruleRequests || []).map(ruleRequestToReview);
+      const grReviews = (groupRequests || []).map(groupRequestToReview);
+      setReviews([...reviewData, ...uniqueModReviews, ...rrReviews, ...grReviews]);
     } catch {
       showNotification('Failed to load reviews', 'error');
     }
@@ -102,12 +186,20 @@ export default function ReviewPage(props: { context?: string }) {
 
   const handleApprove = async (reviewId: string, notes: string) => {
     try {
-      // Check if this is a rule modification (MOD-xxx), a policy change (POL-xxx), or a regular review
       const isModification = reviewId.startsWith('MOD-');
-      // Find the review to check if it's a policy change
+      const isRuleRequest = reviewId.startsWith('RR-');
+      const isGroupRequest = reviewId.startsWith('GR-');
       const review = reviews.find(r => r.id === reviewId);
       const isPolicyChange = review?.request_type?.startsWith('policy_');
-      if (isModification) {
+      if (isRuleRequest) {
+        // Route directly to the canonical rule-request lifecycle so
+        // Studio's RuleRequestsPanel sees the same Approved status.
+        await setRuleRequestStatus(reviewId.slice(3), 'Approved', notes);
+        showNotification('Rule request approved', 'success');
+      } else if (isGroupRequest) {
+        await setGroupChangeRequestStatus(reviewId.slice(3), 'Approved', notes);
+        showNotification('Group change request approved', 'success');
+      } else if (isModification) {
         await approveRuleModification(reviewId, notes);
         showNotification('Rule modification approved successfully', 'success');
       } else if (isPolicyChange && review?.policy_change_id) {
@@ -126,9 +218,17 @@ export default function ReviewPage(props: { context?: string }) {
   const handleReject = async (reviewId: string, notes: string) => {
     try {
       const isModification = reviewId.startsWith('MOD-');
+      const isRuleRequest = reviewId.startsWith('RR-');
+      const isGroupRequest = reviewId.startsWith('GR-');
       const review = reviews.find(r => r.id === reviewId);
       const isPolicyChange = review?.request_type?.startsWith('policy_');
-      if (isModification) {
+      if (isRuleRequest) {
+        await setRuleRequestStatus(reviewId.slice(3), 'Rejected', notes);
+        showNotification('Rule request rejected', 'warning');
+      } else if (isGroupRequest) {
+        await setGroupChangeRequestStatus(reviewId.slice(3), 'Rejected', notes);
+        showNotification('Group change request rejected', 'warning');
+      } else if (isModification) {
         await rejectRuleModification(reviewId, notes);
         showNotification('Rule modification rejected', 'warning');
       } else if (isPolicyChange && review?.policy_change_id) {

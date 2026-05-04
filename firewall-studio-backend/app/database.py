@@ -2371,7 +2371,12 @@ async def delete_security_zone(code: str) -> bool:
 async def create_application(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("applications") or []
     data = dict(data)
-    data.setdefault("primary_dc", "ALPHA_NGDC")
+    # Default primary_dc to the first NGDC datacenter currently registered
+    # rather than a hardcoded ALPHA_NGDC — keeps the App Management form
+    # in lock-step with Settings → Data Centers when ops add/rename DCs.
+    if not data.get("primary_dc"):
+        ngdcs = _ngdc_dc_ids()
+        data["primary_dc"] = ngdcs[0] if ngdcs else ""
     data.setdefault("deployment_mode", "all_ngdc")
     data.setdefault("excluded_dcs", [])
     items.append(data)
@@ -8388,12 +8393,82 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     dedup = evaluate_dedup({"physical_rules": physical}) if physical else {
         "verdict": "ok", "block": False, "matches": [],
     }
+    # Policy Matrix is the architectural source of truth for "what's already
+    # allowed at the zone-pair level" — cross-SZ / cross-NH / cross-DC. Run
+    # validate_birthright (which resolves the matrix) per unique
+    # (src_sz, dst_sz, src_nh, dst_nh, src_dc, dst_dc) tuple and aggregate.
+    # Service-level birthright (DNS/NTP/Splunk overlay) sits ON TOP of this:
+    # it only matters when the matrix says "Firewall Request Required".
+    policy_matrix: dict[str, Any] = {
+        "permitted": [], "rule_required": [], "blocked": [],
+    }
+    if physical:
+        seen_tuples: set[tuple[str, str, str, str, str, str]] = set()
+        for pr in physical:
+            tup = (
+                pr.get("src_sz", ""), pr.get("dst_sz", ""),
+                pr.get("src_nh", ""), pr.get("dst_nh", ""),
+                pr.get("src_dc", ""), pr.get("dst_dc", ""),
+            )
+            if tup in seen_tuples:
+                continue
+            seen_tuples.add(tup)
+            br = await validate_birthright({
+                "source_zone": pr.get("src_sz", ""),
+                "destination_zone": pr.get("dst_sz", ""),
+                "source_sz": pr.get("src_sz", ""),
+                "destination_sz": pr.get("dst_sz", ""),
+                "source_nh": pr.get("src_nh", ""),
+                "destination_nh": pr.get("dst_nh", ""),
+                "source_dc": pr.get("src_dc", ""),
+                "destination_dc": pr.get("dst_dc", ""),
+                "environment": env,
+            })
+            row = {
+                "src_sz": pr.get("src_sz", ""), "dst_sz": pr.get("dst_sz", ""),
+                "src_nh": pr.get("src_nh", ""), "dst_nh": pr.get("dst_nh", ""),
+                "src_dc": pr.get("src_dc", ""), "dst_dc": pr.get("dst_dc", ""),
+            }
+            if br.get("violations"):
+                row["matches"] = br["violations"]
+                policy_matrix["blocked"].append(row)
+            elif br.get("warnings"):
+                row["matches"] = br["warnings"]
+                policy_matrix["rule_required"].append(row)
+            elif br.get("permitted"):
+                row["matches"] = br["permitted"]
+                policy_matrix["permitted"].append(row)
+            else:
+                # Matrix had no opinion — treat as rule_required so the
+                # downstream service-level overlay (DNS/NTP/etc) gets a chance.
+                row["matches"] = []
+                policy_matrix["rule_required"].append(row)
+    pm_all_permitted = bool(physical) and not policy_matrix["rule_required"] and not policy_matrix["blocked"]
+    pm_any_blocked = bool(policy_matrix["blocked"])
+    policy_matrix["all_permitted"] = pm_all_permitted
+    policy_matrix["any_blocked"] = pm_any_blocked
+    if pm_any_blocked:
+        for row in policy_matrix["blocked"]:
+            for m in row["matches"]:
+                warnings.append(
+                    "Blocked by Policy Matrix "
+                    f"(SZ:{row['src_sz']} -> SZ:{row['dst_sz']}): {m.get('reason', '')}"
+                )
+    elif pm_all_permitted:
+        warnings.append(
+            "Already permitted by Policy Matrix at the zone-pair level "
+            "(implicit allow / birthright). No firewall rule needed."
+        )
+
+    # Service-level birthright (DNS/NTP/Splunk/AppD/PKI/AD overlay) only
+    # applies to physical rules where the matrix said "rule required" —
+    # if the matrix already permits or blocks the flow, the overlay is moot.
     birthright = evaluate_birthright(payload) if physical else {
         "covered": False, "matches": [],
     }
-    if birthright["covered"]:
+    if birthright["covered"] and not pm_any_blocked and not pm_all_permitted:
         warnings.append(
-            "Already provided as a birthright rule "
+            "Already provided as a birthright service overlay "
             f"({', '.join(m['birthright_id'] for m in birthright['matches'])}). "
             "No request needed."
         )
@@ -8410,7 +8485,13 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
         "warnings": warnings,
         "dedup": dedup,
         "birthright": birthright,
-        "block_submit": bool(dedup.get("block") or birthright.get("covered")),
+        "policy_matrix": policy_matrix,
+        "block_submit": bool(
+            dedup.get("block")
+            or birthright.get("covered")
+            or pm_all_permitted
+            or pm_any_blocked
+        ),
     }
 
 
@@ -9386,6 +9467,369 @@ async def normalize_legacy_rules_bulk(rules: list[dict[str, Any]]) -> dict[str, 
             counters["standardized"] += 1
         decisions.append(d)
     return {"counters": counters, "decisions": decisions}
+
+
+# ============================================================
+# Migration Studio: enriched transition view
+# (legacy rule  ->  classified atoms  ->  proposed NGDC rule + group/app changes)
+# ============================================================
+
+def _atom_kind(value: str) -> str:
+    """Classify a raw token into ``cidr`` / ``ip`` / ``range`` / ``group`` / ``fqdn`` / ``empty``."""
+    s = (value or "").strip()
+    if not s:
+        return "empty"
+    if "-" in s and "/" not in s:
+        # IP range: 10.0.0.1-10.0.0.10
+        try:
+            left, right = s.split("-", 1)
+            ipaddress.ip_address(left.strip())
+            ipaddress.ip_address(right.strip())
+            return "range"
+        except (ValueError, TypeError):
+            pass
+    try:
+        if "/" in s:
+            ipaddress.ip_network(s, strict=False)
+            return "cidr"
+        ipaddress.ip_address(s)
+        return "ip"
+    except (ValueError, TypeError):
+        pass
+    if _is_legacy_group_name(s):
+        return "group"
+    return "fqdn"
+
+
+def _resolve_atom_to_app(value: str, kind: str) -> dict[str, Any]:
+    """Resolve a raw atom to its owning application + (DC, NH, SZ) presence.
+
+    Returns ``{kind, value, dc, nh, sz, app, app_distributed_id, presence_kind,
+    matched, reason}``. ``presence_kind`` is one of ``egress`` / ``ingress`` /
+    ``shared_service`` / ``unknown``.
+    """
+    out: dict[str, Any] = {
+        "kind": kind, "value": value,
+        "dc": "", "nh": "", "sz": "",
+        "app": "", "app_distributed_id": "",
+        "service_id": "",
+        "presence_kind": "unknown",
+        "matched": False,
+        "reason": "",
+    }
+    if kind in ("ip", "cidr", "range"):
+        cls = _classify_ip_sync(value)
+        if cls.get("matched"):
+            out.update({
+                "dc": cls.get("dc", ""), "nh": cls.get("nh", ""),
+                "sz": cls.get("sz", ""), "matched": True,
+                "reason": cls.get("reason", ""),
+            })
+        else:
+            out["reason"] = cls.get("reason", "no SZ CIDR match")
+
+        # Walk app_presences: if any presence's egress/ingress members include
+        # this IP/CIDR, attach the owning app.
+        target = value.split("/")[0].split("-")[0].strip()
+        for p in (_load("app_presences") or []):
+            for direction in ("egress_members", "ingress_members"):
+                for m in p.get(direction, []) or []:
+                    mv = str(m.get("value", "")).strip() if isinstance(m, dict) else str(m).strip()
+                    if not mv:
+                        continue
+                    try:
+                        if "/" in mv:
+                            net = ipaddress.ip_network(mv, strict=False)
+                            if ipaddress.ip_address(target) in net:
+                                out["app_distributed_id"] = p.get("app_distributed_id", "")
+                                out["app"] = p.get("app_distributed_id", "")
+                                out["presence_kind"] = "egress" if direction == "egress_members" else "ingress"
+                                if not out["dc"]:
+                                    out["dc"] = p.get("dc_id", "")
+                                if not out["nh"]:
+                                    out["nh"] = p.get("nh_id", "")
+                                if not out["sz"]:
+                                    out["sz"] = p.get("sz_code", "")
+                                return out
+                        elif mv == target:
+                            out["app_distributed_id"] = p.get("app_distributed_id", "")
+                            out["app"] = p.get("app_distributed_id", "")
+                            out["presence_kind"] = "egress" if direction == "egress_members" else "ingress"
+                            if not out["dc"]:
+                                out["dc"] = p.get("dc_id", "")
+                            if not out["nh"]:
+                                out["nh"] = p.get("nh_id", "")
+                            if not out["sz"]:
+                                out["sz"] = p.get("sz_code", "")
+                            return out
+                    except (ValueError, TypeError):
+                        continue
+
+        # Then walk shared_service_presences.
+        for p in (_load("shared_service_presences") or []):
+            for m in p.get("members", []) or []:
+                mv = str(m.get("value", "")).strip() if isinstance(m, dict) else str(m).strip()
+                if not mv:
+                    continue
+                try:
+                    if "/" in mv:
+                        net = ipaddress.ip_network(mv, strict=False)
+                        if ipaddress.ip_address(target) in net:
+                            out["service_id"] = p.get("service_id", "")
+                            out["presence_kind"] = "shared_service"
+                            if not out["dc"]:
+                                out["dc"] = p.get("dc_id", "")
+                            if not out["nh"]:
+                                out["nh"] = p.get("nh_id", "")
+                            if not out["sz"]:
+                                out["sz"] = p.get("sz_code", "")
+                            return out
+                    elif mv == target:
+                        out["service_id"] = p.get("service_id", "")
+                        out["presence_kind"] = "shared_service"
+                        if not out["dc"]:
+                            out["dc"] = p.get("dc_id", "")
+                        if not out["nh"]:
+                            out["nh"] = p.get("nh_id", "")
+                        if not out["sz"]:
+                            out["sz"] = p.get("sz_code", "")
+                        return out
+                except (ValueError, TypeError):
+                    continue
+        return out
+
+    if kind == "group":
+        # Legacy group: lookup members, classify majority, infer (NH, SZ) from
+        # the group name when it follows the {APP|SVC}-NH-SZ convention.
+        normalized = _normalize_group_prefix(value)
+        groups = _load("groups") or []
+        match = next((g for g in groups if str(g.get("name", "")).upper() in (value.upper(), normalized.upper())), None)
+        if match:
+            members = match.get("members", []) or []
+            out["matched"] = True
+            out["reason"] = f"group resolved with {len(members)} members"
+            # Try parsing the name: grp-<APP>-<NH>-<SZ> or grp-<NH>-<SZ>
+            tokens = normalized.split("-")
+            if len(tokens) >= 4:
+                # grp-APP-NH-SZ (most common)
+                out["app"] = tokens[1]
+                out["app_distributed_id"] = tokens[1]
+                out["nh"] = tokens[-2]
+                out["sz"] = tokens[-1]
+            elif len(tokens) == 3:
+                out["nh"] = tokens[-2]
+                out["sz"] = tokens[-1]
+            # Sample first member to infer DC.
+            for m in members[:5]:
+                mv = m.get("value") if isinstance(m, dict) else m
+                cls = _classify_ip_sync(str(mv or ""))
+                if cls.get("matched"):
+                    out["dc"] = cls.get("dc", "")
+                    if not out["nh"]:
+                        out["nh"] = cls.get("nh", "")
+                    if not out["sz"]:
+                        out["sz"] = cls.get("sz", "")
+                    break
+            out["presence_kind"] = "group"
+        else:
+            out["reason"] = "group not found in registry"
+        return out
+
+    out["reason"] = "unsupported atom kind"
+    return out
+
+
+def _propose_ngdc_target(side: dict[str, Any]) -> str:
+    """Compute the canonical NGDC group name for a classified side."""
+    nh = (side.get("nh") or "").upper()
+    sz = (side.get("sz") or "").upper()
+    if not nh or not sz:
+        return ""
+    if _get_sz_naming_mode(sz) == "zone_scoped":
+        return _zone_group_name(nh, sz)
+    if side.get("service_id"):
+        return f"grp-{str(side['service_id']).upper()}-{nh}-{sz}"
+    if side.get("app_distributed_id"):
+        return f"grp-{str(side['app_distributed_id']).upper()}-{nh}-{sz}"
+    return f"grp-{nh}-{sz}"
+
+
+async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]:
+    """Build the side-by-side ``original -> classified -> proposed`` block
+    that the Migration Studio renders for a single legacy rule.
+
+    Output schema::
+
+        {
+          "origin_legacy_rule_id": "LEG-001",
+          "original":  {source, destination, protocol, ports, action, environment},
+          "classified": {
+            "source":      {kind, value, dc, nh, sz, app, presence_kind, matched, reason},
+            "destination": {...}
+          },
+          "proposed": {
+            "src_group", "dst_group", "src_vrf", "dst_vrf",
+            "ports", "action", "environment", "src_dc", "dst_dc",
+            "app_management_changes": [...],
+            "group_changes": [...]
+          },
+          "verdict":  "new" | "merge" | "conflict" | "unclassifiable",
+          "warnings": [...]
+        }
+    """
+    legacy_id = legacy_rule.get("rule_id") or legacy_rule.get("legacy_id") or ""
+    src_raw = str(legacy_rule.get("source", "") or "")
+    dst_raw = str(legacy_rule.get("destination", "") or "")
+    proto = (legacy_rule.get("protocol") or "TCP").upper()
+    port = str(legacy_rule.get("port", "") or "")
+    if not port and "ports" in legacy_rule:
+        # "TCP 1521-1530" form
+        toks = str(legacy_rule.get("ports", "")).split(None, 1)
+        if len(toks) == 2:
+            proto = toks[0].upper()
+            port = toks[1]
+        elif toks:
+            port = toks[0]
+    action_in = str(legacy_rule.get("action", "Allow"))
+    action = _normalize_action(action_in)
+    env = legacy_rule.get("environment", "Production")
+
+    src_kind = _atom_kind(src_raw)
+    dst_kind = _atom_kind(dst_raw)
+    src_classified = _resolve_atom_to_app(src_raw, src_kind)
+    dst_classified = _resolve_atom_to_app(dst_raw, dst_kind)
+
+    src_group = _propose_ngdc_target(src_classified)
+    dst_group = _propose_ngdc_target(dst_classified)
+    src_vrf = f"{src_classified.get('nh', '')}-{src_classified.get('sz', '')}".strip("-")
+    dst_vrf = f"{dst_classified.get('nh', '')}-{dst_classified.get('sz', '')}".strip("-")
+
+    warnings: list[str] = []
+    app_management_changes: list[dict[str, Any]] = []
+    group_changes: list[dict[str, Any]] = []
+
+    for label, side, raw in (("source", src_classified, src_raw), ("destination", dst_classified, dst_raw)):
+        if side.get("kind") in ("ip", "cidr", "range") and side.get("matched") and not side.get("app_distributed_id") and not side.get("service_id"):
+            warnings.append(
+                f"{label.title()} {raw} matched zone "
+                f"{side.get('dc')}/{side.get('nh')}/{side.get('sz')} but no app or shared service "
+                "claims it. Consider attaching to an existing app or registering a new one."
+            )
+            app_management_changes.append({
+                "action": "needs_app_attachment",
+                "side": label,
+                "value": raw,
+                "dc": side.get("dc"), "nh": side.get("nh"), "sz": side.get("sz"),
+            })
+        if side.get("kind") in ("ip", "cidr", "range") and not side.get("matched"):
+            warnings.append(
+                f"{label.title()} {raw} could not be classified into any registered "
+                "(DC, NH, SZ). Review SZ CIDR bindings or add the app's CIDR to App Management."
+            )
+        if side.get("kind") == "group" and not side.get("matched"):
+            warnings.append(
+                f"{label.title()} group {raw} is not in the group registry. "
+                "Cannot map members or compute target NGDC group name."
+            )
+        if side.get("kind") == "fqdn":
+            warnings.append(
+                f"{label.title()} {raw} looks like an FQDN. NGDC requires IP/CIDR/group; "
+                "resolve the FQDN to the owning app's ingress VIP via App Management first."
+            )
+
+    if src_group:
+        group_changes.append({
+            "action": "ensure_group", "name": src_group,
+            "dc": src_classified.get("dc"),
+            "nh": src_classified.get("nh"),
+            "sz": src_classified.get("sz"),
+            "members_to_add": [src_raw] if src_classified.get("kind") in ("ip", "cidr", "range") else [],
+        })
+    if dst_group:
+        group_changes.append({
+            "action": "ensure_group", "name": dst_group,
+            "dc": dst_classified.get("dc"),
+            "nh": dst_classified.get("nh"),
+            "sz": dst_classified.get("sz"),
+            "members_to_add": [dst_raw] if dst_classified.get("kind") in ("ip", "cidr", "range") else [],
+        })
+
+    physical_for_dedup = {
+        "src_dc": src_classified.get("dc", ""),
+        "dst_dc": dst_classified.get("dc", ""),
+        "src_group_ref": src_group,
+        "dst_group_ref": dst_group,
+        "src_nh": src_classified.get("nh", ""),
+        "src_sz": src_classified.get("sz", ""),
+        "dst_nh": dst_classified.get("nh", ""),
+        "dst_sz": dst_classified.get("sz", ""),
+        "ports": f"{proto} {port}".strip(),
+        "action": "ACCEPT" if action == "ALLOW" else "DENY",
+        "environment": env,
+        "lifecycle_status": "Migration-Preview",
+    }
+    dedup = evaluate_dedup({"physical_rules": [physical_for_dedup]})
+    verdict = "new"
+    dedup_match: dict[str, Any] | None = None
+    if dedup.get("matches"):
+        dedup_match = dedup["matches"][0]
+        if dedup["verdict"] in ("identical", "subset"):
+            verdict = "merge"
+        elif dedup["verdict"] == "conflict":
+            verdict = "conflict"
+        elif dedup["verdict"] == "overlap":
+            verdict = "overlap"
+
+    if not src_group or not dst_group:
+        verdict = "unclassifiable"
+
+    return {
+        "origin_legacy_rule_id": legacy_id,
+        "original": {
+            "source": src_raw, "destination": dst_raw,
+            "protocol": proto, "ports": port,
+            "action": action_in, "environment": env,
+        },
+        "classified": {
+            "source": src_classified,
+            "destination": dst_classified,
+        },
+        "proposed": {
+            "src_group": src_group, "dst_group": dst_group,
+            "src_vrf": src_vrf, "dst_vrf": dst_vrf,
+            "src_dc": src_classified.get("dc", ""),
+            "dst_dc": dst_classified.get("dc", ""),
+            "ports": f"{proto} {port}".strip(),
+            "action": "ACCEPT" if action == "ALLOW" else "DENY",
+            "environment": env,
+            "app_management_changes": app_management_changes,
+            "group_changes": group_changes,
+            "physical_rule": physical_for_dedup,
+        },
+        "verdict": verdict,
+        "dedup_match": dedup_match,
+        "warnings": warnings,
+    }
+
+
+async def build_legacy_transitions_bulk(rules: list[dict[str, Any]]) -> dict[str, Any]:
+    """Batch transition builder for the Migration Studio side-by-side view."""
+    transitions: list[dict[str, Any]] = []
+    counters = {
+        "total": len(rules),
+        "new": 0, "merge": 0, "conflict": 0,
+        "overlap": 0, "unclassifiable": 0,
+        "needs_app_attachment": 0,
+    }
+    for r in rules:
+        t = await build_legacy_transition(r)
+        transitions.append(t)
+        v = t.get("verdict", "new")
+        if v in counters:
+            counters[v] += 1
+        if any(c.get("action") == "needs_app_attachment" for c in t["proposed"]["app_management_changes"]):
+            counters["needs_app_attachment"] += 1
+    return {"counters": counters, "transitions": transitions}
 
 
 # ============================================================
