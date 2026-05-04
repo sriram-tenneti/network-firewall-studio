@@ -4,13 +4,12 @@ import { Notification } from '@/components/shared/Notification';
 import { Modal } from '@/components/shared/Modal';
 import { useNotification } from '@/hooks/useNotification';
 import { useModal } from '@/hooks/useModal';
-import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone, TierSpec } from '@/types';
+import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecurityZone } from '@/types';
 import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
 import PortCatalogTab from './settings/PortCatalogTab';
 import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
-import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
-import HeritageTierMatrixEditor from '@/components/shared/HeritageTierMatrixEditor';
+import PresencePerDcEditor, { type PresenceRow } from '@/components/shared/PresencePerDcEditor';
 import ItsmConnectorsTab from './settings/ItsmConnectorsTab';
 import BirthrightRulesTab from './settings/BirthrightRulesTab';
 import SecurityZoneNamingTab from './settings/SecurityZoneNamingTab';
@@ -149,8 +148,10 @@ export default function SettingsPage() {
   // Edit states for App Management
   const [editingAppId, setEditingAppId] = useState<string | null>(null);
   const [editAppForm, setEditAppForm] = useState<Partial<Application>>({});
+  const [editAppPresences, setEditAppPresences] = useState<PresenceRow[]>([]);
   const [showAddApp, setShowAddApp] = useState(false);
-  const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '' });
+  const [newAppForm, setNewAppForm] = useState<Partial<Application>>({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', snow_sysid: '' });
+  const [newAppPresences, setNewAppPresences] = useState<PresenceRow[]>([]);
 
   // Inline component editor in All Applications table
   const [_expandedAppId, _setExpandedAppId] = useState<string | null>(null);
@@ -291,10 +292,49 @@ export default function SettingsPage() {
     showNotification('Group deleted', 'success');
   };
 
+  /** Derive ``tiers`` (unique NH/SZ pairs across NGDC presences) and
+   *  ``heritage_tiers`` (unique Heritage DCs) from the per-DC editor rows
+   *  so the backend auto-fan / prune still operates on a consistent
+   *  declarative state. */
+  const derivePayloadFromPresences = (rows: PresenceRow[]): {
+    tiers: { nh_id: string; sz_code: string; has_ingress?: boolean }[];
+    heritage_tiers: { dc_id: string; has_ingress?: boolean }[];
+    presences: PresenceRow[];
+  } => {
+    const tierMap = new Map<string, { nh_id: string; sz_code: string; has_ingress?: boolean }>();
+    const heritageMap = new Map<string, { dc_id: string; has_ingress?: boolean }>();
+    for (const r of rows) {
+      if (r.is_heritage) {
+        if (!r.dc_id) continue;
+        const cur = heritageMap.get(r.dc_id);
+        heritageMap.set(r.dc_id, {
+          dc_id: r.dc_id,
+          has_ingress: Boolean(cur?.has_ingress) || Boolean(r.has_ingress),
+        });
+      } else {
+        if (!r.nh_id || !r.sz_code) continue;
+        const k = `${r.nh_id}|${r.sz_code}`;
+        const cur = tierMap.get(k);
+        tierMap.set(k, {
+          nh_id: r.nh_id,
+          sz_code: r.sz_code,
+          has_ingress: Boolean(cur?.has_ingress) || Boolean(r.has_ingress),
+        });
+      }
+    }
+    return {
+      tiers: Array.from(tierMap.values()),
+      heritage_tiers: Array.from(heritageMap.values()),
+      presences: rows,
+    };
+  };
+
   const handleSaveApp = async () => {
     if (!editingAppId) return;
     try {
-      await api.updateApplication(editingAppId, editAppForm as Record<string, unknown>);
+      const derived = derivePayloadFromPresences(editAppPresences);
+      const payload = { ...editAppForm, ...derived } as Record<string, unknown>;
+      await api.updateApplication(editingAppId, payload);
       showNotification('Application updated', 'success');
       setEditingAppId(null);
       loadRefData();
@@ -305,13 +345,42 @@ export default function SettingsPage() {
 
   const handleAddApp = async () => {
     try {
-      await api.createApplication(newAppForm as Record<string, unknown>);
+      const derived = derivePayloadFromPresences(newAppPresences);
+      const payload = { ...newAppForm, ...derived } as Record<string, unknown>;
+      await api.createApplication(payload);
       showNotification('Application added', 'success');
       setShowAddApp(false);
-      setNewAppForm({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', neighborhoods: '', szs: '', dcs: '', snow_sysid: '', has_ingress: false, egress_ip: '', ingress_ips: '', ingress_components: '' });
+      setNewAppForm({ app_id: '', app_distributed_id: '', name: '', nh: '', sz: '', owner: '', snow_sysid: '' });
+      setNewAppPresences([]);
       loadRefData();
     } catch {
       showNotification('Failed to add application', 'error');
+    }
+  };
+
+  /** Load AppPresence rows for the given app and shape them into editor
+   *  rows. Heritage rows are detected via ``dc_type``. */
+  const loadAppPresences = async (appId: string) => {
+    try {
+      const res = await api.getAppPresences({ app: appId });
+      const rows: PresenceRow[] = (res || []).map((p) => {
+        const isHeritage =
+          (p as { dc_type?: string }).dc_type === 'Legacy' ||
+          String((p as { dc_type?: string }).dc_type ?? '').toLowerCase() === 'heritage';
+        return {
+          dc_id: p.dc_id,
+          nh_id: p.nh_id || '',
+          sz_code: p.sz_code || '',
+          has_ingress: Boolean(p.has_ingress),
+          is_heritage: isHeritage,
+          egress_members: (p.egress_members || []).map((m) => ({ ...m })),
+          ingress_members: (p.ingress_members || []).map((m) => ({ ...m })),
+          environment: p.environment,
+        };
+      });
+      setEditAppPresences(rows);
+    } catch {
+      setEditAppPresences([]);
     }
   };
 
@@ -1886,10 +1955,7 @@ export default function SettingsPage() {
                   <input className={inp} placeholder="App Name" value={newAppForm.name || ''} onChange={e => setNewAppForm({ ...newAppForm, name: e.target.value })} />
                   <input className={inp} placeholder="Owner" value={newAppForm.owner || ''} onChange={e => setNewAppForm({ ...newAppForm, owner: e.target.value })} />
                 </div>
-                <div className="grid grid-cols-4 gap-3">
-                  <input className={inp} placeholder="Neighborhoods (e.g. NH02,NH14)" value={newAppForm.neighborhoods || ''} onChange={e => setNewAppForm({ ...newAppForm, neighborhoods: e.target.value })} />
-                  <input className={inp} placeholder="SZs (e.g. CCS,CDE,PAA)" value={newAppForm.szs || ''} onChange={e => setNewAppForm({ ...newAppForm, szs: e.target.value })} />
-                  <input className={inp} placeholder="DCs (e.g. ALPHA_NGDC,BETA_NGDC)" value={newAppForm.dcs || ''} onChange={e => setNewAppForm({ ...newAppForm, dcs: e.target.value })} />
+                <div className="grid grid-cols-2 gap-3">
                   <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
                 {/* Omnipresent / Primary DC */}
@@ -1928,45 +1994,13 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
-                <TierMatrixEditor
-                  tiers={(newAppForm.tiers as TierSpec[]) || []}
-                  onChange={(t: TierSpec[]) => setNewAppForm({ ...newAppForm, tiers: t })}
-                  title="NGDC Tier Matrix"
-                  subtitle="Each (NH, SZ, has_ingress?) row creates a presence in every NGDC DC at save time."
+                <PresencePerDcEditor
+                  rows={newAppPresences}
+                  onChange={setNewAppPresences}
+                  ngdcDcs={ngdcDatacenters.map(dc => ({ code: String(dc.dc_id || dc.code || '') })).filter(d => d.code)}
+                  title="Per-DC Presences"
+                  subtitle="One row per (DC, NH, SZ) for NGDC, or per Heritage DC. Egress + ingress IPs/CIDRs declared here flow into the matching grp-<APP>-… groups + fan into rules at submit time."
                 />
-                <HeritageTierMatrixEditor
-                  tiers={(newAppForm.heritage_tiers as { dc_id: string; has_ingress?: boolean; label?: string }[]) || []}
-                  onChange={(t) => setNewAppForm({ ...newAppForm, heritage_tiers: t })}
-                  title="Heritage DCs (apps not yet on NGDC)"
-                  subtitle="Add a row per Heritage DC where this app still serves traffic from. Materialises a flat presence + `grp-<APP>-HERITAGE-<DC>` group automatically."
-                />
-                {/* Egress/Ingress Configuration */}
-                <div className="border border-blue-200 rounded-lg p-3 bg-white/60 space-y-2">
-                  <h4 className="text-xs font-semibold text-blue-800">Egress / Ingress Configuration</h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Egress IP (Source)</label>
-                      <input className={inp} placeholder="e.g. svr-10.50.1.10" value={newAppForm.egress_ip || ''} onChange={e => setNewAppForm({ ...newAppForm, egress_ip: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Has Ingress Clients?</label>
-                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md" value={newAppForm.has_ingress ? 'yes' : 'no'} onChange={e => setNewAppForm({ ...newAppForm, has_ingress: e.target.value === 'yes' })}>
-                        <option value="no">No</option>
-                        <option value="yes">Yes</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Ingress IPs (Destination VIPs/DBs)</label>
-                      <input className={inp} placeholder="e.g. svr-10.50.2.20,svr-10.50.2.21" value={newAppForm.ingress_ips || ''} onChange={e => setNewAppForm({ ...newAppForm, ingress_ips: e.target.value })} disabled={!newAppForm.has_ingress} />
-                    </div>
-                  </div>
-                  {newAppForm.has_ingress && (
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Ingress Components (for destination group naming)</label>
-                      <input className={inp} placeholder="e.g. DB,API,VIP (comma-separated)" value={newAppForm.ingress_components || ''} onChange={e => setNewAppForm({ ...newAppForm, ingress_components: e.target.value })} />
-                    </div>
-                  )}
-                </div>
                 <div className="flex justify-end gap-2">
                   <button onClick={() => { setShowAddApp(false); _setNewAppMappings([]); }} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
                   <button onClick={handleAddApp} disabled={!newAppForm.app_id || !newAppForm.name}
@@ -1984,7 +2018,12 @@ export default function SettingsPage() {
                       <button onClick={() => setEditingAppId(null)} className="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
                       <button onClick={handleSaveApp} className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
                     </>) : (<>
-                      <button onClick={() => { setEditingAppId(selectedApp); setEditAppForm(selectedAppData); }}
+                      <button onClick={() => {
+                        setEditingAppId(selectedApp);
+                        setEditAppForm(selectedAppData);
+                        const distId = String(selectedAppData.app_distributed_id || selectedAppData.app_id || selectedApp);
+                        loadAppPresences(distId);
+                      }}
                         className="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
                       <button onClick={() => handleDeleteApp(selectedApp)}
                         className="px-3 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100">Delete</button>
@@ -2003,13 +2042,7 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label>
                         <input className={inp} value={editAppForm.owner || ''} onChange={e => setEditAppForm({ ...editAppForm, owner: e.target.value })} /></div>
                     </div>
-                    <div className="grid grid-cols-4 gap-4">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods</label>
-                        <input className={inp} placeholder="e.g. NH02,NH14" value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SZs</label>
-                        <input className={inp} placeholder="e.g. CCS,CDE,PAA" value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label>
-                        <input className={inp} placeholder="e.g. ALPHA_NGDC,BETA_NGDC" value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /></div>
+                    <div className="grid grid-cols-2 gap-4">
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label>
                         <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
                     </div>
@@ -2043,29 +2076,12 @@ export default function SettingsPage() {
                           value={Array.isArray(editAppForm.excluded_dcs) ? editAppForm.excluded_dcs.join(',') : ''}
                           onChange={e => setEditAppForm({ ...editAppForm, excluded_dcs: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
                     </div>
-                    <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Egress IP (Source)</label>
-                        <input className={inp} placeholder="e.g. svr-10.50.1.10" value={editAppForm.egress_ip || ''} onChange={e => setEditAppForm({ ...editAppForm, egress_ip: e.target.value })} /></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Has Ingress?</label>
-                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md" value={editAppForm.has_ingress ? 'yes' : 'no'} onChange={e => setEditAppForm({ ...editAppForm, has_ingress: e.target.value === 'yes' })}>
-                          <option value="no">No</option><option value="yes">Yes</option>
-                        </select></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress IPs</label>
-                        <input className={inp} placeholder="e.g. svr-10.50.2.20" value={editAppForm.ingress_ips || ''} onChange={e => setEditAppForm({ ...editAppForm, ingress_ips: e.target.value })} disabled={!editAppForm.has_ingress} /></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress Components</label>
-                        <input className={inp} placeholder="e.g. DB,API,VIP" value={editAppForm.ingress_components || ''} onChange={e => setEditAppForm({ ...editAppForm, ingress_components: e.target.value })} disabled={!editAppForm.has_ingress} /></div>
-                    </div>
-                    <TierMatrixEditor
-                      tiers={(editAppForm.tiers as TierSpec[]) || []}
-                      onChange={(t: TierSpec[]) => setEditAppForm({ ...editAppForm, tiers: t })}
-                      title="NGDC Tier Matrix"
-                      subtitle="Saving will auto-fan one presence per (NH, SZ) row into every NGDC DC."
-                    />
-                    <HeritageTierMatrixEditor
-                      tiers={(editAppForm.heritage_tiers as { dc_id: string; has_ingress?: boolean; label?: string }[]) || []}
-                      onChange={(t) => setEditAppForm({ ...editAppForm, heritage_tiers: t })}
-                      title="Heritage DCs (apps not yet on NGDC)"
-                      subtitle="Saving will auto-fan one flat presence per Heritage DC; group naming switches to `grp-<APP>-HERITAGE-<DC>`."
+                    <PresencePerDcEditor
+                      rows={editAppPresences}
+                      onChange={setEditAppPresences}
+                      ngdcDcs={ngdcDatacenters.map(dc => ({ code: String(dc.dc_id || dc.code || '') })).filter(d => d.code)}
+                      title="Per-DC Presences"
+                      subtitle="One row per (DC, NH, SZ) for NGDC, or per Heritage DC. Egress + ingress chips here flow into the matching grp-<APP>-… groups + are picked up by the rule builder."
                     />
                   </div>
                 ) : (

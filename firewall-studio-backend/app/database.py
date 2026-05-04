@@ -2379,16 +2379,26 @@ async def create_application(data: dict[str, Any]) -> dict[str, Any]:
         data["primary_dc"] = ngdcs[0] if ngdcs else ""
     data.setdefault("deployment_mode", "all_ngdc")
     data.setdefault("excluded_dcs", [])
+    # `presences` is a transient form-driven payload (per-DC editor) — store
+    # the rows separately and strip it from the persisted profile so the
+    # `applications` collection stays a clean metadata-only record.
+    presences_payload = data.pop("presences", None)
     items.append(data)
     _save("applications", items)
     # Materialize presences in every NGDC DC when deployment_mode=all_ngdc
     # and the app declared tiers. Idempotent — existing presences kept.
     await auto_fan_app_presences(data)
+    # Then write the explicit per-DC overrides (egress / ingress chips
+    # entered in the form). Overrides win over auto-fan defaults — same
+    # key ⇒ replace.
+    if presences_payload:
+        await apply_app_presence_overrides(data, presences_payload)
     return data
 
 
 async def update_application(app_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
     items = _load("applications") or []
+    presences_payload = updates.pop("presences", None) if isinstance(updates, dict) else None
     for item in items:
         if item.get("app_id") == app_id or item.get("app_distributed_id") == app_id:
             item.update(updates)
@@ -2399,6 +2409,8 @@ async def update_application(app_id: str, updates: dict[str, Any]) -> dict[str, 
             # in lock-step with App Management on every save.
             await auto_fan_app_presences(item)
             await prune_app_presences(item)
+            if presences_payload is not None:
+                await apply_app_presence_overrides(item, presences_payload)
             return item
     return None
 
@@ -7560,17 +7572,21 @@ async def create_shared_service(data: dict[str, Any]) -> dict[str, Any]:
     data.setdefault("primary_dc", "ALPHA_NGDC")
     data.setdefault("deployment_mode", "all_ngdc")
     data.setdefault("excluded_dcs", [])
+    presences_payload = data.pop("presences", None)
     # dedupe by service_id
     items = [i for i in items if str(i.get("service_id", "")).upper() != data["service_id"]]
     items.append(data)
     _save("shared_services", items)
     # Auto-fan presences across all NGDC DCs when deployment_mode=all_ngdc.
     await auto_fan_service_presences(data)
+    if presences_payload:
+        await apply_service_presence_overrides(data, presences_payload)
     return data
 
 
 async def update_shared_service(service_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
     items = _load("shared_services") or []
+    presences_payload = updates.pop("presences", None) if isinstance(updates, dict) else None
     for i in items:
         if str(i.get("service_id", "")).upper() == service_id.upper():
             i.update(updates)
@@ -7582,6 +7598,8 @@ async def update_shared_service(service_id: str, updates: dict[str, Any]) -> dic
             # the latest tier / heritage_tier set no longer covers.
             await auto_fan_service_presences(i)
             await prune_service_presences(i)
+            if presences_payload is not None:
+                await apply_service_presence_overrides(i, presences_payload)
             return i
     return None
 
@@ -8032,6 +8050,161 @@ def _desired_service_presence_keys(svc: dict[str, Any]) -> set[tuple[str, str, s
                 continue
             desired.add((sid, dc, env, "", ""))
     return desired
+
+
+def _normalise_member_chip(chip: Any) -> dict[str, Any] | None:
+    """Coerce an editor chip (string or {type,value,...}) into a MemberSpec
+    dict. Returns ``None`` for empty input. ``type`` is inferred from the
+    raw value when not provided: anything with ``/`` becomes ``cidr``,
+    a hyphen-separated pair becomes ``range``, otherwise ``ip``.
+    """
+    if chip is None:
+        return None
+    if isinstance(chip, str):
+        v = chip.strip()
+        if not v:
+            return None
+        if "/" in v:
+            kind = "cidr"
+        elif "-" in v and not v.lower().startswith("svr-") \
+                and not v.lower().startswith("rng-") \
+                and not v.lower().startswith("grp-") \
+                and not v.lower().startswith("g-"):
+            kind = "range"
+        else:
+            kind = "ip"
+        return {"type": kind, "value": v, "description": "", "dc_id": None}
+    if isinstance(chip, dict):
+        v = str(chip.get("value", "")).strip()
+        if not v:
+            return None
+        kind = str(chip.get("type", "")).strip().lower() or "ip"
+        return {
+            "type": kind,
+            "value": v,
+            "description": chip.get("description", ""),
+            "dc_id": chip.get("dc_id"),
+        }
+    return None
+
+
+def _normalise_chips(chips: Any) -> list[dict[str, Any]]:
+    if not chips:
+        return []
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for c in chips:
+        nm = _normalise_member_chip(c)
+        if not nm:
+            continue
+        k = (nm["type"], nm["value"])
+        if k in seen:
+            continue
+        out.append(nm)
+        seen.add(k)
+    return out
+
+
+async def apply_app_presence_overrides(
+    app: dict[str, Any],
+    presences: list[dict[str, Any]],
+) -> int:
+    """Persist explicit per-(DC, NH, SZ) presence rows declared in the
+    Add/Edit App form. Each row carries its own egress + ingress chips,
+    so this is the path the new Per-DC Presence Editor uses to write
+    members straight into the storage layer (members then flow into
+    auto-derived ``grp-<APP>-…`` groups via ``upsert_app_presence``).
+
+    Idempotent — any existing row with the same key is replaced. Returns
+    the number of rows upserted.
+    """
+    if not presences:
+        return 0
+    app_id = str(app.get("app_distributed_id", "")).upper()
+    if not app_id:
+        return 0
+    envs = _envs_for_entity(app)
+    written = 0
+    for row in presences:
+        if not isinstance(row, dict):
+            continue
+        dc = str(row.get("dc_id", "")).strip()
+        if not dc:
+            continue
+        nh = str(row.get("nh_id", "")).strip()
+        sz = str(row.get("sz_code", "")).strip()
+        is_heritage = bool(row.get("is_heritage")) or \
+            str(row.get("dc_type", "")).lower() == "heritage" or \
+            str(row.get("dc_type", "")).lower() == "legacy"
+        # Heritage rows have no NH/SZ — force-empty even if the form
+        # accidentally pre-fills them.
+        if is_heritage:
+            nh, sz = "", ""
+        env = str(row.get("environment", "")).strip() or envs[0]
+        await upsert_app_presence({
+            "app_distributed_id": app_id,
+            "dc_id": dc,
+            "dc_type": "Heritage" if is_heritage else "NGDC",
+            "is_heritage": is_heritage,
+            "environment": env,
+            "nh_id": nh,
+            "sz_code": sz,
+            "has_ingress": bool(row.get("has_ingress")),
+            "egress_members": _normalise_chips(row.get("egress_members")),
+            "ingress_members": _normalise_chips(row.get("ingress_members")),
+            "ingress_ports": list(row.get("ingress_ports") or []),
+        })
+        written += 1
+    return written
+
+
+async def apply_service_presence_overrides(
+    svc: dict[str, Any],
+    presences: list[dict[str, Any]],
+) -> int:
+    """Same contract as :func:`apply_app_presence_overrides` but for
+    SharedService presence rows."""
+    if not presences:
+        return 0
+    sid = str(svc.get("service_id", "")).upper()
+    if not sid:
+        return 0
+    envs = _envs_for_entity(svc)
+    written = 0
+    for row in presences:
+        if not isinstance(row, dict):
+            continue
+        dc = str(row.get("dc_id", "")).strip()
+        if not dc:
+            continue
+        nh = str(row.get("nh_id", "")).strip()
+        sz = str(row.get("sz_code", "")).strip()
+        is_heritage = bool(row.get("is_heritage")) or \
+            str(row.get("dc_type", "")).lower() in ("heritage", "legacy")
+        if is_heritage:
+            nh, sz = "", ""
+        env = str(row.get("environment", "")).strip() or envs[0]
+        # Shared services use a single ``members`` list (destination-only
+        # historically). The new editor lets the user populate egress
+        # members too — they're stored on ``members`` for back-compat
+        # with the rule pipeline.
+        members = _normalise_chips(
+            (row.get("members") or [])
+            + (row.get("egress_members") or [])
+            + (row.get("ingress_members") or []),
+        )
+        await upsert_shared_service_presence({
+            "service_id": sid,
+            "dc_id": dc,
+            "dc_type": "Heritage" if is_heritage else "NGDC",
+            "is_heritage": is_heritage,
+            "environment": env,
+            "nh_id": nh,
+            "sz_code": sz,
+            "members": members,
+        })
+        written += 1
+    return written
 
 
 async def prune_app_presences(app: dict[str, Any]) -> int:
