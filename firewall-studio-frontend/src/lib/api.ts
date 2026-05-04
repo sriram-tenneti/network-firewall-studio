@@ -1595,6 +1595,22 @@ export interface LegacyClassifiedSide {
   matched: boolean;
   reason: string;
 }
+export interface LegacyProposedFanoutRow {
+  src_dc: string;
+  dst_dc: string;
+  src_group: string;
+  dst_group: string;
+  src_vrf: string;
+  dst_vrf: string;
+  ports: string;
+  action: string;
+  environment: string;
+  src_is_heritage?: boolean;
+  dst_is_heritage?: boolean;
+  dc_to_dc_path?: string;
+  egress_ip_dependency?: string[];
+  ingress_ip_dependency?: string[];
+}
 export interface LegacyProposed {
   src_group: string;
   dst_group: string;
@@ -1608,6 +1624,12 @@ export interface LegacyProposed {
   app_management_changes: Array<Record<string, unknown>>;
   group_changes: Array<Record<string, unknown>>;
   physical_rule: Record<string, unknown>;
+  /** Multi-DC fan-out preview: every classified legacy rule materialises
+   * as N proposed RuleRequests, one per (src_dc, dst_dc) pair.
+   * NGDC<->NGDC pairs same-DC by default. NGDC<->Heritage follows the
+   * Heritage presence's `ngdc_source_dcs[]` mapping. */
+  fanout?: LegacyProposedFanoutRow[];
+  fanout_count?: number;
 }
 export interface LegacyTransition {
   origin_legacy_rule_id: string;

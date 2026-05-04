@@ -113,8 +113,9 @@ export default function StandardizerPanel() {
             requests needed to land the rule cleanly.
             <br />
             <span className="text-purple-800">
-              Multi-DC and cross-DC (Heritage ↔ NGDC) flows are deferred — they keep their original shape until the
-              cross-DC strategy is finalised.
+              Multi-DC fan-out is automatic: every classified legacy rule materialises as N proposed RuleRequests, one
+              per (src DC &rarr; dst DC) pair. NGDC&harr;NGDC pairs same-DC by default. NGDC&harr;Heritage routing
+              follows the Heritage presence&rsquo;s <code>ngdc_source_dcs[]</code> mapping.
             </span>
           </p>
         </div>
@@ -231,6 +232,62 @@ function TransitionCard({ t }: { t: LegacyTransition }) {
           </div>
         </div>
       </div>
+
+      {/* Multi-DC fan-out — every classified legacy rule materialises
+          as N proposed RuleRequests (one per src_dc x dst_dc pair).
+          NGDC<->NGDC pairs same-DC by default; NGDC<->Heritage uses
+          the Heritage presence's `ngdc_source_dcs[]` mapping. */}
+      {(t.proposed.fanout && t.proposed.fanout.length > 0) && (
+        <div className="px-3 py-2 border-t border-gray-100 bg-indigo-50/40">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider">
+              Multi-DC Fan-out &middot; {t.proposed.fanout.length} proposed rule
+              request{t.proposed.fanout.length === 1 ? '' : 's'}
+            </span>
+            <span className="text-[10px] text-indigo-700">
+              one per src DC &rarr; dst DC pair, under one parent migration record
+            </span>
+          </div>
+          <div className="overflow-x-auto rounded-md border border-indigo-100 bg-white">
+            <table className="w-full text-[10px]">
+              <thead className="bg-indigo-50">
+                <tr className="text-left">
+                  <th className="px-1.5 py-1 font-semibold text-indigo-800">Src DC</th>
+                  <th className="px-1.5 py-1 font-semibold text-indigo-800">Dst DC</th>
+                  <th className="px-1.5 py-1 font-semibold text-indigo-800">Source Group</th>
+                  <th className="px-1.5 py-1 font-semibold text-indigo-800">Dest Group</th>
+                  <th className="px-1.5 py-1 font-semibold text-indigo-800">VRF</th>
+                  <th className="px-1.5 py-1 font-semibold text-indigo-800">Path</th>
+                </tr>
+              </thead>
+              <tbody>
+                {t.proposed.fanout.map((row, i) => {
+                  const heritage = row.src_is_heritage || row.dst_is_heritage;
+                  const path = row.dc_to_dc_path || `${row.src_dc} \u2192 ${row.dst_dc}`;
+                  return (
+                    <tr key={`${row.src_dc}|${row.dst_dc}|${i}`}
+                      className={`border-t border-indigo-50 ${heritage ? 'bg-amber-50/40' : ''}`}>
+                      <td className="px-1.5 py-1 font-mono">{row.src_dc}</td>
+                      <td className="px-1.5 py-1 font-mono">
+                        {row.dst_dc}
+                        {heritage && (
+                          <span className="ml-1 text-[8px] px-1 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">
+                            Heritage
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-1 font-mono text-blue-700">{row.src_group || '\u2014'}</td>
+                      <td className="px-1.5 py-1 font-mono text-purple-700">{row.dst_group || '\u2014'}</td>
+                      <td className="px-1.5 py-1 font-mono text-gray-600">{row.src_vrf || '\u2014'} &rarr; {row.dst_vrf || '\u2014'}</td>
+                      <td className="px-1.5 py-1 text-gray-600">{path}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {(t.proposed.app_management_changes.length > 0 || t.proposed.group_changes.length > 0 || t.warnings.length > 0) && (
         <div className="px-3 py-2 border-t border-gray-100 space-y-1 bg-gray-50">

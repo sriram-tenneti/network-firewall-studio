@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup, FirewallRule, SharedService, SharedServicePresence, SharedServiceCategory } from '@/types';
+import type { Application, BirthrightValidation, NeighbourhoodRegistry, SecurityZone, NGDCDataCenter, FirewallGroup, FirewallRule, SharedService, SharedServicePresence, SharedServiceCategory, RuleExpansionPreview } from '@/types';
 import * as api from '@/lib/api';
 import { autoPrefix } from '@/lib/utils';
 
@@ -96,6 +96,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   const [draftCreatedMsg, setDraftCreatedMsg] = useState('');
   const [birthrightResult, setBirthrightResult] = useState<BirthrightValidation | null>(null);
   const [, setValidatingBR] = useState(false);
+  const [fanOutPreview, setFanOutPreview] = useState<RuleExpansionPreview | null>(null);
+  const [includeCrossDc, setIncludeCrossDc] = useState(false);
 
   /* ---------- Group creation modal ---------- */
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
@@ -494,6 +496,51 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
   const effectivePort = form.port === 'custom' ? form.customPort : form.port;
   const canStep3 = effectivePort && form.protocol;
   const canSubmit = canStep1 && canStep2 && canStep3 && !isBirthrightPermitted;
+
+  /* ------------------------------------------------------------------ */
+  /*  Multi-DC fan-out preview (Step 3)                                   */
+  /*                                                                     */
+  /*  Calls the backend `preview_rule_expansion` so the user sees, before
+   *  they click Submit, how many R-#### physical rules will materialise
+   *  under one parent RR-####. NGDC↔NGDC pairs same-DC by default
+   *  (ALPHA→ALPHA, BETA→BETA, …); enabling include_cross_dc lets the
+   *  user also see the off-diagonal pairs. Heritage destinations are
+   *  filtered by their declared `ngdc_source_dcs[]` mapping (or warn
+   *  if no mapping is declared).                                       */
+  /* ------------------------------------------------------------------ */
+  useEffect(() => {
+    if (step !== 3 || !form.application || !form.dst_application
+        || !form.environment || !effectivePort) {
+      setFanOutPreview(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const p = await api.previewRuleExpansion({
+          source_kind: 'app',
+          source_ref: form.application,
+          application_ref: form.application,
+          destination_kind: 'app_ingress',
+          destination_ref: form.dst_application,
+          environment: form.environment as 'Production' | 'Non-Production' | 'Pre-Production',
+          ports: effectivePort,
+          action: form.action === 'Allow' ? 'ACCEPT' : 'DROP',
+          include_cross_dc: includeCrossDc,
+        });
+        if (!cancelled) setFanOutPreview(p);
+      } catch (e) {
+        if (!cancelled) {
+          setFanOutPreview({
+            physical_rules: [],
+            warnings: [`Preview failed: ${(e as Error).message}`],
+          });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, form.application, form.dst_application, form.environment,
+      effectivePort, form.action, includeCrossDc]);
 
   /* ------------------------------------------------------------------ */
   /*  Submit handler                                                     */
@@ -1102,6 +1149,108 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Multi-DC fan-out preview — shows how this single submit
+                  will materialise as N R-#### rules under one RR-####
+                  parent. NGDC↔NGDC pairs same-DC by default; cross-DC
+                  is opt-in via the toggle. Heritage destinations follow
+                  the `ngdc_source_dcs[]` mapping declared on the
+                  Heritage presence row. */}
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
+                      Step 4 &middot; Multi-DC Fan-out Preview
+                    </h4>
+                    <p className="text-[11px] text-gray-600 mt-0.5">
+                      One submit auto-creates one rule request per (src DC &rarr; dst DC) pair.
+                      Same-DC pairing by default for NGDC&harr;NGDC. Heritage routing follows the
+                      app team&rsquo;s <code className="font-mono text-[10px]">ngdc_source_dcs[]</code> mapping.
+                    </p>
+                  </div>
+                  <label className="inline-flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer select-none">
+                    <input type="checkbox" checked={includeCrossDc}
+                      onChange={(e) => setIncludeCrossDc(e.target.checked)} />
+                    Include cross-DC pairs
+                  </label>
+                </div>
+                {!fanOutPreview && (
+                  <div className="text-[11px] text-gray-500 italic">Computing fan-out&hellip;</div>
+                )}
+                {fanOutPreview && (
+                  <>
+                    <div className="text-xs text-indigo-900 font-bold mb-2">
+                      Will materialise as {fanOutPreview.physical_rules.length} rule
+                      request{fanOutPreview.physical_rules.length === 1 ? '' : 's'}
+                      {' '}under one parent RR-####.
+                    </div>
+                    {fanOutPreview.physical_rules.length > 0 ? (
+                      <div className="overflow-x-auto rounded-lg border border-indigo-100 bg-white">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-indigo-50">
+                            <tr className="text-left">
+                              <th className="px-2 py-1 font-semibold text-indigo-800">Src DC</th>
+                              <th className="px-2 py-1 font-semibold text-indigo-800">Dst DC</th>
+                              <th className="px-2 py-1 font-semibold text-indigo-800">Source Group</th>
+                              <th className="px-2 py-1 font-semibold text-indigo-800">Dest Group</th>
+                              <th className="px-2 py-1 font-semibold text-indigo-800">VRF</th>
+                              <th className="px-2 py-1 font-semibold text-indigo-800">Ports</th>
+                              <th className="px-2 py-1 font-semibold text-indigo-800">Path</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {fanOutPreview.physical_rules.map((p, i) => {
+                              const row = p as unknown as Record<string, unknown>;
+                              const path = String(row.dc_to_dc_path || `${p.src_dc} \u2192 ${p.dst_dc}`);
+                              const crossDc = p.cross_dc;
+                              const heritage = p.src_is_heritage || p.dst_is_heritage;
+                              return (
+                                <tr key={`${p.src_dc}|${p.dst_dc}|${i}`}
+                                  className={`border-t border-indigo-50 ${
+                                    heritage ? 'bg-amber-50/40' :
+                                    crossDc ? 'bg-fuchsia-50/40' : ''}`}>
+                                  <td className="px-2 py-1 font-mono">{p.src_dc}</td>
+                                  <td className="px-2 py-1 font-mono">
+                                    {p.dst_dc}
+                                    {heritage && (
+                                      <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">
+                                        Heritage
+                                      </span>
+                                    )}
+                                    {crossDc && !heritage && (
+                                      <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-fuchsia-100 text-fuchsia-800 font-semibold">
+                                        Cross-DC
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1 font-mono text-blue-700">{p.src_group_ref || '\u2014'}</td>
+                                  <td className="px-2 py-1 font-mono text-purple-700">{p.dst_group_ref || '\u2014'}</td>
+                                  <td className="px-2 py-1 font-mono text-gray-600">{p.vrf || '\u2014'}</td>
+                                  <td className="px-2 py-1 font-mono">{p.ports}</td>
+                                  <td className="px-2 py-1 text-gray-600">{path}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                        No source/destination presences resolved &mdash; check that both apps have presence rows declared in App Management.
+                      </div>
+                    )}
+                    {(fanOutPreview.warnings || []).length > 0 && (
+                      <ul className="mt-2 space-y-0.5">
+                        {(fanOutPreview.warnings || []).map((w, i) => (
+                          <li key={i} className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                            {w}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
               </div>
 
               <div className="flex justify-between">

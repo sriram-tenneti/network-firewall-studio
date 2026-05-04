@@ -10065,6 +10065,148 @@ async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]
     if not src_group or not dst_group:
         verdict = "unclassifiable"
 
+    # ----------------------------------------------------------------
+    # Multi-DC fan-out for the proposed NGDC rule. Each NGDC app/service
+    # has presence in all 4 NGDC DCs; one legacy rule must materialise
+    # as N proposed RuleRequests (one per src_dc \u2192 dst_dc pair).
+    # NGDC \u2194 NGDC pairs same-DC by default. NGDC \u2194 Heritage
+    # follows the Heritage presence's `ngdc_source_dcs[]` mapping.
+    # ----------------------------------------------------------------
+    proposed_fanout: list[dict[str, Any]] = []
+
+    def _presences_for(side: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return the presence rows for the classified side that
+        match the resolved (nh, sz). One row per DC the side lives in.
+        """
+        nh = (side.get("nh") or "").upper()
+        sz = (side.get("sz") or "").upper()
+        rows: list[dict[str, Any]] = []
+        sid = str(side.get("service_id") or "").upper()
+        aid = str(side.get("app_distributed_id") or "").upper()
+        if sid:
+            for p in (_load("shared_service_presences") or []):
+                if str(p.get("service_id", "")).upper() != sid:
+                    continue
+                if (p.get("environment") or "Production") != env:
+                    continue
+                if _is_heritage_presence(p):
+                    rows.append(p)
+                else:
+                    if (p.get("nh_id") or "").upper() == nh and (p.get("sz_code") or "").upper() == sz:
+                        rows.append(p)
+        elif aid:
+            for p in (_load("app_presences") or []):
+                if str(p.get("app_distributed_id", "")).upper() != aid:
+                    continue
+                if (p.get("environment") or "Production") != env:
+                    continue
+                if _is_heritage_presence(p):
+                    rows.append(p)
+                else:
+                    if (p.get("nh_id") or "").upper() == nh and (p.get("sz_code") or "").upper() == sz:
+                        rows.append(p)
+        # Fall back to a synthetic "single DC" row from the classification
+        # when no presence rows exist for the resolved owner.
+        if not rows and side.get("dc"):
+            rows.append({
+                "dc_id": side.get("dc"),
+                "dc_type": "NGDC",
+                "nh_id": nh, "sz_code": sz,
+                "is_heritage": False,
+            })
+        return rows
+
+    src_pres_rows = _presences_for(src_classified) if (src_group and src_classified.get("matched")) else []
+    dst_pres_rows = _presences_for(dst_classified) if (dst_group and dst_classified.get("matched")) else []
+
+    def _h(p: dict[str, Any]) -> bool:
+        return _is_heritage_presence(p)
+
+    def _routing_ok(s: dict[str, Any], d: dict[str, Any]) -> bool:
+        sh, dh = _h(s), _h(d)
+        if dh and not sh:
+            allowed = [str(x).upper().strip()
+                       for x in (d.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and str(s.get("dc_id", "")).upper() not in allowed:
+                return False
+            return True
+        if sh and not dh:
+            allowed = [str(x).upper().strip()
+                       for x in (s.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and str(d.get("dc_id", "")).upper() not in allowed:
+                return False
+            return True
+        if not sh and not dh:
+            return str(s.get("dc_id", "")) == str(d.get("dc_id", ""))
+        return True  # heritage <-> heritage
+
+    heritage_warned: set[str] = set()
+    for s in src_pres_rows:
+        for d in dst_pres_rows:
+            if not _routing_ok(s, d):
+                continue
+            sh, dh = _h(s), _h(d)
+            sg = (
+                _heritage_app_group_name(
+                    str(src_classified.get("service_id") or src_classified.get("app_distributed_id") or "").upper(),
+                    s.get("dc_id", ""), "egress")
+                if sh else
+                (_propose_ngdc_target({**src_classified,
+                                       "nh": s.get("nh_id") or src_classified.get("nh"),
+                                       "sz": s.get("sz_code") or src_classified.get("sz")}))
+            )
+            dg = (
+                _heritage_app_group_name(
+                    str(dst_classified.get("service_id") or dst_classified.get("app_distributed_id") or "").upper(),
+                    d.get("dc_id", ""), "ingress")
+                if dh else
+                (_propose_ngdc_target({**dst_classified,
+                                       "nh": d.get("nh_id") or dst_classified.get("nh"),
+                                       "sz": d.get("sz_code") or dst_classified.get("sz")}))
+            )
+            proposed_fanout.append({
+                "src_dc": s.get("dc_id", ""),
+                "dst_dc": d.get("dc_id", ""),
+                "src_group": sg,
+                "dst_group": dg,
+                "src_vrf": (
+                    f"HERITAGE-{s.get('dc_id', '')}" if sh
+                    else f"{s.get('nh_id', '')}-{s.get('sz_code', '')}".strip("-")
+                ),
+                "dst_vrf": (
+                    f"HERITAGE-{d.get('dc_id', '')}" if dh
+                    else f"{d.get('nh_id', '')}-{d.get('sz_code', '')}".strip("-")
+                ),
+                "ports": f"{proto} {port}".strip(),
+                "action": "ACCEPT" if action == "ALLOW" else "DENY",
+                "environment": env,
+                "src_is_heritage": sh,
+                "dst_is_heritage": dh,
+                "dc_to_dc_path": f"{s.get('dc_id', '')} \u2192 {d.get('dc_id', '')}",
+                "egress_ip_dependency": [
+                    str(m.get("value") if isinstance(m, dict) else m)
+                    for m in (s.get("egress_members") or s.get("members") or [])
+                    if (isinstance(m, dict) and m.get("value")) or isinstance(m, str)
+                ],
+                "ingress_ip_dependency": [
+                    str(m.get("value") if isinstance(m, dict) else m)
+                    for m in (d.get("ingress_members") or d.get("members") or [])
+                    if (isinstance(m, dict) and m.get("value")) or isinstance(m, str)
+                ],
+            })
+            if dh and not sh and not (d.get("ngdc_source_dcs") or []):
+                key = str(d.get("dc_id", ""))
+                if key and key not in heritage_warned:
+                    heritage_warned.add(key)
+                    warnings.append(
+                        f"Heritage destination DC {key} has no explicit "
+                        "`ngdc_source_dcs[]` mapping \u2014 fanning out "
+                        "across all NGDC source DCs. Declare the mapping "
+                        "on the Heritage presence row to pin the routing."
+                    )
+
     return {
         "origin_legacy_rule_id": legacy_id,
         "original": {
@@ -10087,6 +10229,10 @@ async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]
             "app_management_changes": app_management_changes,
             "group_changes": group_changes,
             "physical_rule": physical_for_dedup,
+            # New: every classified legacy rule fans out into N proposed
+            # NGDC rule requests (one per src_dc \u2192 dst_dc pair).
+            "fanout": proposed_fanout,
+            "fanout_count": len(proposed_fanout),
         },
         "verdict": verdict,
         "dedup_match": dedup_match,
