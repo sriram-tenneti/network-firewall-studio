@@ -10487,10 +10487,30 @@ async def build_legacy_transitions_bulk(rules: list[dict[str, Any]]) -> dict[str
 # Deployment Artifact Generators
 # ============================================================
 
-def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
-    """Build the vendor-neutral JSON manifest for a RuleRequest."""
+def _artifact_manifest_for_request(
+    req: dict[str, Any],
+    dc_id: str | None = None,
+) -> dict[str, Any]:
+    """Build the vendor-neutral JSON manifest for a RuleRequest.
+
+    When ``dc_id`` is provided the manifest is **scoped to a single
+    deploy target**: only physical rows that touch that DC are
+    emitted, and every referenced group is resolved through its
+    per-DC instance so the device only ever sees IPs that actually
+    live in that DC. This matches reality — a single firewall device
+    lives in exactly one DC, so the artifact it ingests must never
+    mix members from other DCs. When ``dc_id`` is None we fall back
+    to the legacy "all DCs in one file" shape kept for back-compat.
+    """
 
     expansion = req.get("expansion") or []
+    target_dc = (dc_id or "").strip()
+    if target_dc:
+        expansion = [
+            p for p in expansion
+            if str(p.get("src_dc") or "").strip() == target_dc
+            or str(p.get("dst_dc") or "").strip() == target_dc
+        ]
     groups_seen: dict[str, dict[str, Any]] = {}
     fw_rules = _load("firewall_rules") or []
     fw_by_id = {r.get("rule_id"): r for r in fw_rules}
@@ -10500,13 +10520,26 @@ def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
         fw = fw_by_id.get(rid, {})
         # Group create/modify decisions: if the group already exists in
         # the groups store with members, mark `reuse-existing`; otherwise
-        # `create`.
-        for grp_name in (phys.get("src_group_ref"), phys.get("dst_group_ref")):
-            if not grp_name or grp_name in groups_seen:
+        # `create`. Group identity is **(name, dc_id)** so the same
+        # logical name materialises one record per DC with that DC's
+        # IPs only — the source group resolves against ``phys.src_dc``
+        # and the destination group against ``phys.dst_dc`` so a device
+        # in DC X only ever sees DC-local members.
+        side_specs = [
+            (phys.get("src_group_ref"), phys.get("src_dc")),
+            (phys.get("dst_group_ref"), phys.get("dst_dc")),
+        ]
+        for grp_name, grp_dc in side_specs:
+            if not grp_name:
                 continue
-            members = _resolve_group_members_sync(grp_name)
-            groups_seen[grp_name] = {
+            grp_dc_norm = str(grp_dc or "").strip()
+            seen_key = f"{grp_name}@{grp_dc_norm}" if grp_dc_norm else grp_name
+            if seen_key in groups_seen:
+                continue
+            members = _resolve_group_members_sync(grp_name, grp_dc_norm or None)
+            groups_seen[seen_key] = {
                 "name": grp_name,
+                "dc_id": grp_dc_norm or None,
                 "op": "reuse-existing" if members else "create",
                 "members": members,
             }
@@ -10598,11 +10631,28 @@ def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
         if v and v not in seen_vrfs:
             distinct_vrfs.append(v)
             seen_vrfs.add(v)
+    # Distinct DCs the (filtered) expansion touches — vendor compilers
+    # ignore this for now but downstream tools (per-DC bundle, snapshot
+    # capture) need to know which DC the manifest is keyed for.
+    dcs_touched: list[str] = []
+    seen_dcs: set[str] = set()
+    for r in rules_out:
+        for d in (r.get("src_dc"), r.get("dst_dc")):
+            d_norm = str(d or "").strip()
+            if d_norm and d_norm not in seen_dcs:
+                dcs_touched.append(d_norm)
+                seen_dcs.add(d_norm)
     return {
         "request_id": req.get("request_id"),
         "requester": req.get("owner"),
         "owner_team": req.get("owner_team"),
         "environment": req.get("environment"),
+        # ``dc_id`` is set when the manifest is scoped to a single
+        # device's deploy target. Vendor compilers tag the output
+        # filename + header with this so operators know exactly which
+        # DC's firewall the file belongs to.
+        "dc_id": target_dc or None,
+        "dcs_touched": dcs_touched,
         "vrf": (
             req.get("vrf")
             or (distinct_vrfs[0] if distinct_vrfs else
@@ -10657,16 +10707,39 @@ def _vrf_for_environment(env: str) -> str:
     return "VRF-DEFAULT"
 
 
-def _resolve_group_members_sync(name: str) -> list[str]:
-    """Look up an existing group's members from the groups store."""
+def _resolve_group_members_sync(name: str, dc_id: str | None = None) -> list[str]:
+    """Look up an existing group's members from the groups store.
+
+    Per-DC group instances: when ``dc_id`` is given, return only the
+    members of that DC's instance of ``name`` — the same logical group
+    name materialises as one record per ``(name, dc_id)`` and a device
+    in DC X must only ever see DC X's IPs. When ``dc_id`` is None we
+    keep the legacy behaviour (first match wins) for backward
+    compatibility with callers that pre-date per-DC instancing.
+    """
 
     if not name:
         return []
+    target_dc = (dc_id or "").strip()
+    fallback: list[str] | None = None
     for g in _load("groups") or []:
-        if str(g.get("name", "")).upper() == name.upper():
-            ms = g.get("members") or g.get("ips") or []
-            return [str(m) for m in ms]
-    return []
+        if str(g.get("name", "")).upper() != name.upper():
+            continue
+        gdc = str(g.get("dc_id") or "").strip()
+        ms = g.get("members") or g.get("ips") or []
+        members = [str(m) for m in ms]
+        if target_dc:
+            if gdc and gdc == target_dc:
+                return members
+            # Track first-seen as legacy fallback in case there is no
+            # per-DC instance yet (e.g. older seeds before per-DC
+            # materialisation ran).
+            if fallback is None and not gdc:
+                fallback = members
+            continue
+        if fallback is None:
+            fallback = members
+    return fallback or []
 
 
 def _expansion_block(group_name: str, members: list[str] | None = None) -> str:
@@ -10795,9 +10868,14 @@ def _manifest_vrfs(manifest: dict[str, Any]) -> list[str]:
 
 def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "# PAN-OS / Panorama set-mode configuration",
         f"# Request {manifest.get('request_id')}",
+        (
+            f"# Target DC (device): {dc_tag}" if dc_tag
+            else "# Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"# VRFs / virtual-routers touched: {', '.join(vrfs)}",
         "",
     ]
@@ -10847,8 +10925,13 @@ def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
 
 def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "# Fortinet FortiGate config",
+        (
+            f"# Target DC (device): {dc_tag}" if dc_tag
+            else "# Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"# VRFs / vdoms touched: {', '.join(vrfs)}",
         "",
     ]
@@ -10928,8 +11011,13 @@ def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
 
 def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "! Cisco ASA / FTD configuration",
+        (
+            f"! Target DC (device): {dc_tag}" if dc_tag
+            else "! Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"! VRFs / contexts touched: {', '.join(vrfs)}",
         "",
     ]
@@ -10983,8 +11071,13 @@ def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
 
 def _vendor_compile_checkpoint(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "# Check Point SmartConsole CLI",
+        (
+            f"# Target DC (device): {dc_tag}" if dc_tag
+            else "# Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"# VRFs / policy packages touched: {', '.join(vrfs)}",
         "",
     ]
@@ -11246,11 +11339,25 @@ VENDOR_COMPILERS_JSON: dict[str, Any] = {
 }
 
 
-async def get_request_artifacts(request_id: str) -> dict[str, Any] | None:
+async def get_request_artifacts(
+    request_id: str,
+    dc_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Build the deployment-artifact bundle for a RuleRequest.
+
+    When ``dc_id`` is provided the bundle is **scoped to that single
+    DC's device** — only physical rows touching the DC are emitted
+    and every group is resolved through its per-DC instance, so the
+    output can be shipped straight to the firewall living in that DC
+    without dragging in IPs from other DCs (which is what every
+    real-world deploy actually wants). Without ``dc_id`` we keep the
+    legacy "all DCs in one file" shape; the unscoped output prints a
+    banner steering operators at ``/artifacts/per-dc`` instead.
+    """
     items = _load_rule_requests()
     for r in items:
         if r.get("request_id") == request_id:
-            manifest = _artifact_manifest_for_request(r)
+            manifest = _artifact_manifest_for_request(r, dc_id=dc_id)
             sheets = _artifact_xlsx_rows(manifest)
             vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
             vendor_configs_json = {v: fn(manifest) for v, fn in VENDOR_COMPILERS_JSON.items()}
@@ -11261,6 +11368,51 @@ async def get_request_artifacts(request_id: str) -> dict[str, Any] | None:
                 "vendor_configs_json": vendor_configs_json,
             }
     return None
+
+
+async def get_request_artifacts_per_dc(request_id: str) -> dict[str, Any] | None:
+    """Return one artifact bundle per DC the request touches.
+
+    A single RuleRequest can fan out across multiple ``(src_dc, dst_dc)``
+    pairs — every device involved is in exactly one DC, so the
+    deployable artifact must be split by DC. This helper returns a
+    map ``{dcs: [{dc_id, manifest, xlsx_sheets, vendor_configs,
+    vendor_configs_json}, ...], dc_ids: [...]}`` so the UI can render
+    one tab per DC and operators ship the right per-device file with
+    no copy-paste mixing across DCs.
+    """
+    items = _load_rule_requests()
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if target is None:
+        return None
+    expansion = target.get("expansion") or []
+    dc_ids: list[str] = []
+    seen: set[str] = set()
+    for p in expansion:
+        for d in (p.get("src_dc"), p.get("dst_dc")):
+            d_norm = str(d or "").strip()
+            if d_norm and d_norm not in seen:
+                dc_ids.append(d_norm)
+                seen.add(d_norm)
+    bundles: list[dict[str, Any]] = []
+    for d in dc_ids:
+        manifest = _artifact_manifest_for_request(target, dc_id=d)
+        sheets = _artifact_xlsx_rows(manifest)
+        vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
+        vendor_configs_json = {v: fn(manifest) for v, fn in VENDOR_COMPILERS_JSON.items()}
+        bundles.append({
+            "dc_id": d,
+            "environment": target.get("environment"),
+            "manifest": manifest,
+            "xlsx_sheets": sheets,
+            "vendor_configs": vendor_configs,
+            "vendor_configs_json": vendor_configs_json,
+        })
+    return {
+        "request_id": request_id,
+        "dc_ids": dc_ids,
+        "dcs": bundles,
+    }
 
 
 # ============================================================
@@ -11489,11 +11641,18 @@ async def create_group_change_request(payload: dict[str, Any]) -> dict[str, Any]
     items = _load_group_requests()
     rid = _next_group_request_id()
     now = _now()
+    # Per-DC group instances: a GCR mutates exactly one ``(name, dc_id)``
+    # instance, so the device file emitted later only ever sees that
+    # DC's IPs. Carry the DC explicitly on the record (callers that
+    # didn't pass one get the legacy "first match" behaviour at
+    # resolve time, but new callers must be DC-scoped).
+    dc_id = str(payload.get("dc_id") or "").strip() or None
     record = {
         "request_id": rid,
         "kind": "group_change",
         "op": op,
         "group_name": name,
+        "dc_id": dc_id,
         "added_members": added,
         "removed_members": removed,
         "environment": payload.get("environment") or "",
@@ -11648,15 +11807,23 @@ def _vrf_from_group_name(name: str) -> str:
 def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
     """Vendor-neutral manifest for a GroupChangeRequest. Same shape as
     the RuleRequest manifest so the existing XLSX writer + vendor
-    compilers + bundle.zip pipeline keeps working."""
+    compilers + bundle.zip pipeline keeps working.
+
+    Group identity is per-DC: every GCR carries a ``dc_id`` selecting
+    which per-DC instance of the named group is being mutated, and
+    the manifest resolves ``members_now`` against that instance only
+    so the device file never mixes IPs from other DCs.
+    """
 
     op = req.get("op") or "create"
     name = req.get("group_name") or ""
     added = list(req.get("added_members") or [])
     removed = list(req.get("removed_members") or [])
-    members_now = _resolve_group_members_sync(name)
+    dc_id = str(req.get("dc_id") or "").strip() or None
+    members_now = _resolve_group_members_sync(name, dc_id)
     group_entry = {
         "name": name,
+        "dc_id": dc_id,
         "op": op,
         "members": members_now if op != "delete" else members_now,
         "added_members": added,
@@ -11676,6 +11843,11 @@ def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
         "updated_at": req.get("updated_at"),
         "external_ticket_id": req.get("external_ticket_id"),
         "external_ticket_url": req.get("external_ticket_url"),
+        # Single-DC by definition for group changes — surface it so
+        # vendor compilers stamp the device-target header and the UI
+        # tags the artifact with the right DC.
+        "dc_id": dc_id,
+        "dcs_touched": [dc_id] if dc_id else [],
         "vrf": derived_vrf or req.get("vrf") or "",
         "vrfs": [derived_vrf] if derived_vrf else [],
         "rules": [],

@@ -909,7 +909,10 @@ export interface DeploymentArtifactsBundle {
     request_id: string;
     rules: Array<Record<string, unknown>>;
     groups: Array<Record<string, unknown>>;
+    dc_id?: string | null;
+    dcs_touched?: string[];
   };
   xlsx_sheets: Record<string, string[][]>;
   vendor_configs: Record<string, string>;
+  vendor_configs_json?: Record<string, Record<string, unknown>>;
 }

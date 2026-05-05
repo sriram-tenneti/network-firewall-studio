@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.database import (
     classify_ip,
@@ -355,6 +355,7 @@ from app.database import (  # noqa: E402
     evaluate_dedup,
     evaluate_birthright,
     get_request_artifacts,
+    get_request_artifacts_per_dc,
     get_security_zones,
     list_birthright_rules,
     list_itsm_connectors,
@@ -443,31 +444,65 @@ async def list_security_zones_with_mode() -> list[dict[str, Any]]:
 
 # ---- Deployment Artifacts ----
 
+_DC_QUERY_DESC = (
+    "Optional DC scope. When set, the artifact is filtered to only "
+    "physical rows touching this DC and groups resolve through their "
+    "per-DC member lists, so the output is shippable straight to that "
+    "DC's firewall device. Without it the artifact spans every DC the "
+    "request touches and is **not** a valid single-device deploy file."
+)
+
+
 @router.get("/api/rules/requests/{request_id}/artifacts")
-async def request_artifacts_route(request_id: str) -> dict[str, Any]:
-    artifacts = await get_request_artifacts(request_id)
+async def request_artifacts_route(
+    request_id: str,
+    dc_id: str | None = Query(None, description=_DC_QUERY_DESC),
+) -> dict[str, Any]:
+    artifacts = await get_request_artifacts(request_id, dc_id=dc_id)
     if artifacts is None:
         raise HTTPException(404, "Rule request not found")
     return artifacts
 
 
+@router.get("/api/rules/requests/{request_id}/artifacts/per-dc")
+async def request_artifacts_per_dc_route(request_id: str) -> dict[str, Any]:
+    """Return one artifact bundle per DC the request touches.
+
+    A single firewall device lives in exactly one DC, so the legacy
+    "all-DCs in one file" output had no real deploy target — this
+    endpoint splits the artifact into one bundle per DC keyed by
+    ``dc_id``, each one ready to ship to that DC's device.
+    """
+
+    bundles = await get_request_artifacts_per_dc(request_id)
+    if bundles is None:
+        raise HTTPException(404, "Rule request not found")
+    return bundles
+
+
 @router.get("/api/rules/requests/{request_id}/artifacts/manifest.json")
-async def request_artifact_manifest_json(request_id: str) -> dict[str, Any]:
-    artifacts = await get_request_artifacts(request_id)
+async def request_artifact_manifest_json(
+    request_id: str,
+    dc_id: str | None = Query(None, description=_DC_QUERY_DESC),
+) -> dict[str, Any]:
+    artifacts = await get_request_artifacts(request_id, dc_id=dc_id)
     if artifacts is None:
         raise HTTPException(404, "Rule request not found")
     return artifacts["manifest"]
 
 
 @router.get("/api/rules/requests/{request_id}/artifacts/manifest.xlsx")
-async def request_artifact_manifest_xlsx(request_id: str):
+async def request_artifact_manifest_xlsx(
+    request_id: str,
+    dc_id: str | None = Query(None, description=_DC_QUERY_DESC),
+):
     """Stream a real .xlsx file for ServiceNow / SNS attachments."""
 
     from io import BytesIO
     from openpyxl import Workbook
     from fastapi.responses import StreamingResponse
 
-    artifacts = await get_request_artifacts(request_id)
+    artifacts = await get_request_artifacts(request_id, dc_id=dc_id)
     if artifacts is None:
         raise HTTPException(404, "Rule request not found")
     sheets = artifacts["xlsx_sheets"]
@@ -482,6 +517,7 @@ async def request_artifact_manifest_xlsx(request_id: str):
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
+    suffix = f"-{dc_id}" if dc_id else ""
     return StreamingResponse(
         buf,
         media_type=(
@@ -489,16 +525,20 @@ async def request_artifact_manifest_xlsx(request_id: str):
         ),
         headers={
             "Content-Disposition": (
-                f'attachment; filename="{request_id}-manifest.xlsx"'
+                f'attachment; filename="{request_id}{suffix}-manifest.xlsx"'
             )
         },
     )
 
 
 @router.get("/api/rules/requests/{request_id}/artifacts/device.{vendor}")
-async def request_artifact_vendor_config(request_id: str, vendor: str):
+async def request_artifact_vendor_config(
+    request_id: str,
+    vendor: str,
+    dc_id: str | None = Query(None, description=_DC_QUERY_DESC),
+):
     from fastapi.responses import PlainTextResponse
-    artifacts = await get_request_artifacts(request_id)
+    artifacts = await get_request_artifacts(request_id, dc_id=dc_id)
     if artifacts is None:
         raise HTTPException(404, "Rule request not found")
     vendor_l = vendor.lower()
@@ -507,12 +547,13 @@ async def request_artifact_vendor_config(request_id: str, vendor: str):
         raise HTTPException(
             404, f"Unknown vendor '{vendor}'. Try one of: " +
             ", ".join(artifacts["vendor_configs"].keys()))
+    suffix = f"-{dc_id}" if dc_id else ""
     return PlainTextResponse(
         cfg,
         media_type="text/plain",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="{request_id}-{vendor_l}.txt"'
+                f'attachment; filename="{request_id}{suffix}-{vendor_l}.txt"'
             )
         },
     )
@@ -520,7 +561,9 @@ async def request_artifact_vendor_config(request_id: str, vendor: str):
 
 @router.get("/api/rules/requests/{request_id}/artifacts/device-{vendor}.json")
 async def request_artifact_vendor_config_json(
-    request_id: str, vendor: str,
+    request_id: str,
+    vendor: str,
+    dc_id: str | None = Query(None, description=_DC_QUERY_DESC),
 ) -> dict[str, Any]:
     """Structured JSON twin of the vendor-compiled device config.
     Same content as the .txt CLI but as a parseable payload, so SOAR /
@@ -529,7 +572,7 @@ async def request_artifact_vendor_config_json(
     context / package), per-rule action, port, src/dst groups and
     every group create / modify-add / modify-remove / delete op."""
 
-    artifacts = await get_request_artifacts(request_id)
+    artifacts = await get_request_artifacts(request_id, dc_id=dc_id)
     if artifacts is None:
         raise HTTPException(404, "Rule request not found")
     vendor_l = vendor.lower()
@@ -541,10 +584,19 @@ async def request_artifact_vendor_config_json(
     return cfg_json
 
 
-def _build_bundle_zip(artifacts: dict[str, Any], request_id: str) -> bytes:
+def _build_bundle_zip(
+    artifacts: dict[str, Any],
+    request_id: str,
+    dc_id: str | None = None,
+) -> bytes:
     """Pack JSON manifest + XLSX + every vendor config into a single zip
     so SNS can grab everything in one click and attach it to a CR even
-    while the ITSM integration is still being wired up."""
+    while the ITSM integration is still being wired up.
+
+    When ``dc_id`` is given, every entry is namespaced under
+    ``<request_id>/<dc_id>/`` so a per-DC bundle is unambiguous when
+    operators drag-drop the artifacts onto a specific DC's device.
+    """
 
     import io
     import json as _json
@@ -552,10 +604,14 @@ def _build_bundle_zip(artifacts: dict[str, Any], request_id: str) -> bytes:
     from openpyxl import Workbook
 
     buf = io.BytesIO()
+    base_path = (
+        f"{request_id}/{dc_id}" if dc_id else f"{request_id}"
+    )
+    dc_label = dc_id or "(unscoped — spans every DC the request touches)"
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         # JSON manifest
         zf.writestr(
-            f"{request_id}/manifest.json",
+            f"{base_path}/manifest.json",
             _json.dumps(artifacts["manifest"], indent=2, default=str),
         )
         # XLSX manifest
@@ -568,24 +624,25 @@ def _build_bundle_zip(artifacts: dict[str, Any], request_id: str) -> bytes:
                 ws.append(row)
         xlsx_buf = io.BytesIO()
         wb.save(xlsx_buf)
-        zf.writestr(f"{request_id}/manifest.xlsx", xlsx_buf.getvalue())
+        zf.writestr(f"{base_path}/manifest.xlsx", xlsx_buf.getvalue())
         # Each vendor config as a .txt CLI document
         for vendor_l, cfg in (artifacts.get("vendor_configs") or {}).items():
-            zf.writestr(f"{request_id}/device-{vendor_l}.txt", cfg or "")
+            zf.writestr(f"{base_path}/device-{vendor_l}.txt", cfg or "")
         # ...and the structured JSON twin so ops automation / SOAR can
         # consume the payload directly without screen-scraping the CLI.
         for vendor_l, cfg_json in (
             artifacts.get("vendor_configs_json") or {}
         ).items():
             zf.writestr(
-                f"{request_id}/device-{vendor_l}.json",
+                f"{base_path}/device-{vendor_l}.json",
                 _json.dumps(cfg_json, indent=2, default=str),
             )
         # README so SNS / consumers know what's in the bundle
         readme = (
             f"NGDC Firewall Studio — Rule Request {request_id} export bundle\n"
             f"================================================\n"
-            f"manifest.json       Vendor-neutral deployment manifest (carries VRF)\n"
+            f"Target DC (device): {dc_label}\n"
+            f"manifest.json       Vendor-neutral deployment manifest (carries VRF + dc_id)\n"
             f"manifest.xlsx       Same data flattened to spreadsheet rows + group expansions\n"
             f"device-*.txt        Vendor-compiled CLI configs (PAN-OS / Fortinet / Cisco / Check Point)\n"
             f"device-*.json       Vendor-compiled JSON payloads — parseable, ready for SOAR / API push\n"
@@ -593,23 +650,126 @@ def _build_bundle_zip(artifacts: dict[str, Any], request_id: str) -> bytes:
             f"Use any of the above to deploy manually if the ITSM "
             f"integration is not yet wired up.\n"
         )
+        zf.writestr(f"{base_path}/README.txt", readme)
+    return buf.getvalue()
+
+
+def _build_per_dc_bundle_zip(
+    request_id: str, bundles: dict[str, Any],
+) -> bytes:
+    """Pack one folder per DC (plus a top-level README) so a single
+    download still works but every device target is properly isolated.
+
+    The legacy "all-DCs in one file" zip used to invite copy-paste
+    mistakes (operators shipping the wrong DC's IPs to a device); the
+    per-DC layout makes the right answer the only answer — each
+    folder is a complete, single-device deploy artifact.
+    """
+
+    import io
+    import json as _json
+    import zipfile
+    from openpyxl import Workbook
+
+    buf = io.BytesIO()
+    dc_ids: list[str] = list(bundles.get("dc_ids") or [])
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for dc_bundle in bundles.get("dcs") or []:
+            dc_id = str(dc_bundle.get("dc_id") or "").strip() or "unknown-dc"
+            base_path = f"{request_id}/{dc_id}"
+            zf.writestr(
+                f"{base_path}/manifest.json",
+                _json.dumps(
+                    dc_bundle["manifest"], indent=2, default=str,
+                ),
+            )
+            wb = Workbook()
+            default = wb.active
+            wb.remove(default)
+            for name, rows in dc_bundle["xlsx_sheets"].items():
+                ws = wb.create_sheet(title=(name or "Sheet")[:31])
+                for row in rows:
+                    ws.append(row)
+            xlsx_buf = io.BytesIO()
+            wb.save(xlsx_buf)
+            zf.writestr(f"{base_path}/manifest.xlsx", xlsx_buf.getvalue())
+            for vendor_l, cfg in (
+                dc_bundle.get("vendor_configs") or {}
+            ).items():
+                zf.writestr(
+                    f"{base_path}/device-{vendor_l}.txt", cfg or "",
+                )
+            for vendor_l, cfg_json in (
+                dc_bundle.get("vendor_configs_json") or {}
+            ).items():
+                zf.writestr(
+                    f"{base_path}/device-{vendor_l}.json",
+                    _json.dumps(cfg_json, indent=2, default=str),
+                )
+            zf.writestr(
+                f"{base_path}/README.txt",
+                (
+                    f"NGDC Firewall Studio — Rule Request {request_id}\n"
+                    f"Per-DC export — Target DC (device): {dc_id}\n"
+                    f"================================================\n"
+                    f"manifest.json    Vendor-neutral deployment manifest scoped to this DC.\n"
+                    f"manifest.xlsx    Spreadsheet view of the same.\n"
+                    f"device-*.txt     Vendor-compiled CLI for this DC's device only.\n"
+                    f"device-*.json    Structured twin for SOAR / API push.\n"
+                ),
+            )
+        readme = (
+            f"NGDC Firewall Studio — Rule Request {request_id}\n"
+            f"================================================\n"
+            f"This bundle contains one folder per DC the request touches.\n"
+            f"Each folder is a complete, single-device deploy artifact —\n"
+            f"ship the right folder to the firewall living in that DC.\n"
+            f"\n"
+            f"DCs included: {', '.join(dc_ids) if dc_ids else '(none)'}\n"
+        )
         zf.writestr(f"{request_id}/README.txt", readme)
     return buf.getvalue()
 
 
 @router.get("/api/rules/requests/{request_id}/artifacts/bundle.zip")
-async def request_artifact_bundle_zip(request_id: str):
+async def request_artifact_bundle_zip(
+    request_id: str,
+    dc_id: str | None = Query(None, description=_DC_QUERY_DESC),
+):
     """Single-click "Download All" — every artifact format zipped together
     so it can be manually attached to a ServiceNow CR / emailed / handed
-    off to SNS while the automated ITSM integration is being set up."""
+    off to SNS while the automated ITSM integration is being set up.
+
+    With ``?dc_id=<DC>`` the zip contains the artifact filtered to that
+    DC's device only. Without it, the zip is laid out **as one folder
+    per DC** (plus an ``unscoped/`` folder retained for back-compat)
+    so consumers can ship the right per-device file with no copy-paste
+    mixing across DCs.
+    """
 
     from fastapi.responses import StreamingResponse
     from io import BytesIO
 
-    artifacts = await get_request_artifacts(request_id)
-    if artifacts is None:
+    if dc_id:
+        artifacts = await get_request_artifacts(request_id, dc_id=dc_id)
+        if artifacts is None:
+            raise HTTPException(404, "Rule request not found")
+        payload = _build_bundle_zip(artifacts, request_id, dc_id=dc_id)
+        suffix = f"-{dc_id}"
+        return StreamingResponse(
+            BytesIO(payload),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{request_id}{suffix}-bundle.zip"'
+                )
+            },
+        )
+
+    bundles = await get_request_artifacts_per_dc(request_id)
+    if bundles is None:
         raise HTTPException(404, "Rule request not found")
-    payload = _build_bundle_zip(artifacts, request_id)
+    payload = _build_per_dc_bundle_zip(request_id, bundles)
     return StreamingResponse(
         BytesIO(payload),
         media_type="application/zip",

@@ -1605,22 +1605,73 @@ export const getSecurityZonesWithMode = () =>
     '/api/reference/security-zones-with-mode',
   );
 
-export const getRequestArtifacts = (request_id: string) =>
+// Per-DC artifacts: a single firewall device lives in exactly one DC,
+// so the deployable artifact must be filtered to that DC. Every helper
+// accepts an optional ``dc_id`` that scopes the underlying manifest +
+// vendor configs to a single device target. Without it, the legacy
+// "all DCs in one file" shape is returned (kept for back-compat) but
+// the response carries a banner steering operators to per-DC.
+const _withDc = (path: string, dc_id?: string | null) => {
+  if (!dc_id) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}dc_id=${encodeURIComponent(dc_id)}`;
+};
+
+export const getRequestArtifacts = (request_id: string, dc_id?: string | null) =>
   fetchJSON<DeploymentArtifactsBundle>(
-    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts`,
+    _withDc(
+      `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts`,
+      dc_id,
+    ),
   );
 
-export const requestArtifactJsonUrl = (request_id: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`;
+export type PerDcArtifactBundle = {
+  dc_id: string;
+  environment?: string | null;
+  manifest: DeploymentArtifactsBundle['manifest'];
+  xlsx_sheets: DeploymentArtifactsBundle['xlsx_sheets'];
+  vendor_configs: DeploymentArtifactsBundle['vendor_configs'];
+  vendor_configs_json?: DeploymentArtifactsBundle['vendor_configs_json'];
+};
 
-export const requestArtifactXlsxUrl = (request_id: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`;
+export type PerDcArtifactsResponse = {
+  request_id: string;
+  dc_ids: string[];
+  dcs: PerDcArtifactBundle[];
+};
 
-export const requestArtifactVendorUrl = (request_id: string, vendor: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/device.${encodeURIComponent(vendor)}`;
+export const getRequestArtifactsPerDc = (request_id: string) =>
+  fetchJSON<PerDcArtifactsResponse>(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/per-dc`,
+  );
 
-export const requestArtifactBundleUrl = (request_id: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`;
+export const requestArtifactJsonUrl = (request_id: string, dc_id?: string | null) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`,
+    dc_id,
+  );
+
+export const requestArtifactXlsxUrl = (request_id: string, dc_id?: string | null) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`,
+    dc_id,
+  );
+
+export const requestArtifactVendorUrl = (
+  request_id: string,
+  vendor: string,
+  dc_id?: string | null,
+) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/device.${encodeURIComponent(vendor)}`,
+    dc_id,
+  );
+
+export const requestArtifactBundleUrl = (request_id: string, dc_id?: string | null) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`,
+    dc_id,
+  );
 
 export const downloadRequestArtifactBulkBundle = async (request_ids: string[]) => {
   const res = await fetch('/api/rules/requests/artifacts/bulk-bundle.zip', {
