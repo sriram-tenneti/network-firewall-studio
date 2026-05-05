@@ -163,6 +163,73 @@ export default function StandardizerPanel() {
 
 function TransitionResults({ result }: { result: { counters: { total: number; new: number; merge: number; conflict: number; overlap: number; unclassifiable: number; needs_app_attachment: number }; transitions: LegacyTransition[] } }) {
   const c = result.counters;
+  // Apply state: drives the per-DC + auto-GCR pipeline through
+  // /api/migration/apply for a single classified legacy rule. Each
+  // applied transition surfaces a "staged N rule requests" badge on
+  // its card so SNS sees the result without leaving the panel.
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [applyResults, setApplyResults] = useState<Record<string, { staged_count: number }>>({});
+  const [appliedFor, setAppliedFor] = useState<Set<string>>(new Set());
+  const [applyAllBusy, setApplyAllBusy] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  const onApply = async (t: LegacyTransition) => {
+    setApplyingId(t.origin_legacy_rule_id);
+    setApplyError(null);
+    try {
+      const rule = {
+        rule_id: t.origin_legacy_rule_id,
+        source: t.original.source,
+        destination: t.original.destination,
+        protocol: t.original.protocol,
+        port: (t.original.ports || '').split(/\s+/).slice(1).join(' ') || t.original.ports,
+        ports: t.original.ports,
+        action: t.original.action,
+        environment: t.original.environment,
+      };
+      const r = await api.applyLegacyTransition(rule, 'migration');
+      setApplyResults((prev) => ({ ...prev, [t.origin_legacy_rule_id]: { staged_count: r.staged_count || 0 } }));
+      setAppliedFor((prev) => { const s = new Set(prev); s.add(t.origin_legacy_rule_id); return s; });
+    } catch (e) {
+      setApplyError(`Apply failed for ${t.origin_legacy_rule_id}: ${(e as Error).message || e}`);
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  const onApplyAll = async () => {
+    setApplyAllBusy(true);
+    setApplyError(null);
+    try {
+      const rules = result.transitions.map((t) => ({
+        rule_id: t.origin_legacy_rule_id,
+        source: t.original.source,
+        destination: t.original.destination,
+        protocol: t.original.protocol,
+        port: (t.original.ports || '').split(/\s+/).slice(1).join(' ') || t.original.ports,
+        ports: t.original.ports,
+        action: t.original.action,
+        environment: t.original.environment,
+      }));
+      const r = await api.applyLegacyTransitionsBulk(rules, 'migration');
+      const next: Record<string, { staged_count: number }> = {};
+      const seen = new Set<string>();
+      for (const item of (r.results || [])) {
+        const id = String(item.legacy_rule_id || '');
+        if (!id) continue;
+        const sc = typeof item.staged_count === 'number' ? item.staged_count : 0;
+        next[id] = { staged_count: sc };
+        seen.add(id);
+      }
+      setApplyResults((prev) => ({ ...prev, ...next }));
+      setAppliedFor((prev) => { const s = new Set(prev); seen.forEach((id) => s.add(id)); return s; });
+    } catch (e) {
+      setApplyError(`Apply-all failed: ${(e as Error).message || e}`);
+    } finally {
+      setApplyAllBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-[11px] flex-wrap">
@@ -173,17 +240,44 @@ function TransitionResults({ result }: { result: { counters: { total: number; ne
         <Pill label={`Overlap: ${c.overlap}`} tone="amber" />
         <Pill label={`Unclassifiable: ${c.unclassifiable}`} tone="gray" />
         <Pill label={`Needs app attachment: ${c.needs_app_attachment}`} tone="indigo" />
+        <button
+          type="button"
+          disabled={applyAllBusy || result.transitions.length === 0}
+          onClick={() => void onApplyAll()}
+          className="ml-auto rounded border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+          title="Materialise every classified legacy rule's fan-out as actual NGDC rule requests through the per-DC + auto-GCR pipeline."
+        >
+          {applyAllBusy ? 'Applying all…' : `Apply all (${result.transitions.length}) via per-DC pipeline`}
+        </button>
       </div>
+      {applyError && (
+        <div className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700">{applyError}</div>
+      )}
       <div className="space-y-3">
         {result.transitions.map((t, i) => (
-          <TransitionCard key={t.origin_legacy_rule_id || i} t={t} />
+          <TransitionCard
+            key={t.origin_legacy_rule_id || i}
+            t={t}
+            applyingId={applyingId}
+            applyResults={applyResults}
+            appliedFor={appliedFor}
+            onApply={onApply}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function TransitionCard({ t }: { t: LegacyTransition }) {
+function TransitionCard({
+  t, applyingId, applyResults, appliedFor, onApply,
+}: {
+  t: LegacyTransition;
+  applyingId: string | null;
+  applyResults: Record<string, { staged_count: number }>;
+  appliedFor: Set<string>;
+  onApply: (t: LegacyTransition) => void;
+}) {
   return (
     <div className="border border-purple-200 rounded-lg overflow-hidden bg-white">
       <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border-b border-purple-200 text-[11px]">
@@ -244,9 +338,20 @@ function TransitionCard({ t }: { t: LegacyTransition }) {
               Multi-DC Fan-out &middot; {t.proposed.fanout.length} proposed rule
               request{t.proposed.fanout.length === 1 ? '' : 's'}
             </span>
-            <span className="text-[10px] text-indigo-700">
-              one per src DC &rarr; dst DC pair, under one parent migration record
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-indigo-700">
+                one per src DC &rarr; dst DC pair, under one parent migration record
+              </span>
+              <button
+                type="button"
+                disabled={applyingId === t.origin_legacy_rule_id}
+                onClick={() => onApply(t)}
+                className="rounded border border-rose-300 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                title="Materialise the fan-out as actual NGDC rule requests through the per-DC + auto-GCR pipeline."
+              >
+                {applyingId === t.origin_legacy_rule_id ? 'Applying…' : 'Apply via per-DC pipeline'}
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto rounded-md border border-indigo-100 bg-white">
             <table className="w-full text-[10px]">
@@ -258,12 +363,22 @@ function TransitionCard({ t }: { t: LegacyTransition }) {
                   <th className="px-1.5 py-1 font-semibold text-indigo-800">Dest Group</th>
                   <th className="px-1.5 py-1 font-semibold text-indigo-800">VRF</th>
                   <th className="px-1.5 py-1 font-semibold text-indigo-800">Path</th>
+                  <th className="px-1.5 py-1 font-semibold text-indigo-800">Compile mode</th>
                 </tr>
               </thead>
               <tbody>
                 {t.proposed.fanout.map((row, i) => {
                   const heritage = row.src_is_heritage || row.dst_is_heritage;
                   const path = row.dc_to_dc_path || `${row.src_dc} \u2192 ${row.dst_dc}`;
+                  const srcMode = row.src_compile_mode || 'initial';
+                  const dstMode = row.dst_compile_mode || 'initial';
+                  const modeBadge = (m: 'initial' | 'incremental') => (
+                    <span className={`inline-block px-1 py-0.5 rounded text-[8px] font-semibold uppercase ${
+                      m === 'initial'
+                        ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                        : 'bg-blue-100 text-blue-800 border border-blue-200'
+                    }`}>{m === 'initial' ? 'first' : 'delta'}</span>
+                  );
                   return (
                     <tr key={`${row.src_dc}|${row.dst_dc}|${i}`}
                       className={`border-t border-indigo-50 ${heritage ? 'bg-amber-50/40' : ''}`}>
@@ -280,12 +395,34 @@ function TransitionCard({ t }: { t: LegacyTransition }) {
                       <td className="px-1.5 py-1 font-mono text-purple-700">{row.dst_group || '\u2014'}</td>
                       <td className="px-1.5 py-1 font-mono text-gray-600">{row.src_vrf || '\u2014'} &rarr; {row.dst_vrf || '\u2014'}</td>
                       <td className="px-1.5 py-1 text-gray-600">{path}</td>
+                      <td className="px-1.5 py-1">
+                        <div className="flex items-center gap-1">
+                          {modeBadge(srcMode)}
+                          <span className="text-gray-400">/</span>
+                          {modeBadge(dstMode)}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+          <div className="mt-1 text-[9px] text-indigo-700">
+            <strong>first</strong> = no deployed snapshot yet for that DC, so Apply will ship the full
+            ruleset + full group memberships there. <strong>delta</strong> = snapshot exists, Apply will
+            auto-stage delta-only Group Change Requests and the device will receive only the changed
+            rules / member operations.
+          </div>
+          {appliedFor.has(t.origin_legacy_rule_id) && applyResults[t.origin_legacy_rule_id] && (
+            <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] text-emerald-800">
+              Staged <strong>{applyResults[t.origin_legacy_rule_id].staged_count}</strong> rule request
+              {applyResults[t.origin_legacy_rule_id].staged_count === 1 ? '' : 's'} via the per-DC
+              pipeline. Each request auto-stages its own Group Change Requests for any
+              per-(group, dc) membership delta. Approve the parent in Review &amp; Approval to
+              cascade approval to the auto-staged GCRs.
+            </div>
+          )}
         </div>
       )}
 

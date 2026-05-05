@@ -360,6 +360,8 @@ from app.database import (  # noqa: E402
     list_itsm_connectors,
     build_legacy_transition,
     build_legacy_transitions_bulk,
+    apply_legacy_transition,
+    apply_legacy_transitions_bulk,
     normalize_legacy_rule,
     normalize_legacy_rules_bulk,
     refresh_request_external_status,
@@ -771,6 +773,34 @@ async def build_legacy_transitions_bulk_route(payload: dict[str, Any]) -> dict[s
     if not isinstance(rules, list):
         raise HTTPException(400, "rules must be a list")
     return await build_legacy_transitions_bulk([dict(r) for r in rules])
+
+
+@router.post("/api/migration/apply")
+async def apply_legacy_transition_route(payload: dict[str, Any]) -> dict[str, Any]:
+    """Materialise the proposed.fanout for one legacy rule into actual
+    NGDC rule requests through the same per-DC + auto-GCR pipeline as
+    Studio. Returns the staged rule requests (and their auto-staged
+    Group Change Requests) so the Standardizer can render the
+    "before / after / staged" panel.
+    """
+    reviewer = payload.get("reviewer") or "migration"
+    rule = payload.get("rule") or payload
+    return await apply_legacy_transition(dict(rule), reviewer=reviewer)
+
+
+@router.post("/api/migration/apply-bulk")
+async def apply_legacy_transitions_bulk_route(payload: dict[str, Any]) -> dict[str, Any]:
+    """Bulk apply: materialise N legacy rules through the per-DC
+    pipeline. Each rule produces one rule request per `(src_dc, dst_dc)`
+    pair plus auto-staged GCRs for any per-(group, dc) membership
+    delta the rule implies."""
+    rules = payload.get("rules") or []
+    if not isinstance(rules, list):
+        raise HTTPException(400, "rules must be a list")
+    reviewer = payload.get("reviewer") or "migration"
+    return await apply_legacy_transitions_bulk(
+        [dict(r) for r in rules], reviewer=reviewer,
+    )
 
 
 # ============================================================
