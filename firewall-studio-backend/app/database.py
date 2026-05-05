@@ -2900,12 +2900,36 @@ async def get_groups() -> list[dict[str, Any]]:
     return _load("groups") or []
 
 
-async def get_group(name: str) -> dict[str, Any] | None:
+async def get_group(name: str, dc_id: str | None = None
+                     ) -> dict[str, Any] | None:
+    """Look up a single group instance.
+
+    Group identity is logically ``(name, dc_id)`` because every NGDC
+    DC carries its own materialised instance of a logical group (same
+    name, different DC-local member set). Callers that know the DC
+    they want should pass ``dc_id`` explicitly. When ``dc_id`` is
+    ``None`` we fall back to the first match by name for backward
+    compatibility with legacy callers.
+    """
     groups = _load("groups") or []
     for g in groups:
-        if g.get("name") == name:
-            return g
+        if g.get("name") != name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        return g
     return None
+
+
+async def get_group_instances(name: str) -> list[dict[str, Any]]:
+    """Return all per-DC instances of a logical group name.
+
+    Used by the App Groups listing UI to render one row per DC and
+    by per-DC compile previews ("on ALPHA the group resolves to
+    these IPs, on BETA to these, …").
+    """
+    groups = _load("groups") or []
+    return [g for g in groups if g.get("name") == name]
 
 
 async def create_group(data: dict[str, Any], skip_prefix: bool = False) -> dict[str, Any]:
@@ -2925,54 +2949,99 @@ async def create_group(data: dict[str, Any], skip_prefix: bool = False) -> dict[
     return data
 
 
-async def update_group(name: str, data: dict[str, Any]) -> dict[str, Any] | None:
+async def update_group(name: str, data: dict[str, Any],
+                        dc_id: str | None = None
+                        ) -> dict[str, Any] | None:
+    """Update a per-DC group instance.
+
+    Pass ``dc_id`` to scope the update to a single DC's materialised
+    group (the recommended path now that group identity is
+    ``(name, dc_id)``). Without ``dc_id`` we update the first match
+    by name; legacy callers depend on this fallback.
+    """
     groups = _load("groups") or []
     for g in groups:
-        if g.get("name") == name:
-            g.update(data)
-            g["updated_at"] = _now()
-            _save("groups", groups)
-            return g
+        if g.get("name") != name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        g.update(data)
+        g["updated_at"] = _now()
+        _save("groups", groups)
+        return g
     return None
 
 
-async def delete_group(name: str) -> bool:
+async def delete_group(name: str, dc_id: str | None = None) -> bool:
+    """Delete a per-DC group instance.
+
+    With ``dc_id`` specified we delete only that DC's instance; the
+    other DCs keep their copies (matching the per-DC device-deploy
+    model). Without ``dc_id`` we delete all instances of the name
+    (legacy bulk-delete behaviour).
+    """
     groups = _load("groups") or []
-    new_groups = [g for g in groups if g.get("name") != name]
+    if dc_id:
+        new_groups = [g for g in groups
+                      if not (g.get("name") == name
+                              and str(g.get("dc_id", "")) == str(dc_id))]
+    else:
+        new_groups = [g for g in groups if g.get("name") != name]
     if len(new_groups) == len(groups):
         return False
     _save("groups", new_groups)
     return True
 
 
-async def add_group_member(group_name: str, member: dict[str, Any]) -> dict[str, Any] | None:
+async def add_group_member(group_name: str, member: dict[str, Any],
+                            dc_id: str | None = None
+                            ) -> dict[str, Any] | None:
+    """Add a member to a per-DC group instance.
+
+    Per-DC architecture: each NGDC DC carries its own copy of the
+    logical group with DC-local members only (so DC-A's device only
+    ever sees DC-A IPs in the deployed policy). Pass ``dc_id`` so
+    the addition lands on the right DC's instance. Without
+    ``dc_id`` we fall back to the first match for backward
+    compatibility with legacy callers.
+    """
     groups = _load("groups") or []
     # Auto-prefix member value based on type
     if "value" in member:
         member["value"] = _auto_prefix(member["value"], member.get("type", "ip"))
     for g in groups:
-        if g.get("name") == group_name:
-            members = g.get("members", [])
-            members.append(member)
-            g["members"] = members
-            g["updated_at"] = _now()
-            _save("groups", groups)
-            return g
+        if g.get("name") != group_name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        members = g.get("members", [])
+        members.append(member)
+        g["members"] = members
+        g["updated_at"] = _now()
+        _save("groups", groups)
+        return g
     return None
 
 
-async def remove_group_member(group_name: str, member_value: str) -> dict[str, Any] | None:
+async def remove_group_member(group_name: str, member_value: str,
+                                dc_id: str | None = None
+                                ) -> dict[str, Any] | None:
+    """Remove a member from a per-DC group instance. Pass ``dc_id``
+    to scope the removal to a single DC's instance."""
     groups = _load("groups") or []
     for g in groups:
-        if g.get("name") == group_name:
-            members = g.get("members", [])
-            new_members = [m for m in members if m.get("value") != member_value]
-            if len(new_members) == len(members):
-                return None
-            g["members"] = new_members
-            g["updated_at"] = _now()
-            _save("groups", groups)
-            return g
+        if g.get("name") != group_name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        members = g.get("members", [])
+        new_members = [m for m in members if m.get("value") != member_value]
+        if len(new_members) == len(members):
+            return None
+        g["members"] = new_members
+        g["updated_at"] = _now()
+        _save("groups", groups)
+        return g
     return None
 
 

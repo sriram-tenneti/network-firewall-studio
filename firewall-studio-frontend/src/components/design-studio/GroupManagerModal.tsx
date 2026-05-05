@@ -251,13 +251,17 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     if (!selectedGroup || !newMember.value) return;
     try {
       const prefixedMember = { ...newMember, value: autoPrefix(newMember.value, newMember.type) };
-      const updated = await addGroupMember(selectedGroup.name, prefixedMember);
+      // Per-DC architecture: each NGDC DC carries its own copy of the
+      // logical group with DC-local members only. Pass dc_id so the
+      // addition lands on this DC's instance, not the first match.
+      const dcId = (selectedGroup as unknown as Record<string, string>).dc_id || undefined;
+      const updated = await addGroupMember(selectedGroup.name, prefixedMember, dcId);
       setSelectedGroup(updated);
       setNewMember({ type: 'ip', value: '', description: '' });
       loadGroups();
       // Track this as a pending policy change
-      const delta = { added: { [`group:${selectedGroup.name}`]: [prefixedMember.value] }, removed: {}, changed: {} };
-      setPendingChanges(prev => [...prev, { type: 'member_added', detail: `Added ${prefixedMember.value}`, delta }]);
+      const delta = { added: { [`group:${selectedGroup.name}@${dcId || '*'}`]: [prefixedMember.value] }, removed: {}, changed: {} };
+      setPendingChanges(prev => [...prev, { type: 'member_added', detail: `Added ${prefixedMember.value} to ${selectedGroup.name} @ ${dcId || 'all DCs'}`, delta }]);
       // Check affected rules count
       try { const res = await getAffectedRules(selectedGroup.name); setAffectedRulesCount(res.affected_rules); } catch { /* ignore */ }
     } catch { /* ignore */ }
@@ -266,12 +270,14 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
   const handleRemoveMember = async (memberValue: string) => {
     if (!selectedGroup) return;
     try {
-      const updated = await removeGroupMember(selectedGroup.name, memberValue);
+      const dcId = (selectedGroup as unknown as Record<string, string>).dc_id || undefined;
+      const updated = await removeGroupMember(selectedGroup.name, memberValue, dcId);
       setSelectedGroup(updated);
       loadGroups();
       // Track this as a pending policy change
-      const delta = { added: {}, removed: { [`group:${selectedGroup.name}`]: [memberValue] }, changed: {} };
-      setPendingChanges(prev => [...prev, { type: 'member_removed', detail: `Removed ${memberValue}`, delta }]);
+      const dcId2 = (selectedGroup as unknown as Record<string, string>).dc_id || undefined;
+      const delta = { added: {}, removed: { [`group:${selectedGroup.name}@${dcId2 || '*'}`]: [memberValue] }, changed: {} };
+      setPendingChanges(prev => [...prev, { type: 'member_removed', detail: `Removed ${memberValue} from ${selectedGroup.name} @ ${dcId2 || 'all DCs'}`, delta }]);
       // Check affected rules count
       try { const res = await getAffectedRules(selectedGroup.name); setAffectedRulesCount(res.affected_rules); } catch { /* ignore */ }
     } catch { /* ignore */ }
@@ -676,16 +682,29 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
             </div>
           ) : (
             <div className="space-y-1 max-h-[280px] overflow-y-auto">
-              {filteredGroups.map(g => (
+              {filteredGroups.map(g => {
+                // Group identity is per-DC: same logical name materialises
+                // as one record per NGDC DC (DC-local members only).
+                // Compose a stable key + selection check so each DC's
+                // instance is addressable independently in the UI.
+                const dcId = (g as unknown as Record<string, string>).dc_id || '';
+                const compositeKey = `${g.name}__${dcId}`;
+                const selDcId = (selectedGroup as unknown as Record<string, string> | null)?.dc_id || '';
+                const isSelected = selectedGroup?.name === g.name && selDcId === dcId;
+                const memberCount = g.members?.length || 0;
+                return (
                 <button
-                  key={g.name}
+                  key={compositeKey}
                   onClick={() => setSelectedGroup(g)}
                   className={`w-full text-left p-2 rounded-md text-xs transition-colors ${
-                    selectedGroup?.name === g.name ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'hover:bg-gray-50 border border-transparent'
+                    isSelected ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'hover:bg-gray-50 border border-transparent'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium truncate">{g.name}</span>
+                    {dcId && (
+                      <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-slate-100 text-slate-700 border border-slate-200">{dcId}</span>
+                    )}
                     {(() => {
                       const cls = classifyGroup(g);
                       return cls === 'NGDC'
@@ -698,13 +717,17 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                       <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-bold uppercase rounded bg-emerald-100 text-emerald-700">migrated</span>
                     )}
                   </div>
-                  <div className="text-gray-500 mt-0.5 flex items-center gap-2">
-                    <span>{g.members?.length || 0} members</span>
+                  <div className="text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                    <span className={memberCount === 0 ? 'text-rose-600 font-medium' : ''}>
+                      {memberCount} member{memberCount === 1 ? '' : 's'}
+                      {memberCount === 0 && ' — empty (no egress IPs for this DC)'}
+                    </span>
                     {g.nh && <span className="text-gray-400">NH: {g.nh}</span>}
                     {g.sz && <span className="text-gray-400">SZ: {g.sz}</span>}
                   </div>
                 </button>
-              ))}
+                );
+              })}
               {groups.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No groups found</p>}
             </div>
           )}
@@ -727,13 +750,22 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
                   })()}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">{selectedGroup.description}</p>
-                <div className="flex gap-3 mt-2 text-xs text-gray-500">
+                <div className="flex gap-3 mt-2 text-xs text-gray-500 flex-wrap">
                   <span>App: {selectedGroup.app_id}</span>
-                  {(selectedGroup as unknown as Record<string, string>).dc && <span>DC: {(selectedGroup as unknown as Record<string, string>).dc}</span>}
+                  {(() => {
+                    const dcId = (selectedGroup as unknown as Record<string, string>).dc_id
+                      || (selectedGroup as unknown as Record<string, string>).dc;
+                    return dcId ? (
+                      <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-slate-100 text-slate-700 border border-slate-200">DC: {dcId}</span>
+                    ) : null;
+                  })()}
                   <span>NH: {selectedGroup.nh}</span>
                   <span>SZ: {selectedGroup.sz}</span>
                   <span>Component: {selectedGroup.subtype}</span>
                 </div>
+                <p className="mt-2 text-[11px] text-slate-500 italic">
+                  Members shown below are <strong>only the IPs that will deploy to a device in this DC</strong>. The same logical group has a separate instance per NGDC DC, each with that DC's egress IPs only.
+                </p>
               </div>
 
               {/* Add member form */}

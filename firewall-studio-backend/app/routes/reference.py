@@ -646,16 +646,46 @@ async def reject_policy(change_id: str, data: dict | None = None):
 # ---- CRUD: Groups ----
 
 @router.get("/groups")
-async def list_groups(app_id: str | None = None):
+async def list_groups(app_id: str | None = None,
+                      dc_id: str | None = None,
+                      environment: str | None = None):
+    """List materialised group instances.
+
+    Group identity is per-DC: a single logical group like
+    ``grp-CRM-NH02-PAA`` materialises as **one record per NGDC DC**,
+    each with that DC's egress IPs only. Filter by ``dc_id`` to get
+    only one DC's view (i.e. what would deploy to that DC's device).
+    """
     groups = await get_groups()
     if app_id:
-        groups = [g for g in groups if g.get("app_id") == app_id or g.get("app_distributed_id") == app_id]
+        groups = [g for g in groups
+                   if g.get("app_id") == app_id
+                   or g.get("app_distributed_id") == app_id]
+    if dc_id:
+        groups = [g for g in groups
+                   if str(g.get("dc_id", "")) == str(dc_id)]
+    if environment:
+        groups = [g for g in groups
+                   if str(g.get("environment", "Production")) == str(environment)]
     return groups
 
 
+@router.get("/groups-by-name/{name:path}/instances")
+async def get_group_instances_endpoint(name: str):
+    """All per-DC instances of a logical group name.
+
+    Used by the App Groups listing UI to render a per-DC compile
+    preview ("on ALPHA the group resolves to these IPs, on BETA to
+    these, …") and by the Group Manager to validate that every DC
+    has a non-empty member set.
+    """
+    from app.database import get_group_instances
+    return await get_group_instances(name)
+
+
 @router.get("/groups/{name:path}")
-async def get_group_endpoint(name: str):
-    group = await get_group(name)
+async def get_group_endpoint(name: str, dc_id: str | None = None):
+    group = await get_group(name, dc_id=dc_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     return group
@@ -668,31 +698,34 @@ async def create_new_group(data: dict):
 
 
 @router.put("/groups/{name:path}")
-async def update_existing_group(name: str, data: dict):
-    result = await update_group(name, data)
+async def update_existing_group(name: str, data: dict,
+                                  dc_id: str | None = None):
+    result = await update_group(name, data, dc_id=dc_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group not found")
     return result
 
 
 @router.delete("/groups/{name:path}")
-async def delete_existing_group(name: str):
-    if not await delete_group(name):
+async def delete_existing_group(name: str, dc_id: str | None = None):
+    if not await delete_group(name, dc_id=dc_id):
         raise HTTPException(status_code=404, detail="Group not found")
     return {"message": "Group deleted"}
 
 
 @router.post("/groups/{name:path}/members")
-async def add_member_to_group(name: str, data: dict):
-    result = await add_group_member(name, data)
+async def add_member_to_group(name: str, data: dict,
+                                dc_id: str | None = None):
+    result = await add_group_member(name, data, dc_id=dc_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group not found")
     return result
 
 
 @router.delete("/groups/{name:path}/members/{member_value}")
-async def remove_member_from_group(name: str, member_value: str):
-    result = await remove_group_member(name, member_value)
+async def remove_member_from_group(name: str, member_value: str,
+                                     dc_id: str | None = None):
+    result = await remove_group_member(name, member_value, dc_id=dc_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group or member not found")
     return result

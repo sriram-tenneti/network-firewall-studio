@@ -382,23 +382,59 @@ export const updateNamingStandards = (data: Record<string, unknown>) =>
   fetchJSON<Record<string, unknown>>('/api/reference/naming-standards', { method: 'PUT', body: JSON.stringify(data) });
 
 // Groups CRUD
-export const getGroups = (appId?: string) => {
+//
+// Group identity is logically (name, dc_id, environment): each NGDC DC
+// materialises its own copy of a logical group with DC-local egress IPs
+// only. Pass dc_id to scope reads/writes to a specific DC's instance —
+// that is the right path for the per-DC device-deploy model. Without
+// dc_id, list/read returns all DC instances; write/delete falls back
+// to the first match (legacy compatibility).
+export const getGroups = (
+  appId?: string, dcId?: string, environment?: string,
+) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
+  if (dcId) params.set('dc_id', dcId);
+  if (environment) params.set('environment', environment);
   const qs = params.toString();
   return fetchJSON<FirewallGroup[]>(`/api/reference/groups${qs ? `?${qs}` : ''}`);
 };
-export const getGroup = (name: string) => fetchJSON<FirewallGroup>(`/api/reference/groups/${name}`);
+export const getGroup = (name: string, dcId?: string) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(`/api/reference/groups/${name}${qs}`);
+};
+export const getGroupInstances = (name: string) =>
+  fetchJSON<FirewallGroup[]>(`/api/reference/groups-by-name/${name}/instances`);
 export const createGroup = (data: Record<string, unknown>) =>
   fetchJSON<FirewallGroup>('/api/reference/groups', { method: 'POST', body: JSON.stringify(data) });
-export const updateGroup = (name: string, data: Record<string, unknown>) =>
-  fetchJSON<FirewallGroup>(`/api/reference/groups/${name}`, { method: 'PUT', body: JSON.stringify(data) });
-export const deleteGroup = (name: string) =>
-  fetchJSON<{ message: string }>(`/api/reference/groups/${name}`, { method: 'DELETE' });
-export const addGroupMember = (groupName: string, member: GroupMember) =>
-  fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members`, { method: 'POST', body: JSON.stringify(member) });
-export const removeGroupMember = (groupName: string, memberValue: string) =>
-  fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
+export const updateGroup = (
+  name: string, data: Record<string, unknown>, dcId?: string,
+) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(`/api/reference/groups/${name}${qs}`,
+    { method: 'PUT', body: JSON.stringify(data) });
+};
+export const deleteGroup = (name: string, dcId?: string) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<{ message: string }>(`/api/reference/groups/${name}${qs}`,
+    { method: 'DELETE' });
+};
+export const addGroupMember = (
+  groupName: string, member: GroupMember, dcId?: string,
+) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(
+    `/api/reference/groups/${groupName}/members${qs}`,
+    { method: 'POST', body: JSON.stringify(member) });
+};
+export const removeGroupMember = (
+  groupName: string, memberValue: string, dcId?: string,
+) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(
+    `/api/reference/groups/${groupName}/members/${memberValue}${qs}`,
+    { method: 'DELETE' });
+};
 
 // Legacy Rules (for Migration Studio & Firewall Management)
 export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string, migrationOnly?: boolean) => {
