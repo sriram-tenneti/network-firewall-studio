@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from 'react';
+import { autoPrefix } from '@/lib/utils';
 
 export interface MemberChip {
   type?: 'ip' | 'cidr' | 'subnet' | 'range' | 'group';
@@ -84,9 +85,17 @@ export default function MemberChipList({
     const next = [...norm];
     for (const tok of tokens) {
       const t = inferType(tok);
-      const k = `${t}:${tok}`;
+      // Normalise IP / CIDR / range tokens to the NGDC prefix
+      // convention (svr-, net-, rng-) so Heritage and NGDC presence
+      // chips render consistently across the portal. Group references
+      // and already-prefixed atoms are passed through unchanged by
+      // ``autoPrefix``.
+      const valueType: 'ip' | 'cidr' | 'subnet' | 'range' | 'group' =
+        t === 'cidr' ? 'cidr' : t === 'range' ? 'range' : t === 'group' ? 'group' : 'ip';
+      const value = autoPrefix(tok, valueType);
+      const k = `${t}:${value}`;
       if (seen.has(k)) continue;
-      next.push({ type: t, value: tok });
+      next.push({ type: t, value });
       seen.add(k);
     }
     onChange(next);

@@ -9,7 +9,7 @@ import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
 import PortCatalogTab from './settings/PortCatalogTab';
 import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
-import PresencePerDcEditor, { type PresenceRow } from '@/components/shared/PresencePerDcEditor';
+import PresencePerDcEditor, { type PresenceRow, withRowUids } from '@/components/shared/PresencePerDcEditor';
 import ItsmConnectorsTab from './settings/ItsmConnectorsTab';
 import BirthrightRulesTab from './settings/BirthrightRulesTab';
 import SecurityZoneNamingTab from './settings/SecurityZoneNamingTab';
@@ -299,7 +299,7 @@ export default function SettingsPage() {
   const derivePayloadFromPresences = (rows: PresenceRow[]): {
     tiers: { nh_id: string; sz_code: string; has_ingress?: boolean }[];
     heritage_tiers: { dc_id: string; has_ingress?: boolean }[];
-    presences: PresenceRow[];
+    presences: Omit<PresenceRow, 'uid'>[];
   } => {
     const tierMap = new Map<string, { nh_id: string; sz_code: string; has_ingress?: boolean }>();
     const heritageMap = new Map<string, { dc_id: string; has_ingress?: boolean }>();
@@ -312,20 +312,31 @@ export default function SettingsPage() {
           has_ingress: Boolean(cur?.has_ingress) || Boolean(r.has_ingress),
         });
       } else {
-        if (!r.nh_id || !r.sz_code) continue;
-        const k = `${r.nh_id}|${r.sz_code}`;
-        const cur = tierMap.get(k);
-        tierMap.set(k, {
-          nh_id: r.nh_id,
-          sz_code: r.sz_code,
-          has_ingress: Boolean(cur?.has_ingress) || Boolean(r.has_ingress),
-        });
+        // NGDC rows: persist whatever the user typed, including
+        // partially-empty (DC, NH, SZ) tuples so the editor doesn't
+        // silently drop a half-filled row on save. Tier auto-fan only
+        // operates on rows that are complete on (NH, SZ).
+        if (r.nh_id && r.sz_code) {
+          const k = `${r.nh_id}|${r.sz_code}`;
+          const cur = tierMap.get(k);
+          tierMap.set(k, {
+            nh_id: r.nh_id,
+            sz_code: r.sz_code,
+            has_ingress: Boolean(cur?.has_ingress) || Boolean(r.has_ingress),
+          });
+        }
       }
     }
+    // Strip the client-only ``uid`` so the backend payload stays clean.
+    const sanitised = rows.map((r) => {
+      const copy: PresenceRow = { ...r };
+      delete (copy as { uid?: string }).uid;
+      return copy;
+    });
     return {
       tiers: Array.from(tierMap.values()),
       heritage_tiers: Array.from(heritageMap.values()),
-      presences: rows,
+      presences: sanitised,
     };
   };
 
@@ -384,11 +395,28 @@ export default function SettingsPage() {
           ngdc_source_dcs: ngdcSourceDcs,
         };
       });
-      setEditAppPresences(rows);
+      setEditAppPresences(withRowUids(rows));
     } catch {
       setEditAppPresences([]);
     }
   };
+
+  // Auto-load per-DC presences whenever an app is selected so the
+  // read-only view mode can show every (DC, NH, SZ) row's egress +
+  // ingress IPs without the user having to click Edit first.
+  useEffect(() => {
+    if (!selectedApp) {
+      setEditAppPresences([]);
+      return;
+    }
+    const appObj = applications.find((a) => a.app_id === selectedApp);
+    const distId = String(appObj?.app_distributed_id || selectedApp);
+    void loadAppPresences(distId);
+    // We deliberately depend only on the app_id selection \u2014 the editor
+    // is the source of truth once the user enters edit mode, and we
+    // don't want list refreshes to clobber in-progress edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedApp]);
 
   const handleDeleteApp = async (appId: string) => {
     try {
@@ -1945,9 +1973,15 @@ export default function SettingsPage() {
                 <select className="flex-1 max-w-md px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-400 bg-white shadow-sm"
                   value={selectedApp} onChange={e => setSelectedApp(e.target.value)}>
                   <option value="">-- All Applications --</option>
-                  {applications.map(app => (
-                    <option key={app.app_id} value={app.app_id}>{app.app_distributed_id || app.app_id} — {app.app_name || ''}</option>
-                  ))}
+                  {applications.map(app => {
+                    const id = app.app_distributed_id || app.app_id;
+                    const friendly = (app.app_name || '').trim();
+                    // Render `id — friendly` only when both halves are
+                    // non-empty so an empty app_name no longer leaves
+                    // a dangling em-dash like ``CRM_PROD —``.
+                    const label = friendly ? `${id} — ${friendly}` : id;
+                    return <option key={app.app_id} value={app.app_id}>{label}</option>;
+                  })}
                 </select>
               </div>
             </div>
@@ -1964,18 +1998,20 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
-                {/* Omnipresent / Primary DC */}
+                {/* Omnipresent / Primary DC — Primary DC is now optional;
+                    every NGDC app lives in all 4 DCs and the per-DC presence
+                    editor below is the source of truth for materialised
+                    groups. ``primary_dc`` is retained only as a hint for the
+                    rule builder's default source DC. */}
                 <div className="border border-indigo-200 rounded-lg p-3 bg-white/60 space-y-2">
-                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">— rule requests originate from this app's Primary DC</span></h4>
+                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">— every NGDC app lives in all 4 DCs; this is just a hint for the rule builder's default source DC</span></h4>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-gray-400 font-normal">(optional)</span></label>
                       <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                        value={String(newAppForm.primary_dc || ngdcDatacenters[0]?.dc_id || ngdcDatacenters[0]?.code || '')}
+                        value={String(newAppForm.primary_dc || '')}
                         onChange={e => setNewAppForm({ ...newAppForm, primary_dc: e.target.value })}>
-                        {ngdcDatacenters.length === 0 && (
-                          <option value="" disabled>— no NGDC DCs configured —</option>
-                        )}
+                        <option value="">— unset (auto from presences) —</option>
                         {ngdcDatacenters.map(dc => {
                           const code = String(dc.dc_id || dc.code || '');
                           return <option key={code} value={code}>{code}</option>;
@@ -2052,14 +2088,41 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label>
                         <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
                     </div>
+                    {/* Filter values — Neighborhoods / SZs / DCs are the
+                        comma-separated classification fields used by every
+                        listing filter across the portal. They're normally
+                        derived from per-DC presences but operators need
+                        the override path so apps without presence rows
+                        (or undergoing renames) can still be filtered. */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+                        <input className={inp}
+                          placeholder="e.g. Core Banking, Wholesale Banking"
+                          value={editAppForm.neighborhoods ?? ''}
+                          onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">SZs <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+                        <input className={inp}
+                          placeholder="e.g. CCS, PAA, GEN"
+                          value={editAppForm.szs ?? ''}
+                          onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">DCs <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+                        <input className={inp}
+                          placeholder="e.g. ALPHA_NGDC, BETA_NGDC"
+                          value={editAppForm.dcs ?? ''}
+                          onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} />
+                      </div>
+                    </div>
                     <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Primary DC <span className="text-red-500">*</span></label>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Primary DC <span className="text-gray-400 font-normal">(optional)</span></label>
                         <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                          value={String(editAppForm.primary_dc || ngdcDatacenters[0]?.dc_id || ngdcDatacenters[0]?.code || '')}
+                          value={String(editAppForm.primary_dc || '')}
                           onChange={e => setEditAppForm({ ...editAppForm, primary_dc: e.target.value })}>
-                          {ngdcDatacenters.length === 0 && (
-                            <option value="" disabled>— no NGDC DCs configured —</option>
-                          )}
+                          <option value="">— unset (auto from presences) —</option>
                           {ngdcDatacenters.map(dc => {
                             const code = String(dc.dc_id || dc.code || '');
                             return <option key={code} value={code}>{code}</option>;
@@ -2104,10 +2167,95 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.dcs || 'N/A'}</p></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.snow_sysid || 'N/A'}</p></div>
                     </div>
+                    {/* Per-DC presences (read-only) — every (DC, NH, SZ)
+                        row this app declares plus its DC-local egress +
+                        ingress IPs. Heritage rows render in amber, NGDC in
+                        emerald. The same data is editable via the Edit
+                        button above (Per-DC Presence Editor). */}
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="flex items-center justify-between mb-1">
+                        <h4 className="text-xs font-semibold text-gray-700">Per-DC Presences ({editAppPresences.length})</h4>
+                        <span className="text-[10px] text-gray-500 italic">Each row = one DC's group instance. Egress/Ingress IPs shown are only what deploys to that DC's device.</span>
+                      </div>
+                      {editAppPresences.length === 0 ? (
+                        <div className="text-[11px] italic text-gray-500 px-2 py-2">No per-DC presences declared. Click <b>Edit</b> above to add presences using the Per-DC Presence Editor.</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs border border-gray-200 rounded">
+                            <thead className="bg-gray-50 text-[11px] text-gray-600">
+                              <tr>
+                                <th className="text-left font-medium px-2 py-1">Scope</th>
+                                <th className="text-left font-medium px-2 py-1">DC</th>
+                                <th className="text-left font-medium px-2 py-1">NH</th>
+                                <th className="text-left font-medium px-2 py-1">SZ</th>
+                                <th className="text-left font-medium px-2 py-1">Ingress?</th>
+                                <th className="text-left font-medium px-2 py-1">Egress IPs / CIDRs</th>
+                                <th className="text-left font-medium px-2 py-1">Ingress VIPs / IPs</th>
+                                <th className="text-left font-medium px-2 py-1">Source NGDC DCs</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {editAppPresences.map((r) => {
+                                const heritage = !!r.is_heritage;
+                                const renderChips = (chips: typeof r.egress_members) =>
+                                  !chips || chips.length === 0
+                                    ? <span className="text-[10px] italic text-rose-600">— no members for this DC —</span>
+                                    : (
+                                      <div className="flex flex-wrap gap-1">
+                                        {chips.map((c, i) => (
+                                          <span key={`${c.value}-${i}`} className="px-1.5 py-0.5 text-[10px] rounded bg-white border border-gray-200 font-mono text-gray-700">{c.value}</span>
+                                        ))}
+                                      </div>
+                                    );
+                                return (
+                                  <tr key={r.uid || `${r.dc_id}|${r.nh_id}|${r.sz_code}|${heritage ? 'H' : 'N'}`}
+                                    className={`border-t border-gray-100 align-top ${heritage ? 'bg-amber-50/50' : 'bg-white'}`}>
+                                    <td className="px-2 py-1">
+                                      <span className={`px-1.5 py-0.5 text-[10px] rounded font-semibold ${heritage ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                        {heritage ? 'Heritage' : 'NGDC'}
+                                      </span>
+                                    </td>
+                                    <td className="px-2 py-1 font-mono">{r.dc_id || <span className="text-rose-600">—</span>}</td>
+                                    <td className="px-2 py-1 font-mono">{heritage ? '—' : (r.nh_id || <span className="text-rose-600">—</span>)}</td>
+                                    <td className="px-2 py-1 font-mono">{heritage ? '—' : (r.sz_code || <span className="text-rose-600">—</span>)}</td>
+                                    <td className="px-2 py-1">
+                                      {r.has_ingress
+                                        ? <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-100 text-purple-700 font-semibold">Yes</span>
+                                        : <span className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-500">No</span>}
+                                    </td>
+                                    <td className="px-2 py-1">{renderChips(r.egress_members)}</td>
+                                    <td className="px-2 py-1">
+                                      {r.has_ingress
+                                        ? renderChips(r.ingress_members)
+                                        : <span className="text-[10px] italic text-gray-400">— ingress disabled —</span>}
+                                    </td>
+                                    <td className="px-2 py-1">
+                                      {heritage ? (
+                                        (r.ngdc_source_dcs || []).length === 0
+                                          ? <span className="text-[10px] italic text-amber-700">— all NGDC DCs (no explicit mapping) —</span>
+                                          : (
+                                            <div className="flex flex-wrap gap-1">
+                                              {(r.ngdc_source_dcs || []).map((dc) => (
+                                                <span key={dc} className="px-1.5 py-0.5 text-[10px] rounded bg-white border border-amber-200 font-mono text-amber-800">{dc}</span>
+                                              ))}
+                                            </div>
+                                          )
+                                      ) : <span className="text-[10px] text-gray-400">—</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    {/* Legacy single-DC summary fields kept for back-compat with
+                        older imports; per-DC rows above are the source of truth. */}
                     <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Egress IP</label><p className="text-sm font-mono text-gray-800">{selectedAppData.egress_ip || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Legacy Egress IP <span className="text-gray-400 font-normal">(import-only)</span></label><p className="text-sm font-mono text-gray-800">{selectedAppData.egress_ip || 'N/A'}</p></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Has Ingress</label><p className="text-sm">{selectedAppData.has_ingress ? <span className="px-2 py-0.5 text-xs font-bold rounded bg-purple-100 text-purple-700">Yes</span> : <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-500">No</span>}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress IPs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.ingress_ips || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Legacy Ingress IPs <span className="text-gray-400 font-normal">(import-only)</span></label><p className="text-sm font-mono text-gray-800">{selectedAppData.ingress_ips || 'N/A'}</p></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Ingress Components</label><p className="text-sm font-mono text-gray-800">{selectedAppData.ingress_components || 'N/A'}</p></div>
                     </div>
                   </>

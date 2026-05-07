@@ -6,8 +6,15 @@ import MemberChipList, { type MemberChip } from './MemberChipList';
  * One presence row in the editor. Maps 1:1 to a backend AppPresence /
  * SharedServicePresence row. Heritage rows have empty NH/SZ — the form
  * + backend both honour that contract.
+ *
+ * ``uid`` is a client-only stable id used so that two freshly-added
+ * rows that still share the same (DC, NH, SZ) values don't collide on
+ * a derived key — without it, toggling Has Ingress / typing into one
+ * row would leak into every duplicate-keyed sibling. The backend
+ * ignores ``uid`` on submit; it's stripped at the SettingsPage layer.
  */
 export interface PresenceRow {
+  uid?: string;
   dc_id: string;
   nh_id: string;
   sz_code: string;
@@ -23,6 +30,19 @@ export interface PresenceRow {
    * preview asking the SME to declare an explicit mapping).
    */
   ngdc_source_dcs?: string[];
+}
+
+let __presenceRowUidSeq = 0;
+function _newUid(): string {
+  __presenceRowUidSeq += 1;
+  return `pr-${Date.now().toString(36)}-${__presenceRowUidSeq}`;
+}
+
+/** Public helper: callers (SettingsPage / SharedServicesTab) seed a
+ *  fresh ``uid`` on every row they receive from the backend so the
+ *  editor can use it as the React key + identity. */
+export function withRowUids(rows: PresenceRow[]): PresenceRow[] {
+  return (rows || []).map((r) => (r.uid ? r : { ...r, uid: _newUid() }));
 }
 
 interface DcOption {
@@ -48,7 +68,15 @@ const DEFAULT_NHS = ['NH01', 'NH02', 'NH03', 'NH04', 'NH05', 'NH06', 'NH08', 'NH
 const DEFAULT_SZS = ['CCS', 'CDE', 'PAA', 'GEN', 'STD'];
 
 function rowKey(r: PresenceRow): string {
+  // Value-derived key is only used for the Quick-fan dedup check;
+  // identity for updates / removes / React keys uses ``uid`` so two
+  // rows that are still being edited (and may share a derived key)
+  // don't get accidentally merged.
   return [r.is_heritage ? 'H' : 'N', r.dc_id, r.nh_id, r.sz_code].join('|');
+}
+
+function rowUid(r: PresenceRow): string {
+  return r.uid || rowKey(r);
 }
 
 export default function PresencePerDcEditor({
@@ -107,20 +135,34 @@ export default function PresencePerDcEditor({
   const ngdcRows = useMemo(() => rows.filter((r) => !r.is_heritage), [rows]);
   const heritageRows = useMemo(() => rows.filter((r) => r.is_heritage), [rows]);
 
+  // Ensure every row carries a stable uid before we render — this is
+  // a no-op for rows already seeded via ``withRowUids`` but covers
+  // legacy callers that pass raw backend payloads straight in.
+  useEffect(() => {
+    const needsSeed = rows.some((r) => !r.uid);
+    if (!needsSeed) return;
+    onChange(rows.map((r) => (r.uid ? r : { ...r, uid: _newUid() })));
+    // We deliberately depend only on ``rows`` length-and-uid-presence
+    // to avoid an infinite onChange loop when parents always allocate
+    // a fresh array reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.length, rows.map((r) => r.uid ? '1' : '0').join('')]);
+
   const updateRow = (target: PresenceRow, patch: Partial<PresenceRow>) => {
-    const targetKey = rowKey(target);
+    const targetUid = rowUid(target);
     onChange(
-      rows.map((r) => (rowKey(r) === targetKey ? { ...r, ...patch } : r)),
+      rows.map((r) => (rowUid(r) === targetUid ? { ...r, ...patch } : r)),
     );
   };
   const removeRow = (target: PresenceRow) => {
-    const targetKey = rowKey(target);
-    onChange(rows.filter((r) => rowKey(r) !== targetKey));
+    const targetUid = rowUid(target);
+    onChange(rows.filter((r) => rowUid(r) !== targetUid));
   };
   const addNgdcRow = () => {
     onChange([
       ...rows,
       {
+        uid: _newUid(),
         dc_id: ngdcOptions[0]?.code || '',
         nh_id: '',
         sz_code: '',
@@ -135,6 +177,7 @@ export default function PresencePerDcEditor({
     onChange([
       ...rows,
       {
+        uid: _newUid(),
         dc_id: heritageOptions[0]?.code || '',
         nh_id: '',
         sz_code: '',
@@ -155,6 +198,7 @@ export default function PresencePerDcEditor({
     const additions: PresenceRow[] = [];
     for (const dc of ngdcOptions) {
       const candidate: PresenceRow = {
+        uid: _newUid(),
         dc_id: dc.code,
         nh_id: nh,
         sz_code: sz,
@@ -251,7 +295,7 @@ export default function PresencePerDcEditor({
             </thead>
             <tbody>
               {ngdcRows.map((r) => (
-                <tr key={rowKey(r)} className="border-t border-emerald-100 align-top">
+                <tr key={rowUid(r)} className="border-t border-emerald-100 align-top">
                   <td className="py-1 pr-2">
                     <select value={r.dc_id}
                       onChange={(e) => updateRow(r, { dc_id: e.target.value })}
@@ -263,20 +307,20 @@ export default function PresencePerDcEditor({
                     </select>
                   </td>
                   <td className="py-1 pr-2">
-                    <input list={`nh-list-${rowKey(r)}`} value={r.nh_id}
+                    <input list={`nh-list-${rowUid(r)}`} value={r.nh_id}
                       onChange={(e) => updateRow(r, { nh_id: e.target.value.toUpperCase() })}
                       placeholder="NH02"
                       className="w-full border rounded px-1 py-1 text-xs" />
-                    <datalist id={`nh-list-${rowKey(r)}`}>
+                    <datalist id={`nh-list-${rowUid(r)}`}>
                       {DEFAULT_NHS.map((n) => <option key={n} value={n} />)}
                     </datalist>
                   </td>
                   <td className="py-1 pr-2">
-                    <input list={`sz-list-${rowKey(r)}`} value={r.sz_code}
+                    <input list={`sz-list-${rowUid(r)}`} value={r.sz_code}
                       onChange={(e) => updateRow(r, { sz_code: e.target.value.toUpperCase() })}
                       placeholder="CCS"
                       className="w-full border rounded px-1 py-1 text-xs" />
-                    <datalist id={`sz-list-${rowKey(r)}`}>
+                    <datalist id={`sz-list-${rowUid(r)}`}>
                       {DEFAULT_SZS.map((s) => <option key={s} value={s} />)}
                     </datalist>
                   </td>
@@ -350,7 +394,7 @@ export default function PresencePerDcEditor({
             </thead>
             <tbody>
               {heritageRows.map((r) => (
-                <tr key={rowKey(r)} className="border-t border-amber-100 align-top">
+                <tr key={rowUid(r)} className="border-t border-amber-100 align-top">
                   <td className="py-1 pr-2">
                     <select value={r.dc_id}
                       onChange={(e) => updateRow(r, { dc_id: e.target.value })}

@@ -137,7 +137,11 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
     const apps = appsWithIngress.map<DestRef>((a) => ({
       kind: 'app_ingress',
       ref: a.app_distributed_id || a.app_id,
-      label: `🏢 ${a.app_distributed_id || a.app_id} — ${a.app_name ?? ''}`,
+      label: (() => {
+        const id = a.app_distributed_id || a.app_id;
+        const friendly = (a.app_name ?? '').trim();
+        return friendly ? `🏢 ${id} — ${friendly}` : `🏢 ${id}`;
+      })(),
       hint: 'Application (Ingress)',
     }));
     return [...svc, ...apps];
@@ -391,12 +395,14 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   className="w-full border rounded px-2 py-1.5 text-sm">
                   <option value="app:">— select source —</option>
                   <optgroup label="Applications">
-                    {srcOptions.map((a) => (
-                      <option key={`app-${a.app_distributed_id || a.app_id}`}
-                        value={`app:${a.app_distributed_id || a.app_id}`}>
-                        {a.app_distributed_id || a.app_id} — {a.app_name ?? ''}
-                      </option>
-                    ))}
+                    {srcOptions.map((a) => {
+                      const id = a.app_distributed_id || a.app_id;
+                      const friendly = (a.app_name ?? '').trim();
+                      const label = friendly ? `${id} — ${friendly}` : id;
+                      return (
+                        <option key={`app-${id}`} value={`app:${id}`}>{label}</option>
+                      );
+                    })}
                   </optgroup>
                   <optgroup label="Shared Services (as source)">
                     {srcServiceOptions.map((s) => (

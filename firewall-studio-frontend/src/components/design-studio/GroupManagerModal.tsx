@@ -151,11 +151,18 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
         const gEnv = (g as unknown as Record<string, string>).environment;
         return !gEnv || gEnv === forEnv;
       }) : data;
-      // Deduplicate groups by name — keep first occurrence
+      // Deduplicate by composite (name, dc_id, environment) so per-DC
+      // group instances stay distinguishable. The same logical name lives
+      // as one record per NGDC DC (DC-local members only) and we want
+      // every instance visible in the listing.
       const seen = new Set<string>();
       const deduped = filtered.filter(g => {
-        if (seen.has(g.name)) return false;
-        seen.add(g.name);
+        const raw = g as unknown as Record<string, unknown>;
+        const dcId = String(raw.dc_id ?? '');
+        const env = String(raw.environment ?? '');
+        const key = `${g.name}|${dcId}|${env}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       });
       setGroups(deduped);
@@ -179,10 +186,22 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
     setNewGroup(prev => ({ ...prev, environment: newEnv || 'Production' }));
   };
 
+  // Search across name / app_id / description / members / dc_id.
+  // Every field is coerced to a safe lower-cased string before
+  // matching so a missing description or app_id on a per-DC group
+  // instance can no longer throw and blank the whole modal.
   const filteredGroups = groups.filter(g => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
-    return g.name.toLowerCase().includes(q) || g.app_id.toLowerCase().includes(q) || g.description.toLowerCase().includes(q) || (g.members || []).some(m => m.value.toLowerCase().includes(q));
+    const raw = g as unknown as Record<string, unknown>;
+    const safe = (v: unknown) => String(v ?? '').toLowerCase();
+    if (safe(g.name).includes(q)) return true;
+    if (safe(g.app_id).includes(q)) return true;
+    if (safe(g.description).includes(q)) return true;
+    if (safe(raw.dc_id).includes(q)) return true;
+    if (safe(raw.environment).includes(q)) return true;
+    if ((g.members || []).some((m) => safe(m?.value).includes(q))) return true;
+    return false;
   });
 
   const handleAddCreateMember = () => {

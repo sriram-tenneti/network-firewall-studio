@@ -145,6 +145,33 @@ export default function StandardizerPanel() {
           className="w-full border rounded px-2 py-1 font-mono text-[11px]" />
       </div>
 
+      {/* What each view does — keeps the two modes self-documenting so
+          operators don't conflate "preview" with "deduplicate". */}
+      <div className="text-[11px] text-purple-900 bg-white/70 border border-purple-200 rounded px-3 py-2 leading-snug">
+        {view === 'transition' ? (
+          <>
+            <span className="font-semibold">Transition view (read-only)</span> — for every legacy rule, shows the
+            full proposed NGDC equivalent side-by-side: classified groups, per-DC fan-out (Src DC → Dst DC),
+            VRF, action, plus per-DC compile mode (initial vs incremental) and the auto-staged presence /
+            group changes. Nothing is written. Click <span className="font-mono">Apply</span> on a row (or
+            <span className="font-mono"> Apply all</span>) to materialise the actual NGDC RuleRequests through
+            the per-DC pipeline.
+          </>
+        ) : (
+          <>
+            <span className="font-semibold">Standardizer (dedup only)</span> — runs <i>just</i> the dedup pass:
+            for each legacy rule it checks if an equivalent NGDC rule already exists, or if another legacy rule
+            in this batch maps to the same fan-out, and marks duplicates. Nothing is written, no per-DC
+            artefacts are emitted. Use Transition view + Apply for full migration.
+          </>
+        )}
+        <div className="mt-1 text-[10px] text-purple-700">
+          Scope: works for any legacy rule (Excel-imported or seeded), pasted ad-hoc rules in the textbox
+          below, and non-standardised NGDC rules whose groups don't follow the
+          <code> grp-&lt;APP&gt;-&lt;COMP&gt;-&lt;NH&gt;-&lt;SZ&gt; </code> convention.
+        </div>
+      </div>
+
       {error && <div className="rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
 
       {view === 'transition' && transitionResult && (

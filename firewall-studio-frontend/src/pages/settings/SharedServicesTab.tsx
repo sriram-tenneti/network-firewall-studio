@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/shared/Modal';
 import { Notification } from '@/components/shared/Notification';
-import PresencePerDcEditor, { type PresenceRow } from '@/components/shared/PresencePerDcEditor';
+import PresencePerDcEditor, { type PresenceRow, withRowUids } from '@/components/shared/PresencePerDcEditor';
 import { useNotification } from '@/hooks/useNotification';
 import { useTeam } from '@/contexts/TeamContext';
 import type {
@@ -146,10 +146,16 @@ export default function SharedServicesTab() {
         tierMap.set(`${r.nh_id}|${r.sz_code}`, { nh_id: r.nh_id, sz_code: r.sz_code });
       }
     }
+    // Strip the client-only ``uid`` so the backend payload stays clean.
+    const sanitised = rows.map((r) => {
+      const copy: PresenceRow = { ...r };
+      delete (copy as { uid?: string }).uid;
+      return copy;
+    });
     return {
       tiers: Array.from(tierMap.values()),
       heritage_tiers: Array.from(heritageMap.values()),
-      presences: rows,
+      presences: sanitised,
     };
   };
 
@@ -312,7 +318,7 @@ export default function SharedServicesTab() {
                             ngdc_source_dcs: ngdcSourceDcs,
                           };
                         });
-                        setEditingPresences(rows);
+                        setEditingPresences(withRowUids(rows));
                         setCreatingNew(false);
                       }}>Edit</button>
                     <button className="text-xs text-rose-600 hover:text-rose-800"

@@ -1,5 +1,8 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.database import (
+    _load,
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
@@ -297,13 +300,40 @@ async def list_legacy_datacenters():
 async def list_applications(team: str | None = None):
     """List applications. When `team` is provided (and is not the SNS
     god-team), results are filtered to apps owned by that team. SNS sees
-    every app and is the global reviewer/approver."""
+    every app and is the global reviewer/approver.
+
+    The returned ``has_ingress`` flag is aggregated across every per-DC
+    presence row: if any presence (NGDC or Heritage) declares ingress for
+    this app, the top-level flag is True so destination dropdowns in the
+    rule builder can include the app even when the legacy column was
+    never set on the application record itself.
+    """
     items = await get_applications()
     if team and team.strip().upper() != "SNS":
         t = team.strip().lower()
         items = [a for a in items
                  if str(a.get("owner_team", "")).strip().lower() == t]
-    return items
+    # Aggregate per-DC presence ingress flags so the Application record
+    # reflects the per-DC architecture's source of truth.
+    try:
+        all_pres = _load("app_presences") or []
+    except Exception:
+        all_pres = []
+    ingress_by_app: dict[str, bool] = {}
+    for p in all_pres:
+        if p.get("has_ingress"):
+            key = str(p.get("app_distributed_id") or p.get("app_id") or "").strip()
+            if key:
+                ingress_by_app[key] = True
+    enriched: list[dict[str, Any]] = []
+    for a in items:
+        copy = dict(a)
+        ad = str(copy.get("app_distributed_id") or "").strip()
+        aid = str(copy.get("app_id") or "").strip()
+        derived = bool(ingress_by_app.get(ad) or ingress_by_app.get(aid))
+        copy["has_ingress"] = bool(copy.get("has_ingress")) or derived
+        enriched.append(copy)
+    return enriched
 
 
 @router.get("/environments")
