@@ -320,6 +320,17 @@ export interface ReviewRequest {
     ports: string;
     environment: string;
   };
+  /** Per-(src_dc,dst_dc) physical-row count for a fanned-out rule
+   * request. Drives the "DCs" badge in the Review queue so reviewers
+   * see at a glance how many devices a single submission will touch. */
+  dc_fanout_count?: number;
+  /** Distinct DC pair labels (e.g. "ALPHA→ALPHA, BETA→BETA, …") for
+   * tooltip/sort use in the Review table. */
+  dc_pairs?: string[];
+  /** Origin queue this row came from. Lets the Review tab break down
+   * counts by queue ("Rule Requests / Group Changes / Modifications /
+   * Other Reviews") instead of conflating everything into one number. */
+  subqueue?: 'rule_request' | 'group_change' | 'modification' | 'review';
 }
 
 export interface RuleDelta {

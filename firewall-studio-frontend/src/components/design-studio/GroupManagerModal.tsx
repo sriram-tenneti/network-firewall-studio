@@ -539,7 +539,23 @@ export function GroupManagerModal({ isOpen, onClose, appId, applications = [], e
             />
           </div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-700">Groups ({filteredGroups.length})</h3>
+            {(() => {
+              // Group identity is per-(name, dc_id, environment) — one
+              // logical name materialises as N per-DC instances. Show
+              // both numbers so the badge reconciles with the App
+              // Groups badge in App Management (which also counts
+              // every per-DC instance) and the operator can tell at a
+              // glance whether a difference is real or just per-DC
+              // expansion.
+              const logical = new Set(filteredGroups.map(g => g.name)).size;
+              const instances = filteredGroups.length;
+              const diff = instances !== logical;
+              return (
+                <h3 className="text-sm font-semibold text-gray-700" title="Logical groups × per-DC instances. Both surfaces (App Groups badge + this listing) count instances so they align.">
+                  Groups ({instances}{diff ? ` instances · ${logical} logical` : ''})
+                </h3>
+              );
+            })()}
             {!readOnly && (
               <button onClick={() => setShowCreate(!showCreate)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
                 {showCreate ? 'Cancel' : '+ New'}
