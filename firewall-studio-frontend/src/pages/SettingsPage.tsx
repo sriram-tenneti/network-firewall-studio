@@ -83,6 +83,11 @@ export default function SettingsPage() {
   const [newDeviceForm, setNewDeviceForm] = useState<Record<string, unknown>>({ device_id: '', name: '', vendor: 'palo_alto', dc: 'ALPHA_NGDC', nh: '', sz: '', type: 'segmentation', status: 'Active', mgmt_ip: '', capabilities: '' });
   const [deviceFilter, setDeviceFilter] = useState({ dc: '', type: '', vendor: '' });
 
+  // All Applications listing filter — search by id / distributed id / name /
+  // NH / SZ / DC / owner. Filter is purely client-side so it's snappy even
+  // for catalogs in the hundreds of rows.
+  const [appListFilter, setAppListFilter] = useState<string>('');
+
   // Firewall Device Patterns state (generic naming patterns)
   const [fwPatterns, setFwPatterns] = useState<Record<string, unknown>[]>([]);
   const [dcVendorMap, setDcVendorMap] = useState<Record<string, Record<string, string>>>({});
@@ -891,8 +896,14 @@ export default function SettingsPage() {
   // ── DC CRUD handlers ──
   const handleSaveDc = async (dcId: string) => {
     try {
-      await api.updateNGDCDatacenter(dcId, editDcForm);
-      setNgdcDatacenters(prev => prev.map(d => String(d.dc_id || d.code) === dcId ? { ...d, ...editDcForm } : d));
+      const dcType = String(editDcForm.dc_type || 'NGDC');
+      const updateFn = dcType === 'Legacy' ? api.updateLegacyDatacenter : api.updateNGDCDatacenter;
+      await updateFn(dcId, editDcForm);
+      if (dcType === 'Legacy') {
+        setLegacyDatacenters(prev => prev.map(d => String(d.dc_id || d.code) === dcId ? { ...d, ...editDcForm } : d));
+      } else {
+        setNgdcDatacenters(prev => prev.map(d => String(d.dc_id || d.code) === dcId ? { ...d, ...editDcForm } : d));
+      }
       setEditingDcId(null);
       showNotification('Data Center updated', 'success');
     } catch { showNotification('Failed to update data center', 'error'); }
@@ -908,7 +919,7 @@ export default function SettingsPage() {
         setNgdcDatacenters(prev => [...prev, created]);
       }
       setShowAddDc(false);
-      setNewDcForm({ dc_id: '', name: '', region: '', status: 'Active', cidr: '', description: '', dc_type: 'NGDC' });
+      setNewDcForm({ dc_id: '', name: '', region: '', status: 'Active', cidr: '', description: '', dc_type: 'NGDC', ngdc_source_dcs: [] });
       showNotification('Data Center added', 'success');
     } catch { showNotification('Failed to add data center', 'error'); }
   };
@@ -1735,10 +1746,26 @@ export default function SettingsPage() {
                                       onChange={e => setNewSzBindingForm({ ...newSzBindingForm, dc: e.target.value })}
                                     >
                                       <option value="">any-DC (fallback)</option>
-                                      {ngdcDatacenters.map((d, i) => {
-                                        const dcId = String(d.dc_id || d.code || i);
-                                        return <option key={dcId} value={dcId}>{dcId}</option>;
-                                      })}
+                                      {ngdcDatacenters.length > 0 && (
+                                        <optgroup label="NGDC">
+                                          {ngdcDatacenters.map((d, i) => {
+                                            const dcId = String(d.dc_id || d.code || i);
+                                            return <option key={`ng-${dcId}`} value={dcId}>{dcId}</option>;
+                                          })}
+                                        </optgroup>
+                                      )}
+                                      {/* Legacy / Heritage DCs need their own
+                                          SZ + VRF bindings so the compile path
+                                          can resolve a Legacy device's VRF
+                                          per (DC, NH, SZ) just like NGDC. */}
+                                      {legacyDatacenters.length > 0 && (
+                                        <optgroup label="Heritage / Legacy">
+                                          {legacyDatacenters.map((d, i) => {
+                                            const dcId = String(d.dc_id || d.code || i);
+                                            return <option key={`lg-${dcId}`} value={dcId}>{dcId}</option>;
+                                          })}
+                                        </optgroup>
+                                      )}
                                     </select>
                                     <select
                                       className={`${inp} col-span-3 text-xs`}
@@ -1817,18 +1844,39 @@ export default function SettingsPage() {
               {showAddDc && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
                   <h3 className="text-sm font-semibold text-blue-800">Add New Data Center</h3>
-                  <div className="grid grid-cols-5 gap-2">
-                    <select className={inp} value={String(newDcForm.dc_type || 'NGDC')} onChange={e => setNewDcForm({ ...newDcForm, dc_type: e.target.value })}>
+                  <div className="grid grid-cols-4 gap-2">
+                    <select className={inp} value={String(newDcForm.dc_type || 'NGDC')} onChange={e => setNewDcForm({ ...newDcForm, dc_type: e.target.value, ngdc_source_dcs: e.target.value === 'Legacy' ? (newDcForm.ngdc_source_dcs || []) : [] })}>
                       <option value="NGDC">NGDC</option><option value="Legacy">Legacy</option>
                     </select>
                     <input className={inp} placeholder="DC ID / Code" value={String(newDcForm.dc_id || '')} onChange={e => setNewDcForm({ ...newDcForm, dc_id: e.target.value })} />
                     <input className={inp} placeholder="Name" value={String(newDcForm.name || '')} onChange={e => setNewDcForm({ ...newDcForm, name: e.target.value })} />
-                    <input className={inp} placeholder="Region" value={String(newDcForm.region || '')} onChange={e => setNewDcForm({ ...newDcForm, region: e.target.value })} />
                     <select className={inp} value={String(newDcForm.status || 'Active')} onChange={e => setNewDcForm({ ...newDcForm, status: e.target.value })}>
                       <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option><option value="Migrating">Migrating</option>
                     </select>
                   </div>
                   <input className={`${inp} w-full`} placeholder="Description" value={String(newDcForm.description || '')} onChange={e => setNewDcForm({ ...newDcForm, description: e.target.value })} />
+                  {String(newDcForm.dc_type || 'NGDC') === 'Legacy' && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                      <div className="text-xs font-semibold text-amber-800">Connected NGDC DCs</div>
+                      <div className="text-[11px] text-amber-700">Which NGDC DCs route traffic to / from this Heritage DC. Leave blank to allow all NGDC DCs.</div>
+                      <div className="flex flex-wrap gap-1">
+                        {ngdcDatacenters.map((d) => {
+                          const id = String(d.dc_id || d.code || '');
+                          const selected = Array.isArray(newDcForm.ngdc_source_dcs) && (newDcForm.ngdc_source_dcs as unknown[]).map(String).includes(id);
+                          return (
+                            <label key={id} className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded cursor-pointer ${selected ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 border border-amber-200'}`}>
+                              <input type="checkbox" className="hidden" checked={selected} onChange={(e) => {
+                                const cur = new Set(((newDcForm.ngdc_source_dcs as unknown[]) || []).map(String));
+                                if (e.target.checked) cur.add(id); else cur.delete(id);
+                                setNewDcForm({ ...newDcForm, ngdc_source_dcs: Array.from(cur) });
+                              }} />
+                              {id.replace(/_NGDC$/i, '')}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2 mt-2">
                     <button onClick={handleAddDc} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save</button>
                     <button onClick={() => setShowAddDc(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
@@ -1843,9 +1891,9 @@ export default function SettingsPage() {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">DC ID / Code</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Region</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Connected NGDC DCs</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
@@ -1859,13 +1907,44 @@ export default function SettingsPage() {
                           <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${dcType === 'NGDC' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{dcType}</span></td>
                           <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{isEditing ? <input className={inp} value={String(editDcForm.dc_id || '')} onChange={e => setEditDcForm({ ...editDcForm, dc_id: e.target.value })} /> : dcId}</td>
                           <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editDcForm.name || '')} onChange={e => setEditDcForm({ ...editDcForm, name: e.target.value })} /> : String((dc as Record<string, unknown>).name || '')}</td>
-                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String((dc as Record<string, unknown>).region || '—')}</td>
                           <td className="px-3 py-2">{isEditing ? (
                             <select className={inp} value={String(editDcForm.status || 'Active')} onChange={e => setEditDcForm({ ...editDcForm, status: e.target.value })}>
                               <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option><option value="Migrating">Migrating</option>
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String((dc as Record<string, unknown>).status) === 'Active' ? 'bg-green-100 text-green-800' : String((dc as Record<string, unknown>).status) === 'Planned' ? 'bg-blue-100 text-blue-800' : String((dc as Record<string, unknown>).status) === 'Migrating' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800'}`}>{String((dc as Record<string, unknown>).status || 'Active')}</span>}</td>
                           <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String((dc as Record<string, unknown>).description || '—')}</td>
+                          <td className="px-3 py-2">
+                            {dcType === 'Legacy' ? (
+                              isEditing ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {ngdcDatacenters.map((d) => {
+                                    const id = String(d.dc_id || d.code || '');
+                                    const selected = Array.isArray(editDcForm.ngdc_source_dcs) && (editDcForm.ngdc_source_dcs as unknown[]).map(String).includes(id);
+                                    return (
+                                      <label key={id} className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded cursor-pointer ${selected ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 border border-amber-200'}`}>
+                                        <input type="checkbox" className="hidden" checked={selected} onChange={(e) => {
+                                          const cur = new Set(((editDcForm.ngdc_source_dcs as unknown[]) || []).map(String));
+                                          if (e.target.checked) cur.add(id); else cur.delete(id);
+                                          setEditDcForm({ ...editDcForm, ngdc_source_dcs: Array.from(cur) });
+                                        }} />
+                                        {id.replace(/_NGDC$/i, '')}
+                                      </label>
+                                    );
+                                  })}
+                                  {ngdcDatacenters.length === 0 && <span className="text-[10px] italic text-gray-400">— no NGDC DCs —</span>}
+                                </div>
+                              ) : (
+                                Array.isArray((dc as Record<string, unknown>).ngdc_source_dcs) && ((dc as Record<string, unknown>).ngdc_source_dcs as unknown[]).length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {((dc as Record<string, unknown>).ngdc_source_dcs as unknown[]).map((v) => {
+                                      const id = String(v);
+                                      return <span key={id} className="px-1.5 py-0.5 text-[10px] rounded bg-white border border-amber-200 font-mono text-amber-800">{id}</span>;
+                                    })}
+                                  </div>
+                                ) : <span className="text-[10px] italic text-amber-700">All NGDC DCs</span>
+                              )
+                            ) : <span className="text-[10px] text-gray-400">—</span>}
+                          </td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1874,7 +1953,7 @@ export default function SettingsPage() {
                               </div>
                             ) : (
                               <div className="flex gap-1">
-                                <button onClick={() => { setEditingDcId(dcId); setEditDcForm({ dc_id: (dc as Record<string, unknown>).dc_id as string || (dc as Record<string, unknown>).code as string, name: (dc as Record<string, unknown>).name as string, region: (dc as Record<string, unknown>).region as string, status: (dc as Record<string, unknown>).status as string, description: (dc as Record<string, unknown>).description as string, dc_type: dcType }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => { setEditingDcId(dcId); setEditDcForm({ dc_id: (dc as Record<string, unknown>).dc_id as string || (dc as Record<string, unknown>).code as string, name: (dc as Record<string, unknown>).name as string, region: (dc as Record<string, unknown>).region as string, status: (dc as Record<string, unknown>).status as string, description: (dc as Record<string, unknown>).description as string, dc_type: dcType, ngdc_source_dcs: Array.isArray((dc as Record<string, unknown>).ngdc_source_dcs) ? [ ...((dc as Record<string, unknown>).ngdc_source_dcs as unknown[]) ] : [] }); }} className="px-2 py-1 text-xs text-indigo-600 border border-indigo-200 rounded hover:bg-indigo-50">Edit</button>
                                 <button onClick={() => handleDeleteDc(dcId, dcType)} className="px-2 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">Delete</button>
                               </div>
                             )}
@@ -2191,7 +2270,6 @@ export default function SettingsPage() {
                                 <th className="text-left font-medium px-2 py-1">Ingress?</th>
                                 <th className="text-left font-medium px-2 py-1">Egress IPs / CIDRs</th>
                                 <th className="text-left font-medium px-2 py-1">Ingress VIPs / IPs</th>
-                                <th className="text-left font-medium px-2 py-1">Source NGDC DCs</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2228,19 +2306,6 @@ export default function SettingsPage() {
                                       {r.has_ingress
                                         ? renderChips(r.ingress_members)
                                         : <span className="text-[10px] italic text-gray-400">— ingress disabled —</span>}
-                                    </td>
-                                    <td className="px-2 py-1">
-                                      {heritage ? (
-                                        (r.ngdc_source_dcs || []).length === 0
-                                          ? <span className="text-[10px] italic text-amber-700">— all NGDC DCs (no explicit mapping) —</span>
-                                          : (
-                                            <div className="flex flex-wrap gap-1">
-                                              {(r.ngdc_source_dcs || []).map((dc) => (
-                                                <span key={dc} className="px-1.5 py-0.5 text-[10px] rounded bg-white border border-amber-200 font-mono text-amber-800">{dc}</span>
-                                              ))}
-                                            </div>
-                                          )
-                                      ) : <span className="text-[10px] text-gray-400">—</span>}
                                     </td>
                                   </tr>
                                 );
@@ -2374,8 +2439,24 @@ export default function SettingsPage() {
 
             {!selectedApp && (
               <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-800">All Applications ({applications.length})</h3>
+                <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-gray-800">
+                    All Applications ({(() => {
+                      const q = appListFilter.trim().toLowerCase();
+                      if (!q) return applications.length;
+                      return applications.filter(a => [
+                        a.app_id, a.app_distributed_id, a.name, a.owner, a.owner_team,
+                        a.neighborhoods, a.nh, a.szs, a.sz, a.dcs, a.primary_dc, a.snow_sysid,
+                        a.egress_ip,
+                      ].some(v => String(v ?? '').toLowerCase().includes(q))).length;
+                    })()}{appListFilter.trim() ? ` of ${applications.length}` : ''})
+                  </h3>
+                  <input
+                    type="text"
+                    placeholder="Filter by id / name / NH / SZ / DC / owner / Egress IP …"
+                    value={appListFilter}
+                    onChange={e => setAppListFilter(e.target.value)}
+                    className="w-80 px-3 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500" />
                 </div>
                 {loadingRef ? (<div className="p-8 text-center text-gray-400">Loading...</div>) : (
                   <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -2386,6 +2467,7 @@ export default function SettingsPage() {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Has Ingress</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Egress IP</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Ingress IP</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Neighborhoods</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZs</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DCs</th>
@@ -2393,7 +2475,15 @@ export default function SettingsPage() {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                       </tr></thead>
                       <tbody className="divide-y divide-gray-100">
-                        {applications.map(app => {
+                        {applications.filter(app => {
+                          const q = appListFilter.trim().toLowerCase();
+                          if (!q) return true;
+                          return [
+                            app.app_id, app.app_distributed_id, app.name, app.owner, app.owner_team,
+                            app.neighborhoods, app.nh, app.szs, app.sz, app.dcs, app.primary_dc, app.snow_sysid,
+                            app.egress_ip,
+                          ].some(v => String(v ?? '').toLowerCase().includes(q));
+                        }).map(app => {
                           const isEditing = editingAppId === app.app_id;
                           return (
                           <tr key={app.app_id} className={isEditing ? 'bg-blue-50' : 'hover:bg-gray-50'}>
@@ -2408,8 +2498,34 @@ export default function SettingsPage() {
                               ) : (
                                 app.has_ingress ? <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-purple-100 text-purple-700">Yes</span> : <span className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-500">No</span>
                               )}
+                              {/* Inline Has Ingress can only flip the metadata bit; the
+                                  actual per-DC Ingress IPs (VIPs / LBs) are captured
+                                  per (DC, NH, SZ) row in the Per-DC Presence Editor.
+                                  Surface a one-click jump there whenever ingress is
+                                  set so the user can't get stuck without an entry
+                                  surface. */}
+                              {(isEditing ? editAppForm.has_ingress : app.has_ingress) && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setSelectedApp(app.app_id); setEditingAppId(app.app_id); setEditAppForm(app); }}
+                                  className="block mt-1 text-[10px] text-indigo-600 hover:text-indigo-800 underline">
+                                  Add Ingress IPs per DC →
+                                </button>
+                              )}
                             </td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.egress_ip || ''} onChange={e => setEditAppForm({ ...editAppForm, egress_ip: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.egress_ip || '-'}</span>}</td>
+                            {/* Ingress IP column — app-level metadata is just
+                                the boolean; the actual VIPs/LBs live per-DC.
+                                Show ingress_ip when explicitly stored on the
+                                app record, otherwise route the user into the
+                                per-DC editor when has_ingress is true. */}
+                            <td className="px-3 py-2">{isEditing ? <input className={inp} placeholder="set per-DC below" value={String((editAppForm as Record<string, unknown>).ingress_ip ?? '')} onChange={e => setEditAppForm({ ...editAppForm, ingress_ip: e.target.value })} /> : (
+                              (app as Record<string, unknown>).ingress_ip
+                                ? <span className="font-mono text-xs text-gray-600">{String((app as Record<string, unknown>).ingress_ip)}</span>
+                                : app.has_ingress
+                                  ? <button type="button" onClick={() => { setSelectedApp(app.app_id); setEditingAppId(app.app_id); setEditAppForm(app); }} className="text-[10px] text-indigo-600 hover:text-indigo-800 underline">set per-DC →</button>
+                                  : <span className="text-xs text-gray-400">-</span>
+                            )}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.dcs || '-'}</span>}</td>

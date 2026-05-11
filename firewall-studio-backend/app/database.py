@@ -7463,6 +7463,44 @@ def _is_heritage_presence(presence: dict[str, Any]) -> bool:
     return False
 
 
+def _heritage_dc_ngdc_source_dcs(dc_id: str) -> list[str]:
+    """Return the NGDC DC mapping configured on the Heritage DC record.
+
+    The UI now manages this at the Legacy / Heritage data-center level in
+    Settings → Data Centers. We still accept the historical
+    ``ngdc_source_dcs`` payload on individual presence rows as a backward-
+    compatible fallback, but the DC catalogue is the preferred source of
+    truth.
+    """
+    code = str(dc_id or "").strip().upper()
+    if not code:
+        return []
+    for row in (_load("legacy_datacenters") or []):
+        if str(row.get("dc_id") or row.get("code") or "").strip().upper() != code:
+            continue
+        raw = row.get("ngdc_source_dcs") or row.get("connected_ngdc_dcs") or []
+        out: list[str] = []
+        for x in raw:
+            s = str(x).strip().upper()
+            if s and s not in out:
+                out.append(s)
+        return out
+    return []
+
+
+def _effective_heritage_ngdc_source_dcs(presence: dict[str, Any]) -> list[str]:
+    """Resolve the NGDC↔Heritage routing map for a Heritage presence."""
+    dc_level = _heritage_dc_ngdc_source_dcs(str(presence.get("dc_id") or ""))
+    if dc_level:
+        return dc_level
+    out: list[str] = []
+    for x in (presence.get("ngdc_source_dcs") or []):
+        s = str(x).strip().upper()
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
 def _zone_cidrs_for(nh_id: str, sz_code: str,
                     dc_id: str | None = None) -> list[str]:
     """Aggregate every CIDR registered for a (NH, SZ[, DC]) tuple.
@@ -8661,16 +8699,12 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
         s_h = _is_heritage_presence(s_pres)
         d_h = _is_heritage_presence(d_pres)
         if d_h and not s_h:
-            allowed = [str(x).upper().strip()
-                       for x in (d_pres.get("ngdc_source_dcs") or [])
-                       if str(x).strip()]
+            allowed = _effective_heritage_ngdc_source_dcs(d_pres)
             if allowed and s_pres["dc_id"].upper() not in allowed:
                 return False
             return True
         if s_h and not d_h:
-            allowed = [str(x).upper().strip()
-                       for x in (s_pres.get("ngdc_source_dcs") or [])
-                       if str(x).strip()]
+            allowed = _effective_heritage_ngdc_source_dcs(s_pres)
             if allowed and d_pres["dc_id"].upper() not in allowed:
                 return False
             return True
@@ -8747,15 +8781,15 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
             # Surface unmapped Heritage destinations once per dst_dc so
             # the SME can declare ngdc_source_dcs[] explicitly.
             if (_is_heritage_presence(d) and not _is_heritage_presence(s)
-                    and not (d.get("ngdc_source_dcs") or [])):
+                    and not _effective_heritage_ngdc_source_dcs(d)):
                 if d["dc_id"] not in heritage_unmapped_warned:
                     heritage_unmapped_warned.add(d["dc_id"])
                     warnings.append(
                         f"Heritage destination DC {d['dc_id']} has no "
                         "explicit `ngdc_source_dcs[]` mapping — fanning "
                         "out across all NGDC source DCs. Declare the "
-                        "mapping on the Heritage presence row to pin "
-                        "which NGDC DCs route into this Heritage DC."
+                        "mapping on the Heritage DC in Settings → Data "
+                        "Centers to pin which NGDC DCs route into this Heritage DC."
                     )
     if not physical and not warnings:
         warnings.append(
@@ -10235,16 +10269,12 @@ async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]
     def _routing_ok(s: dict[str, Any], d: dict[str, Any]) -> bool:
         sh, dh = _h(s), _h(d)
         if dh and not sh:
-            allowed = [str(x).upper().strip()
-                       for x in (d.get("ngdc_source_dcs") or [])
-                       if str(x).strip()]
+            allowed = _effective_heritage_ngdc_source_dcs(d)
             if allowed and str(s.get("dc_id", "")).upper() not in allowed:
                 return False
             return True
         if sh and not dh:
-            allowed = [str(x).upper().strip()
-                       for x in (s.get("ngdc_source_dcs") or [])
-                       if str(x).strip()]
+            allowed = _effective_heritage_ngdc_source_dcs(s)
             if allowed and str(d.get("dc_id", "")).upper() not in allowed:
                 return False
             return True
@@ -10317,7 +10347,7 @@ async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]
                 "src_compile_mode": "incremental" if src_snap else "initial",
                 "dst_compile_mode": "incremental" if dst_snap else "initial",
             })
-            if dh and not sh and not (d.get("ngdc_source_dcs") or []):
+            if dh and not sh and not _effective_heritage_ngdc_source_dcs(d):
                 key = str(d.get("dc_id", ""))
                 if key and key not in heritage_warned:
                     heritage_warned.add(key)
@@ -10325,7 +10355,7 @@ async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]
                         f"Heritage destination DC {key} has no explicit "
                         "`ngdc_source_dcs[]` mapping \u2014 fanning out "
                         "across all NGDC source DCs. Declare the mapping "
-                        "on the Heritage presence row to pin the routing."
+                        "on the Heritage DC in Settings → Data Centers to pin the routing."
                     )
 
     return {

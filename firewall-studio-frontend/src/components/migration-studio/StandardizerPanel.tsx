@@ -115,7 +115,7 @@ export default function StandardizerPanel() {
             <span className="text-purple-800">
               Multi-DC fan-out is automatic: every classified legacy rule materialises as N proposed RuleRequests, one
               per (src DC &rarr; dst DC) pair. NGDC&harr;NGDC pairs same-DC by default. NGDC&harr;Heritage routing
-              follows the Heritage presence&rsquo;s <code>ngdc_source_dcs[]</code> mapping.
+              follows the Heritage presence&rsquo;s connected NGDC DC selection.
             </span>
           </p>
         </div>
@@ -357,7 +357,7 @@ function TransitionCard({
       {/* Multi-DC fan-out — every classified legacy rule materialises
           as N proposed RuleRequests (one per src_dc x dst_dc pair).
           NGDC<->NGDC pairs same-DC by default; NGDC<->Heritage uses
-          the Heritage presence's `ngdc_source_dcs[]` mapping. */}
+          the Heritage presence's connected-NGDC-DC selection. */}
       {(t.proposed.fanout && t.proposed.fanout.length > 0) && (
         <div className="px-3 py-2 border-t border-gray-100 bg-indigo-50/40">
           <div className="flex items-center justify-between mb-1">
