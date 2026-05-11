@@ -34,6 +34,7 @@ function modToReview(m: RuleModification): ReviewRequest {
       ports: m.original?.rule_service || 'N/A',
       environment: m.original?.environment || '',
     },
+    subqueue: 'modification',
   };
 }
 
@@ -56,6 +57,21 @@ const RR_STATUS_TO_REVIEW: Record<string, ReviewRequest['status']> = {
  * the transition back to /api/rules/requests/{id}/status. */
 function ruleRequestToReview(r: RuleRequestRecord): ReviewRequest {
   const reqId = String(r.request_id || '').trim();
+  // Derive per-(src_dc,dst_dc) fan-out so the Review queue exposes
+  // how many DC-scoped physical rows ride under one logical submit.
+  // Same-pair duplicates are deduped so the badge count matches what
+  // a reviewer sees in the rule-request detail panel.
+  const pairs: string[] = [];
+  const seen = new Set<string>();
+  for (const row of (r.expansion || [])) {
+    const src = String(row?.src_dc || '').trim();
+    const dst = String(row?.dst_dc || '').trim();
+    if (!src || !dst) continue;
+    const key = `${src}\u2192${dst}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push(key);
+  }
   return {
     id: `RR-${reqId}`,
     rule_id: reqId,
@@ -76,6 +92,9 @@ function ruleRequestToReview(r: RuleRequestRecord): ReviewRequest {
       environment: r.environment || '',
     },
     module: 'design-studio',
+    subqueue: 'rule_request',
+    dc_fanout_count: pairs.length,
+    dc_pairs: pairs,
   };
 }
 
@@ -90,6 +109,10 @@ function groupRequestToReview(g: GroupChangeRequest): ReviewRequest {
   const reqType: ReviewRequest['request_type'] = g.op === 'delete'
     ? 'group_policy_change'
     : 'group_member_change';
+  // Group instances are now per-(name, dc_id, environment); surface
+  // the DC scope in the queue so reviewers don't conflate the
+  // per-DC instances of the same logical group.
+  const dcId = String((g as unknown as { dc_id?: string }).dc_id || '').trim();
   return {
     id: `GR-${g.request_id}`,
     rule_id: g.group_name,
@@ -110,6 +133,9 @@ function groupRequestToReview(g: GroupChangeRequest): ReviewRequest {
       environment: g.environment || '',
     },
     module: 'design-studio',
+    subqueue: 'group_change',
+    dc_fanout_count: dcId ? 1 : 0,
+    dc_pairs: dcId ? [dcId] : [],
   };
 }
 
@@ -130,6 +156,7 @@ export default function ReviewPage(props: { context?: string }) {
   const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [selectedModule, setSelectedModule] = useState<string>(moduleContext);
   const [activeTab, setActiveTab] = useState('Pending');
+  const [selectedSubqueue, setSelectedSubqueue] = useState<string>('');
   const approvalModal = useModal<ReviewRequest>();
   const { notification, showNotification } = useNotification();
 
@@ -152,7 +179,11 @@ export default function ReviewPage(props: { context?: string }) {
       const uniqueModReviews = modReviews.filter(mr => !existingModIds.has(mr.modification_id));
       const rrReviews = (ruleRequests || []).map(ruleRequestToReview);
       const grReviews = (groupRequests || []).map(groupRequestToReview);
-      setReviews([...reviewData, ...uniqueModReviews, ...rrReviews, ...grReviews]);
+      // Tag pre-existing review records with `subqueue: 'review'` so
+      // every row in the queue carries a queue-of-origin and the
+      // breakdown count cards reconcile to the table total.
+      const tagged = reviewData.map(r => r.subqueue ? r : { ...r, subqueue: 'review' as const });
+      setReviews([...tagged, ...uniqueModReviews, ...rrReviews, ...grReviews]);
     } catch {
       showNotification('Failed to load reviews', 'error');
     }
@@ -169,6 +200,7 @@ export default function ReviewPage(props: { context?: string }) {
       // Strict: if module is set on the review, it must match; if not set, exclude from filtered views
       if (mod !== selectedModule) return false;
     }
+    if (selectedSubqueue && (r.subqueue || 'review') !== selectedSubqueue) return false;
     return true;
   });
 
@@ -183,6 +215,24 @@ export default function ReviewPage(props: { context?: string }) {
     Approved: envFilteredReviews.filter(r => r.status === 'Approved').length,
     Rejected: envFilteredReviews.filter(r => r.status === 'Rejected').length,
   };
+
+  // Per-queue breakdown: every row in the table has a `subqueue` tag
+  // (rule_request / group_change / modification / review). The
+  // breakdown card reconciles to the table's All count so reviewers
+  // can see at a glance how the workload is split across queues.
+  const subCounts = {
+    rule_request: envFilteredReviews.filter(r => (r.subqueue || 'review') === 'rule_request').length,
+    group_change: envFilteredReviews.filter(r => (r.subqueue || 'review') === 'group_change').length,
+    modification: envFilteredReviews.filter(r => (r.subqueue || 'review') === 'modification').length,
+    review: envFilteredReviews.filter(r => (r.subqueue || 'review') === 'review').length,
+  };
+  // Total fan-out — how many DC-scoped physical rows ride under the
+  // currently-filtered rule requests. Surfaces the "1 logical submit
+  // = N DC requests" architecture in a single number.
+  const fanoutTotal = envFilteredReviews.reduce(
+    (acc, r) => acc + (typeof r.dc_fanout_count === 'number' ? r.dc_fanout_count : 0),
+    0,
+  );
 
   const handleApprove = async (reviewId: string, notes: string) => {
     try {
@@ -306,6 +356,24 @@ export default function ReviewPage(props: { context?: string }) {
       render: (_, row) => <span className="font-mono text-xs">{row.rule_summary?.destination || 'N/A'}</span>,
     },
     {
+      key: 'dc_fanout_count', header: 'DCs', sortable: true, width: '90px',
+      render: (_, row) => {
+        const n = typeof row.dc_fanout_count === 'number' ? row.dc_fanout_count : 0;
+        if (!n) return <span className="text-[11px] text-gray-400">—</span>;
+        const tip = (row.dc_pairs || []).join(' · ') || `${n} DC${n === 1 ? '' : 's'}`;
+        const cls = row.subqueue === 'rule_request'
+          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+          : row.subqueue === 'group_change'
+            ? 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200'
+            : 'bg-gray-50 text-gray-700 border border-gray-200';
+        return (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${cls}`} title={tip}>
+            {n} {row.subqueue === 'rule_request' ? 'DC' : 'DC'}{n === 1 ? '' : 's'}
+          </span>
+        );
+      },
+    },
+    {
       key: 'status', header: 'Status', sortable: true, width: '110px',
       render: (_, row) => <StatusBadge status={row.status} />,
     },
@@ -378,8 +446,44 @@ export default function ReviewPage(props: { context?: string }) {
             <option value="Non-Production">Non-Production</option>
             <option value="Pre-Production">Pre-Production</option>
           </select>
+          <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            value={selectedSubqueue}
+            onChange={e => setSelectedSubqueue(e.target.value)}
+            title="Filter by source queue (Rule Requests / Group Changes / Modifications / Other Reviews)">
+            <option value="">All Queues</option>
+            <option value="rule_request">Rule Requests ({subCounts.rule_request})</option>
+            <option value="group_change">Group Changes ({subCounts.group_change})</option>
+            <option value="modification">Modifications ({subCounts.modification})</option>
+            <option value="review">Other Reviews ({subCounts.review})</option>
+          </select>
           <span className="text-xs text-gray-500">Export is available for Add / Modify / Remove requests</span>
         </div>
+      </div>
+
+      {/* Per-queue breakdown — every count card reconciles to the
+          table total so reviewers can verify "we are seeing every
+          rule request + group change + modification + plain review".
+          The Fan-out card surfaces how many DC-scoped physical rows
+          ride under the currently-filtered rule requests. */}
+      <div className="grid grid-cols-5 gap-3 mb-4">
+        {[
+          { label: 'Rule Requests', value: subCounts.rule_request, color: 'bg-blue-50 text-blue-800 border border-blue-200', sub: 'rule_request' },
+          { label: 'Group Changes', value: subCounts.group_change, color: 'bg-fuchsia-50 text-fuchsia-800 border border-fuchsia-200', sub: 'group_change' },
+          { label: 'Modifications', value: subCounts.modification, color: 'bg-amber-50 text-amber-800 border border-amber-200', sub: 'modification' },
+          { label: 'Other Reviews', value: subCounts.review, color: 'bg-gray-50 text-gray-800 border border-gray-200', sub: 'review' },
+          { label: 'DC Fan-out (rows)', value: fanoutTotal, color: 'bg-emerald-50 text-emerald-800 border border-emerald-200', sub: '' },
+        ].map(card => (
+          <button
+            key={card.label}
+            type="button"
+            onClick={() => card.sub && setSelectedSubqueue(selectedSubqueue === card.sub ? '' : card.sub)}
+            className={`text-left p-3 rounded-lg ${card.color} ${card.sub ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'} ${card.sub && selectedSubqueue === card.sub ? 'ring-2 ring-offset-1 ring-blue-500' : ''}`}
+            title={card.sub ? `Click to filter by ${card.label}` : 'Total per-DC physical rows across the currently-filtered rule requests'}
+          >
+            <div className="text-xl font-bold">{card.value}</div>
+            <div className="text-[11px] font-medium mt-0.5 leading-tight">{card.label}</div>
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -412,7 +516,7 @@ export default function ReviewPage(props: { context?: string }) {
               columns={columns}
               keyField="id"
               searchPlaceholder="Search by rule ID, app, source, destination, requestor..."
-              searchFields={['id', 'rule_id', 'request_type', 'requestor']}
+              searchFields={['id', 'rule_id', 'rule_name', 'request_type', 'requestor', 'reviewer', 'comments']}
               onRowClick={(row) => approvalModal.open(row)}
               emptyMessage="No review requests found. Select rules for migration in the Migration to NGDC page and submit for review."
               defaultPageSize={25}

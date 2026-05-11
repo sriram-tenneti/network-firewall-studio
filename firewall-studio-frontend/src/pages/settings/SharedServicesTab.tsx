@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/shared/Modal';
 import { Notification } from '@/components/shared/Notification';
-import TierMatrixEditor from '@/components/shared/TierMatrixEditor';
-import HeritageTierMatrixEditor from '@/components/shared/HeritageTierMatrixEditor';
+import PresencePerDcEditor, { type PresenceRow, withRowUids } from '@/components/shared/PresencePerDcEditor';
 import { useNotification } from '@/hooks/useNotification';
 import { useTeam } from '@/contexts/TeamContext';
 import type {
@@ -16,7 +15,6 @@ import type {
   NGDCDataCenter,
   NeighbourhoodRegistry,
   SecurityZone,
-  TierSpec,
 } from '@/types';
 import type { PortCatalogEntry } from '@/lib/api';
 import * as api from '@/lib/api';
@@ -83,6 +81,7 @@ export default function SharedServicesTab() {
 
   // service edit
   const [editing, setEditing] = useState<Partial<SharedService> | null>(null);
+  const [editingPresences, setEditingPresences] = useState<PresenceRow[]>([]);
   const [creatingNew, setCreatingNew] = useState(false);
 
   // presence edit
@@ -133,17 +132,47 @@ export default function SharedServicesTab() {
     });
   }, [services, envFilter, catFilter, q]);
 
+  /** Derive ``tiers`` (unique NH/SZ pairs) and ``heritage_tiers`` (unique
+   *  Heritage DCs) from the per-DC editor rows, plus pass the rows themselves
+   *  on ``presences`` so the backend writes member chips into each
+   *  SharedServicePresence directly. */
+  const derivePayloadFromPresences = (rows: PresenceRow[]) => {
+    const tierMap = new Map<string, { nh_id: string; sz_code: string }>();
+    const heritageMap = new Map<string, { dc_id: string }>();
+    for (const r of rows) {
+      if (r.is_heritage) {
+        if (r.dc_id) heritageMap.set(r.dc_id, { dc_id: r.dc_id });
+      } else if (r.nh_id && r.sz_code) {
+        tierMap.set(`${r.nh_id}|${r.sz_code}`, { nh_id: r.nh_id, sz_code: r.sz_code });
+      }
+    }
+    // Strip the client-only ``uid`` so the backend payload stays clean.
+    const sanitised = rows.map((r) => {
+      const copy: PresenceRow = { ...r };
+      delete (copy as { uid?: string }).uid;
+      return copy;
+    });
+    return {
+      tiers: Array.from(tierMap.values()),
+      heritage_tiers: Array.from(heritageMap.values()),
+      presences: sanitised,
+    };
+  };
+
   const saveService = async () => {
     if (!editing) return;
     try {
+      const derived = derivePayloadFromPresences(editingPresences);
+      const payload = { ...editing, ...derived } as Partial<SharedService> & { presences: PresenceRow[] };
       if (creatingNew) {
-        await api.createSharedService(editing);
+        await api.createSharedService(payload as Partial<SharedService>);
         showSuccess(`Shared service "${editing.service_id}" created`);
       } else {
-        await api.updateSharedService(editing.service_id!, editing);
+        await api.updateSharedService(editing.service_id!, payload as Partial<SharedService>);
         showSuccess(`Shared service "${editing.service_id}" updated`);
       }
       setEditing(null);
+      setEditingPresences([]);
       setCreatingNew(false);
       void loadAll();
     } catch (e) {
@@ -226,7 +255,7 @@ export default function SharedServicesTab() {
             placeholder="Search name / id / description"
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
         </div>
-        <button onClick={() => { setEditing(emptyService()); setCreatingNew(true); }}
+        <button onClick={() => { setEditing(emptyService()); setEditingPresences([]); setCreatingNew(true); }}
           className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded shadow">
           + Add Shared Service
         </button>
@@ -266,7 +295,32 @@ export default function SharedServicesTab() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <button className="text-xs text-indigo-700 hover:text-indigo-900"
-                      onClick={() => { setEditing({ ...s }); setCreatingNew(false); }}>Edit</button>
+                      onClick={() => {
+                        setEditing({ ...s });
+                        const existing = presencesByService[s.service_id] || [];
+                        const rows: PresenceRow[] = existing.map((p) => {
+                          const raw = p as unknown as Record<string, unknown>;
+                          const isHeritage = p.dc_type === 'Legacy' ||
+                            String(p.dc_type ?? '').toLowerCase() === 'heritage' ||
+                            raw.is_heritage === true;
+                          const ngdcSourceDcs = Array.isArray(raw.ngdc_source_dcs)
+                            ? (raw.ngdc_source_dcs as unknown[]).map((x) => String(x))
+                            : [];
+                          return {
+                            dc_id: p.dc_id,
+                            nh_id: p.nh_id || '',
+                            sz_code: p.sz_code || '',
+                            has_ingress: false,
+                            is_heritage: isHeritage,
+                            egress_members: (p.members || []).map((m) => ({ ...m })),
+                            ingress_members: [],
+                            environment: p.environment,
+                            ngdc_source_dcs: ngdcSourceDcs,
+                          };
+                        });
+                        setEditingPresences(withRowUids(rows));
+                        setCreatingNew(false);
+                      }}>Edit</button>
                     <button className="text-xs text-rose-600 hover:text-rose-800"
                       onClick={() => void removeService(s)}>Delete</button>
                   </div>
@@ -422,19 +476,13 @@ export default function SharedServicesTab() {
                   className="w-full border rounded px-2 py-1 text-sm" />
               </div>
             </div>
-            <TierMatrixEditor
-              tiers={editing.tiers || []}
-              onChange={(t: TierSpec[]) => setEditing((s) => ({ ...(s || {}), tiers: t }))}
+            <PresencePerDcEditor
+              rows={editingPresences}
+              onChange={setEditingPresences}
+              ngdcDcs={datacenters.map((dc) => ({ code: String(dc.code || '') })).filter((d) => d.code)}
               hideIngress
-              title="NGDC Service Tiers"
-              subtitle="Each (NH, SZ) row materializes a SharedServicePresence in every NGDC DC (auto-fan)."
-            />
-            <HeritageTierMatrixEditor
-              tiers={editing.heritage_tiers || []}
-              onChange={(t) => setEditing((s) => ({ ...(s || {}), heritage_tiers: t }))}
-              hideIngress
-              title="Heritage DCs (services not yet on NGDC)"
-              subtitle="Add a row per Heritage DC where this service still lives. Materialises a flat presence + `grp-<SVC>-HERITAGE-<DC>` group automatically."
+              title="Per-DC Service Presences"
+              subtitle="One row per (DC, NH, SZ) for NGDC, or per Heritage DC. Member chips here flow into grp-<SVC>-… groups + are picked up by destination resolution at rule build time."
             />
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Environments</label>

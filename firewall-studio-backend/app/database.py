@@ -6,6 +6,7 @@ IP Ranges, Naming Standards, Policy Matrix) is fully customizable via CRUD APIs.
 Data is stored in JSON files under the data/ directory and seeded on first startup.
 """
 
+import hashlib
 import ipaddress
 import json
 import os
@@ -1938,6 +1939,22 @@ async def transition_rule_status(rule_id: str, new_status: str, module: str = "s
             })
             _save("rule_history", history)
             await _sync_studio_rule(r)
+            # On Deployed transition, refresh the per-DC snapshot for
+            # both the source and destination DCs so the next compile
+            # emits delta-only output. Each device-bearing DC keeps its
+            # own snapshot keyed by `(dc_id, environment)`.
+            if new_status == "Deployed":
+                env = r.get("environment", "Production")
+                try:
+                    seen_dcs: set[str] = set()
+                    for fld in ("datacenter", "dst_datacenter",
+                                "source_dc", "destination_dc"):
+                        v = str(r.get(fld) or "")
+                        if v and v not in seen_dcs:
+                            seen_dcs.add(v)
+                            await capture_deployed_snapshot(v, env, deployed_by=reviewer)
+                except Exception:  # pragma: no cover - defensive
+                    pass
             return r
     return None
 
@@ -2379,16 +2396,26 @@ async def create_application(data: dict[str, Any]) -> dict[str, Any]:
         data["primary_dc"] = ngdcs[0] if ngdcs else ""
     data.setdefault("deployment_mode", "all_ngdc")
     data.setdefault("excluded_dcs", [])
+    # `presences` is a transient form-driven payload (per-DC editor) — store
+    # the rows separately and strip it from the persisted profile so the
+    # `applications` collection stays a clean metadata-only record.
+    presences_payload = data.pop("presences", None)
     items.append(data)
     _save("applications", items)
     # Materialize presences in every NGDC DC when deployment_mode=all_ngdc
     # and the app declared tiers. Idempotent — existing presences kept.
     await auto_fan_app_presences(data)
+    # Then write the explicit per-DC overrides (egress / ingress chips
+    # entered in the form). Overrides win over auto-fan defaults — same
+    # key ⇒ replace.
+    if presences_payload:
+        await apply_app_presence_overrides(data, presences_payload)
     return data
 
 
 async def update_application(app_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
     items = _load("applications") or []
+    presences_payload = updates.pop("presences", None) if isinstance(updates, dict) else None
     for item in items:
         if item.get("app_id") == app_id or item.get("app_distributed_id") == app_id:
             item.update(updates)
@@ -2399,6 +2426,8 @@ async def update_application(app_id: str, updates: dict[str, Any]) -> dict[str, 
             # in lock-step with App Management on every save.
             await auto_fan_app_presences(item)
             await prune_app_presences(item)
+            if presences_payload is not None:
+                await apply_app_presence_overrides(item, presences_payload)
             return item
     return None
 
@@ -2888,12 +2917,36 @@ async def get_groups() -> list[dict[str, Any]]:
     return _load("groups") or []
 
 
-async def get_group(name: str) -> dict[str, Any] | None:
+async def get_group(name: str, dc_id: str | None = None
+                     ) -> dict[str, Any] | None:
+    """Look up a single group instance.
+
+    Group identity is logically ``(name, dc_id)`` because every NGDC
+    DC carries its own materialised instance of a logical group (same
+    name, different DC-local member set). Callers that know the DC
+    they want should pass ``dc_id`` explicitly. When ``dc_id`` is
+    ``None`` we fall back to the first match by name for backward
+    compatibility with legacy callers.
+    """
     groups = _load("groups") or []
     for g in groups:
-        if g.get("name") == name:
-            return g
+        if g.get("name") != name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        return g
     return None
+
+
+async def get_group_instances(name: str) -> list[dict[str, Any]]:
+    """Return all per-DC instances of a logical group name.
+
+    Used by the App Groups listing UI to render one row per DC and
+    by per-DC compile previews ("on ALPHA the group resolves to
+    these IPs, on BETA to these, …").
+    """
+    groups = _load("groups") or []
+    return [g for g in groups if g.get("name") == name]
 
 
 async def create_group(data: dict[str, Any], skip_prefix: bool = False) -> dict[str, Any]:
@@ -2913,54 +2966,99 @@ async def create_group(data: dict[str, Any], skip_prefix: bool = False) -> dict[
     return data
 
 
-async def update_group(name: str, data: dict[str, Any]) -> dict[str, Any] | None:
+async def update_group(name: str, data: dict[str, Any],
+                        dc_id: str | None = None
+                        ) -> dict[str, Any] | None:
+    """Update a per-DC group instance.
+
+    Pass ``dc_id`` to scope the update to a single DC's materialised
+    group (the recommended path now that group identity is
+    ``(name, dc_id)``). Without ``dc_id`` we update the first match
+    by name; legacy callers depend on this fallback.
+    """
     groups = _load("groups") or []
     for g in groups:
-        if g.get("name") == name:
-            g.update(data)
-            g["updated_at"] = _now()
-            _save("groups", groups)
-            return g
+        if g.get("name") != name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        g.update(data)
+        g["updated_at"] = _now()
+        _save("groups", groups)
+        return g
     return None
 
 
-async def delete_group(name: str) -> bool:
+async def delete_group(name: str, dc_id: str | None = None) -> bool:
+    """Delete a per-DC group instance.
+
+    With ``dc_id`` specified we delete only that DC's instance; the
+    other DCs keep their copies (matching the per-DC device-deploy
+    model). Without ``dc_id`` we delete all instances of the name
+    (legacy bulk-delete behaviour).
+    """
     groups = _load("groups") or []
-    new_groups = [g for g in groups if g.get("name") != name]
+    if dc_id:
+        new_groups = [g for g in groups
+                      if not (g.get("name") == name
+                              and str(g.get("dc_id", "")) == str(dc_id))]
+    else:
+        new_groups = [g for g in groups if g.get("name") != name]
     if len(new_groups) == len(groups):
         return False
     _save("groups", new_groups)
     return True
 
 
-async def add_group_member(group_name: str, member: dict[str, Any]) -> dict[str, Any] | None:
+async def add_group_member(group_name: str, member: dict[str, Any],
+                            dc_id: str | None = None
+                            ) -> dict[str, Any] | None:
+    """Add a member to a per-DC group instance.
+
+    Per-DC architecture: each NGDC DC carries its own copy of the
+    logical group with DC-local members only (so DC-A's device only
+    ever sees DC-A IPs in the deployed policy). Pass ``dc_id`` so
+    the addition lands on the right DC's instance. Without
+    ``dc_id`` we fall back to the first match for backward
+    compatibility with legacy callers.
+    """
     groups = _load("groups") or []
     # Auto-prefix member value based on type
     if "value" in member:
         member["value"] = _auto_prefix(member["value"], member.get("type", "ip"))
     for g in groups:
-        if g.get("name") == group_name:
-            members = g.get("members", [])
-            members.append(member)
-            g["members"] = members
-            g["updated_at"] = _now()
-            _save("groups", groups)
-            return g
+        if g.get("name") != group_name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        members = g.get("members", [])
+        members.append(member)
+        g["members"] = members
+        g["updated_at"] = _now()
+        _save("groups", groups)
+        return g
     return None
 
 
-async def remove_group_member(group_name: str, member_value: str) -> dict[str, Any] | None:
+async def remove_group_member(group_name: str, member_value: str,
+                                dc_id: str | None = None
+                                ) -> dict[str, Any] | None:
+    """Remove a member from a per-DC group instance. Pass ``dc_id``
+    to scope the removal to a single DC's instance."""
     groups = _load("groups") or []
     for g in groups:
-        if g.get("name") == group_name:
-            members = g.get("members", [])
-            new_members = [m for m in members if m.get("value") != member_value]
-            if len(new_members) == len(members):
-                return None
-            g["members"] = new_members
-            g["updated_at"] = _now()
-            _save("groups", groups)
-            return g
+        if g.get("name") != group_name:
+            continue
+        if dc_id and str(g.get("dc_id", "")) != str(dc_id):
+            continue
+        members = g.get("members", [])
+        new_members = [m for m in members if m.get("value") != member_value]
+        if len(new_members) == len(members):
+            return None
+        g["members"] = new_members
+        g["updated_at"] = _now()
+        _save("groups", groups)
+        return g
     return None
 
 
@@ -7560,17 +7658,21 @@ async def create_shared_service(data: dict[str, Any]) -> dict[str, Any]:
     data.setdefault("primary_dc", "ALPHA_NGDC")
     data.setdefault("deployment_mode", "all_ngdc")
     data.setdefault("excluded_dcs", [])
+    presences_payload = data.pop("presences", None)
     # dedupe by service_id
     items = [i for i in items if str(i.get("service_id", "")).upper() != data["service_id"]]
     items.append(data)
     _save("shared_services", items)
     # Auto-fan presences across all NGDC DCs when deployment_mode=all_ngdc.
     await auto_fan_service_presences(data)
+    if presences_payload:
+        await apply_service_presence_overrides(data, presences_payload)
     return data
 
 
 async def update_shared_service(service_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
     items = _load("shared_services") or []
+    presences_payload = updates.pop("presences", None) if isinstance(updates, dict) else None
     for i in items:
         if str(i.get("service_id", "")).upper() == service_id.upper():
             i.update(updates)
@@ -7582,6 +7684,8 @@ async def update_shared_service(service_id: str, updates: dict[str, Any]) -> dic
             # the latest tier / heritage_tier set no longer covers.
             await auto_fan_service_presences(i)
             await prune_service_presences(i)
+            if presences_payload is not None:
+                await apply_service_presence_overrides(i, presences_payload)
             return i
     return None
 
@@ -8034,6 +8138,175 @@ def _desired_service_presence_keys(svc: dict[str, Any]) -> set[tuple[str, str, s
     return desired
 
 
+def _normalise_member_chip(chip: Any) -> dict[str, Any] | None:
+    """Coerce an editor chip (string or {type,value,...}) into a MemberSpec
+    dict. Returns ``None`` for empty input. ``type`` is inferred from the
+    raw value when not provided: anything with ``/`` becomes ``cidr``,
+    a hyphen-separated pair becomes ``range``, otherwise ``ip``.
+    """
+    if chip is None:
+        return None
+    if isinstance(chip, str):
+        v = chip.strip()
+        if not v:
+            return None
+        if "/" in v:
+            kind = "cidr"
+        elif "-" in v and not v.lower().startswith("svr-") \
+                and not v.lower().startswith("rng-") \
+                and not v.lower().startswith("grp-") \
+                and not v.lower().startswith("g-"):
+            kind = "range"
+        else:
+            kind = "ip"
+        return {"type": kind, "value": v, "description": "", "dc_id": None}
+    if isinstance(chip, dict):
+        v = str(chip.get("value", "")).strip()
+        if not v:
+            return None
+        kind = str(chip.get("type", "")).strip().lower() or "ip"
+        return {
+            "type": kind,
+            "value": v,
+            "description": chip.get("description", ""),
+            "dc_id": chip.get("dc_id"),
+        }
+    return None
+
+
+def _normalise_chips(chips: Any) -> list[dict[str, Any]]:
+    if not chips:
+        return []
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for c in chips:
+        nm = _normalise_member_chip(c)
+        if not nm:
+            continue
+        k = (nm["type"], nm["value"])
+        if k in seen:
+            continue
+        out.append(nm)
+        seen.add(k)
+    return out
+
+
+async def apply_app_presence_overrides(
+    app: dict[str, Any],
+    presences: list[dict[str, Any]],
+) -> int:
+    """Persist explicit per-(DC, NH, SZ) presence rows declared in the
+    Add/Edit App form. Each row carries its own egress + ingress chips,
+    so this is the path the new Per-DC Presence Editor uses to write
+    members straight into the storage layer (members then flow into
+    auto-derived ``grp-<APP>-…`` groups via ``upsert_app_presence``).
+
+    Idempotent — any existing row with the same key is replaced. Returns
+    the number of rows upserted.
+    """
+    if not presences:
+        return 0
+    app_id = str(app.get("app_distributed_id", "")).upper()
+    if not app_id:
+        return 0
+    envs = _envs_for_entity(app)
+    written = 0
+    for row in presences:
+        if not isinstance(row, dict):
+            continue
+        dc = str(row.get("dc_id", "")).strip()
+        if not dc:
+            continue
+        nh = str(row.get("nh_id", "")).strip()
+        sz = str(row.get("sz_code", "")).strip()
+        is_heritage = bool(row.get("is_heritage")) or \
+            str(row.get("dc_type", "")).lower() == "heritage" or \
+            str(row.get("dc_type", "")).lower() == "legacy"
+        # Heritage rows have no NH/SZ — force-empty even if the form
+        # accidentally pre-fills them.
+        if is_heritage:
+            nh, sz = "", ""
+        env = str(row.get("environment", "")).strip() or envs[0]
+        ngdc_source_dcs = []
+        if is_heritage:
+            for x in (row.get("ngdc_source_dcs") or []):
+                s = str(x).strip().upper()
+                if s and s not in ngdc_source_dcs:
+                    ngdc_source_dcs.append(s)
+        await upsert_app_presence({
+            "app_distributed_id": app_id,
+            "dc_id": dc,
+            "dc_type": "Heritage" if is_heritage else "NGDC",
+            "is_heritage": is_heritage,
+            "environment": env,
+            "nh_id": nh,
+            "sz_code": sz,
+            "has_ingress": bool(row.get("has_ingress")),
+            "egress_members": _normalise_chips(row.get("egress_members")),
+            "ingress_members": _normalise_chips(row.get("ingress_members")),
+            "ingress_ports": list(row.get("ingress_ports") or []),
+            "ngdc_source_dcs": ngdc_source_dcs,
+        })
+        written += 1
+    return written
+
+
+async def apply_service_presence_overrides(
+    svc: dict[str, Any],
+    presences: list[dict[str, Any]],
+) -> int:
+    """Same contract as :func:`apply_app_presence_overrides` but for
+    SharedService presence rows."""
+    if not presences:
+        return 0
+    sid = str(svc.get("service_id", "")).upper()
+    if not sid:
+        return 0
+    envs = _envs_for_entity(svc)
+    written = 0
+    for row in presences:
+        if not isinstance(row, dict):
+            continue
+        dc = str(row.get("dc_id", "")).strip()
+        if not dc:
+            continue
+        nh = str(row.get("nh_id", "")).strip()
+        sz = str(row.get("sz_code", "")).strip()
+        is_heritage = bool(row.get("is_heritage")) or \
+            str(row.get("dc_type", "")).lower() in ("heritage", "legacy")
+        if is_heritage:
+            nh, sz = "", ""
+        env = str(row.get("environment", "")).strip() or envs[0]
+        # Shared services use a single ``members`` list (destination-only
+        # historically). The new editor lets the user populate egress
+        # members too — they're stored on ``members`` for back-compat
+        # with the rule pipeline.
+        members = _normalise_chips(
+            (row.get("members") or [])
+            + (row.get("egress_members") or [])
+            + (row.get("ingress_members") or []),
+        )
+        ngdc_source_dcs = []
+        if is_heritage:
+            for x in (row.get("ngdc_source_dcs") or []):
+                s = str(x).strip().upper()
+                if s and s not in ngdc_source_dcs:
+                    ngdc_source_dcs.append(s)
+        await upsert_shared_service_presence({
+            "service_id": sid,
+            "dc_id": dc,
+            "dc_type": "Heritage" if is_heritage else "NGDC",
+            "is_heritage": is_heritage,
+            "environment": env,
+            "nh_id": nh,
+            "sz_code": sz,
+            "members": members,
+            "ngdc_source_dcs": ngdc_source_dcs,
+        })
+        written += 1
+    return written
+
+
 async def prune_app_presences(app: dict[str, Any]) -> int:
     """Drop any AppPresence rows for this app that no longer match the
     declared tiers / heritage_tiers / deployment scope, and cascade
@@ -8283,17 +8556,34 @@ async def _resolve_destination_presences(kind: str, dest_ref: str | None,
 async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     """Compute the multi-DC fan-out for a proposed rule request.
 
-    By default the engine emits ONE PhysicalRule per (src_tier × dst_tier)
-    in the **source's primary DC**, with destination groups resolved to
-    the **destination's primary DC**. The destination team owns
-    east-west routing across their other DCs (per architecture: app
-    teams raise from one primary DC; destination teams handle their own
-    DC fan-out via VIP / GSLB / per-DC LBs).
+    Default behaviour (matches the architecture: every NGDC app/service
+    has presence in all 4 NGDC DCs; one logical submit must materialise
+    one firewall request **per source DC per destination**):
+
+      - Source side fans out across **all** NGDC DCs the source has
+        presence in (no primary-DC scoping by default).
+      - For NGDC ↔ NGDC flows, src_dc and dst_dc are **strictly paired
+        same-DC** (ALPHA → ALPHA, BETA → BETA …) so a 4-DC source
+        talking to a 4-DC destination produces exactly 4 R-#### rules
+        under one parent RR-####. Cross-DC reasoning does not apply
+        within NGDC (every app lives in every DC); the legacy
+        `include_cross_dc` toggle is ignored for NGDC↔NGDC and only
+        matters for Heritage routing exceptions.
+      - For NGDC → Heritage (or Heritage → NGDC), the **Heritage
+        presence's `ngdc_source_dcs[]` mapping** drives which NGDC DCs
+        route into / out of that Heritage DC. This is the architectural
+        hook for the 2-NGDC-servers-→-1-Heritage-DC pattern: the app
+        team declares the routing on the Heritage row of the editor.
+        Empty mapping = all NGDC DCs (a warning is surfaced telling
+        the user to declare the mapping explicitly).
+      - Each emitted physical row carries `dc_to_dc_path`,
+        `egress_ip_dependency`, and `ingress_ip_dependency` so the
+        manifest export and Review queue can document the hop.
 
     Power-user toggles:
-      - `include_cross_dc=True` ⇒ legacy intersect-all-DCs behaviour.
-      - `destination_dc_override=<dc_id>` ⇒ explicitly target a non-primary
-        destination DC (DR cutover scenarios).
+      - `requested_dcs` — explicit src+dst DC scope (overrides the all-DC default).
+      - `include_cross_dc=True` — full cross-product across NGDC DCs (DR / cutover).
+      - `destination_dc_override=<dc_id>` — pin destination DC.
 
     Returns { physical_rules: [...], warnings: [...] } without persisting.
     """
@@ -8313,25 +8603,15 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     source_presences = payload.get("source_presences")
     destination_presences = payload.get("destination_presences")
 
-    # Primary-DC scoping (default). When the requester didn't pass
-    # explicit `requested_dcs`, scope the source resolver to the source's
-    # primary_dc and the destination resolver to either the override DC
-    # or the destination's primary_dc.
+    # Default = all-DC fan-out. The engine no longer collapses to the
+    # source's primary DC; the architectural rule is "one firewall
+    # request per source DC per destination DC". Callers that still want
+    # primary-DC scoping must pass `requested_dcs` explicitly or set
+    # `destination_dc_override`.
     src_dc_filter = list(requested_dcs) if requested_dcs else None
     dst_dc_filter = list(requested_dcs) if requested_dcs else None
-    if not include_cross_dc:
-        if not src_dc_filter:
-            primary = await _get_primary_dc(source_kind, src_ref)
-            if primary:
-                src_dc_filter = [primary]
-        if not dst_dc_filter:
-            if dest_dc_override:
-                dst_dc_filter = [dest_dc_override]
-            else:
-                dst_kind = "shared_service" if kind == "shared_service" else "app"
-                primary = await _get_primary_dc(dst_kind, dest_ref)
-                if primary:
-                    dst_dc_filter = [primary]
+    if dest_dc_override and not dst_dc_filter:
+        dst_dc_filter = [dest_dc_override]
 
     src_pres = await _resolve_source_presences(
         src_ref, env, src_dc_filter, source_presences,
@@ -8351,38 +8631,132 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
             + (f" / DCs {dst_dc_filter}" if dst_dc_filter else "")
         )
 
+    def _chip_values(chips: Any) -> list[str]:
+        out: list[str] = []
+        for chip in chips or []:
+            if isinstance(chip, dict):
+                v = str(chip.get("value", "")).strip()
+                if v:
+                    out.append(v)
+            elif isinstance(chip, str):
+                v = chip.strip()
+                if v:
+                    out.append(v)
+        return out
+
+    def _routing_allowed(s_pres: dict[str, Any], d_pres: dict[str, Any]) -> bool:
+        """DC-to-DC pairing rules.
+
+        - Heritage destination: src_dc must be listed in d_pres's
+          `ngdc_source_dcs[]` (or the list is empty = "all NGDC DCs").
+        - Heritage source: dst_dc must be listed in s_pres's
+          `ngdc_source_dcs[]` (mirror semantics: which NGDC DCs this
+          Heritage DC sends traffic out to).
+        - NGDC <-> NGDC: **strictly same-DC pairing**. Apps live in all
+          4 NGDC DCs, so traffic always pairs same-DC (ALPHA->ALPHA,
+          BETA->BETA, ...). Cross-DC NGDC<->NGDC is meaningless and
+          intentionally not emitted.
+        - Heritage <-> Heritage: free pairing (no NH/SZ to constrain).
+        """
+        s_h = _is_heritage_presence(s_pres)
+        d_h = _is_heritage_presence(d_pres)
+        if d_h and not s_h:
+            allowed = [str(x).upper().strip()
+                       for x in (d_pres.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and s_pres["dc_id"].upper() not in allowed:
+                return False
+            return True
+        if s_h and not d_h:
+            allowed = [str(x).upper().strip()
+                       for x in (s_pres.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and d_pres["dc_id"].upper() not in allowed:
+                return False
+            return True
+        if not s_h and not d_h:
+            # Strict same-DC pairing for NGDC<->NGDC. The legacy
+            # `include_cross_dc` toggle is intentionally ignored here
+            # \u2014 cross-DC reasoning is reserved for NGDC<->Heritage
+            # flows governed by `ngdc_source_dcs[]`.
+            return s_pres["dc_id"] == d_pres["dc_id"]
+        # heritage <-> heritage: allow all
+        return True
+
     physical: list[dict[str, Any]] = []
     seen_pairs: set[tuple[str, str, str, str]] = set()
+    heritage_unmapped_warned: set[str] = set()
     for s in src_pres:
         for d in dst_pres:
-            if s["dc_id"] != d["dc_id"] and not include_cross_dc:
+            if not _routing_allowed(s, d):
                 continue
-            # source group name (egress)
-            src_group = _app_egress_group_name(
-                s["app_distributed_id"], s["nh_id"], s["sz_code"])
+            # source group name (egress) — Heritage uses the flat per-DC
+            # naming (`grp-<APP>-HERITAGE-<DC>`); NGDC uses NH/SZ.
+            if _is_heritage_presence(s):
+                src_group = _heritage_app_group_name(
+                    s.get("app_distributed_id", ""), s.get("dc_id", ""))
+            else:
+                src_group = _app_egress_group_name(
+                    s["app_distributed_id"], s["nh_id"], s["sz_code"])
             # destination group name
             if kind == "shared_service":
-                dst_group = _shared_service_group_name(
-                    d["service_id"], d["nh_id"], d["sz_code"])
+                if _is_heritage_presence(d):
+                    dst_group = _heritage_app_group_name(
+                        d.get("service_id", ""), d.get("dc_id", ""))
+                else:
+                    dst_group = _shared_service_group_name(
+                        d["service_id"], d["nh_id"], d["sz_code"])
             else:
-                dst_group = _app_ingress_group_name(
-                    d["app_distributed_id"], d["nh_id"], d["sz_code"])
+                if _is_heritage_presence(d):
+                    dst_group = _heritage_app_group_name(
+                        d.get("app_distributed_id", ""), d.get("dc_id", ""))
+                else:
+                    dst_group = _app_ingress_group_name(
+                        d["app_distributed_id"], d["nh_id"], d["sz_code"])
             key = (s["dc_id"], d["dc_id"], src_group, dst_group)
             if key in seen_pairs:
                 continue
             seen_pairs.add(key)
+            # Source / dest IP dependency atoms — picked from the
+            # presence chips so the manifest documents per-DC IPs.
+            src_ips = _chip_values(s.get("egress_members"))
+            dst_ips = _chip_values(
+                d.get("ingress_members") if not _is_heritage_presence(d)
+                else d.get("egress_members") or d.get("members"))
+            if not dst_ips:
+                # Shared service heritage rows store under "members"; some
+                # legacy app rows under "members" too. Fallback.
+                dst_ips = _chip_values(d.get("members"))
             physical.append({
                 "src_dc": s["dc_id"],
                 "dst_dc": d["dc_id"],
                 "src_group_ref": src_group,
                 "dst_group_ref": dst_group,
-                "src_nh": s["nh_id"], "src_sz": s["sz_code"],
-                "dst_nh": d["nh_id"], "dst_sz": d["sz_code"],
+                "src_nh": s.get("nh_id", ""), "src_sz": s.get("sz_code", ""),
+                "dst_nh": d.get("nh_id", ""), "dst_sz": d.get("sz_code", ""),
                 "ports": ports, "action": action,
                 "environment": env,
                 "cross_dc": s["dc_id"] != d["dc_id"],
+                "src_is_heritage": _is_heritage_presence(s),
+                "dst_is_heritage": _is_heritage_presence(d),
+                "dc_to_dc_path": f"{s['dc_id']} -> {d['dc_id']}",
+                "egress_ip_dependency": src_ips,
+                "ingress_ip_dependency": dst_ips,
                 "lifecycle_status": "Preview",
             })
+            # Surface unmapped Heritage destinations once per dst_dc so
+            # the SME can declare ngdc_source_dcs[] explicitly.
+            if (_is_heritage_presence(d) and not _is_heritage_presence(s)
+                    and not (d.get("ngdc_source_dcs") or [])):
+                if d["dc_id"] not in heritage_unmapped_warned:
+                    heritage_unmapped_warned.add(d["dc_id"])
+                    warnings.append(
+                        f"Heritage destination DC {d['dc_id']} has no "
+                        "explicit `ngdc_source_dcs[]` mapping — fanning "
+                        "out across all NGDC source DCs. Declare the "
+                        "mapping on the Heritage presence row to pin "
+                        "which NGDC DCs route into this Heritage DC."
+                    )
     if not physical and not warnings:
         warnings.append(
             "Source and destination have no DC in common; "
@@ -8657,6 +9031,24 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
     items = _load_rule_requests()
     items.append(record)
     _save("rule_requests", items)
+
+    # Auto-stage Group Change Requests for any per-(group, dc) membership
+    # delta this rule implies. Mode is per-DC: 'initial' when the
+    # destination DC has no deployed snapshot yet (first-time bootstrap),
+    # 'incremental' once the DC has been deployed at least once. The
+    # GCRs share `triggered_by_rule = request_id` so the Review queue
+    # groups them under the parent rule submission.
+    try:
+        record["auto_group_change_requests"] = (
+            await auto_stage_gcrs_for_rule_request(
+                request_id, preview.get("physical_rules", []), payload,
+            )
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        record["auto_group_change_requests"] = []
+        record.setdefault("warnings", []).append(
+            f"Auto-GCR staging failed: {e}"
+        )
     return record
 
 
@@ -9783,6 +10175,159 @@ async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]
     if not src_group or not dst_group:
         verdict = "unclassifiable"
 
+    # ----------------------------------------------------------------
+    # Multi-DC fan-out for the proposed NGDC rule. Each NGDC app/service
+    # has presence in all 4 NGDC DCs; one legacy rule must materialise
+    # as N proposed RuleRequests (one per src_dc \u2192 dst_dc pair).
+    # NGDC \u2194 NGDC pairs same-DC by default. NGDC \u2194 Heritage
+    # follows the Heritage presence's `ngdc_source_dcs[]` mapping.
+    # ----------------------------------------------------------------
+    proposed_fanout: list[dict[str, Any]] = []
+
+    def _presences_for(side: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return the presence rows for the classified side that
+        match the resolved (nh, sz). One row per DC the side lives in.
+        """
+        nh = (side.get("nh") or "").upper()
+        sz = (side.get("sz") or "").upper()
+        rows: list[dict[str, Any]] = []
+        sid = str(side.get("service_id") or "").upper()
+        aid = str(side.get("app_distributed_id") or "").upper()
+        if sid:
+            for p in (_load("shared_service_presences") or []):
+                if str(p.get("service_id", "")).upper() != sid:
+                    continue
+                if (p.get("environment") or "Production") != env:
+                    continue
+                if _is_heritage_presence(p):
+                    rows.append(p)
+                else:
+                    if (p.get("nh_id") or "").upper() == nh and (p.get("sz_code") or "").upper() == sz:
+                        rows.append(p)
+        elif aid:
+            for p in (_load("app_presences") or []):
+                if str(p.get("app_distributed_id", "")).upper() != aid:
+                    continue
+                if (p.get("environment") or "Production") != env:
+                    continue
+                if _is_heritage_presence(p):
+                    rows.append(p)
+                else:
+                    if (p.get("nh_id") or "").upper() == nh and (p.get("sz_code") or "").upper() == sz:
+                        rows.append(p)
+        # Fall back to a synthetic "single DC" row from the classification
+        # when no presence rows exist for the resolved owner.
+        if not rows and side.get("dc"):
+            rows.append({
+                "dc_id": side.get("dc"),
+                "dc_type": "NGDC",
+                "nh_id": nh, "sz_code": sz,
+                "is_heritage": False,
+            })
+        return rows
+
+    src_pres_rows = _presences_for(src_classified) if (src_group and src_classified.get("matched")) else []
+    dst_pres_rows = _presences_for(dst_classified) if (dst_group and dst_classified.get("matched")) else []
+
+    def _h(p: dict[str, Any]) -> bool:
+        return _is_heritage_presence(p)
+
+    def _routing_ok(s: dict[str, Any], d: dict[str, Any]) -> bool:
+        sh, dh = _h(s), _h(d)
+        if dh and not sh:
+            allowed = [str(x).upper().strip()
+                       for x in (d.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and str(s.get("dc_id", "")).upper() not in allowed:
+                return False
+            return True
+        if sh and not dh:
+            allowed = [str(x).upper().strip()
+                       for x in (s.get("ngdc_source_dcs") or [])
+                       if str(x).strip()]
+            if allowed and str(d.get("dc_id", "")).upper() not in allowed:
+                return False
+            return True
+        if not sh and not dh:
+            return str(s.get("dc_id", "")) == str(d.get("dc_id", ""))
+        return True  # heritage <-> heritage
+
+    heritage_warned: set[str] = set()
+    for s in src_pres_rows:
+        for d in dst_pres_rows:
+            if not _routing_ok(s, d):
+                continue
+            sh, dh = _h(s), _h(d)
+            sg = (
+                _heritage_app_group_name(
+                    str(src_classified.get("service_id") or src_classified.get("app_distributed_id") or "").upper(),
+                    s.get("dc_id", ""), "egress")
+                if sh else
+                (_propose_ngdc_target({**src_classified,
+                                       "nh": s.get("nh_id") or src_classified.get("nh"),
+                                       "sz": s.get("sz_code") or src_classified.get("sz")}))
+            )
+            dg = (
+                _heritage_app_group_name(
+                    str(dst_classified.get("service_id") or dst_classified.get("app_distributed_id") or "").upper(),
+                    d.get("dc_id", ""), "ingress")
+                if dh else
+                (_propose_ngdc_target({**dst_classified,
+                                       "nh": d.get("nh_id") or dst_classified.get("nh"),
+                                       "sz": d.get("sz_code") or dst_classified.get("sz")}))
+            )
+            src_egress = [
+                str(m.get("value") if isinstance(m, dict) else m)
+                for m in (s.get("egress_members") or s.get("members") or [])
+                if (isinstance(m, dict) and m.get("value")) or isinstance(m, str)
+            ]
+            dst_ingress = [
+                str(m.get("value") if isinstance(m, dict) else m)
+                for m in (d.get("ingress_members") or d.get("members") or [])
+                if (isinstance(m, dict) and m.get("value")) or isinstance(m, str)
+            ]
+            # Per-DC snapshot awareness — drives initial vs incremental
+            # mode for both the materialised rule's GCR auto-staging
+            # and the per-DC compile output the Standardizer surfaces.
+            src_snap = await get_deployed_snapshot(s.get("dc_id", ""), env)
+            dst_snap = await get_deployed_snapshot(d.get("dc_id", ""), env)
+            proposed_fanout.append({
+                "src_dc": s.get("dc_id", ""),
+                "dst_dc": d.get("dc_id", ""),
+                "src_group": sg,
+                "dst_group": dg,
+                "src_vrf": (
+                    f"HERITAGE-{s.get('dc_id', '')}" if sh
+                    else f"{s.get('nh_id', '')}-{s.get('sz_code', '')}".strip("-")
+                ),
+                "dst_vrf": (
+                    f"HERITAGE-{d.get('dc_id', '')}" if dh
+                    else f"{d.get('nh_id', '')}-{d.get('sz_code', '')}".strip("-")
+                ),
+                "ports": f"{proto} {port}".strip(),
+                "action": "ACCEPT" if action == "ALLOW" else "DENY",
+                "environment": env,
+                "src_is_heritage": sh,
+                "dst_is_heritage": dh,
+                "dc_to_dc_path": f"{s.get('dc_id', '')} \u2192 {d.get('dc_id', '')}",
+                "egress_ip_dependency": src_egress,
+                "ingress_ip_dependency": dst_ingress,
+                "src_snapshot_present": src_snap is not None,
+                "dst_snapshot_present": dst_snap is not None,
+                "src_compile_mode": "incremental" if src_snap else "initial",
+                "dst_compile_mode": "incremental" if dst_snap else "initial",
+            })
+            if dh and not sh and not (d.get("ngdc_source_dcs") or []):
+                key = str(d.get("dc_id", ""))
+                if key and key not in heritage_warned:
+                    heritage_warned.add(key)
+                    warnings.append(
+                        f"Heritage destination DC {key} has no explicit "
+                        "`ngdc_source_dcs[]` mapping \u2014 fanning out "
+                        "across all NGDC source DCs. Declare the mapping "
+                        "on the Heritage presence row to pin the routing."
+                    )
+
     return {
         "origin_legacy_rule_id": legacy_id,
         "original": {
@@ -9805,10 +10350,116 @@ async def build_legacy_transition(legacy_rule: dict[str, Any]) -> dict[str, Any]
             "app_management_changes": app_management_changes,
             "group_changes": group_changes,
             "physical_rule": physical_for_dedup,
+            # New: every classified legacy rule fans out into N proposed
+            # NGDC rule requests (one per src_dc \u2192 dst_dc pair).
+            "fanout": proposed_fanout,
+            "fanout_count": len(proposed_fanout),
         },
         "verdict": verdict,
         "dedup_match": dedup_match,
         "warnings": warnings,
+    }
+
+
+async def apply_legacy_transition(
+    legacy_rule: dict[str, Any],
+    reviewer: str = "migration",
+) -> dict[str, Any]:
+    """Materialise a legacy rule's proposed.fanout into actual NGDC
+    rule requests using the same per-DC pipeline as Studio:
+
+    - One rule request per `(src_dc, dst_dc)` proposed_fanout row, all
+      sharing a parent migration record (``migration_legacy_rule_id``)
+      so the Review queue can group them.
+    - ``create_rule_request`` already auto-stages per-(group, dc) GCRs
+      from each row's egress/ingress IP dependencies, with
+      ``mode='initial'`` when the destination DC has no snapshot yet
+      and ``mode='incremental'`` afterwards.
+    - Returns the parent migration record + the list of staged rule
+      requests + their auto-staged GCRs so the Migration Standardizer
+      can render a side-by-side "before / after / staged" panel.
+    """
+    transition = await build_legacy_transition(legacy_rule)
+    fanout = (transition.get("proposed") or {}).get("fanout") or []
+    legacy_id = transition.get("origin_legacy_rule_id") or ""
+    env = (legacy_rule.get("environment") or "Production")
+    owner = legacy_rule.get("owner") or reviewer
+    owner_team = legacy_rule.get("owner_team") or "Migration"
+
+    staged: list[dict[str, Any]] = []
+    for row in fanout:
+        proto, port = "TCP", ""
+        ports_str = str(row.get("ports") or "")
+        toks = ports_str.split(None, 1)
+        if len(toks) == 2:
+            proto, port = toks[0].upper(), toks[1]
+        elif toks:
+            port = toks[0]
+        rule_payload = {
+            "source": row.get("src_group"),
+            "destination": row.get("dst_group"),
+            "protocol": proto,
+            "port": port,
+            "action": "Allow" if row.get("action") == "ACCEPT" else "Deny",
+            "environment": row.get("environment") or env,
+            "source_dc": row.get("src_dc"),
+            "destination_dc": row.get("dst_dc"),
+            "source_nh": "" if row.get("src_is_heritage") else (
+                (row.get("src_vrf") or "").split("-", 1)[0] if "-" in (row.get("src_vrf") or "") else ""
+            ),
+            "source_zone": "" if row.get("src_is_heritage") else (
+                (row.get("src_vrf") or "").split("-", 1)[1] if "-" in (row.get("src_vrf") or "") else ""
+            ),
+            "destination_nh": "" if row.get("dst_is_heritage") else (
+                (row.get("dst_vrf") or "").split("-", 1)[0] if "-" in (row.get("dst_vrf") or "") else ""
+            ),
+            "destination_zone": "" if row.get("dst_is_heritage") else (
+                (row.get("dst_vrf") or "").split("-", 1)[1] if "-" in (row.get("dst_vrf") or "") else ""
+            ),
+            "owner": owner,
+            "owner_team": owner_team,
+            "description": (
+                f"Migrated from legacy rule {legacy_id} "
+                f"({row.get('dc_to_dc_path')})"
+            ),
+            "migration_origin": "legacy",
+            "migration_legacy_rule_id": legacy_id,
+        }
+        try:
+            req = await create_rule_request(rule_payload)
+            staged.append(req)
+        except Exception as e:  # pragma: no cover - defensive
+            staged.append({
+                "error": str(e),
+                "src_dc": row.get("src_dc"),
+                "dst_dc": row.get("dst_dc"),
+            })
+
+    return {
+        "legacy_rule_id": legacy_id,
+        "transition": transition,
+        "staged_rule_requests": staged,
+        "staged_count": sum(1 for r in staged if not r.get("error")),
+    }
+
+
+async def apply_legacy_transitions_bulk(
+    rules: list[dict[str, Any]],
+    reviewer: str = "migration",
+) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    for r in rules:
+        try:
+            results.append(await apply_legacy_transition(r, reviewer=reviewer))
+        except Exception as e:  # pragma: no cover - defensive
+            results.append({
+                "legacy_rule_id": r.get("rule_id") or r.get("legacy_id") or "",
+                "error": str(e),
+            })
+    return {
+        "total": len(rules),
+        "applied": sum(1 for r in results if not r.get("error")),
+        "results": results,
     }
 
 
@@ -9836,10 +10487,30 @@ async def build_legacy_transitions_bulk(rules: list[dict[str, Any]]) -> dict[str
 # Deployment Artifact Generators
 # ============================================================
 
-def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
-    """Build the vendor-neutral JSON manifest for a RuleRequest."""
+def _artifact_manifest_for_request(
+    req: dict[str, Any],
+    dc_id: str | None = None,
+) -> dict[str, Any]:
+    """Build the vendor-neutral JSON manifest for a RuleRequest.
+
+    When ``dc_id`` is provided the manifest is **scoped to a single
+    deploy target**: only physical rows that touch that DC are
+    emitted, and every referenced group is resolved through its
+    per-DC instance so the device only ever sees IPs that actually
+    live in that DC. This matches reality — a single firewall device
+    lives in exactly one DC, so the artifact it ingests must never
+    mix members from other DCs. When ``dc_id`` is None we fall back
+    to the legacy "all DCs in one file" shape kept for back-compat.
+    """
 
     expansion = req.get("expansion") or []
+    target_dc = (dc_id or "").strip()
+    if target_dc:
+        expansion = [
+            p for p in expansion
+            if str(p.get("src_dc") or "").strip() == target_dc
+            or str(p.get("dst_dc") or "").strip() == target_dc
+        ]
     groups_seen: dict[str, dict[str, Any]] = {}
     fw_rules = _load("firewall_rules") or []
     fw_by_id = {r.get("rule_id"): r for r in fw_rules}
@@ -9849,13 +10520,26 @@ def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
         fw = fw_by_id.get(rid, {})
         # Group create/modify decisions: if the group already exists in
         # the groups store with members, mark `reuse-existing`; otherwise
-        # `create`.
-        for grp_name in (phys.get("src_group_ref"), phys.get("dst_group_ref")):
-            if not grp_name or grp_name in groups_seen:
+        # `create`. Group identity is **(name, dc_id)** so the same
+        # logical name materialises one record per DC with that DC's
+        # IPs only — the source group resolves against ``phys.src_dc``
+        # and the destination group against ``phys.dst_dc`` so a device
+        # in DC X only ever sees DC-local members.
+        side_specs = [
+            (phys.get("src_group_ref"), phys.get("src_dc")),
+            (phys.get("dst_group_ref"), phys.get("dst_dc")),
+        ]
+        for grp_name, grp_dc in side_specs:
+            if not grp_name:
                 continue
-            members = _resolve_group_members_sync(grp_name)
-            groups_seen[grp_name] = {
+            grp_dc_norm = str(grp_dc or "").strip()
+            seen_key = f"{grp_name}@{grp_dc_norm}" if grp_dc_norm else grp_name
+            if seen_key in groups_seen:
+                continue
+            members = _resolve_group_members_sync(grp_name, grp_dc_norm or None)
+            groups_seen[seen_key] = {
                 "name": grp_name,
+                "dc_id": grp_dc_norm or None,
                 "op": "reuse-existing" if members else "create",
                 "members": members,
             }
@@ -9947,11 +10631,28 @@ def _artifact_manifest_for_request(req: dict[str, Any]) -> dict[str, Any]:
         if v and v not in seen_vrfs:
             distinct_vrfs.append(v)
             seen_vrfs.add(v)
+    # Distinct DCs the (filtered) expansion touches — vendor compilers
+    # ignore this for now but downstream tools (per-DC bundle, snapshot
+    # capture) need to know which DC the manifest is keyed for.
+    dcs_touched: list[str] = []
+    seen_dcs: set[str] = set()
+    for r in rules_out:
+        for d in (r.get("src_dc"), r.get("dst_dc")):
+            d_norm = str(d or "").strip()
+            if d_norm and d_norm not in seen_dcs:
+                dcs_touched.append(d_norm)
+                seen_dcs.add(d_norm)
     return {
         "request_id": req.get("request_id"),
         "requester": req.get("owner"),
         "owner_team": req.get("owner_team"),
         "environment": req.get("environment"),
+        # ``dc_id`` is set when the manifest is scoped to a single
+        # device's deploy target. Vendor compilers tag the output
+        # filename + header with this so operators know exactly which
+        # DC's firewall the file belongs to.
+        "dc_id": target_dc or None,
+        "dcs_touched": dcs_touched,
         "vrf": (
             req.get("vrf")
             or (distinct_vrfs[0] if distinct_vrfs else
@@ -10006,16 +10707,39 @@ def _vrf_for_environment(env: str) -> str:
     return "VRF-DEFAULT"
 
 
-def _resolve_group_members_sync(name: str) -> list[str]:
-    """Look up an existing group's members from the groups store."""
+def _resolve_group_members_sync(name: str, dc_id: str | None = None) -> list[str]:
+    """Look up an existing group's members from the groups store.
+
+    Per-DC group instances: when ``dc_id`` is given, return only the
+    members of that DC's instance of ``name`` — the same logical group
+    name materialises as one record per ``(name, dc_id)`` and a device
+    in DC X must only ever see DC X's IPs. When ``dc_id`` is None we
+    keep the legacy behaviour (first match wins) for backward
+    compatibility with callers that pre-date per-DC instancing.
+    """
 
     if not name:
         return []
+    target_dc = (dc_id or "").strip()
+    fallback: list[str] | None = None
     for g in _load("groups") or []:
-        if str(g.get("name", "")).upper() == name.upper():
-            ms = g.get("members") or g.get("ips") or []
-            return [str(m) for m in ms]
-    return []
+        if str(g.get("name", "")).upper() != name.upper():
+            continue
+        gdc = str(g.get("dc_id") or "").strip()
+        ms = g.get("members") or g.get("ips") or []
+        members = [str(m) for m in ms]
+        if target_dc:
+            if gdc and gdc == target_dc:
+                return members
+            # Track first-seen as legacy fallback in case there is no
+            # per-DC instance yet (e.g. older seeds before per-DC
+            # materialisation ran).
+            if fallback is None and not gdc:
+                fallback = members
+            continue
+        if fallback is None:
+            fallback = members
+    return fallback or []
 
 
 def _expansion_block(group_name: str, members: list[str] | None = None) -> str:
@@ -10144,9 +10868,14 @@ def _manifest_vrfs(manifest: dict[str, Any]) -> list[str]:
 
 def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "# PAN-OS / Panorama set-mode configuration",
         f"# Request {manifest.get('request_id')}",
+        (
+            f"# Target DC (device): {dc_tag}" if dc_tag
+            else "# Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"# VRFs / virtual-routers touched: {', '.join(vrfs)}",
         "",
     ]
@@ -10196,8 +10925,13 @@ def _vendor_compile_panos(manifest: dict[str, Any]) -> str:
 
 def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "# Fortinet FortiGate config",
+        (
+            f"# Target DC (device): {dc_tag}" if dc_tag
+            else "# Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"# VRFs / vdoms touched: {', '.join(vrfs)}",
         "",
     ]
@@ -10277,8 +11011,13 @@ def _vendor_compile_fortinet(manifest: dict[str, Any]) -> str:
 
 def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "! Cisco ASA / FTD configuration",
+        (
+            f"! Target DC (device): {dc_tag}" if dc_tag
+            else "! Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"! VRFs / contexts touched: {', '.join(vrfs)}",
         "",
     ]
@@ -10332,8 +11071,13 @@ def _vendor_compile_cisco(manifest: dict[str, Any]) -> str:
 
 def _vendor_compile_checkpoint(manifest: dict[str, Any]) -> str:
     vrfs = _manifest_vrfs(manifest) or ["VRF-DEFAULT"]
+    dc_tag = manifest.get("dc_id") or ""
     out: list[str] = [
         "# Check Point SmartConsole CLI",
+        (
+            f"# Target DC (device): {dc_tag}" if dc_tag
+            else "# Target DC (device): <unscoped — see /artifacts/per-dc for one-file-per-DC>"
+        ),
         f"# VRFs / policy packages touched: {', '.join(vrfs)}",
         "",
     ]
@@ -10595,11 +11339,25 @@ VENDOR_COMPILERS_JSON: dict[str, Any] = {
 }
 
 
-async def get_request_artifacts(request_id: str) -> dict[str, Any] | None:
+async def get_request_artifacts(
+    request_id: str,
+    dc_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Build the deployment-artifact bundle for a RuleRequest.
+
+    When ``dc_id`` is provided the bundle is **scoped to that single
+    DC's device** — only physical rows touching the DC are emitted
+    and every group is resolved through its per-DC instance, so the
+    output can be shipped straight to the firewall living in that DC
+    without dragging in IPs from other DCs (which is what every
+    real-world deploy actually wants). Without ``dc_id`` we keep the
+    legacy "all DCs in one file" shape; the unscoped output prints a
+    banner steering operators at ``/artifacts/per-dc`` instead.
+    """
     items = _load_rule_requests()
     for r in items:
         if r.get("request_id") == request_id:
-            manifest = _artifact_manifest_for_request(r)
+            manifest = _artifact_manifest_for_request(r, dc_id=dc_id)
             sheets = _artifact_xlsx_rows(manifest)
             vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
             vendor_configs_json = {v: fn(manifest) for v, fn in VENDOR_COMPILERS_JSON.items()}
@@ -10610,6 +11368,51 @@ async def get_request_artifacts(request_id: str) -> dict[str, Any] | None:
                 "vendor_configs_json": vendor_configs_json,
             }
     return None
+
+
+async def get_request_artifacts_per_dc(request_id: str) -> dict[str, Any] | None:
+    """Return one artifact bundle per DC the request touches.
+
+    A single RuleRequest can fan out across multiple ``(src_dc, dst_dc)``
+    pairs — every device involved is in exactly one DC, so the
+    deployable artifact must be split by DC. This helper returns a
+    map ``{dcs: [{dc_id, manifest, xlsx_sheets, vendor_configs,
+    vendor_configs_json}, ...], dc_ids: [...]}`` so the UI can render
+    one tab per DC and operators ship the right per-device file with
+    no copy-paste mixing across DCs.
+    """
+    items = _load_rule_requests()
+    target = next((r for r in items if r.get("request_id") == request_id), None)
+    if target is None:
+        return None
+    expansion = target.get("expansion") or []
+    dc_ids: list[str] = []
+    seen: set[str] = set()
+    for p in expansion:
+        for d in (p.get("src_dc"), p.get("dst_dc")):
+            d_norm = str(d or "").strip()
+            if d_norm and d_norm not in seen:
+                dc_ids.append(d_norm)
+                seen.add(d_norm)
+    bundles: list[dict[str, Any]] = []
+    for d in dc_ids:
+        manifest = _artifact_manifest_for_request(target, dc_id=d)
+        sheets = _artifact_xlsx_rows(manifest)
+        vendor_configs = {v: fn(manifest) for v, fn in VENDOR_COMPILERS.items()}
+        vendor_configs_json = {v: fn(manifest) for v, fn in VENDOR_COMPILERS_JSON.items()}
+        bundles.append({
+            "dc_id": d,
+            "environment": target.get("environment"),
+            "manifest": manifest,
+            "xlsx_sheets": sheets,
+            "vendor_configs": vendor_configs,
+            "vendor_configs_json": vendor_configs_json,
+        })
+    return {
+        "request_id": request_id,
+        "dc_ids": dc_ids,
+        "dcs": bundles,
+    }
 
 
 # ============================================================
@@ -10838,11 +11641,18 @@ async def create_group_change_request(payload: dict[str, Any]) -> dict[str, Any]
     items = _load_group_requests()
     rid = _next_group_request_id()
     now = _now()
+    # Per-DC group instances: a GCR mutates exactly one ``(name, dc_id)``
+    # instance, so the device file emitted later only ever sees that
+    # DC's IPs. Carry the DC explicitly on the record (callers that
+    # didn't pass one get the legacy "first match" behaviour at
+    # resolve time, but new callers must be DC-scoped).
+    dc_id = str(payload.get("dc_id") or "").strip() or None
     record = {
         "request_id": rid,
         "kind": "group_change",
         "op": op,
         "group_name": name,
+        "dc_id": dc_id,
         "added_members": added,
         "removed_members": removed,
         "environment": payload.get("environment") or "",
@@ -10905,10 +11715,21 @@ async def set_group_change_request_status(
 
     # When the change is finally Deployed (or Certified) flip the group's
     # lifecycle, applying the modify-add / modify-remove members so the
-    # group truly reflects what's on the device.
+    # group truly reflects what's on the device. Group identity is
+    # per-DC: when ``target.dc_id`` is set we mutate that DC's instance
+    # only — leaving other NGDC DCs' copies untouched.
     if status in ("Deployed", "Certified"):
         groups = _load("groups") or []
-        g = next((x for x in groups if x.get("name") == target["group_name"]), None)
+        target_dc = target.get("dc_id")
+
+        def _matches(rec: dict[str, Any]) -> bool:
+            if rec.get("name") != target["group_name"]:
+                return False
+            if target_dc and str(rec.get("dc_id") or "") != str(target_dc):
+                return False
+            return True
+
+        g = next((x for x in groups if _matches(x)), None)
         if g is not None:
             members = g.get("members") or []
             current_values = [m.get("value") for m in members if isinstance(m, dict)]
@@ -10921,14 +11742,31 @@ async def set_group_change_request_status(
                 rm_set = set(target.get("removed_members", []))
                 members = [m for m in members if m.get("value") not in rm_set]
             elif op == "delete":
-                groups = [x for x in groups if x.get("name") != target["group_name"]]
+                groups = [x for x in groups if not _matches(x)]
                 _save("groups", groups)
+                # Capture snapshot for the DC of the deleted group
+                if target_dc:
+                    try:
+                        await capture_deployed_snapshot(
+                            target_dc, target.get("environment") or "Production",
+                        )
+                    except Exception:  # pragma: no cover - defensive
+                        pass
                 return target
             g["members"] = members
             g["lifecycle_status"] = status
             g["pending_change_request"] = None
             g["updated_at"] = _now()
             _save("groups", groups)
+        # Snapshot the DC after the membership mutation so the next
+        # compile emits delta-only output.
+        if target_dc:
+            try:
+                await capture_deployed_snapshot(
+                    target_dc, target.get("environment") or "Production",
+                )
+            except Exception:  # pragma: no cover - defensive
+                pass
     elif status == "Rejected":
         # Roll back any provisional create and unblock the existing group.
         groups = _load("groups") or []
@@ -10969,15 +11807,23 @@ def _vrf_from_group_name(name: str) -> str:
 def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
     """Vendor-neutral manifest for a GroupChangeRequest. Same shape as
     the RuleRequest manifest so the existing XLSX writer + vendor
-    compilers + bundle.zip pipeline keeps working."""
+    compilers + bundle.zip pipeline keeps working.
+
+    Group identity is per-DC: every GCR carries a ``dc_id`` selecting
+    which per-DC instance of the named group is being mutated, and
+    the manifest resolves ``members_now`` against that instance only
+    so the device file never mixes IPs from other DCs.
+    """
 
     op = req.get("op") or "create"
     name = req.get("group_name") or ""
     added = list(req.get("added_members") or [])
     removed = list(req.get("removed_members") or [])
-    members_now = _resolve_group_members_sync(name)
+    dc_id = str(req.get("dc_id") or "").strip() or None
+    members_now = _resolve_group_members_sync(name, dc_id)
     group_entry = {
         "name": name,
+        "dc_id": dc_id,
         "op": op,
         "members": members_now if op != "delete" else members_now,
         "added_members": added,
@@ -10997,6 +11843,11 @@ def _group_change_manifest(req: dict[str, Any]) -> dict[str, Any]:
         "updated_at": req.get("updated_at"),
         "external_ticket_id": req.get("external_ticket_id"),
         "external_ticket_url": req.get("external_ticket_url"),
+        # Single-DC by definition for group changes — surface it so
+        # vendor compilers stamp the device-target header and the UI
+        # tags the artifact with the right DC.
+        "dc_id": dc_id,
+        "dcs_touched": [dc_id] if dc_id else [],
         "vrf": derived_vrf or req.get("vrf") or "",
         "vrfs": [derived_vrf] if derived_vrf else [],
         "rules": [],
@@ -11338,3 +12189,713 @@ async def itsm_webhook_dispatch(
         "external_ticket_id": ext_id,
         "reason": "no rule or group change request matches this ticket id",
     }
+
+
+# ============================================================
+# Per-DC Compilation + Deployed Snapshot + Auto-GCR linkage
+# ============================================================
+#
+# Every device (firewall) belongs to exactly one DC, so the artifacts
+# we ship to a device must be scoped to that DC: only rules whose
+# src_dc OR dst_dc matches the device's DC, and only the DC-local
+# instance of every referenced group (per-DC group identity is
+# `(name, dc_id, environment)` — see commit 0db4b54).
+#
+# We also track a **deployed snapshot** per `(dc_id, environment)`. The
+# first compile after a snapshot exists emits delta-only operations;
+# the very first compile (no snapshot yet) emits everything as new.
+# Snapshots are captured automatically when a rule or GCR transitions
+# to Deployed.
+#
+# Finally, when a rule request is created we auto-stage Group Change
+# Requests for any per-(group, dc) membership delta the rule implies,
+# so the group lifecycle and rule lifecycle stay in lock-step through
+# the canonical Pending → Approved → Deployed flow.
+
+
+def _hash_value(v: Any) -> str:
+    """Stable short hex hash of any JSON-serialisable value."""
+    return hashlib.sha256(
+        json.dumps(v, sort_keys=True, default=str).encode()
+    ).hexdigest()[:12]
+
+
+def _snapshot_key(dc_id: str, environment: str) -> str:
+    return f"{(dc_id or '').upper()}::{(environment or 'Production').upper()}"
+
+
+async def get_deployed_snapshot(
+    dc_id: str, environment: str = "Production",
+) -> dict[str, Any] | None:
+    """Return the most recent deployed snapshot for a `(dc_id, env)`
+    pair, or None if nothing has ever been deployed there yet."""
+    snapshots = _load("deployed_snapshots") or {}
+    return snapshots.get(_snapshot_key(dc_id, environment))
+
+
+async def list_deployed_snapshots() -> list[dict[str, Any]]:
+    """Flat list of all snapshots — drives the "Deployment Status"
+    banner in Studio (which DCs have ever been deployed, when, etc.)."""
+    snapshots = _load("deployed_snapshots") or {}
+    return [
+        {
+            "key": k,
+            "dc_id": v.get("dc_id"),
+            "environment": v.get("environment"),
+            "snapshot_at": v.get("snapshot_at"),
+            "snapshot_id": v.get("snapshot_id"),
+            "rules": len(v.get("rules") or {}),
+            "groups": len(v.get("groups") or {}),
+        }
+        for k, v in snapshots.items()
+    ]
+
+
+async def save_deployed_snapshot(
+    dc_id: str, environment: str, snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    snapshots = _load("deployed_snapshots") or {}
+    snapshots[_snapshot_key(dc_id, environment)] = snapshot
+    _save("deployed_snapshots", snapshots)
+    return snapshot
+
+
+def _rule_canonical_for_snapshot(rule: dict[str, Any]) -> dict[str, Any]:
+    """Stable subset of a rule used for hashing + diff. Only fields
+    that actually affect the device config are included so cosmetic
+    edits (description, ticket id, etc.) don't trigger redeploys."""
+    return {
+        "rule_id": rule.get("rule_id"),
+        "src_dc": (rule.get("datacenter") or rule.get("source_dc") or ""),
+        "dst_dc": (rule.get("dst_datacenter") or rule.get("destination_dc") or ""),
+        "source_group": rule.get("source") or "",
+        "dest_group": rule.get("destination") or "",
+        "src_nh": rule.get("source_nh") or "",
+        "src_sz": rule.get("source_zone") or "",
+        "dst_nh": rule.get("destination_nh") or "",
+        "dst_sz": rule.get("destination_zone") or "",
+        "protocol": rule.get("protocol") or "",
+        "port": rule.get("port") or "",
+        "action": rule.get("action") or "",
+        "environment": rule.get("environment") or "Production",
+    }
+
+
+def _group_canonical_for_snapshot(group: dict[str, Any]) -> dict[str, Any]:
+    """Stable subset of a per-DC group instance for hashing + diff."""
+    members = group.get("members") or []
+    member_values = sorted({
+        str(m.get("value") if isinstance(m, dict) else m)
+        for m in members
+        if (m.get("value") if isinstance(m, dict) else m)
+    })
+    return {
+        "name": group.get("name") or "",
+        "dc_id": str(group.get("dc_id") or ""),
+        "environment": str(group.get("environment", "Production")),
+        "members": member_values,
+    }
+
+
+def _collect_dc_state(
+    dc_id: str, environment: str,
+) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Return `(rules_canon, groups_canon)` — rules touching this DC
+    and per-DC instances of groups referenced by those rules.
+
+    Group identity in the per-DC architecture is `(name, dc_id, env)`,
+    so we filter to instances whose `dc_id` matches this device's DC.
+    """
+    fw_rules = _load("firewall_rules") or []
+    groups = _load("groups") or []
+    dc_norm = (dc_id or "").upper()
+    env_norm = (environment or "Production").upper()
+    rules_for_dc: list[dict[str, Any]] = []
+    for r in fw_rules:
+        if str(r.get("environment", "Production")).upper() != env_norm:
+            continue
+        dcs = {
+            str(r.get("datacenter") or "").upper(),
+            str(r.get("dst_datacenter") or "").upper(),
+            str(r.get("source_dc") or "").upper(),
+            str(r.get("destination_dc") or "").upper(),
+        }
+        if dc_norm in dcs:
+            rules_for_dc.append(r)
+    rules_canon = {
+        r["rule_id"]: _rule_canonical_for_snapshot(r)
+        for r in rules_for_dc if r.get("rule_id")
+    }
+    group_refs: set[str] = set()
+    for r in rules_for_dc:
+        for ref in (r.get("source"), r.get("destination")):
+            ref_s = str(ref or "")
+            if ref_s.startswith("grp-") or ref_s.startswith("g-"):
+                group_refs.add(ref_s)
+    groups_canon: dict[str, dict] = {}
+    for g in groups:
+        if g.get("name") not in group_refs:
+            continue
+        if str(g.get("dc_id") or "").upper() != dc_norm:
+            continue
+        if str(g.get("environment", "Production")).upper() != env_norm:
+            # Allow groups with no environment field (legacy) to flow
+            # through; the rule already filtered by env above.
+            if g.get("environment"):
+                continue
+        key = f"{g['name']}@{g.get('dc_id', '')}"
+        groups_canon[key] = _group_canonical_for_snapshot(g)
+    return rules_canon, groups_canon
+
+
+def _render_device_config(
+    vendor: str,
+    mode: str,
+    rule_changes: list[dict[str, Any]],
+    group_changes: list[dict[str, Any]],
+    full_rules: dict[str, dict[str, Any]],
+    full_groups: dict[str, dict[str, Any]],
+) -> str:
+    """Vendor-specific device config text. ``mode='initial'`` emits
+    the full set; ``mode='incremental'`` emits delta operations only."""
+    v = (vendor or "generic").lower()
+    out: list[str] = []
+
+    def _proto_port(r: dict[str, Any]) -> str:
+        return f"{(r.get('protocol') or 'TCP').upper()}/{r.get('port') or ''}"
+
+    if v in ("panos", "palo", "paloalto", "pan-os"):
+        out.append(f"# Palo Alto PAN-OS — {mode} deploy")
+        if mode == "initial":
+            for _, g in full_groups.items():
+                out.append(
+                    f"set address-group {g['name']} static "
+                    f"[ {' '.join(g['members'])} ]"
+                )
+            for rid, r in full_rules.items():
+                out.append(
+                    f"set rulebase security rules {rid} from "
+                    f"{r['src_sz'] or 'any'} to {r['dst_sz'] or 'any'} "
+                    f"source {r['source_group'] or 'any'} "
+                    f"destination {r['dest_group'] or 'any'} "
+                    f"application any service "
+                    f"{(r['protocol'] or 'tcp').lower()}-{r['port'] or ''} "
+                    f"action {(r['action'] or 'allow').lower()}"
+                )
+        else:
+            for ch in group_changes:
+                if ch["op"] == "create":
+                    g = ch.get("after") or {}
+                    out.append(
+                        f"set address-group {g.get('name', '')} static "
+                        f"[ {' '.join(g.get('members', []))} ]"
+                    )
+                elif ch["op"] == "modify":
+                    name = (ch.get("after") or {}).get("name", "")
+                    for m in ch.get("added_members", []):
+                        out.append(f"set address-group {name} static + [ {m} ]")
+                    for m in ch.get("removed_members", []):
+                        out.append(f"delete address-group {name} static {m}")
+                elif ch["op"] == "delete":
+                    g = ch.get("before") or {}
+                    out.append(f"delete address-group {g.get('name', '')}")
+            for ch in rule_changes:
+                if ch["op"] in ("add", "update"):
+                    r = ch.get("after") or {}
+                    rid = ch.get("rule_id") or r.get("rule_id") or ""
+                    if ch["op"] == "update":
+                        out.append(f"# update {rid} (re-emit)")
+                    out.append(
+                        f"set rulebase security rules {rid} from "
+                        f"{r.get('src_sz') or 'any'} to {r.get('dst_sz') or 'any'} "
+                        f"source {r.get('source_group') or 'any'} "
+                        f"destination {r.get('dest_group') or 'any'} "
+                        f"application any service "
+                        f"{(r.get('protocol') or 'tcp').lower()}-{r.get('port') or ''} "
+                        f"action {(r.get('action') or 'allow').lower()}"
+                    )
+                elif ch["op"] == "remove":
+                    out.append(f"delete rulebase security rules {ch['rule_id']}")
+    elif v in ("fortinet", "fortios", "forti"):
+        out.append(f"# Fortinet FortiOS — {mode} deploy")
+        if mode == "initial":
+            out.append("config firewall addrgrp")
+            for _, g in full_groups.items():
+                out.append(f"  edit \"{g['name']}\"")
+                out.append(f"    set member {' '.join(g['members'])}")
+                out.append("  next")
+            out.append("end")
+            out.append("config firewall policy")
+            for rid, r in full_rules.items():
+                out.append(f"  edit {rid.replace('R-', '')}")
+                out.append(f"    set srcaddr \"{r['source_group']}\"")
+                out.append(f"    set dstaddr \"{r['dest_group']}\"")
+                out.append(
+                    f"    set service \"{(r['protocol'] or 'TCP')}-{r['port'] or ''}\""
+                )
+                out.append(f"    set action {(r['action'] or 'allow').lower()}")
+                out.append("  next")
+            out.append("end")
+        else:
+            for ch in group_changes:
+                after = ch.get("after") or {}
+                if ch["op"] in ("create", "modify"):
+                    out.append("config firewall addrgrp")
+                    out.append(f"  edit \"{after.get('name', '')}\"")
+                    out.append(
+                        f"    set member {' '.join(after.get('members', []))}"
+                    )
+                    out.append("  next")
+                    out.append("end")
+                elif ch["op"] == "delete":
+                    before = ch.get("before") or {}
+                    out.append("config firewall addrgrp")
+                    out.append(f"  delete \"{before.get('name', '')}\"")
+                    out.append("end")
+            for ch in rule_changes:
+                if ch["op"] in ("add", "update"):
+                    r = ch.get("after") or {}
+                    rid = ch.get("rule_id") or r.get("rule_id") or ""
+                    out.append("config firewall policy")
+                    out.append(f"  edit {rid.replace('R-', '')}")
+                    out.append(f"    set srcaddr \"{r.get('source_group', '')}\"")
+                    out.append(f"    set dstaddr \"{r.get('dest_group', '')}\"")
+                    out.append(
+                        f"    set service \"{r.get('protocol', 'TCP')}-{r.get('port', '')}\""
+                    )
+                    out.append(
+                        f"    set action {(r.get('action') or 'allow').lower()}"
+                    )
+                    out.append("  next")
+                    out.append("end")
+                elif ch["op"] == "remove":
+                    out.append("config firewall policy")
+                    out.append(f"  delete {ch['rule_id'].replace('R-', '')}")
+                    out.append("end")
+    elif v in ("cisco", "asa", "ftd", "ios", "iosxe"):
+        out.append(f"! Cisco — {mode} deploy")
+        if mode == "initial":
+            for _, g in full_groups.items():
+                out.append(f"object-group network {g['name']}")
+                for m in g["members"]:
+                    out.append(f"  network-object host {m}")
+            for rid, r in full_rules.items():
+                out.append(
+                    f"access-list {rid} extended "
+                    f"{(r['action'] or 'permit').lower()} "
+                    f"{(r['protocol'] or 'tcp').lower()} object-group "
+                    f"{r['source_group']} object-group {r['dest_group']} "
+                    f"eq {r['port'] or ''}"
+                )
+        else:
+            for ch in group_changes:
+                after = ch.get("after") or {}
+                if ch["op"] == "create":
+                    out.append(f"object-group network {after.get('name', '')}")
+                    for m in after.get("members", []):
+                        out.append(f"  network-object host {m}")
+                elif ch["op"] == "modify":
+                    out.append(f"object-group network {after.get('name', '')}")
+                    for m in ch.get("added_members", []):
+                        out.append(f"  network-object host {m}")
+                    for m in ch.get("removed_members", []):
+                        out.append(f"  no network-object host {m}")
+                elif ch["op"] == "delete":
+                    before = ch.get("before") or {}
+                    out.append(f"no object-group network {before.get('name', '')}")
+            for ch in rule_changes:
+                if ch["op"] in ("add", "update"):
+                    r = ch.get("after") or {}
+                    rid = ch.get("rule_id") or r.get("rule_id") or ""
+                    out.append(
+                        f"access-list {rid} extended "
+                        f"{(r.get('action') or 'permit').lower()} "
+                        f"{(r.get('protocol') or 'tcp').lower()} object-group "
+                        f"{r.get('source_group', '')} object-group "
+                        f"{r.get('dest_group', '')} eq {r.get('port', '')}"
+                    )
+                elif ch["op"] == "remove":
+                    out.append(f"no access-list {ch['rule_id']}")
+    elif v in ("juniper", "junos", "srx"):
+        out.append(f"# Juniper Junos — {mode} deploy")
+        if mode == "initial":
+            for _, g in full_groups.items():
+                out.append(f"set security address-book global address-set {g['name']}")
+                for m in g["members"]:
+                    out.append(
+                        f"set security address-book global address-set "
+                        f"{g['name']} address {m}"
+                    )
+            for rid, r in full_rules.items():
+                out.append(
+                    f"set security policies from-zone {r['src_sz'] or 'trust'} "
+                    f"to-zone {r['dst_sz'] or 'untrust'} policy {rid} "
+                    f"match source-address {r['source_group']}"
+                )
+                out.append(
+                    f"set security policies from-zone {r['src_sz'] or 'trust'} "
+                    f"to-zone {r['dst_sz'] or 'untrust'} policy {rid} "
+                    f"match destination-address {r['dest_group']}"
+                )
+                out.append(
+                    f"set security policies from-zone {r['src_sz'] or 'trust'} "
+                    f"to-zone {r['dst_sz'] or 'untrust'} policy {rid} "
+                    f"then {(r['action'] or 'permit').lower()}"
+                )
+        else:
+            for ch in group_changes:
+                after = ch.get("after") or {}
+                name = after.get("name", "")
+                if ch["op"] == "modify":
+                    for m in ch.get("added_members", []):
+                        out.append(
+                            f"set security address-book global address-set "
+                            f"{name} address {m}"
+                        )
+                    for m in ch.get("removed_members", []):
+                        out.append(
+                            f"delete security address-book global address-set "
+                            f"{name} address {m}"
+                        )
+                elif ch["op"] == "create":
+                    for m in after.get("members", []):
+                        out.append(
+                            f"set security address-book global address-set "
+                            f"{name} address {m}"
+                        )
+                elif ch["op"] == "delete":
+                    before = ch.get("before") or {}
+                    out.append(
+                        f"delete security address-book global address-set "
+                        f"{before.get('name', '')}"
+                    )
+            for ch in rule_changes:
+                if ch["op"] == "remove":
+                    out.append(f"delete security policies policy {ch['rule_id']}")
+                else:
+                    r = ch.get("after") or {}
+                    rid = ch.get("rule_id") or r.get("rule_id") or ""
+                    out.append(
+                        f"set security policies from-zone {r.get('src_sz') or 'trust'} "
+                        f"to-zone {r.get('dst_sz') or 'untrust'} policy {rid} "
+                        f"then {(r.get('action') or 'permit').lower()}"
+                    )
+    else:
+        out.append(f"# Generic device config — {mode} deploy")
+        if mode == "initial":
+            for _, g in full_groups.items():
+                out.append(
+                    f"GROUP {g['name']} = {{ {', '.join(g['members'])} }}"
+                )
+            for rid, r in full_rules.items():
+                out.append(
+                    f"RULE {rid}: {r['source_group']} -> {r['dest_group']} "
+                    f"{_proto_port(r)} {r['action']}"
+                )
+        else:
+            for ch in group_changes:
+                after = ch.get("after") or {}
+                if ch["op"] == "create":
+                    out.append(
+                        f"GROUP_CREATE {after.get('name', '')} "
+                        f"= {{ {', '.join(after.get('members', []))} }}"
+                    )
+                elif ch["op"] == "modify":
+                    for m in ch.get("added_members", []):
+                        out.append(f"GROUP_ADD {after.get('name', '')} {m}")
+                    for m in ch.get("removed_members", []):
+                        out.append(f"GROUP_DEL {after.get('name', '')} {m}")
+                elif ch["op"] == "delete":
+                    before = ch.get("before") or {}
+                    out.append(f"GROUP_DELETE {before.get('name', '')}")
+            for ch in rule_changes:
+                if ch["op"] == "remove":
+                    out.append(f"RULE_REMOVE {ch['rule_id']}")
+                else:
+                    r = ch.get("after") or {}
+                    rid = ch.get("rule_id") or r.get("rule_id") or ""
+                    op = "RULE_ADD" if ch["op"] == "add" else "RULE_UPDATE"
+                    out.append(
+                        f"{op} {rid}: {r.get('source_group', '')} -> "
+                        f"{r.get('dest_group', '')} {_proto_port(r)} "
+                        f"{r.get('action', '')}"
+                    )
+    return "\n".join(out)
+
+
+async def compile_per_dc(
+    dc_id: str,
+    environment: str = "Production",
+    vendor: str = "generic",
+    mode: str = "auto",
+) -> dict[str, Any]:
+    """Build a per-DC deployable manifest.
+
+    Args:
+        dc_id: e.g. ``ALPHA_NGDC`` or ``DC_LEGACY_A``.
+        environment: ``Production`` / ``Non-Production`` / ``Pre-Production``.
+        vendor: ``generic`` / ``panos`` / ``fortinet`` / ``cisco`` / ``juniper``.
+        mode:
+            * ``auto`` — initial when no snapshot for `(dc_id, env)`,
+              incremental otherwise.
+            * ``initial`` — force full snapshot output.
+            * ``incremental`` — force delta-only output.
+
+    Returns a manifest:
+        {
+          dc_id, environment, vendor, mode, snapshot_present,
+          snapshot_at, rule_changes[], group_changes[],
+          summary{rules_total, groups_total, ...}, device_config,
+          full_rules, full_groups,
+        }
+    """
+    rules_canon, groups_canon = _collect_dc_state(dc_id, environment)
+    rule_hashes = {rid: _hash_value(c) for rid, c in rules_canon.items()}
+    group_hashes = {k: _hash_value(c) for k, c in groups_canon.items()}
+
+    snapshot = await get_deployed_snapshot(dc_id, environment)
+    if mode == "auto":
+        effective_mode = "initial" if snapshot is None else "incremental"
+    else:
+        effective_mode = mode
+
+    rule_changes: list[dict[str, Any]] = []
+    group_changes: list[dict[str, Any]] = []
+
+    if effective_mode == "initial":
+        for rid, canon in rules_canon.items():
+            rule_changes.append({"op": "add", "rule_id": rid, "after": canon})
+        for k, canon in groups_canon.items():
+            group_changes.append({"op": "create", "group_key": k, "after": canon})
+    else:
+        prev_rule_hashes = (snapshot or {}).get("rule_hashes", {})
+        prev_group_hashes = (snapshot or {}).get("group_hashes", {})
+        prev_rules_canon = (snapshot or {}).get("rules", {})
+        prev_groups_canon = (snapshot or {}).get("groups", {})
+
+        for rid, h in rule_hashes.items():
+            if rid not in prev_rule_hashes:
+                rule_changes.append(
+                    {"op": "add", "rule_id": rid, "after": rules_canon[rid]}
+                )
+            elif prev_rule_hashes[rid] != h:
+                rule_changes.append({
+                    "op": "update", "rule_id": rid,
+                    "before": prev_rules_canon.get(rid),
+                    "after": rules_canon[rid],
+                })
+        for rid in prev_rule_hashes:
+            if rid not in rule_hashes:
+                rule_changes.append({
+                    "op": "remove", "rule_id": rid,
+                    "before": prev_rules_canon.get(rid),
+                })
+
+        for k, h in group_hashes.items():
+            if k not in prev_group_hashes:
+                group_changes.append({
+                    "op": "create", "group_key": k,
+                    "after": groups_canon[k],
+                })
+            elif prev_group_hashes[k] != h:
+                prev_members = set(
+                    (prev_groups_canon.get(k) or {}).get("members", [])
+                )
+                curr_members = set(groups_canon[k].get("members", []))
+                group_changes.append({
+                    "op": "modify",
+                    "group_key": k,
+                    "added_members": sorted(curr_members - prev_members),
+                    "removed_members": sorted(prev_members - curr_members),
+                    "before": prev_groups_canon.get(k),
+                    "after": groups_canon[k],
+                })
+        for k in prev_group_hashes:
+            if k not in group_hashes:
+                group_changes.append({
+                    "op": "delete", "group_key": k,
+                    "before": prev_groups_canon.get(k),
+                })
+
+    return {
+        "dc_id": (dc_id or "").upper(),
+        "environment": environment,
+        "vendor": vendor,
+        "mode": effective_mode,
+        "snapshot_present": snapshot is not None,
+        "snapshot_at": (snapshot or {}).get("snapshot_at"),
+        "snapshot_id": (snapshot or {}).get("snapshot_id"),
+        "rule_changes": rule_changes,
+        "group_changes": group_changes,
+        "summary": {
+            "rules_total": len(rules_canon),
+            "groups_total": len(groups_canon),
+            "rule_changes": len(rule_changes),
+            "group_changes": len(group_changes),
+        },
+        "device_config": _render_device_config(
+            vendor, effective_mode, rule_changes, group_changes,
+            full_rules=rules_canon, full_groups=groups_canon,
+        ),
+        "full_rules": rules_canon,
+        "full_groups": groups_canon,
+    }
+
+
+async def compile_per_dc_all(
+    environment: str = "Production",
+    vendor: str = "generic",
+    mode: str = "auto",
+) -> dict[str, Any]:
+    """Per-DC manifest for every DC (NGDC + Heritage) that has any
+    rules referencing it in this environment."""
+    rules = _load("firewall_rules") or []
+    env_norm = (environment or "Production").upper()
+    dcs: set[str] = set()
+    for r in rules:
+        if str(r.get("environment", "Production")).upper() != env_norm:
+            continue
+        for fld in ("datacenter", "dst_datacenter", "source_dc", "destination_dc"):
+            v = str(r.get(fld) or "").upper()
+            if v:
+                dcs.add(v)
+    manifests: dict[str, Any] = {}
+    for dc in sorted(dcs):
+        manifests[dc] = await compile_per_dc(dc, environment, vendor, mode)
+    return {
+        "environment": environment,
+        "vendor": vendor,
+        "mode": mode,
+        "manifests": manifests,
+        "dc_ids": sorted(dcs),
+    }
+
+
+async def capture_deployed_snapshot(
+    dc_id: str, environment: str = "Production",
+    deployed_by: str = "system",
+) -> dict[str, Any]:
+    """Persist the current per-DC compile state as the new baseline.
+    Called automatically on every Deployed transition so subsequent
+    compiles emit delta-only output."""
+    rules_canon, groups_canon = _collect_dc_state(dc_id, environment)
+    rule_hashes = {rid: _hash_value(c) for rid, c in rules_canon.items()}
+    group_hashes = {k: _hash_value(c) for k, c in groups_canon.items()}
+    snapshot = {
+        "dc_id": (dc_id or "").upper(),
+        "environment": environment,
+        "snapshot_id": _id(),
+        "snapshot_at": _now(),
+        "deployed_by": deployed_by,
+        "rules": rules_canon,
+        "rule_hashes": rule_hashes,
+        "groups": groups_canon,
+        "group_hashes": group_hashes,
+    }
+    await save_deployed_snapshot(dc_id, environment, snapshot)
+    return snapshot
+
+
+async def auto_stage_gcrs_for_rule_request(
+    request_id: str,
+    physical_rules: list[dict[str, Any]],
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """When a rule request is created, stage Group Change Requests for
+    every per-(group, dc) membership delta the rule implies.
+
+    Mode is **per-DC**: if the destination DC has no deployed snapshot
+    yet, the GCR is tagged ``mode='initial'`` and carries the full
+    member set so the first deploy ships everything as new. Otherwise
+    it's tagged ``mode='incremental'`` and carries only the IPs that
+    aren't already in the group instance.
+    """
+    auto_gcrs: list[dict[str, Any]] = []
+    env = payload.get("environment", "Production")
+    owner = payload.get("owner", "")
+    owner_team = payload.get("owner_team", "")
+
+    # Aggregate per `(group_name, dc_id)` so multiple physical rows for
+    # the same DC don't stage redundant GCRs.
+    proposed: dict[tuple[str, str], set[str]] = {}
+    for p in physical_rules:
+        sg = p.get("src_group_ref")
+        sd = p.get("src_dc")
+        if sg and sd:
+            for ip in p.get("egress_ip_dependency") or []:
+                if ip:
+                    proposed.setdefault((sg, sd), set()).add(str(ip))
+        dg = p.get("dst_group_ref")
+        dd = p.get("dst_dc")
+        if dg and dd:
+            for ip in p.get("ingress_ip_dependency") or []:
+                if ip:
+                    proposed.setdefault((dg, dd), set()).add(str(ip))
+
+    for (group_name, dc_id), proposed_members in proposed.items():
+        existing = await get_group(group_name, dc_id=dc_id)
+        existing_values: set[str] = set()
+        if existing:
+            for m in (existing.get("members") or []):
+                v = m.get("value") if isinstance(m, dict) else m
+                if v:
+                    existing_values.add(str(v))
+
+        snap = await get_deployed_snapshot(dc_id, env)
+        snapshot_present = snap is not None
+        gcr_mode = "incremental" if snapshot_present else "initial"
+
+        if gcr_mode == "initial":
+            full_members = sorted(proposed_members | existing_values)
+            if not full_members:
+                continue
+            try:
+                gcr = await create_group_change_request({
+                    "op": "modify-add",
+                    "group_name": group_name,
+                    "added_members": full_members,
+                    "environment": env,
+                    "owner": owner,
+                    "owner_team": owner_team,
+                    "description": (
+                        f"Auto-staged from rule request {request_id} "
+                        f"(initial bootstrap for DC {dc_id})"
+                    ),
+                })
+            except ValueError:
+                continue
+        else:
+            delta = sorted(proposed_members - existing_values)
+            if not delta:
+                continue
+            gcr = await create_group_change_request({
+                "op": "modify-add",
+                "group_name": group_name,
+                "added_members": delta,
+                "environment": env,
+                "owner": owner,
+                "owner_team": owner_team,
+                "description": (
+                    f"Auto-staged from rule request {request_id} "
+                    f"(incremental delta for DC {dc_id})"
+                ),
+            })
+
+        # Stamp parent linkage + per-DC scope so Review queue can group
+        # auto-staged GCRs under the parent rule submission.
+        items = _load_group_requests()
+        for rec in items:
+            if rec.get("request_id") == gcr.get("request_id"):
+                rec["triggered_by_rule"] = request_id
+                rec["dc_id"] = dc_id
+                rec["mode"] = gcr_mode
+                break
+        _save("group_change_requests", items)
+        auto_gcrs.append({
+            **gcr,
+            "triggered_by_rule": request_id,
+            "dc_id": dc_id,
+            "mode": gcr_mode,
+        })
+
+    return auto_gcrs

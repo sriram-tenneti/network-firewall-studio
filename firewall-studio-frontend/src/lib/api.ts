@@ -382,23 +382,59 @@ export const updateNamingStandards = (data: Record<string, unknown>) =>
   fetchJSON<Record<string, unknown>>('/api/reference/naming-standards', { method: 'PUT', body: JSON.stringify(data) });
 
 // Groups CRUD
-export const getGroups = (appId?: string) => {
+//
+// Group identity is logically (name, dc_id, environment): each NGDC DC
+// materialises its own copy of a logical group with DC-local egress IPs
+// only. Pass dc_id to scope reads/writes to a specific DC's instance —
+// that is the right path for the per-DC device-deploy model. Without
+// dc_id, list/read returns all DC instances; write/delete falls back
+// to the first match (legacy compatibility).
+export const getGroups = (
+  appId?: string, dcId?: string, environment?: string,
+) => {
   const params = new URLSearchParams();
   if (appId) params.set('app_id', appId);
+  if (dcId) params.set('dc_id', dcId);
+  if (environment) params.set('environment', environment);
   const qs = params.toString();
   return fetchJSON<FirewallGroup[]>(`/api/reference/groups${qs ? `?${qs}` : ''}`);
 };
-export const getGroup = (name: string) => fetchJSON<FirewallGroup>(`/api/reference/groups/${name}`);
+export const getGroup = (name: string, dcId?: string) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(`/api/reference/groups/${name}${qs}`);
+};
+export const getGroupInstances = (name: string) =>
+  fetchJSON<FirewallGroup[]>(`/api/reference/groups-by-name/${name}/instances`);
 export const createGroup = (data: Record<string, unknown>) =>
   fetchJSON<FirewallGroup>('/api/reference/groups', { method: 'POST', body: JSON.stringify(data) });
-export const updateGroup = (name: string, data: Record<string, unknown>) =>
-  fetchJSON<FirewallGroup>(`/api/reference/groups/${name}`, { method: 'PUT', body: JSON.stringify(data) });
-export const deleteGroup = (name: string) =>
-  fetchJSON<{ message: string }>(`/api/reference/groups/${name}`, { method: 'DELETE' });
-export const addGroupMember = (groupName: string, member: GroupMember) =>
-  fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members`, { method: 'POST', body: JSON.stringify(member) });
-export const removeGroupMember = (groupName: string, memberValue: string) =>
-  fetchJSON<FirewallGroup>(`/api/reference/groups/${groupName}/members/${memberValue}`, { method: 'DELETE' });
+export const updateGroup = (
+  name: string, data: Record<string, unknown>, dcId?: string,
+) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(`/api/reference/groups/${name}${qs}`,
+    { method: 'PUT', body: JSON.stringify(data) });
+};
+export const deleteGroup = (name: string, dcId?: string) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<{ message: string }>(`/api/reference/groups/${name}${qs}`,
+    { method: 'DELETE' });
+};
+export const addGroupMember = (
+  groupName: string, member: GroupMember, dcId?: string,
+) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(
+    `/api/reference/groups/${groupName}/members${qs}`,
+    { method: 'POST', body: JSON.stringify(member) });
+};
+export const removeGroupMember = (
+  groupName: string, memberValue: string, dcId?: string,
+) => {
+  const qs = dcId ? `?dc_id=${encodeURIComponent(dcId)}` : '';
+  return fetchJSON<FirewallGroup>(
+    `/api/reference/groups/${groupName}/members/${memberValue}${qs}`,
+    { method: 'DELETE' });
+};
 
 // Legacy Rules (for Migration Studio & Firewall Management)
 export const getLegacyRules = (appId?: string, excludeMigrated?: boolean, environment?: string, migrationOnly?: boolean) => {
@@ -502,6 +538,109 @@ export const getMigrationHistory = () =>
 // Rule Compiler
 export const compileRule = (ruleId: string, vendor: string = 'generic') =>
   fetchJSON<CompiledRule>(`/api/rules/${ruleId}/compile?vendor=${vendor}`, { method: 'POST' });
+
+// ----------------------------------------------------------------
+// Per-DC Compilation + Deployed Snapshots
+// ----------------------------------------------------------------
+// A device (firewall) belongs to one DC, so the artifacts shipped
+// to it must be scoped to that DC: only rules whose src_dc OR dst_dc
+// matches the device's DC, and only the DC-local instance of every
+// referenced group. A "deployed snapshot" per (dc_id, environment)
+// drives initial-vs-incremental compile output: the very first
+// compile (no snapshot) emits everything; subsequent compiles emit
+// delta operations only.
+// ----------------------------------------------------------------
+
+export interface PerDcRuleChange {
+  op: 'add' | 'update' | 'remove';
+  rule_id: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+}
+
+export interface PerDcGroupChange {
+  op: 'create' | 'modify' | 'delete';
+  group_key: string;
+  added_members?: string[];
+  removed_members?: string[];
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+}
+
+export interface PerDcManifest {
+  dc_id: string;
+  environment: string;
+  vendor: string;
+  mode: 'initial' | 'incremental';
+  snapshot_present: boolean;
+  snapshot_at?: string;
+  snapshot_id?: string;
+  rule_changes: PerDcRuleChange[];
+  group_changes: PerDcGroupChange[];
+  summary: {
+    rules_total: number;
+    groups_total: number;
+    rule_changes: number;
+    group_changes: number;
+  };
+  device_config: string;
+  full_rules: Record<string, Record<string, unknown>>;
+  full_groups: Record<string, Record<string, unknown>>;
+}
+
+export const compilePerDc = (
+  payload: { dc_id: string; environment?: string; vendor?: string; mode?: 'auto' | 'initial' | 'incremental' },
+) => fetchJSON<PerDcManifest>('/api/compile/per-dc', {
+  method: 'POST', body: JSON.stringify(payload),
+});
+
+export const compilePerDcAll = (
+  payload: { environment?: string; vendor?: string; mode?: 'auto' | 'initial' | 'incremental' },
+) => fetchJSON<{ environment: string; vendor: string; mode: string; manifests: Record<string, PerDcManifest>; dc_ids: string[] }>(
+  '/api/compile/per-dc/all', { method: 'POST', body: JSON.stringify(payload) },
+);
+
+export interface DeployedSnapshotSummary {
+  key: string;
+  dc_id: string;
+  environment: string;
+  snapshot_at?: string;
+  snapshot_id?: string;
+  rules: number;
+  groups: number;
+}
+
+export const listDeployedSnapshots = () =>
+  fetchJSON<DeployedSnapshotSummary[]>('/api/compile/snapshots');
+
+export const getDeployedSnapshot = (dcId: string, environment = 'Production') =>
+  fetchJSON<{ exists: boolean; dc_id: string; environment: string; snapshot_at?: string; snapshot_id?: string; rules?: Record<string, unknown>; groups?: Record<string, unknown> }>(
+    `/api/compile/snapshots/${encodeURIComponent(dcId)}?environment=${encodeURIComponent(environment)}`,
+  );
+
+export const captureDeployedSnapshot = (
+  dcId: string, payload: { environment?: string; deployed_by?: string } = {},
+) => fetchJSON<Record<string, unknown>>(
+  `/api/compile/snapshots/${encodeURIComponent(dcId)}/capture`,
+  { method: 'POST', body: JSON.stringify(payload) },
+);
+
+// ----------------------------------------------------------------
+// Migration apply (per-DC + auto-GCR pipeline)
+// ----------------------------------------------------------------
+
+export const applyLegacyTransition = (rule: Record<string, unknown>, reviewer = 'migration') =>
+  fetchJSON<{ legacy_rule_id: string; transition: Record<string, unknown>; staged_rule_requests: Record<string, unknown>[]; staged_count: number }>(
+    '/api/migration/apply',
+    { method: 'POST', body: JSON.stringify({ rule, reviewer }) },
+  );
+
+export const applyLegacyTransitionsBulk = (
+  rules: Record<string, unknown>[], reviewer = 'migration',
+) => fetchJSON<{ total: number; applied: number; results: Record<string, unknown>[] }>(
+  '/api/migration/apply-bulk',
+  { method: 'POST', body: JSON.stringify({ rules, reviewer }) },
+);
 
 // Legacy Rule Compiler
 export const compileLegacyRule = (ruleId: string, vendor: string = 'generic') =>
@@ -1466,22 +1605,73 @@ export const getSecurityZonesWithMode = () =>
     '/api/reference/security-zones-with-mode',
   );
 
-export const getRequestArtifacts = (request_id: string) =>
+// Per-DC artifacts: a single firewall device lives in exactly one DC,
+// so the deployable artifact must be filtered to that DC. Every helper
+// accepts an optional ``dc_id`` that scopes the underlying manifest +
+// vendor configs to a single device target. Without it, the legacy
+// "all DCs in one file" shape is returned (kept for back-compat) but
+// the response carries a banner steering operators to per-DC.
+const _withDc = (path: string, dc_id?: string | null) => {
+  if (!dc_id) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}dc_id=${encodeURIComponent(dc_id)}`;
+};
+
+export const getRequestArtifacts = (request_id: string, dc_id?: string | null) =>
   fetchJSON<DeploymentArtifactsBundle>(
-    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts`,
+    _withDc(
+      `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts`,
+      dc_id,
+    ),
   );
 
-export const requestArtifactJsonUrl = (request_id: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`;
+export type PerDcArtifactBundle = {
+  dc_id: string;
+  environment?: string | null;
+  manifest: DeploymentArtifactsBundle['manifest'];
+  xlsx_sheets: DeploymentArtifactsBundle['xlsx_sheets'];
+  vendor_configs: DeploymentArtifactsBundle['vendor_configs'];
+  vendor_configs_json?: DeploymentArtifactsBundle['vendor_configs_json'];
+};
 
-export const requestArtifactXlsxUrl = (request_id: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`;
+export type PerDcArtifactsResponse = {
+  request_id: string;
+  dc_ids: string[];
+  dcs: PerDcArtifactBundle[];
+};
 
-export const requestArtifactVendorUrl = (request_id: string, vendor: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/device.${encodeURIComponent(vendor)}`;
+export const getRequestArtifactsPerDc = (request_id: string) =>
+  fetchJSON<PerDcArtifactsResponse>(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/per-dc`,
+  );
 
-export const requestArtifactBundleUrl = (request_id: string) =>
-  `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`;
+export const requestArtifactJsonUrl = (request_id: string, dc_id?: string | null) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.json`,
+    dc_id,
+  );
+
+export const requestArtifactXlsxUrl = (request_id: string, dc_id?: string | null) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/manifest.xlsx`,
+    dc_id,
+  );
+
+export const requestArtifactVendorUrl = (
+  request_id: string,
+  vendor: string,
+  dc_id?: string | null,
+) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/device.${encodeURIComponent(vendor)}`,
+    dc_id,
+  );
+
+export const requestArtifactBundleUrl = (request_id: string, dc_id?: string | null) =>
+  _withDc(
+    `/api/rules/requests/${encodeURIComponent(request_id)}/artifacts/bundle.zip`,
+    dc_id,
+  );
 
 export const downloadRequestArtifactBulkBundle = async (request_ids: string[]) => {
   const res = await fetch('/api/rules/requests/artifacts/bulk-bundle.zip', {
@@ -1595,6 +1785,30 @@ export interface LegacyClassifiedSide {
   matched: boolean;
   reason: string;
 }
+export interface LegacyProposedFanoutRow {
+  src_dc: string;
+  dst_dc: string;
+  src_group: string;
+  dst_group: string;
+  src_vrf: string;
+  dst_vrf: string;
+  ports: string;
+  action: string;
+  environment: string;
+  src_is_heritage?: boolean;
+  dst_is_heritage?: boolean;
+  dc_to_dc_path?: string;
+  egress_ip_dependency?: string[];
+  ingress_ip_dependency?: string[];
+  // Snapshot-aware compile mode: 'initial' when no deployed
+  // snapshot exists yet for that DC; 'incremental' once a baseline
+  // exists. Drives the per-DC compile preview and the auto-staged
+  // group change requests' mode at apply time.
+  src_snapshot_present?: boolean;
+  dst_snapshot_present?: boolean;
+  src_compile_mode?: 'initial' | 'incremental';
+  dst_compile_mode?: 'initial' | 'incremental';
+}
 export interface LegacyProposed {
   src_group: string;
   dst_group: string;
@@ -1608,6 +1822,12 @@ export interface LegacyProposed {
   app_management_changes: Array<Record<string, unknown>>;
   group_changes: Array<Record<string, unknown>>;
   physical_rule: Record<string, unknown>;
+  /** Multi-DC fan-out preview: every classified legacy rule materialises
+   * as N proposed RuleRequests, one per (src_dc, dst_dc) pair.
+   * NGDC<->NGDC pairs same-DC by default. NGDC<->Heritage follows the
+   * Heritage presence's `ngdc_source_dcs[]` mapping. */
+  fanout?: LegacyProposedFanoutRow[];
+  fanout_count?: number;
 }
 export interface LegacyTransition {
   origin_legacy_rule_id: string;

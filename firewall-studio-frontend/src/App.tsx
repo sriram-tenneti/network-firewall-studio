@@ -3,6 +3,7 @@ import { TeamProvider } from '@/contexts/TeamContext';
 import HomePage from '@/pages/HomePage';
 import { ModuleLayout } from '@/components/layout/ModuleLayout';
 import { DesignStudioPage } from '@/pages/DesignStudioPage';
+import CompilePerDcPanel from '@/components/design-studio/CompilePerDcPanel';
 import { MigrationStudioPage } from '@/pages/MigrationStudioPage';
 import ReviewPage from '@/pages/ReviewPage';
 import FirewallManagementPage from '@/pages/FirewallManagementPage';
@@ -26,6 +27,11 @@ function App() {
           </ModuleLayout>
         } />
         {/* Import removed from Firewall Studio - auto-imports from NFR */}
+        <Route path="/firewall-studio/compile" element={
+          <ModuleLayout module="firewall-studio" title="Firewall Studio">
+            <CompilePerDcPanel />
+          </ModuleLayout>
+        } />
         <Route path="/firewall-studio/review" element={
           <ModuleLayout module="firewall-studio" title="Firewall Studio">
             <ReviewPage context="firewall-studio" />

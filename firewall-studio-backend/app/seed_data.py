@@ -2526,7 +2526,14 @@ SEED_SHARED_SERVICES = [
 ]
 
 
-def _ss_presence(service_id, dc_id, env, nh_id, sz, members, dc_type="NGDC"):
+def _ss_presence(service_id, dc_id, env, nh_id, sz, members, dc_type="NGDC",
+                 is_heritage=False, ngdc_source_dcs=None):
+    """Per-DC shared-service presence row.
+
+    Heritage rows carry `is_heritage=True` + `ngdc_source_dcs[]` to
+    declare which NGDC DCs route traffic into this Heritage DC for
+    cross-DC firewall fan-out (Ravi's 2-NGDC-→-1-Heritage-DC pattern).
+    """
     return {
         "service_id": service_id,
         "dc_id": dc_id,
@@ -2535,7 +2542,41 @@ def _ss_presence(service_id, dc_id, env, nh_id, sz, members, dc_type="NGDC"):
         "nh_id": nh_id,
         "sz_code": sz,
         "members": members,
+        "is_heritage": is_heritage,
+        "ngdc_source_dcs": list(ngdc_source_dcs or []),
     }
+
+
+def _ss_4dc(service_id, env, nh, sz, *, third_octet, host_start, host_count=2,
+            tag=""):
+    """Helper: emit one shared-service presence per NGDC DC for the same
+    (NH,SZ), seeding distinct member IPs per DC so the fan-out plan
+    reads naturally and `grp-<SVC>-<NH>-<SZ>` carries all 4 DC IPs."""
+    rows = []
+    for dc in NGDC_DCS_4:
+        oct_ = _ngdc_octet(dc)
+        members = []
+        for i in range(host_count):
+            members.append(_m(
+                "ip",
+                f"{oct_}.{third_octet}.{host_start + i}",
+                f"{tag}-{i + 1} ({dc.split('_')[0].lower()})",
+            ))
+        rows.append(_ss_presence(service_id, dc, env, nh, sz, members))
+    return rows
+
+
+# Architecture: every NGDC shared service gets presence in ALL 4 NGDC
+# DCs. Each DC carries its own member IPs so a single rule submit fans
+# out into 4 firewall requests (one per source DC) automatically.
+NGDC_DCS_4 = ["ALPHA_NGDC", "BETA_NGDC", "GAMMA_NGDC", "DELTA_NGDC"]
+
+
+def _ngdc_octet(dc_id: str) -> str:
+    return {"ALPHA_NGDC": "10.10",
+            "BETA_NGDC": "10.20",
+            "GAMMA_NGDC": "10.30",
+            "DELTA_NGDC": "10.40"}.get(dc_id, "10.99")
 
 
 def _m(t, v, d=""):
@@ -2683,6 +2724,72 @@ SEED_SHARED_SERVICE_PRESENCES = [
     _ss_presence("MAINFRAME", "GAMMA_NGDC", "Production", "NH01", "SEC", [
         _m("ip", "10.50.101.10", "zos-lpar-central"),
     ]),
+
+    # ============================================================
+    # 4-DC NGDC fill-in: every Prod-spanning service gets DELTA_NGDC
+    # so `grp-<SVC>-<NH>-<SZ>` carries members from all 4 NGDC DCs
+    # and rule fan-out lands 4 R-#### per submit.
+    # ============================================================
+    _ss_presence("KAFKA", "DELTA_NGDC", "Production", "NH08", "CCS", [
+        _m("ip", "10.40.8.101", "kafka-broker-north-01"),
+        _m("ip", "10.40.8.102", "kafka-broker-north-02"),
+        _m("cidr", "10.40.8.96/28", "kafka cluster subnet (North)"),
+    ]),
+    _ss_presence("MQ", "DELTA_NGDC", "Production", "NH02", "CCS", [
+        _m("ip", "10.40.9.50", "mq-qmgr-north-01"),
+    ]),
+    _ss_presence("ORACLE", "DELTA_NGDC", "Production", "NH02", "CDE", [
+        _m("ip", "10.40.2.10", "oracle-scan-north"),
+    ]),
+    _ss_presence("APPD", "DELTA_NGDC", "Production", "NH01", "GEN", [
+        _m("ip", "10.40.50.200", "appd-controller-north-01"),
+    ]),
+    _ss_presence("SPLUNK", "DELTA_NGDC", "Production", "NH01", "GEN", [
+        _m("ip", "10.40.50.210", "splunk-hf-north-01"),
+    ]),
+    _ss_presence("LDAP", "DELTA_NGDC", "Production", "NH05", "GEN", [
+        _m("ip", "10.40.50.60", "ldap-north-01"),
+    ]),
+    _ss_presence("MONGODB", "DELTA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "10.40.17.10", "mongo-primary-north"),
+        _m("cidr", "10.40.17.0/28", "mongo replica set subnet (North)"),
+    ]),
+    _ss_presence("DB2", "DELTA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "10.40.18.10", "db2-node-north"),
+    ]),
+    _ss_presence("MSSQL", "DELTA_NGDC", "Production", "NH02", "CPA", [
+        _m("ip", "10.40.19.10", "mssql-primary-north"),
+    ]),
+
+    # ============================================================
+    # Heritage shared-service presences with `ngdc_source_dcs[]`
+    # mapping. Demonstrates the 2-NGDC-→-1-Heritage-DC pattern: for
+    # MAINFRAME, ALPHA + BETA route into DC_LEGACY_A; GAMMA + DELTA
+    # route into DC_LEGACY_C. preview_rule_expansion picks src DCs
+    # from these lists when a Heritage SS is the destination.
+    # ============================================================
+    _ss_presence("MAINFRAME", "DC_LEGACY_A", "Production", "", "", [
+        _m("ip", "10.25.101.10", "zos-lpar-heritage-A-01"),
+        _m("ip", "10.25.101.11", "zos-lpar-heritage-A-02"),
+        _m("cidr", "10.25.101.0/28", "mainframe heritage subnet (A)"),
+    ], dc_type="Heritage", is_heritage=True,
+       ngdc_source_dcs=["ALPHA_NGDC", "BETA_NGDC"]),
+    _ss_presence("MAINFRAME", "DC_LEGACY_C", "Production", "", "", [
+        _m("ip", "10.27.101.10", "zos-lpar-heritage-C-01"),
+        _m("cidr", "10.27.101.0/28", "mainframe heritage subnet (C)"),
+    ], dc_type="Heritage", is_heritage=True,
+       ngdc_source_dcs=["GAMMA_NGDC", "DELTA_NGDC"]),
+
+    # Oracle on legacy infra — common Heritage destination
+    _ss_presence("ORACLE", "DC_LEGACY_B", "Production", "", "", [
+        _m("ip", "10.26.2.10", "oracle-scan-heritage-B"),
+        _m("range", "10.26.2.11-10.26.2.14", "oracle-nodes-heritage-B"),
+    ], dc_type="Heritage", is_heritage=True,
+       ngdc_source_dcs=["ALPHA_NGDC", "GAMMA_NGDC"]),
+    _ss_presence("ORACLE", "DC_LEGACY_D", "Production", "", "", [
+        _m("ip", "10.28.2.10", "oracle-scan-heritage-D"),
+    ], dc_type="Heritage", is_heritage=True,
+       ngdc_source_dcs=["BETA_NGDC", "DELTA_NGDC"]),
 ]
 
 
@@ -2690,7 +2797,20 @@ SEED_SHARED_SERVICE_PRESENCES = [
 # egress/ingress members. This replaces the implicit per-app has_ingress
 # flag with an explicit DC-scoped record.
 
-def _app_presence(app_dist_id, dc_id, env, nh, sz, has_ingress, egress, ingress, dc_type="NGDC"):
+def _app_presence(app_dist_id, dc_id, env, nh, sz, has_ingress, egress, ingress,
+                  dc_type="NGDC", is_heritage=False, ngdc_source_dcs=None):
+    """Per-DC presence row.
+
+    For NGDC rows: dc_type='NGDC', NH/SZ populated, egress_members carry
+    that DC's egress IPs, ingress_members carry that DC's ingress VIPs.
+
+    For Heritage rows: dc_type='Heritage', is_heritage=True, NH/SZ are
+    empty by convention, and `ngdc_source_dcs` lists the NGDC DCs that
+    route traffic into / out of this Heritage DC. This is the
+    architectural hook for the 2-NGDC-→-1-Heritage-DC mapping the app
+    team declares; preview_rule_expansion respects it when fanning out
+    cross-DC requests.
+    """
     return {
         "app_distributed_id": app_dist_id,
         "dc_id": dc_id,
@@ -2701,62 +2821,88 @@ def _app_presence(app_dist_id, dc_id, env, nh, sz, has_ingress, egress, ingress,
         "has_ingress": has_ingress,
         "egress_members": egress,
         "ingress_members": ingress,
+        "is_heritage": is_heritage,
+        "ngdc_source_dcs": list(ngdc_source_dcs or []),
     }
 
 
+# NGDC_DCS_4 + _ngdc_octet are defined alongside _ss_4dc above and
+# reused here so the same DC list / octet plan covers both apps and
+# shared services.
+
+def _seed_ngdc_app(app_dist_id, env, nh, sz, has_ingress, *,
+                   third_octet, host_egress, host_ingress=None,
+                   tag=""):
+    """Helper: emit one presence per NGDC DC for the same (NH,SZ),
+    seeding distinct egress/ingress IPs per DC so the fan-out plan
+    reads naturally in the UI."""
+    rows = []
+    for dc in NGDC_DCS_4:
+        oct_ = _ngdc_octet(dc)
+        egress = [_m("ip", f"{oct_}.{third_octet}.{host_egress}",
+                     f"{tag} egress {dc.split('_')[0].lower()}")] if host_egress else []
+        ingress = []
+        if has_ingress and host_ingress:
+            ingress = [_m("ip", f"{oct_}.{third_octet}.{host_ingress}",
+                          f"{tag} ingress vip {dc.split('_')[0].lower()}")]
+        rows.append(_app_presence(app_dist_id, dc, env, nh, sz, has_ingress,
+                                  egress, ingress))
+    return rows
+
+
 SEED_APP_PRESENCES = [
-    # CRM (AD-1001) — Prod East + West
-    _app_presence("AD-1001", "ALPHA_NGDC", "Production", "NH02", "CCS", True,
-                  [_m("ip", "10.50.1.10", "crm-egress-01")],
-                  [_m("ip", "10.50.1.20", "crm-api-vip"),
-                   _m("ip", "10.50.1.21", "crm-db-listener")]),
-    _app_presence("AD-1001", "BETA_NGDC", "Production", "NH02", "CCS", True,
-                  [_m("ip", "172.16.1.10", "crm-egress-west-01")],
-                  [_m("ip", "172.16.1.20", "crm-api-vip-west")]),
+    # ---------- CRM (AD-1001) — 4-DC NGDC + Heritage example ----------
+    *_seed_ngdc_app("AD-1001", "Production", "NH02", "CCS", True,
+                    third_octet="1", host_egress="10", host_ingress="20",
+                    tag="crm"),
+    # Heritage destinations: app team declares which NGDC DCs route into
+    # which Heritage DC. ALPHA + BETA → DC_LEGACY_A, GAMMA + DELTA → DC_LEGACY_C.
+    _app_presence("AD-1001", "DC_LEGACY_A", "Production", "", "", True,
+                  [_m("ip", "10.25.1.10", "crm-heritage-egress-A")],
+                  [_m("ip", "10.25.1.20", "crm-heritage-vip-A")],
+                  dc_type="Heritage", is_heritage=True,
+                  ngdc_source_dcs=["ALPHA_NGDC", "BETA_NGDC"]),
+    _app_presence("AD-1001", "DC_LEGACY_C", "Production", "", "", True,
+                  [_m("ip", "10.27.1.10", "crm-heritage-egress-C")],
+                  [_m("ip", "10.27.1.20", "crm-heritage-vip-C")],
+                  dc_type="Heritage", is_heritage=True,
+                  ngdc_source_dcs=["GAMMA_NGDC", "DELTA_NGDC"]),
 
-    # HRM (AD-1002) — Prod East only, no ingress
-    _app_presence("AD-1002", "ALPHA_NGDC", "Production", "NH01", "GEN", False,
-                  [_m("ip", "10.0.1.30", "hrm-egress-01")], []),
+    # ---------- HRM (AD-1002) — 4-DC NGDC, no ingress ----------
+    *_seed_ngdc_app("AD-1002", "Production", "NH01", "GEN", False,
+                    third_octet="2", host_egress="30",
+                    tag="hrm"),
 
-    # TRD (AD-1003) — all 3 DCs Prod, with ingress
-    _app_presence("AD-1003", "ALPHA_NGDC", "Production", "NH06", "CDE", True,
-                  [_m("ip", "172.16.20.10", "trd-egress-01")],
-                  [_m("ip", "10.6.1.30", "trd-db"), _m("ip", "10.6.1.40", "trd-mq-listener")]),
-    _app_presence("AD-1003", "BETA_NGDC", "Production", "NH06", "CDE", True,
-                  [_m("ip", "172.16.6.10", "trd-egress-west-01")],
-                  [_m("ip", "172.16.6.30", "trd-db-west")]),
-    _app_presence("AD-1003", "GAMMA_NGDC", "Production", "NH06", "CDE", True,
-                  [_m("ip", "10.50.6.10", "trd-egress-central-01")],
-                  [_m("ip", "10.50.6.30", "trd-db-central")]),
+    # ---------- TRD (AD-1003) — 4-DC NGDC + Heritage example ----------
+    *_seed_ngdc_app("AD-1003", "Production", "NH06", "CDE", True,
+                    third_octet="6", host_egress="10", host_ingress="30",
+                    tag="trd"),
+    _app_presence("AD-1003", "DC_LEGACY_B", "Production", "", "", True,
+                  [_m("ip", "10.26.6.10", "trd-heritage-egress-B")],
+                  [_m("ip", "10.26.6.30", "trd-heritage-vip-B")],
+                  dc_type="Heritage", is_heritage=True,
+                  ngdc_source_dcs=["ALPHA_NGDC", "GAMMA_NGDC"]),
 
-    # PAY (AD-1004) — East only
-    _app_presence("AD-1004", "ALPHA_NGDC", "Production", "NH08", "CCS", True,
-                  [_m("ip", "10.50.8.10", "pay-egress-01")],
-                  [_m("ip", "10.50.7.30", "pay-db"), _m("ip", "10.50.7.31", "pay-db-standby")]),
+    # ---------- PAY (AD-1004) — 4-DC NGDC ----------
+    *_seed_ngdc_app("AD-1004", "Production", "NH08", "CCS", True,
+                    third_octet="8", host_egress="10", host_ingress="30",
+                    tag="pay"),
 
-    # INS (AD-1005) — East + West, no ingress
-    _app_presence("AD-1005", "ALPHA_NGDC", "Production", "NH04", "STD", False,
-                  [_m("ip", "10.3.1.10", "ins-egress-01")], []),
-    _app_presence("AD-1005", "BETA_NGDC", "Production", "NH04", "STD", False,
-                  [_m("ip", "172.16.4.10", "ins-egress-west-01")], []),
+    # ---------- INS (AD-1005) — 4-DC NGDC, no ingress ----------
+    *_seed_ngdc_app("AD-1005", "Production", "NH04", "STD", False,
+                    third_octet="4", host_egress="10",
+                    tag="ins"),
 
-    # --- OMS (AD-1013) — demo app spanning multiple (NH, SZ) in same DC ---
-    # Web tier in ALPHA NH02/CCS
-    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH02", "CCS", True,
-                  [_m("ip", "10.1.1.10", "oms-web-egress")],
-                  [_m("ip", "10.1.1.20", "oms-web-ingress-vip")]),
-    # DB tier in ALPHA NH02/CPA — same NH, different SZ
-    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH02", "CPA", True,
-                  [_m("ip", "10.1.2.10", "oms-db-egress")],
-                  [_m("ip", "10.1.2.20", "oms-db-listener")]),
-    # Analytics tier in ALPHA NH04/STD — different NH
-    _app_presence("AD-1013", "ALPHA_NGDC", "Production", "NH04", "STD", True,
-                  [_m("ip", "10.3.1.70", "oms-analytics-egress")],
-                  [_m("ip", "10.3.1.80", "oms-analytics-ingress")]),
-    # West Web tier in BETA NH02/CCS — DR/active-active
-    _app_presence("AD-1013", "BETA_NGDC", "Production", "NH02", "CCS", True,
-                  [_m("ip", "172.16.1.10", "oms-web-egress-west")],
-                  [_m("ip", "172.16.1.20", "oms-web-ingress-vip-west")]),
+    # ---------- OMS (AD-1013) — multi-tier across 4 NGDC DCs ----------
+    *_seed_ngdc_app("AD-1013", "Production", "NH02", "CCS", True,
+                    third_octet="11", host_egress="10", host_ingress="20",
+                    tag="oms-web"),
+    *_seed_ngdc_app("AD-1013", "Production", "NH02", "CPA", True,
+                    third_octet="12", host_egress="10", host_ingress="20",
+                    tag="oms-db"),
+    *_seed_ngdc_app("AD-1013", "Production", "NH04", "STD", True,
+                    third_octet="13", host_egress="70", host_ingress="80",
+                    tag="oms-analytics"),
 ]
 SEED_LIFECYCLE_EVENTS = build_seed_lifecycle_events()
 

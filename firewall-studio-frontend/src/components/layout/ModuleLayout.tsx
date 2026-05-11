@@ -18,6 +18,7 @@ const moduleDefaultTitles: Record<string, string> = {
 const moduleNav: Record<string, { path: string; label: string }[]> = {
   'firewall-studio': [
     { path: '/firewall-studio', label: 'Rule Designer' },
+    { path: '/firewall-studio/compile', label: 'Compile per DC' },
     { path: '/firewall-studio/review', label: 'Review & Approval' },
   ],
   'ngdc-standardization': [

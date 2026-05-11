@@ -203,6 +203,8 @@ function ArtifactsAndItsmPanel({ record, onChanged }: { record: RuleRequestRecor
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [chosenConnector, setChosenConnector] = useState<string>('');
+  const [perDcDcIds, setPerDcDcIds] = useState<string[] | null>(null);
+  const [activeDc, setActiveDc] = useState<string>('');
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -220,9 +222,37 @@ function ArtifactsAndItsmPanel({ record, onChanged }: { record: RuleRequestRecor
   }, []);
 
   const requestId = record.request_id!;
-  const jsonHref = `${api.API_BASE}${api.requestArtifactJsonUrl(requestId)}`;
-  const xlsxHref = `${api.API_BASE}${api.requestArtifactXlsxUrl(requestId)}`;
-  const bundleHref = `${api.API_BASE}${api.requestArtifactBundleUrl(requestId)}`;
+  // Load the list of DCs this request actually touches so we can render
+  // one tab per DC's device. A real firewall lives in exactly one DC,
+  // so the deployable file must be DC-scoped — without a DC pinned the
+  // download would mix members from multiple DCs into a single file
+  // that has no valid deploy target.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resp = await api.getRequestArtifactsPerDc(requestId);
+        if (!cancelled) {
+          const ids = resp.dc_ids || [];
+          setPerDcDcIds(ids);
+          if (ids.length > 0) {
+            setActiveDc(prev => (prev && ids.includes(prev) ? prev : ids[0]));
+          } else {
+            setActiveDc('');
+          }
+        }
+      } catch {
+        if (!cancelled) setPerDcDcIds([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [requestId]);
+
+  const dcScope = activeDc || null;
+  const jsonHref = `${api.API_BASE}${api.requestArtifactJsonUrl(requestId, dcScope)}`;
+  const xlsxHref = `${api.API_BASE}${api.requestArtifactXlsxUrl(requestId, dcScope)}`;
+  const bundleHref = `${api.API_BASE}${api.requestArtifactBundleUrl(requestId, dcScope)}`;
+  const allDcsBundleHref = `${api.API_BASE}${api.requestArtifactBundleUrl(requestId)}`;
   const vendors: Array<{ key: string; label: string; ext: string }> = [
     { key: 'panos', label: 'Palo Alto (PAN-OS)', ext: 'panos' },
     { key: 'fortinet', label: 'Fortinet', ext: 'fortinet' },
@@ -256,30 +286,71 @@ function ArtifactsAndItsmPanel({ record, onChanged }: { record: RuleRequestRecor
     }
   };
 
+  const dcIds = perDcDcIds || [];
+  const hasDcs = dcIds.length > 0;
   return (
     <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[10px] uppercase tracking-widest font-bold text-indigo-700">Deployment Artifacts</span>
+        {hasDcs && (
+          <span className="text-[10px] text-indigo-700 italic">
+            {dcIds.length === 1
+              ? `1 DC touched · device file is scoped to ${dcIds[0]}`
+              : `${dcIds.length} DCs touched · pick a DC tab below — each tab is a single-device deploy artifact`}
+          </span>
+        )}
+      </div>
+      {hasDcs && (
+        <div className="flex flex-wrap items-center gap-1 border-b border-indigo-200 pb-1">
+          {dcIds.map(dc => (
+            <button
+              key={dc}
+              type="button"
+              onClick={() => setActiveDc(dc)}
+              className={`text-[11px] px-2 py-0.5 rounded-t border-b-2 ${
+                activeDc === dc
+                  ? 'border-indigo-600 bg-white text-indigo-900 font-semibold'
+                  : 'border-transparent bg-indigo-100/60 text-indigo-700 hover:bg-indigo-100'
+              }`}
+              title={`Filter artifacts to ${dc}'s device — only that DC's IPs will appear in the compiled config`}
+            >
+              {dc}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2 flex-wrap">
         <a href={bundleHref} target="_blank" rel="noreferrer"
-          title="Single zip with JSON + XLSX + every vendor config — manual fallback while ITSM integration is being set up"
+          title={
+            dcScope
+              ? `Single zip scoped to ${dcScope} — JSON + XLSX + every vendor config for that DC's device only`
+              : 'Single zip laid out as one folder per DC — each folder is a complete single-device deploy artifact'
+          }
           className="text-[11px] px-2 py-0.5 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold">
-          Download All (.zip)
+          {dcScope ? `Download (.zip) — ${dcScope}` : 'Download All DCs (.zip)'}
         </a>
+        {dcScope && (
+          <a href={allDcsBundleHref} target="_blank" rel="noreferrer"
+            title="One zip with one folder per DC — useful when you need to ship every DC's device file at once"
+            className="text-[11px] px-2 py-0.5 rounded border border-indigo-200 bg-white hover:bg-indigo-100 text-indigo-800">
+            All DCs (.zip)
+          </a>
+        )}
         <a href={jsonHref} target="_blank" rel="noreferrer"
           className="text-[11px] px-2 py-0.5 rounded border border-indigo-200 bg-white hover:bg-indigo-100 text-indigo-800">JSON manifest</a>
         <a href={xlsxHref} target="_blank" rel="noreferrer"
           className="text-[11px] px-2 py-0.5 rounded border border-indigo-200 bg-white hover:bg-indigo-100 text-indigo-800">Excel (.xlsx)</a>
         {vendors.map(v => (
           <a key={v.key}
-            href={`${api.API_BASE}${api.requestArtifactVendorUrl(requestId, v.ext)}`}
+            href={`${api.API_BASE}${api.requestArtifactVendorUrl(requestId, v.ext, dcScope)}`}
             target="_blank" rel="noreferrer"
             className="text-[11px] px-2 py-0.5 rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-700">{v.label}</a>
         ))}
       </div>
       <div className="text-[10px] text-gray-500 italic">
-        Available regardless of approval/ITSM status — attach to a CR manually,
-        email to SNS, or feed into device pipelines while the automated ITSM
-        connector is being wired up.
+        {hasDcs && dcScope
+          ? `Files above are filtered to ${dcScope}'s device only — group members reflect just ${dcScope}'s IPs, not other DCs.`
+          : 'Available regardless of approval/ITSM status — attach to a CR manually, email to SNS, or feed into device pipelines while the automated ITSM connector is being wired up.'}
       </div>
 
       <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-indigo-100">

@@ -1884,22 +1884,48 @@ export function MigrationStudioPage() {
                       </div>
                     )}
 
-                    {/* Existing App Groups + Create New */}
+                    {/* Existing App Groups + Create New — counts must
+                        align with the App Groups badge in Group
+                        Management (both surfaces count per-DC
+                        instances; logical count surfaced when the two
+                        diverge so reviewers can tell at a glance
+                        whether a delta is real or just per-DC fan-out). */}
                     <div className="border rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-semibold text-gray-700">Existing Groups for App {migrateRule.app_distributed_id || migrateRule.app_id}</h4>
+                        {(() => {
+                          const logical = new Set(appGroups.map(g => g.name)).size;
+                          const instances = appGroups.length;
+                          const diff = instances !== logical;
+                          return (
+                            <h4 className="text-xs font-semibold text-gray-700"
+                                title="Per-(name, dc_id) instances. Aligned with Group Management's App Groups badge.">
+                              Existing Groups for App {migrateRule.app_distributed_id || migrateRule.app_id}
+                              {appGroups.length > 0 && (
+                                <span className="ml-2 text-[10px] font-normal text-gray-500">
+                                  ({instances}{diff ? ` instances · ${logical} logical` : ''})
+                                </span>
+                              )}
+                            </h4>
+                          );
+                        })()}
                         <button onClick={() => setShowNewGroupModal(true)} className="px-3 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100">
                           + Create New Group
                         </button>
                       </div>
                       {appGroups.length > 0 ? (
                         <div className="space-y-1">
-                          {appGroups.map(g => (
-                            <div key={g.name} className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded text-xs">
-                              <span className="font-mono text-gray-700">{g.name}</span>
-                              <span className="text-gray-400">{g.members.length} members</span>
-                            </div>
-                          ))}
+                          {appGroups.map(g => {
+                            const dcId = String((g as unknown as { dc_id?: string }).dc_id || '').trim();
+                            return (
+                              <div key={`${g.name}|${dcId}`} className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded text-xs">
+                                <span className="font-mono text-gray-700">
+                                  {g.name}
+                                  {dcId && <span className="ml-1 text-[10px] text-blue-600 font-normal">@{dcId}</span>}
+                                </span>
+                                <span className="text-gray-400">{g.members.length} members</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-xs text-gray-400 italic">No existing groups. Component groups above will be auto-created during compile.</p>

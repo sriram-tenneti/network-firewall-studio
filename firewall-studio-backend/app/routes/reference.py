@@ -1,5 +1,8 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.database import (
+    _load,
     get_ngdc_datacenters, get_security_zones, get_predefined_destinations,
     get_neighbourhoods, get_legacy_datacenters, get_applications,
     get_environments, get_chg_requests, get_naming_standards, get_org_config,
@@ -297,13 +300,40 @@ async def list_legacy_datacenters():
 async def list_applications(team: str | None = None):
     """List applications. When `team` is provided (and is not the SNS
     god-team), results are filtered to apps owned by that team. SNS sees
-    every app and is the global reviewer/approver."""
+    every app and is the global reviewer/approver.
+
+    The returned ``has_ingress`` flag is aggregated across every per-DC
+    presence row: if any presence (NGDC or Heritage) declares ingress for
+    this app, the top-level flag is True so destination dropdowns in the
+    rule builder can include the app even when the legacy column was
+    never set on the application record itself.
+    """
     items = await get_applications()
     if team and team.strip().upper() != "SNS":
         t = team.strip().lower()
         items = [a for a in items
                  if str(a.get("owner_team", "")).strip().lower() == t]
-    return items
+    # Aggregate per-DC presence ingress flags so the Application record
+    # reflects the per-DC architecture's source of truth.
+    try:
+        all_pres = _load("app_presences") or []
+    except Exception:
+        all_pres = []
+    ingress_by_app: dict[str, bool] = {}
+    for p in all_pres:
+        if p.get("has_ingress"):
+            key = str(p.get("app_distributed_id") or p.get("app_id") or "").strip()
+            if key:
+                ingress_by_app[key] = True
+    enriched: list[dict[str, Any]] = []
+    for a in items:
+        copy = dict(a)
+        ad = str(copy.get("app_distributed_id") or "").strip()
+        aid = str(copy.get("app_id") or "").strip()
+        derived = bool(ingress_by_app.get(ad) or ingress_by_app.get(aid))
+        copy["has_ingress"] = bool(copy.get("has_ingress")) or derived
+        enriched.append(copy)
+    return enriched
 
 
 @router.get("/environments")
@@ -646,16 +676,46 @@ async def reject_policy(change_id: str, data: dict | None = None):
 # ---- CRUD: Groups ----
 
 @router.get("/groups")
-async def list_groups(app_id: str | None = None):
+async def list_groups(app_id: str | None = None,
+                      dc_id: str | None = None,
+                      environment: str | None = None):
+    """List materialised group instances.
+
+    Group identity is per-DC: a single logical group like
+    ``grp-CRM-NH02-PAA`` materialises as **one record per NGDC DC**,
+    each with that DC's egress IPs only. Filter by ``dc_id`` to get
+    only one DC's view (i.e. what would deploy to that DC's device).
+    """
     groups = await get_groups()
     if app_id:
-        groups = [g for g in groups if g.get("app_id") == app_id or g.get("app_distributed_id") == app_id]
+        groups = [g for g in groups
+                   if g.get("app_id") == app_id
+                   or g.get("app_distributed_id") == app_id]
+    if dc_id:
+        groups = [g for g in groups
+                   if str(g.get("dc_id", "")) == str(dc_id)]
+    if environment:
+        groups = [g for g in groups
+                   if str(g.get("environment", "Production")) == str(environment)]
     return groups
 
 
+@router.get("/groups-by-name/{name:path}/instances")
+async def get_group_instances_endpoint(name: str):
+    """All per-DC instances of a logical group name.
+
+    Used by the App Groups listing UI to render a per-DC compile
+    preview ("on ALPHA the group resolves to these IPs, on BETA to
+    these, …") and by the Group Manager to validate that every DC
+    has a non-empty member set.
+    """
+    from app.database import get_group_instances
+    return await get_group_instances(name)
+
+
 @router.get("/groups/{name:path}")
-async def get_group_endpoint(name: str):
-    group = await get_group(name)
+async def get_group_endpoint(name: str, dc_id: str | None = None):
+    group = await get_group(name, dc_id=dc_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     return group
@@ -668,31 +728,34 @@ async def create_new_group(data: dict):
 
 
 @router.put("/groups/{name:path}")
-async def update_existing_group(name: str, data: dict):
-    result = await update_group(name, data)
+async def update_existing_group(name: str, data: dict,
+                                  dc_id: str | None = None):
+    result = await update_group(name, data, dc_id=dc_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group not found")
     return result
 
 
 @router.delete("/groups/{name:path}")
-async def delete_existing_group(name: str):
-    if not await delete_group(name):
+async def delete_existing_group(name: str, dc_id: str | None = None):
+    if not await delete_group(name, dc_id=dc_id):
         raise HTTPException(status_code=404, detail="Group not found")
     return {"message": "Group deleted"}
 
 
 @router.post("/groups/{name:path}/members")
-async def add_member_to_group(name: str, data: dict):
-    result = await add_group_member(name, data)
+async def add_member_to_group(name: str, data: dict,
+                                dc_id: str | None = None):
+    result = await add_group_member(name, data, dc_id=dc_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group not found")
     return result
 
 
 @router.delete("/groups/{name:path}/members/{member_value}")
-async def remove_member_from_group(name: str, member_value: str):
-    result = await remove_group_member(name, member_value)
+async def remove_member_from_group(name: str, member_value: str,
+                                     dc_id: str | None = None):
+    result = await remove_group_member(name, member_value, dc_id=dc_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group or member not found")
     return result
