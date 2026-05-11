@@ -217,6 +217,29 @@ export default function PresencePerDcEditor({
     setQuickIngress(false);
   };
 
+  // When the user toggles the Quick-fan Ingress checkbox AFTER having
+  // already fanned a (NH, SZ) tuple, retroactively flip ``has_ingress``
+  // on every matching row so the Ingress chips textbox enables
+  // immediately — instead of forcing the user to delete + re-fan.
+  // Matching is by (NH, SZ) only (DC is "all 4 NGDC"), and only NGDC
+  // rows; Heritage rows have their own per-row checkbox.
+  const handleQuickIngressToggle = (checked: boolean) => {
+    setQuickIngress(checked);
+    const nh = quickNh.trim().toUpperCase();
+    const sz = quickSz.trim().toUpperCase();
+    if (!nh || !sz) return;
+    let touched = false;
+    const next = rows.map((r) => {
+      if (r.is_heritage) return r;
+      if (r.nh_id?.toUpperCase() !== nh) return r;
+      if (r.sz_code?.toUpperCase() !== sz) return r;
+      if (Boolean(r.has_ingress) === checked) return r;
+      touched = true;
+      return { ...r, has_ingress: checked };
+    });
+    if (touched) onChange(next);
+  };
+
   return (
     <div className={`p-3 border border-emerald-200 rounded-lg bg-emerald-50/40 space-y-3 ${className ?? ''}`}>
       <div className="flex items-baseline justify-between gap-2">
@@ -252,7 +275,7 @@ export default function PresencePerDcEditor({
         {!hideIngress && (
           <label className="inline-flex items-center gap-1 text-[11px] text-gray-700 mb-1">
             <input type="checkbox" checked={quickIngress}
-              onChange={(e) => setQuickIngress(e.target.checked)} />
+              onChange={(e) => handleQuickIngressToggle(e.target.checked)} />
             Ingress
           </label>
         )}

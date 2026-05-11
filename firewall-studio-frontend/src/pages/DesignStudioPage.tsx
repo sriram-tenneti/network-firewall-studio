@@ -406,23 +406,31 @@ export function DesignStudioPage() {
               />
             </div>
           )}
-          <div className="mt-6 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-            <div className="text-sm font-semibold text-purple-800">Group Change Requests</div>
-            <div className="text-xs text-purple-600">Standalone group create / modify / delete. Lifecycle: Pending → Approved → Deployed → Certified. Until Deployed, the group is portal-only and any rule that references it is blocked from being marked Deployed.</div>
-          </div>
-          <div className="mt-3">
-            <GroupChangeRequestBuilder
-              environment={selectedEnv}
-              onSubmitted={() => setRequestsReloadKey(k => k + 1)}
-            />
-          </div>
-          <div className="mt-3">
-            <GroupChangeRequestsPanel
-              environment={selectedEnv}
-              reloadKey={requestsReloadKey}
-              onChanged={() => { loadData(); setRequestsReloadKey(k => k + 1); }}
-            />
-          </div>
+          {/* When the New-Rule wizard is open, hide the pre-existing
+              Rule Requests panel + Group Change Requests builder/panel
+              so the user can focus on the new submission. They're all
+              still reachable once the wizard is dismissed. */}
+          {!isWizardOpen && (
+            <>
+              <div className="mt-6 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="text-sm font-semibold text-purple-800">Group Change Requests</div>
+                <div className="text-xs text-purple-600">Standalone group create / modify / delete. Lifecycle: Pending → Approved → Deployed → Certified. Until Deployed, the group is portal-only and any rule that references it is blocked from being marked Deployed.</div>
+              </div>
+              <div className="mt-3">
+                <GroupChangeRequestBuilder
+                  environment={selectedEnv}
+                  onSubmitted={() => setRequestsReloadKey(k => k + 1)}
+                />
+              </div>
+              <div className="mt-3">
+                <GroupChangeRequestsPanel
+                  environment={selectedEnv}
+                  reloadKey={requestsReloadKey}
+                  onChanged={() => { loadData(); setRequestsReloadKey(k => k + 1); }}
+                />
+              </div>
+            </>
+          )}
         </div>
       ) : (
       <div className="bg-white border rounded-lg shadow-sm">

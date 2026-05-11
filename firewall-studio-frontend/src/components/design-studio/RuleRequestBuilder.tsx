@@ -115,14 +115,29 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
 
   useEffect(() => { void loadRefs(); }, [loadRefs]);
 
-  // Apps that have at least one ingress-enabled presence → eligible as destination
+  // Apps eligible as destination — surfaces any app that *either*
+  //   (a) has at least one ingress-enabled per-DC presence row for this
+  //       environment (the deploy-ready case), OR
+  //   (b) is flagged ``has_ingress`` at the application level but has
+  //       not yet had per-DC ingress chips declared (the bootstrap case).
+  // The bootstrap path is critical so newly-onboarded apps with ingress
+  // are visible in the destination picker even before per-DC IPs are
+  // filled in — otherwise the user can never reach the rule builder to
+  // request the rule, and we hide the very apps that need ingress.
   const appsWithIngress = useMemo(() => {
-    const ids = new Set(
+    const idsFromPresences = new Set(
       appPresences
         .filter((p) => p.has_ingress && p.environment === environment)
         .map((p) => p.app_distributed_id),
     );
-    return applications.filter((a) => a.app_distributed_id && ids.has(a.app_distributed_id));
+    return applications.filter((a) => {
+      if (!a.app_distributed_id) return false;
+      if (idsFromPresences.has(a.app_distributed_id)) return true;
+      // App-level flag — fall back to surfacing the app so it can be
+      // picked as destination; the per-DC presence editor will guide
+      // the user to fill in the actual VIPs / LBs.
+      return Boolean(a.has_ingress);
+    });
   }, [appPresences, applications, environment]);
 
   const unifiedDestinations: DestRef[] = useMemo(() => {
