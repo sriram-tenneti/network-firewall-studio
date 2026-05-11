@@ -24,10 +24,9 @@ export interface PresenceRow {
   ingress_members: MemberChip[];
   environment?: string;
   /**
-   * Heritage rows only. Lists which NGDC DCs route traffic into / out
-   * of this Heritage DC (Ravi's 2-NGDC-→-1-Heritage-DC pattern). Empty
-   * = fan-out across all NGDC DCs (a warning will surface in the rule
-   * preview asking the SME to declare an explicit mapping).
+   * Historical per-presence fallback for Heritage routing. Preferred
+   * source of truth now lives on the Heritage DC record in Settings →
+   * Data Centers.
    */
   ngdc_source_dcs?: string[];
 }
@@ -185,7 +184,6 @@ export default function PresencePerDcEditor({
         is_heritage: true,
         egress_members: [],
         ingress_members: [],
-        ngdc_source_dcs: [],
       },
     ]);
   };
@@ -406,9 +404,6 @@ export default function PresencePerDcEditor({
             <thead className="text-[11px] text-gray-500">
               <tr>
                 <th className="text-left font-medium pb-1 w-32">Heritage DC</th>
-                <th className="text-left font-medium pb-1 w-44" title="Which NGDC data centers connect to this Heritage DC for rule fan-out">
-                  Connected NGDC DCs
-                </th>
                 {!hideIngress && <th className="text-left font-medium pb-1 w-20">Ingress?</th>}
                 <th className="text-left font-medium pb-1">Egress members</th>
                 {!hideIngress && <th className="text-left font-medium pb-1">Ingress VIPs</th>}
@@ -427,41 +422,6 @@ export default function PresencePerDcEditor({
                         <option key={d.code} value={d.code}>{d.code}</option>
                       ))}
                     </select>
-                  </td>
-                  <td className="py-1 pr-2">
-                    <div className="flex flex-wrap gap-1 p-1 border rounded bg-white min-h-[28px]">
-                      {ngdcOptions.map((d) => {
-                        const code = d.code;
-                        const checked = (r.ngdc_source_dcs || []).includes(code);
-                        return (
-                          <label key={code}
-                            className={`inline-flex items-center gap-0.5 px-1 py-0.5 text-[10px] rounded cursor-pointer ${
-                              checked
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                            title={`${checked ? 'Disable' : 'Enable'} ${code} as a connected NGDC DC for this Heritage DC`}>
-                            <input type="checkbox" className="hidden"
-                              checked={checked}
-                              onChange={(e) => {
-                                const cur = new Set(r.ngdc_source_dcs || []);
-                                if (e.target.checked) cur.add(code);
-                                else cur.delete(code);
-                                updateRow(r, { ngdc_source_dcs: Array.from(cur) });
-                              }} />
-                            {code.replace(/_NGDC$/i, '')}
-                          </label>
-                        );
-                      })}
-                      {ngdcOptions.length === 0 && (
-                        <span className="text-[10px] text-gray-400 italic">— no NGDC DCs registered —</span>
-                      )}
-                    </div>
-                    {(r.ngdc_source_dcs || []).length === 0 && ngdcOptions.length > 0 && (
-                      <p className="text-[10px] text-amber-700 mt-0.5">
-                        None selected ⇒ treat this Heritage DC as connected to all NGDC DCs.
-                      </p>
-                    )}
                   </td>
                   {!hideIngress && (
                     <td className="py-1 pr-2">
