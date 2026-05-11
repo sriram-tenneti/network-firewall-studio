@@ -194,10 +194,23 @@ export default function PresencePerDcEditor({
     const nh = quickNh.trim().toUpperCase();
     const sz = quickSz.trim().toUpperCase();
     if (!nh || !sz) return;
-    const existingKeys = new Set(ngdcRows.map(rowKey));
-    const additions: PresenceRow[] = [];
+
+    let changed = false;
+    const nextRows = [...rows];
+
     for (const dc of ngdcOptions) {
-      const candidate: PresenceRow = {
+      const existingIdx = nextRows.findIndex((r) =>
+        !r.is_heritage && r.dc_id === dc.code && r.nh_id === nh && r.sz_code === sz,
+      );
+      if (existingIdx >= 0) {
+        if (quickIngress && !nextRows[existingIdx].has_ingress) {
+          nextRows[existingIdx] = { ...nextRows[existingIdx], has_ingress: true };
+          changed = true;
+        }
+        continue;
+      }
+
+      nextRows.push({
         uid: _newUid(),
         dc_id: dc.code,
         nh_id: nh,
@@ -206,12 +219,12 @@ export default function PresencePerDcEditor({
         is_heritage: false,
         egress_members: [],
         ingress_members: [],
-      };
-      if (existingKeys.has(rowKey(candidate))) continue;
-      additions.push(candidate);
+      });
+      changed = true;
     }
-    if (additions.length === 0) return;
-    onChange([...rows, ...additions]);
+
+    if (!changed) return;
+    onChange(nextRows);
     setQuickNh('');
     setQuickSz('');
     setQuickIngress(false);
@@ -263,7 +276,7 @@ export default function PresencePerDcEditor({
           Apply to all {ngdcOptions.length} NGDC DCs
         </button>
         <span className="text-[10px] text-gray-500 ml-auto italic">
-          Seeds one empty-member row per NGDC DC for this (NH, SZ). Fill chips per DC after.
+          Seeds one row per NGDC DC. Re-run with Ingress checked to enable ingress on matching rows.
         </span>
       </div>
 

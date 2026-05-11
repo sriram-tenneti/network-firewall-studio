@@ -1,0 +1,26 @@
+# Trufflehog exclusion list — paths and file patterns intentionally excluded
+# from secret scanning. Anything that legitimately contains tokens/secrets MUST
+# NOT be added here; use environment variables or a secrets manager instead.
+
+# Build + dependency artifacts
+node_modules/
+dist/
+build/
+coverage/
+__pycache__/
+*.lock
+package-lock.json
+poetry.lock
+
+# Generated test/coverage outputs
+firewall-studio-backend/htmlcov/
+firewall-studio-backend/coverage.xml
+firewall-studio-frontend/coverage/
+
+# Seed and reference data (publicly distributable schema/topology data only)
+firewall-studio-backend/seed-json/
+firewall-studio-backend/app/config/
+firewall-studio-backend/data/
+
+# Documentation deliverables
+deliverables/

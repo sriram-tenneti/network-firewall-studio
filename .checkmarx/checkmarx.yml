@@ -1,0 +1,45 @@
+version: "1.0"
+
+scan:
+  scan-types:
+    - sast
+    - sca
+    - secrets
+  filters:
+    severities:
+      - critical
+      - high
+      - medium
+
+sast:
+  preset: "ASA Premium"
+  language-mode: multi
+  include:
+    - "firewall-studio-backend/app/**/*.py"
+    - "firewall-studio-frontend/src/**/*.ts"
+    - "firewall-studio-frontend/src/**/*.tsx"
+  exclude:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/__pycache__/**"
+    - "**/coverage/**"
+    - "**/tests/**"
+    - "**/seed-json/**"
+    - "**/app/config/**"
+    - "**/data/**"
+
+sca:
+  manifest-files:
+    - firewall-studio-backend/requirements.txt
+    - firewall-studio-backend/pyproject.toml
+    - firewall-studio-frontend/package.json
+    - firewall-studio-frontend/package-lock.json
+
+secrets:
+  exclude-patterns-file: .trufflehog-exclude
+
+policy:
+  fail-on:
+    - severity: critical
+    - severity: high

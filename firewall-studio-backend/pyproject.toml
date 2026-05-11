@@ -13,3 +13,62 @@ fastapi = {extras = ["standard"], version = "^0.135.1"}
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--cov=app",
+  "--cov-report=term-missing",
+  "--cov-report=xml",
+  "--cov-report=html",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = [
+  "app/seed_data.py",
+  "app/mongodb.py",
+  "app/main.py",
+  "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+fail_under = 0
+precision = 2
+show_missing = true
+skip_empty = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["app/config", "seed-json", "data", "htmlcov"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "S", "N", "UP"]
+ignore = [
+  "S101",  # asserts ok in tests
+  "S104",  # bind 0.0.0.0 in dev
+  "E501",  # line length governed by formatter
+  "B008",  # FastAPI's Depends() default-argument pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "N", "B"]
+"app/seed_data.py" = ["E", "N"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "seed-json", "app/config", "data", "htmlcov"]
+skips = ["B101", "B104"]
+

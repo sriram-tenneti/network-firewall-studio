@@ -18,6 +18,17 @@ dist/
 .env.local
 .env.production
 
+# Test/coverage artifacts
+.coverage
+coverage/
+coverage.xml
+htmlcov/
+.pytest_cache/
+.vitest/
+
+# Runtime data
+firewall-studio-backend/live-data/
+
 # IDE
 .vscode/
 .idea/
