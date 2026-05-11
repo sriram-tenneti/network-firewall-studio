@@ -406,8 +406,8 @@ export default function PresencePerDcEditor({
             <thead className="text-[11px] text-gray-500">
               <tr>
                 <th className="text-left font-medium pb-1 w-32">Heritage DC</th>
-                <th className="text-left font-medium pb-1 w-44" title="Which NGDC DCs route traffic into / out of this Heritage DC">
-                  Source NGDC DCs
+                <th className="text-left font-medium pb-1 w-44" title="Which NGDC data centers connect to this Heritage DC for rule fan-out">
+                  Connected NGDC DCs
                 </th>
                 {!hideIngress && <th className="text-left font-medium pb-1 w-20">Ingress?</th>}
                 <th className="text-left font-medium pb-1">Egress members</th>
@@ -440,7 +440,7 @@ export default function PresencePerDcEditor({
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
-                            title={`${checked ? 'Disable' : 'Enable'} ${code} as a source for this Heritage DC`}>
+                            title={`${checked ? 'Disable' : 'Enable'} ${code} as a connected NGDC DC for this Heritage DC`}>
                             <input type="checkbox" className="hidden"
                               checked={checked}
                               onChange={(e) => {
@@ -459,7 +459,7 @@ export default function PresencePerDcEditor({
                     </div>
                     {(r.ngdc_source_dcs || []).length === 0 && ngdcOptions.length > 0 && (
                       <p className="text-[10px] text-amber-700 mt-0.5">
-                        None selected ⇒ fan-out across all NGDC DCs.
+                        None selected ⇒ treat this Heritage DC as connected to all NGDC DCs.
                       </p>
                     )}
                   </td>

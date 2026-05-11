@@ -582,8 +582,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 <p className="text-[11px] text-gray-600 mt-2">
                   Rules fan out automatically across <strong>all 4 NGDC DCs</strong> with strict
                   same-DC pairing (ALPHA→ALPHA, BETA→BETA, …). NGDC↔Heritage routing follows
-                  the Heritage presence's <code className="font-mono">ngdc_source_dcs[]</code>
-                  mapping. Use the override below only for DR cutover / pinned active-active.
+                  the Heritage presence's connected-NGDC-DC selection.
+                  Use the override below only for DR cutover / pinned active-active.
                 </p>
                 <label className="flex items-center gap-2 text-xs text-gray-700">
                   <span className="min-w-[150px]"><strong>Destination DC override</strong></span>

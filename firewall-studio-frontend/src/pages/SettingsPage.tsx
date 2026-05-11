@@ -2209,7 +2209,7 @@ export default function SettingsPage() {
                                 <th className="text-left font-medium px-2 py-1">Ingress?</th>
                                 <th className="text-left font-medium px-2 py-1">Egress IPs / CIDRs</th>
                                 <th className="text-left font-medium px-2 py-1">Ingress VIPs / IPs</th>
-                                <th className="text-left font-medium px-2 py-1">Source NGDC DCs</th>
+                                <th className="text-left font-medium px-2 py-1">Connected NGDC DCs</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2250,7 +2250,7 @@ export default function SettingsPage() {
                                     <td className="px-2 py-1">
                                       {heritage ? (
                                         (r.ngdc_source_dcs || []).length === 0
-                                          ? <span className="text-[10px] italic text-amber-700">— all NGDC DCs (no explicit mapping) —</span>
+                                          ? <span className="text-[10px] italic text-amber-700">— all NGDC DCs connected —</span>
                                           : (
                                             <div className="flex flex-wrap gap-1">
                                               {(r.ngdc_source_dcs || []).map((dc) => (
