@@ -1154,8 +1154,7 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                   parent. NGDC↔NGDC is strictly same-DC (every app lives
                   in all 4 NGDC DCs, so cross-DC pairing inside NGDC is
                   meaningless). NGDC↔Heritage routing follows the
-                  `ngdc_source_dcs[]` mapping declared on the Heritage
-                  presence row. */}
+                  Heritage DC's connected NGDC DCs (Settings → Data Centers). */}
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
                 <div className="mb-2">
                   <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
@@ -1165,8 +1164,8 @@ export function DragDropRuleBuilder({ applications, onRuleCreated, editRule, onE
                     One submit auto-creates one rule request per (src DC &rarr; dst DC) pair.
                     NGDC&harr;NGDC is <strong>strictly same-DC</strong> (ALPHA&rarr;ALPHA,
                     BETA&rarr;BETA, &hellip;) since every app lives in all 4 NGDC DCs.
-                    NGDC&harr;Heritage routing follows the Heritage presence&rsquo;s
-                    {' '}<code className="font-mono text-[10px]">ngdc_source_dcs[]</code> mapping.
+                    NGDC&harr;Heritage routing follows the Heritage DC&rsquo;s connected NGDC
+                    DCs (Settings &rarr; Data Centers).
                   </p>
                 </div>
                 {!fanOutPreview && (

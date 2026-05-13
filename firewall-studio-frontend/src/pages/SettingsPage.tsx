@@ -8,7 +8,6 @@ import type { ADUserGroup, ADUser, ADConfig, Application, AppDCMapping, NhSecuri
 import * as api from '@/lib/api';
 import SharedServicesTab from './settings/SharedServicesTab';
 import PortCatalogTab from './settings/PortCatalogTab';
-import { AppPresenceMatrix } from './settings/AppPresenceMatrix';
 import PresencePerDcEditor, { type PresenceRow, withRowUids } from '@/components/shared/PresencePerDcEditor';
 import ItsmConnectorsTab from './settings/ItsmConnectorsTab';
 import BirthrightRulesTab from './settings/BirthrightRulesTab';
@@ -61,12 +60,14 @@ export default function SettingsPage() {
   const [policyMatrix, setPolicyMatrix] = useState<Record<string, unknown>[]>([]);
   const [namingStandards, setNamingStandards] = useState<Record<string, unknown>>({});
 
-  // App-DC Mappings state
+  // App-DC Mappings state (legacy — UI deprecated in favour of per-DC
+  // presence editor; backend collection retained during migration window).
   const [appDCMappings, setAppDCMappings] = useState<AppDCMapping[]>([]);
   const [showAddMapping, setShowAddMapping] = useState(false);
   const [newMappingForm, setNewMappingForm] = useState<Partial<AppDCMapping>>({ app_id: '', component: 'APP', dc: 'ALPHA_NGDC', nh: '', sz: '', cidr: '', status: 'Active', notes: '' });
   const [editingMappingId, setEditingMappingId] = useState<string | null>(null);
   const [editMappingForm, setEditMappingForm] = useState<Partial<AppDCMapping>>({});
+  void showAddMapping; void setEditMappingForm;
 
   // Policy matrix environment filter
   const [policyEnvFilter, setPolicyEnvFilter] = useState<string>('all');
@@ -502,8 +503,11 @@ export default function SettingsPage() {
   const selectedAppData = applications.find(a => a.app_id === selectedApp);
   const inp = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500';
 
-  // App DC Mapping helpers
+  // App DC Mapping helpers (legacy — retained for the per-app summary
+  // hooks below; the dedicated UI was retired in favour of the per-DC
+  // presence editor.)
   const selectedAppMappings = appDCMappings.filter(m => m.app_id === selectedApp);
+  void selectedAppMappings;
 
   // Client-side CIDR resolution from szCidrMap (mirrors backend _resolve_sz_cidr_sync)
   const clientResolveCidr = useCallback((dc: string, nh: string, sz: string): string => {
@@ -515,6 +519,7 @@ export default function SettingsPage() {
     const fallback = szCidrMap.find(e => e.nh === nh && e.sz === sz && !e.dc);
     return fallback ? fallback.cidr : '';
   }, [szCidrMap]);
+  void clientResolveCidr;
 
   const handleAddMapping = async () => {
     try {
@@ -528,6 +533,7 @@ export default function SettingsPage() {
       showNotification('Component mapping added', 'success');
     } catch { showNotification('Failed to add mapping', 'error'); }
   };
+  void handleAddMapping;
 
   // Inline mapping handlers for All Applications table
   void setInlineAddMapping; void inlineNewMapping; void setInlineEditMappingId; void inlineEditForm;
@@ -574,6 +580,7 @@ export default function SettingsPage() {
       showNotification('Mapping updated', 'success');
     } catch { showNotification('Failed to update mapping', 'error'); }
   };
+  void handleSaveMapping;
 
   const handleDeleteMapping = async (id: string) => {
     try {
@@ -582,6 +589,7 @@ export default function SettingsPage() {
       showNotification('Mapping deleted', 'success');
     } catch { showNotification('Failed to delete mapping', 'error'); }
   };
+  void handleDeleteMapping;
 
   // Policy matrix filtered by environment
   const filteredPolicyMatrix = policyEnvFilter === 'all' ? policyMatrix
@@ -932,25 +940,50 @@ export default function SettingsPage() {
 
   const filteredNhs = nhEnvFilter === 'all' ? neighbourhoods : neighbourhoods.filter(n => String(n.environment || '').toLowerCase().includes(nhEnvFilter.toLowerCase()));
 
-  const tabs = [
-    { id: 'data_mode', label: 'Data Mode' },
-    { id: 'data_management', label: 'Data Management' },
-    { id: 'neighbourhoods', label: 'Neighbourhoods' },
-    { id: 'security_zones', label: 'Security Zones' },
-    { id: 'datacenters', label: 'Data Centers' },
-    { id: 'app_management', label: 'App Management' },
-    { id: 'shared_services', label: 'Shared Services' },
-    { id: 'port_catalog', label: 'Port Configuration' },
-    { id: 'policy_matrix', label: 'Policy Matrix' },
-    { id: 'naming_standards', label: 'Naming Standards' },
-    { id: 'fw_devices', label: 'Firewall Devices' },
-    { id: 'sz_naming', label: 'SZ Naming Mode' },
-    { id: 'birthright', label: 'Birthright Rules' },
-    { id: 'itsm', label: 'ITSM Connectors' },
-    { id: 'ad_groups', label: 'User Groups' },
-    { id: 'ad_users', label: 'Users' },
-    { id: 'ad_config', label: 'AD Configuration' },
+  // Settings is grouped into 3 top-level pillars so the 14 flat tabs no
+  // longer dump on the operator in one row. Each pillar maps to one of
+  // the architectural concerns of the portal:
+  //   - Topology      : where the network actually lives (DCs / NHs / SZs / ports)
+  //   - Apps & Services: what runs on top of the topology + their policies
+  //   - Admin         : platform-level config (modes, naming, devices, users)
+  type TabGroup = 'topology' | 'apps' | 'admin';
+  const TAB_GROUPS: { id: TabGroup; label: string; description: string }[] = [
+    { id: 'topology', label: 'Topology', description: 'Data Centers, Neighbourhoods, Security Zones, Ports' },
+    { id: 'apps', label: 'Apps & Services', description: 'Applications, Shared Services, Policy Matrix, Birthright Rules' },
+    { id: 'admin', label: 'Admin', description: 'Data mode, naming, firewall devices, ITSM, users & AD' },
   ];
+  const TABS_BY_GROUP: Record<TabGroup, { id: string; label: string }[]> = {
+    topology: [
+      { id: 'datacenters', label: 'Data Centers' },
+      { id: 'neighbourhoods', label: 'Neighbourhoods' },
+      { id: 'security_zones', label: 'Security Zones' },
+      { id: 'port_catalog', label: 'Port Catalog' },
+    ],
+    apps: [
+      { id: 'app_management', label: 'App Management' },
+      { id: 'shared_services', label: 'Shared Services' },
+      { id: 'policy_matrix', label: 'Policy Matrix' },
+      { id: 'birthright', label: 'Birthright Rules' },
+    ],
+    admin: [
+      { id: 'data_mode', label: 'Data Mode' },
+      { id: 'data_management', label: 'Data Management' },
+      { id: 'naming_standards', label: 'Naming Standards' },
+      { id: 'sz_naming', label: 'SZ Naming Mode' },
+      { id: 'fw_devices', label: 'Firewall Devices' },
+      { id: 'itsm', label: 'ITSM Connectors' },
+      { id: 'ad_groups', label: 'User Groups' },
+      { id: 'ad_users', label: 'Users' },
+      { id: 'ad_config', label: 'AD Configuration' },
+    ],
+  };
+  const groupOf = (tabId: string): TabGroup => {
+    if (TABS_BY_GROUP.topology.some(t => t.id === tabId)) return 'topology';
+    if (TABS_BY_GROUP.apps.some(t => t.id === tabId)) return 'apps';
+    return 'admin';
+  };
+  const [tabGroup, setTabGroup] = useState<TabGroup>(() => groupOf(activeTab));
+  const subTabs = TABS_BY_GROUP[tabGroup];
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -959,7 +992,29 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Admin &amp; Settings</h1>
         <p className="text-sm text-gray-500 mt-1">Application management, policy matrix, naming standards, AD integration</p>
       </div>
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      <div className="flex gap-2 mb-3">
+        {TAB_GROUPS.map(g => {
+          const active = tabGroup === g.id;
+          return (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => {
+                setTabGroup(g.id);
+                const first = TABS_BY_GROUP[g.id][0];
+                if (first && !TABS_BY_GROUP[g.id].some(t => t.id === activeTab)) {
+                  setActiveTab(first.id);
+                }
+              }}
+              className={`flex-1 text-left px-4 py-2.5 rounded-lg border transition ${active ? 'border-indigo-500 bg-indigo-50 shadow-sm' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+            >
+              <div className={`text-sm font-semibold ${active ? 'text-indigo-700' : 'text-gray-800'}`}>{g.label}</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">{g.description}</div>
+            </button>
+          );
+        })}
+      </div>
+      <Tabs tabs={subTabs} activeTab={activeTab} onChange={setActiveTab} />
 
       {(activeTab === 'ad_groups' || activeTab === 'ad_users') && (
         <div className="mt-4">
@@ -1817,13 +1872,12 @@ export default function SettingsPage() {
               {showAddDc && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
                   <h3 className="text-sm font-semibold text-blue-800">Add New Data Center</h3>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <select className={inp} value={String(newDcForm.dc_type || 'NGDC')} onChange={e => setNewDcForm({ ...newDcForm, dc_type: e.target.value })}>
                       <option value="NGDC">NGDC</option><option value="Legacy">Legacy</option>
                     </select>
                     <input className={inp} placeholder="DC ID / Code" value={String(newDcForm.dc_id || '')} onChange={e => setNewDcForm({ ...newDcForm, dc_id: e.target.value })} />
                     <input className={inp} placeholder="Name" value={String(newDcForm.name || '')} onChange={e => setNewDcForm({ ...newDcForm, name: e.target.value })} />
-                    <input className={inp} placeholder="Region" value={String(newDcForm.region || '')} onChange={e => setNewDcForm({ ...newDcForm, region: e.target.value })} />
                     <select className={inp} value={String(newDcForm.status || 'Active')} onChange={e => setNewDcForm({ ...newDcForm, status: e.target.value })}>
                       <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option><option value="Migrating">Migrating</option>
                     </select>
@@ -1843,7 +1897,6 @@ export default function SettingsPage() {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">DC ID / Code</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Region</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -1859,7 +1912,6 @@ export default function SettingsPage() {
                           <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${dcType === 'NGDC' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{dcType}</span></td>
                           <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{isEditing ? <input className={inp} value={String(editDcForm.dc_id || '')} onChange={e => setEditDcForm({ ...editDcForm, dc_id: e.target.value })} /> : dcId}</td>
                           <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editDcForm.name || '')} onChange={e => setEditDcForm({ ...editDcForm, name: e.target.value })} /> : String((dc as Record<string, unknown>).name || '')}</td>
-                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String((dc as Record<string, unknown>).region || '—')}</td>
                           <td className="px-3 py-2">{isEditing ? (
                             <select className={inp} value={String(editDcForm.status || 'Active')} onChange={e => setEditDcForm({ ...editDcForm, status: e.target.value })}>
                               <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option><option value="Migrating">Migrating</option>
@@ -1998,44 +2050,9 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <input className={inp} placeholder="SNow SysID" value={newAppForm.snow_sysid || ''} onChange={e => setNewAppForm({ ...newAppForm, snow_sysid: e.target.value })} />
                 </div>
-                {/* Omnipresent / Primary DC — Primary DC is now optional;
-                    every NGDC app lives in all 4 DCs and the per-DC presence
-                    editor below is the source of truth for materialised
-                    groups. ``primary_dc`` is retained only as a hint for the
-                    rule builder's default source DC. */}
-                <div className="border border-indigo-200 rounded-lg p-3 bg-white/60 space-y-2">
-                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">— every NGDC app lives in all 4 DCs; this is just a hint for the rule builder's default source DC</span></h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-gray-400 font-normal">(optional)</span></label>
-                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                        value={String(newAppForm.primary_dc || '')}
-                        onChange={e => setNewAppForm({ ...newAppForm, primary_dc: e.target.value })}>
-                        <option value="">— unset (auto from presences) —</option>
-                        {ngdcDatacenters.map(dc => {
-                          const code = String(dc.dc_id || dc.code || '');
-                          return <option key={code} value={code}>{code}</option>;
-                        })}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Deployment Mode</label>
-                      <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                        value={newAppForm.deployment_mode || 'all_ngdc'}
-                        onChange={e => setNewAppForm({ ...newAppForm, deployment_mode: e.target.value as Application['deployment_mode'] })}>
-                        <option value="all_ngdc">All NGDC (auto-fan presences)</option>
-                        <option value="all_ngdc_with_exceptions">All NGDC (with exceptions)</option>
-                        <option value="selective">Selective (manual presences)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Owner Team</label>
-                      <input className={inp} placeholder="e.g. Eta, Platform, SNS"
-                        value={newAppForm.owner_team || ''}
-                        onChange={e => setNewAppForm({ ...newAppForm, owner_team: e.target.value })} />
-                    </div>
-                  </div>
-                </div>
+                <p className="text-[11px] text-gray-500 italic">
+                  Every NGDC app lives in all NGDC DCs by default. Use the Per-DC Presence editor below to declare egress/ingress chips per (DC, NH, SZ) for NGDC and per Heritage DC for legacy infra. NGDC↔Heritage routing is managed under Settings → Data Centers.
+                </p>
                 <PresencePerDcEditor
                   rows={newAppPresences}
                   onChange={setNewAppPresences}
@@ -2088,63 +2105,9 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label>
                         <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /></div>
                     </div>
-                    {/* Filter values — Neighborhoods / SZs / DCs are the
-                        comma-separated classification fields used by every
-                        listing filter across the portal. They're normally
-                        derived from per-DC presences but operators need
-                        the override path so apps without presence rows
-                        (or undergoing renames) can still be filtered. */}
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                        <input className={inp}
-                          placeholder="e.g. Core Banking, Wholesale Banking"
-                          value={editAppForm.neighborhoods ?? ''}
-                          onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">SZs <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                        <input className={inp}
-                          placeholder="e.g. CCS, PAA, GEN"
-                          value={editAppForm.szs ?? ''}
-                          onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">DCs <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-                        <input className={inp}
-                          placeholder="e.g. ALPHA_NGDC, BETA_NGDC"
-                          value={editAppForm.dcs ?? ''}
-                          onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-4 gap-4 pt-2 border-t border-gray-200">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Primary DC <span className="text-gray-400 font-normal">(optional)</span></label>
-                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                          value={String(editAppForm.primary_dc || '')}
-                          onChange={e => setEditAppForm({ ...editAppForm, primary_dc: e.target.value })}>
-                          <option value="">— unset (auto from presences) —</option>
-                          {ngdcDatacenters.map(dc => {
-                            const code = String(dc.dc_id || dc.code || '');
-                            return <option key={code} value={code}>{code}</option>;
-                          })}
-                        </select></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Deployment Mode</label>
-                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
-                          value={editAppForm.deployment_mode || 'all_ngdc'}
-                          onChange={e => setEditAppForm({ ...editAppForm, deployment_mode: e.target.value as Application['deployment_mode'] })}>
-                          <option value="all_ngdc">All NGDC (auto-fan)</option>
-                          <option value="all_ngdc_with_exceptions">All NGDC (with exceptions)</option>
-                          <option value="selective">Selective</option>
-                        </select></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner Team</label>
-                        <input className={inp} placeholder="e.g. Eta, Platform, SNS"
-                          value={editAppForm.owner_team || ''}
-                          onChange={e => setEditAppForm({ ...editAppForm, owner_team: e.target.value })} /></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Excluded DCs</label>
-                        <input className={inp} placeholder="comma-separated, e.g. DELTA_NGDC"
-                          value={Array.isArray(editAppForm.excluded_dcs) ? editAppForm.excluded_dcs.join(',') : ''}
-                          onChange={e => setEditAppForm({ ...editAppForm, excluded_dcs: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
-                    </div>
+                    <p className="text-[11px] text-gray-500 italic">
+                      Neighborhoods / SZs / DCs are auto-derived from the per-DC presence rows below — you no longer need to maintain them on the app metadata. Heritage routing lives in Settings → Data Centers.
+                    </p>
                     <PresencePerDcEditor
                       rows={editAppPresences}
                       onChange={setEditAppPresences}
@@ -2162,9 +2125,9 @@ export default function SettingsPage() {
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">Owner</label><p className="text-sm text-gray-800">{selectedAppData.owner || 'N/A'}</p></div>
                     </div>
                     <div className="grid grid-cols-4 gap-4">
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods</label><p className="text-sm font-mono text-gray-800">{selectedAppData.neighborhoods || 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SZs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.szs || 'N/A'}</p></div>
-                      <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs</label><p className="text-sm font-mono text-gray-800">{selectedAppData.dcs || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">Neighborhoods <span className="text-gray-400 font-normal">(derived)</span></label><p className="text-sm font-mono text-gray-800">{selectedAppData.neighborhoods || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">SZs <span className="text-gray-400 font-normal">(derived)</span></label><p className="text-sm font-mono text-gray-800">{selectedAppData.szs || 'N/A'}</p></div>
+                      <div><label className="block text-xs font-medium text-gray-500 mb-1">DCs <span className="text-gray-400 font-normal">(derived)</span></label><p className="text-sm font-mono text-gray-800">{selectedAppData.dcs || 'N/A'}</p></div>
                       <div><label className="block text-xs font-medium text-gray-500 mb-1">SNow SysID</label><p className="text-sm font-mono text-gray-800">{selectedAppData.snow_sysid || 'N/A'}</p></div>
                     </div>
                     {/* Per-DC presences (read-only) — every (DC, NH, SZ)
@@ -2263,114 +2226,6 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Presence Matrix — per-(DC, NH, SZ) with auto-derived egress/ingress groups */}
-            {selectedAppData && (
-              <div className="p-5 bg-white border border-purple-100 rounded-2xl shadow-sm">
-                <AppPresenceMatrix
-                  appDistributedId={String(selectedAppData.app_distributed_id || selectedAppData.app_id)}
-                  appId={String(selectedAppData.app_id)}
-                  environment="Production"
-                  onChange={() => loadRefData()}
-                />
-              </div>
-            )}
-
-            {/* DC/NH/SZ Mappings for selected app (simplified - no component) */}
-            {selectedApp && (
-              <div className="p-4 bg-white border border-gray-200 rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-800">DC / NH / SZ Mappings ({selectedAppMappings.length})</h3>
-                  <button onClick={() => { setShowAddMapping(true); setNewMappingForm({ ...newMappingForm, app_id: selectedApp }); }}
-                    className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700">+ Add Mapping</button>
-                </div>
-                {showAddMapping && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-                    <div className="grid grid-cols-6 gap-2">
-                      <select className="px-2 py-1 text-xs border rounded" value={newMappingForm.dc || ''} onChange={e => { const dc = e.target.value; const resolved = clientResolveCidr(dc, newMappingForm.nh || '', newMappingForm.sz || ''); setNewMappingForm({ ...newMappingForm, dc, cidr: resolved || newMappingForm.cidr || '' }); }}>
-                        <option value="">-- Select DC --</option>
-                        {ngdcDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (NGDC)</option>; })}
-                        {legacyDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id} (Legacy)</option>; })}
-                      </select>
-                      <input className="px-2 py-1 text-xs border rounded" placeholder="NH (e.g. NH02)" value={newMappingForm.nh || ''} onChange={e => { const nh = e.target.value; const resolved = clientResolveCidr(newMappingForm.dc || '', nh, newMappingForm.sz || ''); setNewMappingForm({ ...newMappingForm, nh, cidr: resolved || newMappingForm.cidr || '' }); }} />
-                      <input className="px-2 py-1 text-xs border rounded" placeholder="SZ (e.g. CCS)" value={newMappingForm.sz || ''} onChange={e => { const sz = e.target.value; const resolved = clientResolveCidr(newMappingForm.dc || '', newMappingForm.nh || '', sz); setNewMappingForm({ ...newMappingForm, sz, cidr: resolved || newMappingForm.cidr || '' }); }} />
-                      <div className="relative">
-                        <input className="px-2 py-1 text-xs border rounded font-mono w-full" placeholder="CIDR (auto-resolved)" value={newMappingForm.cidr || ''} onChange={e => setNewMappingForm({ ...newMappingForm, cidr: e.target.value })} />
-                        {newMappingForm.cidr && clientResolveCidr(newMappingForm.dc || '', newMappingForm.nh || '', newMappingForm.sz || '') === newMappingForm.cidr && (
-                          <span className="absolute -top-1.5 right-1 text-[8px] text-green-600 bg-white px-0.5">auto</span>
-                        )}
-                      </div>
-                      <input className="px-2 py-1 text-xs border rounded" placeholder="Notes" value={newMappingForm.notes || ''} onChange={e => setNewMappingForm({ ...newMappingForm, notes: e.target.value })} />
-                      <div className="flex gap-1">
-                        <button onClick={() => setShowAddMapping(false)} className="px-2 py-1 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
-                        <button onClick={handleAddMapping} className="px-2 py-1 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700">Add</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {selectedAppMappings.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50"><tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DC Location</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DC</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">NH</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZ</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">CIDR</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Notes</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
-                      </tr></thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {selectedAppMappings.map(m => {
-                          const mid = m.id || `${m.app_id}-${m.dc}-${m.nh}`;
-                          if (editingMappingId === mid) {
-                            return (
-                              <tr key={mid} className="bg-blue-50">
-                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={(editMappingForm as Record<string,string>).dc_location || 'NGDC'} onChange={e => setEditMappingForm({ ...editMappingForm, dc_location: e.target.value } as typeof editMappingForm)}>
-                                  <option value="NGDC">NGDC</option><option value="Legacy">Legacy</option>
-                                </select></td>
-                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.dc || ''} onChange={e => setEditMappingForm({ ...editMappingForm, dc: e.target.value })}>
-                                  {ngdcDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id}</option>; })}
-                                  {legacyDatacenters.map(d => { const id = String(d.dc_id || d.code); return <option key={id} value={id}>{id}</option>; })}
-                                </select></td>
-                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" placeholder="NH02" value={editMappingForm.nh || ''} onChange={e => setEditMappingForm({ ...editMappingForm, nh: e.target.value })} /></td>
-                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" placeholder="CCS" value={editMappingForm.sz || ''} onChange={e => setEditMappingForm({ ...editMappingForm, sz: e.target.value })} /></td>
-                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded font-mono" value={editMappingForm.cidr || ''} onChange={e => setEditMappingForm({ ...editMappingForm, cidr: e.target.value })} /></td>
-                                <td className="px-3 py-1"><select className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.status || 'Active'} onChange={e => setEditMappingForm({ ...editMappingForm, status: e.target.value as AppDCMapping['status'] })}>
-                                  <option value="Active">Active</option><option value="Inactive">Inactive</option>
-                                </select></td>
-                                <td className="px-3 py-1"><input className="w-full px-1 py-1 text-xs border rounded" value={editMappingForm.notes || ''} onChange={e => setEditMappingForm({ ...editMappingForm, notes: e.target.value })} /></td>
-                                <td className="px-3 py-1"><div className="flex gap-1">
-                                  <button onClick={() => setEditingMappingId(null)} className="px-2 py-0.5 text-xs text-gray-600 border rounded hover:bg-gray-100">Cancel</button>
-                                  <button onClick={handleSaveMapping} className="px-2 py-0.5 text-xs text-white bg-indigo-600 rounded hover:bg-indigo-700">Save</button>
-                                </div></td>
-                              </tr>
-                            );
-                          }
-                          return (
-                            <tr key={mid} className="hover:bg-gray-50">
-                              <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${(m as unknown as Record<string,string>).dc_location === 'NGDC' ? 'bg-green-100 text-green-700' : (m as unknown as Record<string,string>).dc_location === 'Legacy' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>{(m as unknown as Record<string,string>).dc_location || 'N/A'}</span></td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.dc || (m as unknown as Record<string,string>).legacy_dc || '-'}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.nh || '-'}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.sz || '-'}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-600">{m.cidr || (m as unknown as Record<string,string>).legacy_cidr || '-'}</td>
-                              <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs rounded-full ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span></td>
-                              <td className="px-3 py-2 text-xs text-gray-500 max-w-[150px] truncate">{m.notes || ''}</td>
-                              <td className="px-3 py-2"><div className="flex gap-1">
-                                <button onClick={() => { setEditingMappingId(mid); setEditMappingForm({ ...m }); }} className="px-2 py-0.5 text-xs text-blue-700 bg-blue-50 rounded hover:bg-blue-100">Edit</button>
-                                <button onClick={() => handleDeleteMapping(mid)} className="px-2 py-0.5 text-xs text-red-700 bg-red-50 rounded hover:bg-red-100">Del</button>
-                              </div></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">No DC/NH/SZ mappings yet. Click &quot;+ Add Mapping&quot; to define placement.</p>
-                )}
-              </div>
-            )}
 
             {!selectedApp && (
               <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -2386,9 +2241,6 @@ export default function SettingsPage() {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">App Name</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Has Ingress</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Egress IP</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Neighborhoods</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SZs</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">DCs</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SNow SysID</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                       </tr></thead>
@@ -2410,9 +2262,6 @@ export default function SettingsPage() {
                               )}
                             </td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.egress_ip || ''} onChange={e => setEditAppForm({ ...editAppForm, egress_ip: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.egress_ip || '-'}</span>}</td>
-                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.neighborhoods || ''} onChange={e => setEditAppForm({ ...editAppForm, neighborhoods: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.neighborhoods || app.nh || '-'}</span>}</td>
-                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.szs || ''} onChange={e => setEditAppForm({ ...editAppForm, szs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.szs || app.sz || '-'}</span>}</td>
-                            <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.dcs || ''} onChange={e => setEditAppForm({ ...editAppForm, dcs: e.target.value })} /> : <span className="font-mono text-xs text-gray-600">{app.dcs || '-'}</span>}</td>
                             <td className="px-3 py-2">{isEditing ? <input className={inp} value={editAppForm.snow_sysid || ''} onChange={e => setEditAppForm({ ...editAppForm, snow_sysid: e.target.value })} /> : <span className="font-mono text-xs text-gray-500">{app.snow_sysid || '-'}</span>}</td>
                             <td className="px-3 py-2">
                               {isEditing ? (

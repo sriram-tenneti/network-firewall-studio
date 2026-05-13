@@ -561,33 +561,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 className="w-full border rounded px-2 py-1.5 text-sm"
                 placeholder="Business justification / ticket / context" />
             </div>
-            {isGodView ? (
-              <details className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
-                <summary className="text-[11px] font-semibold text-amber-800 cursor-pointer">Advanced (SNS only) — Power-user Overrides</summary>
-                <p className="text-[11px] text-gray-600 mt-2">
-                  Rules fan out automatically across <strong>all 4 NGDC DCs</strong> with strict
-                  same-DC pairing (ALPHA→ALPHA, BETA→BETA, …). NGDC↔Heritage routing follows
-                  the Heritage presence's <code className="font-mono">ngdc_source_dcs[]</code>
-                  mapping. Use the override below only for DR cutover / pinned active-active.
-                </p>
-                <label className="flex items-center gap-2 text-xs text-gray-700">
-                  <span className="min-w-[150px]"><strong>Destination DC override</strong></span>
-                  <select value={destinationDcOverride}
-                    onChange={(e) => setDestinationDcOverride(e.target.value)}
-                    className="border rounded px-2 py-1 text-xs">
-                    <option value="">Use destination's primary DC (default)</option>
-                    <option value="ALPHA_NGDC">ALPHA_NGDC</option>
-                    <option value="BETA_NGDC">BETA_NGDC</option>
-                    <option value="GAMMA_NGDC">GAMMA_NGDC</option>
-                    <option value="DELTA_NGDC">DELTA_NGDC</option>
-                  </select>
-                </label>
-              </details>
-            ) : (
-              <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-2 text-[11px] text-emerald-800">
-                Your rule will originate from your app's primary DC. The destination team handles east-west routing across their other DCs — you don't need to think in DC terms.
-              </div>
-            )}
+            <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-2 text-[11px] text-emerald-800">
+              Rules fan out automatically across all NGDC DCs with strict same-DC pairing (ALPHA→ALPHA, BETA→BETA, …). NGDC↔Heritage routing follows the Heritage DC's connected NGDC DCs (Settings → Data Centers). DR cut-over / pinned destination is now an Admin-only action on the Rules page — it's not a per-rule field anymore.
+            </div>
             <div className="flex justify-between">
               <button onClick={() => setStep(1)} className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">Back</button>
               <button onClick={() => setStep(3)}

@@ -486,20 +486,6 @@ export default function ReviewPage(props: { context?: string }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Total Reviews', value: counts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
-          { label: 'Pending', value: counts.Pending, color: 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800' },
-          { label: 'Approved', value: counts.Approved, color: 'bg-gradient-to-br from-green-100 to-green-200 text-green-800' },
-          { label: 'Rejected', value: counts.Rejected, color: 'bg-gradient-to-br from-red-100 to-red-200 text-red-800' },
-        ].map(card => (
-          <div key={card.label} className={`p-4 rounded-lg ${card.color}`}>
-            <div className="text-2xl font-bold">{card.value}</div>
-            <div className="text-sm font-medium mt-1">{card.label}</div>
-          </div>
-        ))}
-      </div>
-
       <div className="bg-white border rounded-lg shadow-sm">
         <div className="px-4 pt-4">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />

@@ -735,20 +735,6 @@ export function MigrationStudioPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-3 mb-6">
-        {[
-          { label: 'Total Rules', value: counts.All, color: 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800' },
-          { label: 'Non-Standard', value: counts['Non-Standard'], color: 'bg-gradient-to-br from-red-100 to-red-200 text-red-800' },
-          { label: 'Standard', value: counts.Standard, color: 'bg-gradient-to-br from-green-100 to-green-200 text-green-800' },
-          { label: 'Not Started', value: counts['Not Started'], color: 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-800' },
-          { label: 'In Progress', value: counts['In Progress'], color: 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800' },
-        ].map(card => (
-          <div key={card.label} className={'p-3 rounded-lg shadow-sm ' + card.color}>
-            <div className="text-xl font-bold">{card.value}</div>
-            <div className="text-xs font-medium mt-0.5">{card.label}</div>
-          </div>
-        ))}
-      </div>
 
       {/* Partial Migration Scenario Banner */}
       {appMigrationInfo && appMigrationInfo.migration_scenario !== 'Full NGDC' && (
