@@ -7728,6 +7728,10 @@ async def upsert_shared_service_presence(data: dict[str, Any]) -> dict[str, Any]
     items = _load("shared_service_presences") or []
     data = dict(data)
     data["service_id"] = str(data.get("service_id", "")).upper()
+    # NGDC↔Heritage routing is owned by the Heritage DC record (Settings →
+    # Data Centers). Per-presence ngdc_source_dcs is no longer a write
+    # surface — strip it on ingress so the file stays clean.
+    data.pop("ngdc_source_dcs", None)
     key = (data["service_id"], data.get("dc_id", ""),
            data.get("environment", "Production"),
            data.get("nh_id", ""), data.get("sz_code", ""))
@@ -7820,6 +7824,10 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("app_presences") or []
     data = dict(data)
     data["app_distributed_id"] = str(data.get("app_distributed_id", "")).upper()
+    # NGDC↔Heritage routing is owned by the Heritage DC record (Settings →
+    # Data Centers). Per-presence ngdc_source_dcs is no longer a write
+    # surface — strip it on ingress so the file stays clean.
+    data.pop("ngdc_source_dcs", None)
     key = (data["app_distributed_id"], data.get("dc_id", ""),
            data.get("environment", "Production"),
            data.get("nh_id", ""), data.get("sz_code", ""))
