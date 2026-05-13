@@ -8227,12 +8227,12 @@ async def apply_app_presence_overrides(
         if is_heritage:
             nh, sz = "", ""
         env = str(row.get("environment", "")).strip() or envs[0]
-        ngdc_source_dcs = []
-        if is_heritage:
-            for x in (row.get("ngdc_source_dcs") or []):
-                s = str(x).strip().upper()
-                if s and s not in ngdc_source_dcs:
-                    ngdc_source_dcs.append(s)
+        # NGDC <-> Heritage routing is now managed centrally on each Heritage
+        # DC record (Settings -> Data Centers). We deliberately do NOT persist
+        # ``ngdc_source_dcs`` on the per-presence row anymore. The runtime
+        # helper ``_effective_heritage_ngdc_source_dcs`` still falls back to
+        # any pre-existing presence-level value for backward compatibility,
+        # but no new writes carry it.
         await upsert_app_presence({
             "app_distributed_id": app_id,
             "dc_id": dc,
@@ -8245,7 +8245,6 @@ async def apply_app_presence_overrides(
             "egress_members": _normalise_chips(row.get("egress_members")),
             "ingress_members": _normalise_chips(row.get("ingress_members")),
             "ingress_ports": list(row.get("ingress_ports") or []),
-            "ngdc_source_dcs": ngdc_source_dcs,
         })
         written += 1
     return written
@@ -8286,12 +8285,8 @@ async def apply_service_presence_overrides(
             + (row.get("egress_members") or [])
             + (row.get("ingress_members") or []),
         )
-        ngdc_source_dcs = []
-        if is_heritage:
-            for x in (row.get("ngdc_source_dcs") or []):
-                s = str(x).strip().upper()
-                if s and s not in ngdc_source_dcs:
-                    ngdc_source_dcs.append(s)
+        # See note in apply_app_presence_overrides — Heritage routing comes
+        # from the DC record now, not the presence row.
         await upsert_shared_service_presence({
             "service_id": sid,
             "dc_id": dc,
@@ -8301,7 +8296,6 @@ async def apply_service_presence_overrides(
             "nh_id": nh,
             "sz_code": sz,
             "members": members,
-            "ngdc_source_dcs": ngdc_source_dcs,
         })
         written += 1
     return written
