@@ -18,8 +18,13 @@ from app.database import get_rule_request, get_rule_requests
 router = APIRouter(prefix="/api/rules/requests", tags=["Request Export"])
 
 
-def _resolve_group_members(group_name: str) -> list[str]:
-    """Resolve a group name to its member IPs/CIDRs from groups store."""
+def _resolve_group_members(group_name: str, dc: str = "") -> list[str]:
+    """Resolve a group name to its member IPs/CIDRs from groups store.
+    
+    If dc is provided, looks for the DC-specific materialization of the group
+    (same group name can have different members in different datacenters).
+    Falls back to the first matching group if no DC-specific entry exists.
+    """
     import json
     from pathlib import Path
 
@@ -31,20 +36,33 @@ def _resolve_group_members(group_name: str) -> list[str]:
         return []
     with open(groups_path, "r") as f:
         groups = json.load(f)
+
+    def _extract_members(g: dict) -> list[str]:
+        members = g.get("members") or g.get("member_ips") or []
+        result = []
+        for m in members:
+            if isinstance(m, str):
+                result.append(m)
+            elif isinstance(m, dict):
+                result.append(m.get("ip") or m.get("address") or m.get("value") or str(m))
+            else:
+                result.append(str(m))
+        return result
+
+    # First pass: find DC-specific match
+    fallback_group = None
     for g in groups:
         name = g.get("name", "") or g.get("group_name", "")
         if name.upper() == group_name.upper():
-            members = g.get("members") or g.get("member_ips") or []
-            # Members can be strings or dicts with 'ip'/'address' key
-            result = []
-            for m in members:
-                if isinstance(m, str):
-                    result.append(m)
-                elif isinstance(m, dict):
-                    result.append(m.get("ip") or m.get("address") or m.get("value") or str(m))
-                else:
-                    result.append(str(m))
-            return result
+            group_dc = g.get("dc") or g.get("datacenter") or g.get("dc_id") or ""
+            if dc and group_dc and group_dc.upper() == dc.upper():
+                return _extract_members(g)
+            if fallback_group is None:
+                fallback_group = g
+
+    # Fallback: return first match (no DC filter)
+    if fallback_group:
+        return _extract_members(fallback_group)
     return []
 
 
@@ -61,7 +79,12 @@ def _details_block(members: list[str]) -> str:
 
 
 def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
-    """Build rows for the simplified export spreadsheet."""
+    """Build rows for the simplified export spreadsheet.
+    
+    Each row represents one physical rule in a specific DC pair.
+    Group members are resolved per-DC so each row shows the actual
+    IPs for that datacenter.
+    """
     rows: list[list[str]] = []
     expansion = request.get("expansion", [])
 
@@ -75,12 +98,16 @@ def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
         dst_group = str(rule.get("dst_group_ref", "") or rule.get("dst_group", "") or "")
         ports = str(rule.get("ports", "") or ports_default)
 
+        # DC information for this physical rule
+        src_dc = str(rule.get("src_dc", "") or "")
+        dst_dc = str(rule.get("dst_dc", "") or "")
+
         # Destination app — infer from the rule or the request
         dst_app = str(rule.get("dst_application", "") or rule.get("dst_app", "") or dst_app_default)
 
-        # Resolve group members for details columns
-        src_members = _resolve_group_members(src_group)
-        dst_members = _resolve_group_members(dst_group)
+        # Resolve group members PER DC — different DCs have different IPs
+        src_members = _resolve_group_members(src_group, dc=src_dc)
+        dst_members = _resolve_group_members(dst_group, dc=dst_dc)
 
         rows.append([
             src_app,
@@ -90,6 +117,8 @@ def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
             dst_group,
             _details_block(dst_members),
             ports,
+            src_dc,
+            dst_dc,
         ])
 
     # If no expansion rules, still output a row with request-level data
@@ -102,6 +131,8 @@ def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
             "",
             "",
             str(ports_default),
+            "",
+            "",
         ])
 
     return rows
@@ -140,7 +171,8 @@ async def export_request_xlsx(request_id: str) -> StreamingResponse:
     # Headers
     headers = [
         "Source App", "Source (Group)", "Source Details",
-        "Destination App", "Destination (Group)", "Destination Details", "Ports"
+        "Destination App", "Destination (Group)", "Destination Details",
+        "Ports", "Source DC", "Destination DC"
     ]
     ws.append(headers)
     for cell in ws[1]:
@@ -154,13 +186,14 @@ async def export_request_xlsx(request_id: str) -> StreamingResponse:
         ws.append(row)
 
     # Set column widths
-    widths = [18, 25, 40, 18, 25, 40, 15]
+    widths = [18, 28, 40, 18, 28, 40, 15, 18, 18]
     for i, w in enumerate(widths, 1):
-        ws.column_dimensions[chr(64 + i)].width = w
+        col_letter = chr(64 + i) if i <= 26 else chr(64 + (i - 1) // 26) + chr(64 + (i - 1) % 26 + 1)
+        ws.column_dimensions[col_letter].width = w
 
-    # Wrap text for expansion columns
+    # Wrap text for details columns
     for row_idx in range(2, ws.max_row + 1):
-        for col in (3, 6):  # C and F (expansion columns)
+        for col in (3, 6):  # C and F (details columns)
             cell = ws.cell(row=row_idx, column=col)
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 
@@ -215,7 +248,8 @@ async def export_all_requests_xlsx(
 
     headers = [
         "Source App", "Source (Group)", "Source Details",
-        "Destination App", "Destination (Group)", "Destination Details", "Ports"
+        "Destination App", "Destination (Group)", "Destination Details",
+        "Ports", "Source DC", "Destination DC"
     ]
 
     for req in requests[:50]:  # Limit to 50 sheets
@@ -233,9 +267,10 @@ async def export_all_requests_xlsx(
             ws.append(row)
 
         # Column widths
-        widths = [18, 25, 40, 18, 25, 40, 15]
+        widths = [18, 28, 40, 18, 28, 40, 15, 18, 18]
         for i, w in enumerate(widths, 1):
-            ws.column_dimensions[chr(64 + i)].width = w
+            col_letter = chr(64 + i) if i <= 26 else chr(64 + (i - 1) // 26) + chr(64 + (i - 1) % 26 + 1)
+            ws.column_dimensions[col_letter].width = w
 
     buf = BytesIO()
     wb.save(buf)
