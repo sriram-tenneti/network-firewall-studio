@@ -1,6 +1,6 @@
 """Rule Request Excel Export — simplified XLSX with the columns:
-Source App, Source (group), Source Expansion, Destination App,
-Destination (group), Destination Expansion, Ports.
+Source App, Source (Group), Source Details, Destination App,
+Destination (Group), Destination Details, Ports.
 
 This is the Phase 1 export: straightforward spreadsheet output
 for each rule request's expanded physical rules.
@@ -23,6 +23,8 @@ def _resolve_group_members(group_name: str) -> list[str]:
     import json
     from pathlib import Path
 
+    if not group_name:
+        return []
     data_dir = Path(__file__).parent.parent.parent / "data"
     groups_path = data_dir / "groups.json"
     if not groups_path.exists():
@@ -30,22 +32,32 @@ def _resolve_group_members(group_name: str) -> list[str]:
     with open(groups_path, "r") as f:
         groups = json.load(f)
     for g in groups:
-        if g.get("name", "").upper() == group_name.upper():
-            return [str(m) for m in (g.get("members") or [])]
+        name = g.get("name", "") or g.get("group_name", "")
+        if name.upper() == group_name.upper():
+            members = g.get("members") or g.get("member_ips") or []
+            # Members can be strings or dicts with 'ip'/'address' key
+            result = []
+            for m in members:
+                if isinstance(m, str):
+                    result.append(m)
+                elif isinstance(m, dict):
+                    result.append(m.get("ip") or m.get("address") or m.get("value") or str(m))
+                else:
+                    result.append(str(m))
+            return result
     return []
 
 
-def _expansion_block(group_name: str, members: list[str]) -> str:
-    """Format group expansion for the Excel cell:
-    group_name
+def _details_block(members: list[str]) -> str:
+    """Format group members for the Details cell:
       10.1.2.3
       10.1.2.4
       ...
+    Returns empty string if no members found.
     """
     if not members:
-        return group_name
-    lines = [group_name] + [f"  {m}" for m in members]
-    return "\n".join(lines)
+        return "(no members found)"
+    return "\n".join(members)
 
 
 def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
@@ -54,28 +66,42 @@ def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
     expansion = request.get("expansion", [])
 
     src_app = request.get("source_ref") or request.get("application_ref", "")
-    environment = request.get("environment", "")
+    dst_app_default = request.get("destination_ref", "") or ""
+    ports_default = request.get("ports", "")
 
     for rule in expansion:
-        src_group = str(rule.get("src_group", ""))
-        dst_group = str(rule.get("dst_group", ""))
-        ports = str(rule.get("ports", ""))
+        # Physical rule uses src_group_ref / dst_group_ref
+        src_group = str(rule.get("src_group_ref", "") or rule.get("src_group", "") or "")
+        dst_group = str(rule.get("dst_group_ref", "") or rule.get("dst_group", "") or "")
+        ports = str(rule.get("ports", "") or ports_default)
 
-        # Destination app — infer from the request or the rule
-        dst_app = str(rule.get("dst_app", "")) or request.get("destination_ref", "") or ""
+        # Destination app — infer from the rule or the request
+        dst_app = str(rule.get("dst_application", "") or rule.get("dst_app", "") or dst_app_default)
 
-        # Resolve group members for expansion columns
+        # Resolve group members for details columns
         src_members = _resolve_group_members(src_group)
         dst_members = _resolve_group_members(dst_group)
 
         rows.append([
             src_app,
             src_group,
-            _expansion_block(src_group, src_members),
+            _details_block(src_members),
             dst_app,
             dst_group,
-            _expansion_block(dst_group, dst_members),
+            _details_block(dst_members),
             ports,
+        ])
+
+    # If no expansion rules, still output a row with request-level data
+    if not rows:
+        rows.append([
+            src_app,
+            "",
+            "",
+            dst_app_default,
+            "",
+            "",
+            str(ports_default),
         ])
 
     return rows
@@ -113,8 +139,8 @@ async def export_request_xlsx(request_id: str) -> StreamingResponse:
 
     # Headers
     headers = [
-        "Source App", "Source (Group)", "Source Expansion",
-        "Destination App", "Destination (Group)", "Destination Expansion", "Ports"
+        "Source App", "Source (Group)", "Source Details",
+        "Destination App", "Destination (Group)", "Destination Details", "Ports"
     ]
     ws.append(headers)
     for cell in ws[1]:
@@ -188,8 +214,8 @@ async def export_all_requests_xlsx(
     header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
 
     headers = [
-        "Source App", "Source (Group)", "Source Expansion",
-        "Destination App", "Destination (Group)", "Destination Expansion", "Ports"
+        "Source App", "Source (Group)", "Source Details",
+        "Destination App", "Destination (Group)", "Destination Details", "Ports"
     ]
 
     for req in requests[:50]:  # Limit to 50 sheets
