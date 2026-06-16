@@ -111,14 +111,14 @@ def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
 
         rows.append([
             src_app,
+            src_dc,
             src_group,
             _details_block(src_members),
             dst_app,
+            dst_dc,
             dst_group,
             _details_block(dst_members),
             ports,
-            src_dc,
-            dst_dc,
         ])
 
     # If no expansion rules, still output a row with request-level data
@@ -127,12 +127,12 @@ def _build_export_rows(request: dict[str, Any]) -> list[list[str]]:
             src_app,
             "",
             "",
+            "",
             dst_app_default,
             "",
             "",
+            "",
             str(ports_default),
-            "",
-            "",
         ])
 
     return rows
@@ -170,9 +170,9 @@ async def export_request_xlsx(request_id: str) -> StreamingResponse:
 
     # Headers
     headers = [
-        "Source App", "Source (Group)", "Source Details",
-        "Destination App", "Destination (Group)", "Destination Details",
-        "Ports", "Source DC", "Destination DC"
+        "Source App", "Source DC", "Source (Group)", "Source Details",
+        "Destination App", "Destination DC", "Destination (Group)", "Destination Details",
+        "Ports"
     ]
     ws.append(headers)
     for cell in ws[1]:
@@ -185,15 +185,14 @@ async def export_request_xlsx(request_id: str) -> StreamingResponse:
     for row in rows:
         ws.append(row)
 
-    # Set column widths
-    widths = [18, 28, 40, 18, 28, 40, 15, 18, 18]
+    # Set column widths (A-I)
+    widths = [18, 18, 28, 40, 18, 18, 28, 40, 15]
     for i, w in enumerate(widths, 1):
-        col_letter = chr(64 + i) if i <= 26 else chr(64 + (i - 1) // 26) + chr(64 + (i - 1) % 26 + 1)
-        ws.column_dimensions[col_letter].width = w
+        ws.column_dimensions[chr(64 + i)].width = w
 
-    # Wrap text for details columns
+    # Wrap text for details columns (D=4 and H=8)
     for row_idx in range(2, ws.max_row + 1):
-        for col in (3, 6):  # C and F (details columns)
+        for col in (4, 8):
             cell = ws.cell(row=row_idx, column=col)
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 
@@ -247,9 +246,9 @@ async def export_all_requests_xlsx(
     header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
 
     headers = [
-        "Source App", "Source (Group)", "Source Details",
-        "Destination App", "Destination (Group)", "Destination Details",
-        "Ports", "Source DC", "Destination DC"
+        "Source App", "Source DC", "Source (Group)", "Source Details",
+        "Destination App", "Destination DC", "Destination (Group)", "Destination Details",
+        "Ports"
     ]
 
     for req in requests[:50]:  # Limit to 50 sheets
@@ -266,11 +265,10 @@ async def export_all_requests_xlsx(
         for row in rows:
             ws.append(row)
 
-        # Column widths
-        widths = [18, 28, 40, 18, 28, 40, 15, 18, 18]
+        # Column widths (A-I)
+        widths = [18, 18, 28, 40, 18, 18, 28, 40, 15]
         for i, w in enumerate(widths, 1):
-            col_letter = chr(64 + i) if i <= 26 else chr(64 + (i - 1) // 26) + chr(64 + (i - 1) % 26 + 1)
-            ws.column_dimensions[col_letter].width = w
+            ws.column_dimensions[chr(64 + i)].width = w
 
     buf = BytesIO()
     wb.save(buf)
