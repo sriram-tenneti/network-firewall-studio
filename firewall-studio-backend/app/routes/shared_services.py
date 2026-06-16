@@ -287,7 +287,28 @@ async def create_rule_request_route(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(400, "destination_kind is required")
     payload["source_kind"] = src_kind
     payload["source_ref"] = src_ref
-    return await create_rule_request(payload)
+    result = await create_rule_request(payload)
+
+    # Record audit trail
+    from app.routes.audit import record_audit_event
+    await record_audit_event(
+        action="request_created",
+        entity_type="rule_request",
+        entity_id=result.get("request_id", ""),
+        app_distributed_id=src_ref,
+        environment=payload.get("environment", ""),
+        user_email=payload.get("user_email", "system"),
+        details={
+            "source_kind": src_kind,
+            "source_ref": src_ref,
+            "destination_kind": payload.get("destination_kind"),
+            "destination_ref": payload.get("destination_ref"),
+            "ports": payload.get("ports"),
+            "environment": payload.get("environment"),
+        },
+        after_snapshot=result,
+    )
+    return result
 
 
 @router.get("/api/rules/requests/{request_id}")
@@ -305,9 +326,27 @@ async def set_rule_request_status_route(request_id: str,
     note = payload.get("note")
     if not status:
         raise HTTPException(400, "status is required")
+
+    # Get before snapshot for audit
+    before = await get_rule_request(request_id)
+
     r = await set_rule_request_status(request_id, status, note)
     if not r:
         raise HTTPException(404, "Rule request not found")
+
+    # Record audit trail
+    from app.routes.audit import record_audit_event
+    await record_audit_event(
+        action=f"request_status_{status.lower()}",
+        entity_type="rule_request",
+        entity_id=request_id,
+        app_distributed_id=r.get("source_ref") or r.get("application_ref", ""),
+        environment=r.get("environment", ""),
+        user_email=payload.get("user_email", "system"),
+        details={"new_status": status, "note": note},
+        before_snapshot={"status": before.get("status") if before else None},
+        after_snapshot={"status": status},
+    )
     return r
 
 

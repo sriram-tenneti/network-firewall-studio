@@ -11,6 +11,8 @@ import DataImportPage from '@/pages/DataImportPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AdminPage from '@/pages/AdminPage';
 import LifecycleDashboardPage from '@/pages/LifecycleDashboardPage';
+import RequestHistoryPage from '@/pages/RequestHistoryPage';
+import FirewallValidationPage from '@/pages/FirewallValidationPage';
 
 function App() {
   return (
@@ -30,6 +32,16 @@ function App() {
         <Route path="/firewall-studio/compile" element={
           <ModuleLayout module="firewall-studio" title="Firewall Studio">
             <CompilePerDcPanel />
+          </ModuleLayout>
+        } />
+        <Route path="/firewall-studio/requests" element={
+          <ModuleLayout module="firewall-studio" title="Firewall Studio">
+            <RequestHistoryPage />
+          </ModuleLayout>
+        } />
+        <Route path="/firewall-studio/validation" element={
+          <ModuleLayout module="firewall-studio" title="Firewall Studio">
+            <FirewallValidationPage />
           </ModuleLayout>
         } />
         <Route path="/firewall-studio/review" element={

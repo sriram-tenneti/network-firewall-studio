@@ -11,6 +11,9 @@ from app.routes.reviews import router as reviews_router
 from app.routes.lifecycle import router as lifecycle_router
 from app.routes.shared_services import router as shared_services_router
 from app.routes.compile_per_dc import router as compile_per_dc_router
+from app.routes.audit import router as audit_router
+from app.routes.validation import router as validation_router
+from app.routes.request_export import router as request_export_router
 from app.database import seed_database
 
 
@@ -43,6 +46,9 @@ app.include_router(policy_router)
 app.include_router(reviews_router)
 app.include_router(lifecycle_router)
 app.include_router(compile_per_dc_router)
+app.include_router(audit_router)
+app.include_router(validation_router)
+app.include_router(request_export_router)
 
 
 @app.get("/healthz")
