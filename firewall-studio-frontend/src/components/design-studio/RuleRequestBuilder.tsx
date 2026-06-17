@@ -69,7 +69,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   // SS→App / SS→SS rules (Splunk→app APIs, Kerberos→LDAP, etc.).
   const [srcKind, setSrcKind] = useState<SrcKind>('app');
   const [srcApp, setSrcApp] = useState<string>('');
-  const [dest, setDest] = useState<DestRef | null>(null);
+  const [dests, setDests] = useState<DestRef[]>([]);
   const [ports, setPorts] = useState('TCP 443');
   const [action, setAction] = useState<'ACCEPT' | 'DROP'>('ACCEPT');
   const [description, setDescription] = useState('');
@@ -116,6 +116,9 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   useEffect(() => { void loadRefs(); }, [loadRefs]);
 
   // Apps that have at least one ingress-enabled presence → eligible as destination
+  // Back-compat helper: first selected destination (used for port defaults, presence scoping)
+  const dest = dests[0] ?? null;
+
   const appsWithIngress = useMemo(() => {
     const ids = new Set(
       appPresences
@@ -140,7 +143,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
       label: (() => {
         const id = a.app_distributed_id || a.app_id;
         const friendly = (a.app_name ?? '').trim();
-        return friendly ? `🏢 ${id} — ${friendly}` : `🏢 ${id}`;
+        return friendly ? `🏢 ${id} ${friendly}` : `🏢 ${id}`;
       })(),
       hint: 'Application (Ingress)',
     }));
@@ -191,7 +194,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   // When src/dst/env change, forget prior presence scoping (UI defaults back
   // to "all presences"). Avoids stale selections referencing a stale app.
   useEffect(() => { setSelectedSrcKeys(new Set()); }, [srcApp, srcKind, environment]);
-  useEffect(() => { setSelectedDstKeys(new Set()); }, [dest?.ref, dest?.kind, environment]);
+  useEffect(() => { setSelectedDstKeys(new Set()); }, [dests, environment]);
 
   const effectiveSrcPresences = useMemo<PresenceKey[] | undefined>(() => {
     if (selectedSrcKeys.size === 0) return undefined;
@@ -253,7 +256,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   // Preview fan-out when inputs change
   useEffect(() => {
     setPreview(null);
-    if (!srcApp || !dest?.ref) return;
+    if (!srcApp || dests.length === 0) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -261,8 +264,10 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
           source_kind: srcKind,
           source_ref: srcApp,
           application_ref: srcKind === 'app' ? srcApp : '',
-          destination_kind: dest.kind,
-          destination_ref: dest.ref,
+          destinations: dests.map((d) => ({ kind: d.kind, ref: d.ref })),
+          // Back-compat: pass first dest as legacy fields
+          destination_kind: dests[0].kind,
+          destination_ref: dests[0].ref,
           environment,
           ports,
           action,
@@ -276,15 +281,22 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
       }
     })();
     return () => { cancelled = true; };
-  }, [srcApp, srcKind, dest, environment, ports, action,
+  }, [srcApp, srcKind, dests, environment, ports, action,
       destinationDcOverride, effectiveSrcPresences, effectiveDstPresences]);
+
+  const addDest = (d: DestRef) => {
+    setDests((prev) => prev.some((x) => x.ref === d.ref && x.kind === d.kind) ? prev : [...prev, d]);
+  };
+  const removeDest = (index: number) => {
+    setDests((prev) => prev.filter((_, j) => j !== index));
+  };
 
   const onDropDestination = (e: React.DragEvent) => {
     e.preventDefault();
     const sid = e.dataTransfer.getData('application/x-shared-service');
     if (!sid) return;
     const s = services.find((x) => x.service_id === sid);
-    if (s) setDest({
+    if (s) addDest({
       kind: 'shared_service',
       ref: s.service_id,
       label: `${s.icon ?? '🧩'} ${s.name}`,
@@ -293,7 +305,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   };
 
   const submit = async () => {
-    if (!srcApp || !dest?.ref) return;
+    if (!srcApp || dests.length === 0) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -301,8 +313,10 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
         source_kind: srcKind,
         source_ref: srcApp,
         application_ref: srcKind === 'app' ? srcApp : '',
-        destination_kind: dest.kind,
-        destination_ref: dest.ref,
+        destinations: dests.map((d) => ({ kind: d.kind, ref: d.ref })),
+        // Back-compat: pass first dest as legacy fields
+        destination_kind: dests[0].kind,
+        destination_ref: dests[0].ref,
         environment,
         ports,
         action,
@@ -328,7 +342,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
   };
 
   const reset = () => {
-    setStep(1); setSrcKind('app'); setSrcApp(''); setDest(null); setPorts('TCP 443');
+    setStep(1); setSrcKind('app'); setSrcApp(''); setDests([]); setPorts('TCP 443');
     setAction('ACCEPT'); setDescription('');
     setDestinationDcOverride('');
     setSelectedSrcKeys(new Set()); setSelectedDstKeys(new Set());
@@ -342,8 +356,8 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
           services={services}
           presences={ssPresences}
           environment={environment}
-          selectedServiceId={dest?.kind === 'shared_service' ? dest.ref : null}
-          onSelect={(s) => setDest({
+          selectedServiceId={dests.find((d) => d.kind === 'shared_service')?.ref ?? null}
+          onSelect={(s) => addDest({
             kind: 'shared_service',
             ref: s.service_id,
             label: `${s.icon ?? '🧩'} ${s.name}`,
@@ -393,12 +407,12 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                     else { setSrcKind('app'); setSrcApp(ref); }
                   }}
                   className="w-full border rounded px-2 py-1.5 text-sm">
-                  <option value="app:">— select source —</option>
+                  <option value="app:">select source</option>
                   <optgroup label="Applications">
                     {srcOptions.map((a) => {
                       const id = a.app_distributed_id || a.app_id;
                       const friendly = (a.app_name ?? '').trim();
-                      const label = friendly ? `${id} — ${friendly}` : id;
+                      const label = friendly ? `${id} ${friendly}` : id;
                       return (
                         <option key={`app-${id}`} value={`app:${id}`}>{label}</option>
                       );
@@ -416,38 +430,53 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Destination (Apps with Ingress ∪ Shared Services)</label>
-              <select value={dest?.ref ?? ''}
+              <label className="block text-xs font-medium text-gray-600 mb-1">Destinations (Apps with Ingress ∪ Shared Services)</label>
+              <select value=""
                 onChange={(e) => {
-                  const d = unifiedDestinations.find((x) => x.ref === e.target.value);
-                  setDest(d ?? null);
+                  const key = e.target.value;
+                  const d = unifiedDestinations.find((x) => `${x.kind}:${x.ref}` === key);
+                  if (d) addDest(d);
                 }}
                 className="w-full border rounded px-2 py-1.5 text-sm">
-                <option value="">— select destination —</option>
+                <option value="">add destination</option>
                 <optgroup label="Shared Services">
                   {unifiedDestinations.filter((d) => d.kind === 'shared_service')
-                    .map((d) => <option key={`ss-${d.ref}`} value={d.ref}>{d.label}</option>)}
+                    .map((d) => <option key={`ss-${d.ref}`} value={`${d.kind}:${d.ref}`}>{d.label}</option>)}
                 </optgroup>
                 <optgroup label="Applications (with Ingress)">
                   {unifiedDestinations.filter((d) => d.kind === 'app_ingress')
-                    .map((d) => <option key={`ai-${d.ref}`} value={d.ref}>{d.label}</option>)}
+                    .map((d) => <option key={`ai-${d.ref}`} value={`${d.kind}:${d.ref}`}>{d.label}</option>)}
                 </optgroup>
               </select>
+
+              {/* Selected destinations chip list */}
+              {dests.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {dests.map((d, i) => (
+                    <span key={`${d.kind}-${d.ref}`} className="flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-medium border border-indigo-200">
+                      {d.label}
+                      <button onClick={() => removeDest(i)}
+                        className="text-indigo-400 hover:text-rose-600 ml-1">×</button>
+                    </span>
+                  ))}
+                  {dests.length > 1 && (
+                    <button onClick={() => setDests([])}
+                      className="text-[10px] text-rose-600 hover:text-rose-800 self-center">Clear all</button>
+                  )}
+                </div>
+              )}
 
               {/* DnD drop zone */}
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={onDropDestination}
-                className={`mt-2 border-2 border-dashed rounded-xl p-4 text-center transition ${dest ? 'border-indigo-300 bg-indigo-50' : 'border-gray-300 bg-gray-50 hover:bg-indigo-50/60'}`}>
-                {dest ? (
+                className={`mt-2 border-2 border-dashed rounded-xl p-4 text-center transition ${dests.length > 0 ? 'border-indigo-300 bg-indigo-50' : 'border-gray-300 bg-gray-50 hover:bg-indigo-50/60'}`}>
+                {dests.length > 0 ? (
                   <div>
-                    <div className="text-xs uppercase tracking-wider text-gray-500">Destination</div>
-                    <div className="text-lg font-semibold text-gray-900">{dest.label}</div>
-                    {dest.hint && <div className="text-xs text-gray-500 mt-0.5">{dest.hint}</div>}
-                    <div className="mt-2">
-                      <button onClick={() => setDest(null)}
-                        className="text-xs text-rose-600 hover:text-rose-800">Clear</button>
+                    <div className="text-xs uppercase tracking-wider text-gray-500">
+                      {dests.length} destination{dests.length > 1 ? 's' : ''} selected
                     </div>
+                    <div className="text-sm text-gray-700 mt-1">{dests.map((d) => d.label).join(', ')}</div>
                   </div>
                 ) : (
                   <div className="text-xs text-gray-500">
@@ -490,7 +519,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             )}
             {isGodView && advancedMode && (<>
             <PresencePicker
-              title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source'}?`}
+              title={`Source presences: which (DC · NH · SZ) for ${srcApp || 'the source'}?`}
               subtitle={srcKind === 'shared_service'
                 ? 'Each checked presence becomes one PhysicalRule with the matching grp-<Service>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'
                 : 'Each checked presence becomes one PhysicalRule with the matching grp-<App>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'}
@@ -505,7 +534,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               onChange={setSelectedSrcKeys}
             />
             <PresencePicker
-              title={`Destination presences — which (DC · NH · SZ) for ${dest?.label || 'the destination'}?`}
+              title={`Destination presences: which (DC · NH · SZ) for ${dest?.label || 'the destination'}?`}
               subtitle={dest?.kind === 'app_ingress'
                 ? 'Each checked presence becomes the destination grp-<App>-<NH>-<SZ>-Ingress group.'
                 : 'Each checked presence becomes the destination grp-<Service>-<NH>-<SZ> group.'}
@@ -527,7 +556,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             )}
 
             <div className="flex justify-end">
-              <button disabled={!srcApp || !dest} onClick={() => setStep(2)}
+              <button disabled={!srcApp || dests.length === 0} onClick={() => setStep(2)}
                 className="px-4 py-1.5 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300">
                 Next: Ports & Action
               </button>
@@ -563,7 +592,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             </div>
             {isGodView ? (
               <details className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
-                <summary className="text-[11px] font-semibold text-amber-800 cursor-pointer">Advanced (SNS only) — Power-user Overrides</summary>
+                <summary className="text-[11px] font-semibold text-amber-800 cursor-pointer">Advanced (SNS only): Power-user Overrides</summary>
                 <p className="text-[11px] text-gray-600 mt-2">
                   Rules fan out automatically across <strong>all 4 NGDC DCs</strong> with strict
                   same-DC pairing (ALPHA→ALPHA, BETA→BETA, …). NGDC↔Heritage routing follows
@@ -585,7 +614,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               </details>
             ) : (
               <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-2 text-[11px] text-emerald-800">
-                Your rule will originate from your app's primary DC. The destination team handles east-west routing across their other DCs — you don't need to think in DC terms.
+                Your rule will originate from your app's primary DC. The destination team handles east-west routing across their other DCs. You don't need to think in DC terms.
               </div>
             )}
             <div className="flex justify-between">
@@ -604,14 +633,17 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               <div>
                 <div className="text-sm font-semibold text-gray-900">Multi-DC Fan-out Preview</div>
                 <div className="text-xs text-gray-500">
-                  {srcApp} → {dest?.label} · {environment} · {ports}
+                  {srcApp} → {dests.map((d) => d.label).join(', ')} · {environment} · {ports}
                 </div>
               </div>
               <button onClick={() => void (async () => {
                 const p = await api.previewRuleExpansion({
-                  application_ref: srcApp,
-                  destination_kind: dest!.kind,
-                  destination_ref: dest!.ref,
+                  source_kind: srcKind,
+                  source_ref: srcApp,
+                  application_ref: srcKind === 'app' ? srcApp : '',
+                  destinations: dests.map((d) => ({ kind: d.kind, ref: d.ref })),
+                  destination_kind: dests[0]?.kind,
+                  destination_ref: dests[0]?.ref,
                   environment, ports, action,
                   destination_dc_override: destinationDcOverride || undefined,
                 });
@@ -640,7 +672,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 <div className="flex items-center gap-2 mb-2">
                   <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600 text-white text-sm font-bold">✓</span>
                   <div className="flex-1">
-                    <div className="text-sm font-bold text-emerald-900">Rule Request submitted — now in <span className="text-amber-700">Pending Review</span></div>
+                    <div className="text-sm font-bold text-emerald-900">Rule Request submitted, now in <span className="text-amber-700">Pending Review</span></div>
                     <div className="text-[11px] text-emerald-700">Scroll down to the <strong>Rule Requests</strong> panel to Approve / Reject / Deploy / Certify.</div>
                   </div>
                 </div>
@@ -699,7 +731,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   <button onClick={() => setStep(2)} className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">Back</button>
                   <button onClick={() => void submit()}
                     disabled={submitting || !preview || preview.physical_rules.length === 0 || preview.block_submit}
-                    title={preview?.block_submit ? 'Submit blocked — see validation status above' : undefined}
+                    title={preview?.block_submit ? 'Submit blocked: see validation status above' : undefined}
                     className="px-4 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-300">
                     {submitting ? 'Submitting…' : (preview?.block_submit ? 'Blocked by validation' : 'Submit Rule Request')}
                   </button>
@@ -732,7 +764,7 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
     return (
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800 flex items-center gap-2">
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-bold">✓</span>
-        <span><strong>Validation passed</strong> — no overlap with existing rules; no birthright coverage. Safe to submit.</span>
+        <span><strong>Validation passed</strong>: no overlap with existing rules; no birthright coverage. Safe to submit.</span>
       </div>
     );
   }
@@ -746,7 +778,7 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       </div>
       {hardMatches.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Hard-block — already exists</div>
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Hard-block: already exists</div>
           {hardMatches.map((m: DedupMatch, idx: number) => (
             <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-rose-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-rose-100 border border-rose-200 text-[10px] font-bold uppercase">{m.verdict}</span>
@@ -765,7 +797,7 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       )}
       {overlap.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Overlap — proceed with care</div>
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Overlap: proceed with care</div>
           {overlap.map((m: DedupMatch, idx: number) => (
             <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-amber-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-[10px] font-bold uppercase">overlap</span>
@@ -783,13 +815,13 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       )}
       {birthMatches.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Birthright — already provided cluster-wide</div>
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Birthright: already provided cluster-wide</div>
           {birthMatches.map((b) => (
             <div key={b.birthright_id} className="bg-white/60 border border-emerald-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-emerald-100 border border-emerald-200 text-[10px] font-bold uppercase">{b.birthright_id}</span>
               <span className="font-mono text-[10px]">{b.destination_ref}</span>
               <span className="font-mono text-[10px]">{b.ports}</span>
-              {b.description ? <span className="text-[10px] opacity-80">— {b.description}</span> : null}
+              {b.description ? <span className="text-[10px] opacity-80">{b.description}</span> : null}
             </div>
           ))}
         </div>
@@ -802,7 +834,7 @@ function FanOutTable({ rows }: { rows: PhysicalRuleExpansion[] }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500">
-        No physical rules — source and destination have no matching DC/environment presences.
+        No physical rules. Source and destination have no matching DC/environment presences.
       </div>
     );
   }
@@ -811,6 +843,7 @@ function FanOutTable({ rows }: { rows: PhysicalRuleExpansion[] }) {
       <table className="min-w-full text-xs">
         <thead className="bg-gray-50 text-gray-600">
           <tr>
+            <th className="px-2 py-1.5 text-left">Destination</th>
             <th className="px-2 py-1.5 text-left">Src DC</th>
             <th className="px-2 py-1.5 text-left">→</th>
             <th className="px-2 py-1.5 text-left">Dst DC</th>
@@ -824,6 +857,7 @@ function FanOutTable({ rows }: { rows: PhysicalRuleExpansion[] }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
+              <td className="px-2 py-1.5 font-mono text-purple-700 truncate max-w-[140px]" title={r.destination_ref || ''}>{r.destination_ref || ''}</td>
               <td className="px-2 py-1.5 font-mono">{r.src_dc}</td>
               <td className="px-2 py-1.5 text-gray-400">→</td>
               <td className="px-2 py-1.5 font-mono">{r.dst_dc}</td>
@@ -934,7 +968,7 @@ function PresencePicker({
           ))}
           {allSelected && (
             <div className="text-[11px] text-gray-500">
-              All presences checked — equivalent to "Using all presences".
+              All presences checked. Equivalent to "Using all presences".
             </div>
           )}
         </div>

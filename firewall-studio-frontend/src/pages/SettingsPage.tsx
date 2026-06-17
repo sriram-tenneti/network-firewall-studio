@@ -707,7 +707,7 @@ export default function SettingsPage() {
     setHideSeedData(hide);
     localStorage.setItem('nfs_hide_seed', hide ? 'true' : 'false');
     try { await api.setHideSeed(hide); } catch { /* localStorage is primary */ }
-    showNotification(hide ? 'Seed data hidden — showing only real/imported data' : 'Seed data visible — showing all data', 'success');
+    showNotification(hide ? 'Seed data hidden, showing only real/imported data' : 'Seed data visible, showing all data', 'success');
   };
 
   const handleClearLegacy = async () => {
@@ -780,7 +780,7 @@ export default function SettingsPage() {
   };
 
   const handleClearAll = async () => {
-    if (!confirm('⚠️ CLEAN ALL DATA — This will clear ALL imported data across the entire portal:\n\n• Legacy Rules\n• Migration Data\n• Studio Rules\n• Reviews\n• Firewall Rules\n• Modifications\n\nSeed reference data (NHs, SZs, Policy Matrix, etc.) is NOT affected.\n\nContinue?')) return;
+    if (!confirm('⚠️ CLEAN ALL DATA: This will clear ALL imported data across the entire portal:\n\n• Legacy Rules\n• Migration Data\n• Studio Rules\n• Reviews\n• Firewall Rules\n• Modifications\n\nSeed reference data (NHs, SZs, Policy Matrix, etc.) is NOT affected.\n\nContinue?')) return;
     setClearingAll(true);
     try {
       const res = await api.clearAllUserData();
@@ -932,25 +932,50 @@ export default function SettingsPage() {
 
   const filteredNhs = nhEnvFilter === 'all' ? neighbourhoods : neighbourhoods.filter(n => String(n.environment || '').toLowerCase().includes(nhEnvFilter.toLowerCase()));
 
-  const tabs = [
-    { id: 'data_mode', label: 'Data Mode' },
-    { id: 'data_management', label: 'Data Management' },
-    { id: 'neighbourhoods', label: 'Neighbourhoods' },
-    { id: 'security_zones', label: 'Security Zones' },
-    { id: 'datacenters', label: 'Data Centers' },
-    { id: 'app_management', label: 'App Management' },
-    { id: 'shared_services', label: 'Shared Services' },
-    { id: 'port_catalog', label: 'Port Configuration' },
-    { id: 'policy_matrix', label: 'Policy Matrix' },
-    { id: 'naming_standards', label: 'Naming Standards' },
-    { id: 'fw_devices', label: 'Firewall Devices' },
-    { id: 'sz_naming', label: 'SZ Naming Mode' },
-    { id: 'birthright', label: 'Birthright Rules' },
-    { id: 'itsm', label: 'ITSM Connectors' },
-    { id: 'ad_groups', label: 'User Groups' },
-    { id: 'ad_users', label: 'Users' },
-    { id: 'ad_config', label: 'AD Configuration' },
+  // Settings is grouped into 3 top-level pillars so the tabs no
+  // longer dump on the operator in one row. Each pillar maps to one of
+  // the architectural concerns of the portal:
+  //   - Topology       : where the network actually lives (DCs / NHs / SZs / ports)
+  //   - Apps & Services: what runs on top of the topology + their policies
+  //   - Admin          : platform-level config (modes, naming, devices, users)
+  type TabGroup = 'topology' | 'apps' | 'admin';
+  const TAB_GROUPS: { id: TabGroup; label: string; description: string }[] = [
+    { id: 'topology', label: 'Topology', description: 'Data Centers, Neighbourhoods, Security Zones, Ports' },
+    { id: 'apps', label: 'Apps & Services', description: 'Applications, Shared Services, Policy Matrix, Birthright Rules' },
+    { id: 'admin', label: 'Admin', description: 'Data mode, naming, firewall devices, ITSM, users & AD' },
   ];
+  const TABS_BY_GROUP: Record<TabGroup, { id: string; label: string }[]> = {
+    topology: [
+      { id: 'datacenters', label: 'Data Centers' },
+      { id: 'neighbourhoods', label: 'Neighbourhoods' },
+      { id: 'security_zones', label: 'Security Zones' },
+      { id: 'port_catalog', label: 'Port Catalog' },
+    ],
+    apps: [
+      { id: 'app_management', label: 'App Management' },
+      { id: 'shared_services', label: 'Shared Services' },
+      { id: 'policy_matrix', label: 'Policy Matrix' },
+      { id: 'birthright', label: 'Birthright Rules' },
+    ],
+    admin: [
+      { id: 'data_mode', label: 'Data Mode' },
+      { id: 'data_management', label: 'Data Management' },
+      { id: 'naming_standards', label: 'Naming Standards' },
+      { id: 'sz_naming', label: 'SZ Naming Mode' },
+      { id: 'fw_devices', label: 'Firewall Devices' },
+      { id: 'itsm', label: 'ITSM Connectors' },
+      { id: 'ad_groups', label: 'User Groups' },
+      { id: 'ad_users', label: 'Users' },
+      { id: 'ad_config', label: 'AD Configuration' },
+    ],
+  };
+  const groupOf = (tabId: string): TabGroup => {
+    if (TABS_BY_GROUP.topology.some(t => t.id === tabId)) return 'topology';
+    if (TABS_BY_GROUP.apps.some(t => t.id === tabId)) return 'apps';
+    return 'admin';
+  };
+  const [tabGroup, setTabGroup] = useState<TabGroup>(() => groupOf(activeTab));
+  const subTabs = TABS_BY_GROUP[tabGroup];
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -959,7 +984,29 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Admin &amp; Settings</h1>
         <p className="text-sm text-gray-500 mt-1">Application management, policy matrix, naming standards, AD integration</p>
       </div>
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      <div className="flex gap-2 mb-3">
+        {TAB_GROUPS.map(g => {
+          const active = tabGroup === g.id;
+          return (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => {
+                setTabGroup(g.id);
+                const first = TABS_BY_GROUP[g.id][0];
+                if (first && !TABS_BY_GROUP[g.id].some(t => t.id === activeTab)) {
+                  setActiveTab(first.id);
+                }
+              }}
+              className={`flex-1 text-left px-4 py-2.5 rounded-lg border transition ${active ? 'border-indigo-500 bg-indigo-50 shadow-sm' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+            >
+              <div className={`text-sm font-semibold ${active ? 'text-indigo-700' : 'text-gray-800'}`}>{g.label}</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">{g.description}</div>
+            </button>
+          );
+        })}
+      </div>
+      <Tabs tabs={subTabs} activeTab={activeTab} onChange={setActiveTab} />
 
       {(activeTab === 'ad_groups' || activeTab === 'ad_users') && (
         <div className="mt-4">
@@ -1061,7 +1108,7 @@ export default function SettingsPage() {
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hideSeedData ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
                 <span className={`text-sm font-medium ${hideSeedData ? 'text-indigo-700' : 'text-gray-500'}`}>
-                  {hideSeedData ? 'Seed data hidden — showing only real data' : 'Seed data visible — showing all data'}
+                  {hideSeedData ? 'Seed data hidden, showing only real data' : 'Seed data visible, showing all data'}
                 </span>
               </div>
             </div>
@@ -1327,7 +1374,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Neighbourhoods</h2>
-                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Logical groupings of hosts, subnets, and zones. CIDRs resolve at the SZ level per (DC, NH, SZ) — expand any NH row to see the breakdown.</p>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Logical groupings of hosts, subnets, and zones. CIDRs resolve at the SZ level per (DC, NH, SZ). Expand any NH row to see the breakdown.</p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {(['Production','Pre-Production','Non-Production'] as const).map(env => {
                         const n = neighbourhoods.filter(nh => String(nh.environment || '') === env).length;
@@ -1412,9 +1459,9 @@ export default function SettingsPage() {
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(nh.environment) === 'Production' ? 'bg-green-100 text-green-800' : String(nh.environment) === 'Pre-Production' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{String(nh.environment || 'N/A')}</span>}</td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            <span className="text-gray-500">{nhSzEntries.length > 0 ? `${nhSzEntries.length} SZ entries` : '—'}</span>
+                            <span className="text-gray-500">{nhSzEntries.length > 0 ? `${nhSzEntries.length} SZ entries` : ''}</span>
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editNhForm.description || '')} onChange={e => setEditNhForm({ ...editNhForm, description: e.target.value })} /> : String(nh.description || '—')}</td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editNhForm.description || '')} onChange={e => setEditNhForm({ ...editNhForm, description: e.target.value })} /> : String(nh.description || '')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1620,8 +1667,8 @@ export default function SettingsPage() {
                             <select className={inp} value={String(editSzForm.fabric || '')} onChange={e => setEditSzForm({ ...editSzForm, fabric: e.target.value })}>
                               <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option><option value="All">All</option>
                             </select>
-                          ) : <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{String(sz.fabric || '—')}</span>}</td>
-                          <td className="px-3 py-2 font-mono text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '—')}</td>
+                          ) : <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{String(sz.fabric || '')}</span>}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1647,7 +1694,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                       <div className="text-xs font-bold text-emerald-800">CIDR Bindings for {code}</div>
-                                      <div className="text-[10px] text-gray-500">Per (DC, NH) — DC-specific takes precedence; empty DC = any-DC fallback.</div>
+                                      <div className="text-[10px] text-gray-500">Per (DC, NH). DC-specific takes precedence; empty DC = any-DC fallback.</div>
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
@@ -1701,7 +1748,7 @@ export default function SettingsPage() {
                                                     onChange={e => setEditSzBindingVrf(e.target.value)}
                                                   />
                                                 ) : (
-                                                  <span className="font-mono text-[10px] text-gray-600">{b.vrf_id || '—'}</span>
+                                                  <span className="font-mono text-[10px] text-gray-600">{b.vrf_id || ''}</span>
                                                 )}
                                               </td>
                                               <td className="px-2 py-1 text-right">
@@ -1859,13 +1906,13 @@ export default function SettingsPage() {
                           <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${dcType === 'NGDC' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{dcType}</span></td>
                           <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{isEditing ? <input className={inp} value={String(editDcForm.dc_id || '')} onChange={e => setEditDcForm({ ...editDcForm, dc_id: e.target.value })} /> : dcId}</td>
                           <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editDcForm.name || '')} onChange={e => setEditDcForm({ ...editDcForm, name: e.target.value })} /> : String((dc as Record<string, unknown>).name || '')}</td>
-                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String((dc as Record<string, unknown>).region || '—')}</td>
+                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String((dc as Record<string, unknown>).region || '')}</td>
                           <td className="px-3 py-2">{isEditing ? (
                             <select className={inp} value={String(editDcForm.status || 'Active')} onChange={e => setEditDcForm({ ...editDcForm, status: e.target.value })}>
                               <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option><option value="Migrating">Migrating</option>
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String((dc as Record<string, unknown>).status) === 'Active' ? 'bg-green-100 text-green-800' : String((dc as Record<string, unknown>).status) === 'Planned' ? 'bg-blue-100 text-blue-800' : String((dc as Record<string, unknown>).status) === 'Migrating' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800'}`}>{String((dc as Record<string, unknown>).status || 'Active')}</span>}</td>
-                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String((dc as Record<string, unknown>).description || '—')}</td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String((dc as Record<string, unknown>).description || '')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1979,7 +2026,7 @@ export default function SettingsPage() {
                     // Render `id — friendly` only when both halves are
                     // non-empty so an empty app_name no longer leaves
                     // a dangling em-dash like ``CRM_PROD —``.
-                    const label = friendly ? `${id} — ${friendly}` : id;
+                    const label = friendly ? `${id} ${friendly}` : id;
                     return <option key={app.app_id} value={app.app_id}>{label}</option>;
                   })}
                 </select>
@@ -2004,14 +2051,14 @@ export default function SettingsPage() {
                     groups. ``primary_dc`` is retained only as a hint for the
                     rule builder's default source DC. */}
                 <div className="border border-indigo-200 rounded-lg p-3 bg-white/60 space-y-2">
-                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">— every NGDC app lives in all 4 DCs; this is just a hint for the rule builder's default source DC</span></h4>
+                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">: every NGDC app lives in all 4 DCs; this is just a hint for the rule builder's default source DC</span></h4>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-gray-400 font-normal">(optional)</span></label>
                       <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
                         value={String(newAppForm.primary_dc || '')}
                         onChange={e => setNewAppForm({ ...newAppForm, primary_dc: e.target.value })}>
-                        <option value="">— unset (auto from presences) —</option>
+                        <option value="">unset (auto from presences)</option>
                         {ngdcDatacenters.map(dc => {
                           const code = String(dc.dc_id || dc.code || '');
                           return <option key={code} value={code}>{code}</option>;
@@ -2122,7 +2169,7 @@ export default function SettingsPage() {
                         <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
                           value={String(editAppForm.primary_dc || '')}
                           onChange={e => setEditAppForm({ ...editAppForm, primary_dc: e.target.value })}>
-                          <option value="">— unset (auto from presences) —</option>
+                          <option value="">unset (auto from presences)</option>
                           {ngdcDatacenters.map(dc => {
                             const code = String(dc.dc_id || dc.code || '');
                             return <option key={code} value={code}>{code}</option>;
@@ -2199,7 +2246,7 @@ export default function SettingsPage() {
                                 const heritage = !!r.is_heritage;
                                 const renderChips = (chips: typeof r.egress_members) =>
                                   !chips || chips.length === 0
-                                    ? <span className="text-[10px] italic text-rose-600">— no members for this DC —</span>
+                                    ? <span className="text-[10px] italic text-rose-600">no members for this DC</span>
                                     : (
                                       <div className="flex flex-wrap gap-1">
                                         {chips.map((c, i) => (
@@ -2215,9 +2262,9 @@ export default function SettingsPage() {
                                         {heritage ? 'Heritage' : 'NGDC'}
                                       </span>
                                     </td>
-                                    <td className="px-2 py-1 font-mono">{r.dc_id || <span className="text-rose-600">—</span>}</td>
-                                    <td className="px-2 py-1 font-mono">{heritage ? '—' : (r.nh_id || <span className="text-rose-600">—</span>)}</td>
-                                    <td className="px-2 py-1 font-mono">{heritage ? '—' : (r.sz_code || <span className="text-rose-600">—</span>)}</td>
+                                    <td className="px-2 py-1 font-mono">{r.dc_id || <span className="text-rose-600"></span>}</td>
+                                    <td className="px-2 py-1 font-mono">{heritage ? '' : (r.nh_id || <span className="text-rose-600"></span>)}</td>
+                                    <td className="px-2 py-1 font-mono">{heritage ? '' : (r.sz_code || <span className="text-rose-600"></span>)}</td>
                                     <td className="px-2 py-1">
                                       {r.has_ingress
                                         ? <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-100 text-purple-700 font-semibold">Yes</span>
@@ -2227,12 +2274,12 @@ export default function SettingsPage() {
                                     <td className="px-2 py-1">
                                       {r.has_ingress
                                         ? renderChips(r.ingress_members)
-                                        : <span className="text-[10px] italic text-gray-400">— ingress disabled —</span>}
+                                        : <span className="text-[10px] italic text-gray-400">ingress disabled</span>}
                                     </td>
                                     <td className="px-2 py-1">
                                       {heritage ? (
                                         (r.ngdc_source_dcs || []).length === 0
-                                          ? <span className="text-[10px] italic text-amber-700">— all NGDC DCs (no explicit mapping) —</span>
+                                          ? <span className="text-[10px] italic text-amber-700">all NGDC DCs (no explicit mapping)</span>
                                           : (
                                             <div className="flex flex-wrap gap-1">
                                               {(r.ngdc_source_dcs || []).map((dc) => (
@@ -2240,7 +2287,7 @@ export default function SettingsPage() {
                                               ))}
                                             </div>
                                           )
-                                      ) : <span className="text-[10px] text-gray-400">—</span>}
+                                      ) : <span className="text-[10px] text-gray-400"></span>}
                                     </td>
                                   </tr>
                                 );

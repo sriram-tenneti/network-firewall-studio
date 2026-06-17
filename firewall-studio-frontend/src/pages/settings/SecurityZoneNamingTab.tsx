@@ -80,7 +80,7 @@ export default function SecurityZoneNamingTab() {
                   <tr key={sz.code} className="border-t border-gray-100">
                     <td className="p-2 font-mono font-semibold">{sz.code}</td>
                     <td className="p-2">{sz.name}</td>
-                    <td className="p-2 text-gray-600 max-w-[280px]">{sz.description || '—'}</td>
+                    <td className="p-2 text-gray-600 max-w-[280px]">{sz.description || ''}</td>
                     <td className="p-2">
                       <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border font-semibold ${
                         mode === 'zone_scoped'

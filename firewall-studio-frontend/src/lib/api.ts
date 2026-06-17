@@ -1453,8 +1453,11 @@ export interface RuleRequestInput {
   /** Legacy alias for app sources. Populated automatically when
    *  source_kind='app'. */
   application_ref?: string;
-  destination_kind: DestinationEntityKind;
+  destination_kind?: DestinationEntityKind;
   destination_ref?: string | null;
+  /** Multi-destination fan-out. When provided, destination_kind/destination_ref
+   *  are ignored and the engine fans out per destination. */
+  destinations?: Array<{ kind: DestinationEntityKind; ref: string }>;
   environment: Environment;
   ports: string;
   action?: 'ACCEPT' | 'DROP';

@@ -781,6 +781,9 @@ export interface SharedService {
 export interface PhysicalRuleExpansion {
   rule_id?: string;
   request_id?: string;
+  /** Multi-destination: identifies which destination this physical rule belongs to. */
+  destination_ref?: string;
+  destination_kind?: string;
   src_dc: string;
   dst_dc: string;
   src_group_ref: string;
@@ -857,6 +860,8 @@ export interface RuleRequestRecord {
   source_ref?: string;
   destination_kind: DestinationEntityKind;
   destination_ref?: string | null;
+  /** Multi-destination list. When populated, the RR fans out across all entries. */
+  destinations?: Array<{ kind: DestinationEntityKind; ref: string }>;
   environment: Environment;
   ports: string;
   action: string;

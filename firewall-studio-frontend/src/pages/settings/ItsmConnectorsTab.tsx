@@ -96,7 +96,7 @@ export default function ItsmConnectorsTab() {
               {items.map((c) => (
                 <tr key={c.connector_id} className="border-t border-gray-100">
                   <td className="p-2 font-mono">{c.connector_id}</td>
-                  <td className="p-2">{c.name || '—'}</td>
+                  <td className="p-2">{c.name || ''}</td>
                   <td className="p-2">
                     <span className="px-1.5 py-0.5 rounded border border-indigo-200 bg-indigo-50 text-indigo-800 text-[10px] uppercase">{c.kind}</span>
                   </td>
@@ -186,7 +186,7 @@ export default function ItsmConnectorsTab() {
               </label>
             )}
             <label className="space-y-1 col-span-2">
-              <span className="text-gray-700">Payload template (JSON, optional — uses default ServiceNow CHG mapping if empty)</span>
+              <span className="text-gray-700">Payload template (JSON, optional, uses default ServiceNow CHG mapping if empty)</span>
               <textarea rows={4}
                 value={JSON.stringify(editing.payload_template || {}, null, 2)}
                 onChange={(e) => {

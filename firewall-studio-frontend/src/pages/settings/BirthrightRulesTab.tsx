@@ -142,7 +142,7 @@ export default function BirthrightRulesTab() {
         <div className="font-semibold text-sm">Birthright = what every workload already gets, no rule request needed</div>
         <p>
           The <strong>Policy Matrix</strong> below is the architectural source of truth for birthright access at the
-          zone-pair level — it defines for each (Source SZ, Destination SZ, Environment) whether traffic is{' '}
+          zone-pair level. It defines for each (Source SZ, Destination SZ, Environment) whether traffic is{' '}
           <span className="px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
             Permitted (implicit allow)
           </span>
@@ -158,7 +158,7 @@ export default function BirthrightRulesTab() {
         </p>
         <p>
           The <strong>Service Overlay</strong> at the bottom layers <em>service-level</em> birthrights (DNS, NTP, Splunk,
-          AppD, PKI, AD/Kerberos) on top — they only kick in for cells where the matrix says "Firewall Request Required"
+          AppD, PKI, AD/Kerberos) on top. They only kick in for cells where the matrix says "Firewall Request Required"
           but the destination/port is on the universal-services list. Validation runs Policy Matrix first, then the overlay.
         </p>
         <p className="text-emerald-700">
@@ -214,22 +214,22 @@ export default function BirthrightRulesTab() {
               <tbody>
                 {activeRows.map((r, idx) => (
                   <tr key={r.id || idx} className="border-t border-gray-100 align-top">
-                    <td className="p-2 font-mono text-[10px] text-gray-500">{r.id || '—'}</td>
+                    <td className="p-2 font-mono text-[10px] text-gray-500">{r.id || ''}</td>
                     <td className="p-2 font-mono text-[10px]">
-                      <div>SZ: <span className="text-gray-900">{r.source_zone || '—'}</span></div>
-                      <div className="text-gray-500">NH: {r.source_nh || '—'} · DC: {r.source_dc || '—'}</div>
+                      <div>SZ: <span className="text-gray-900">{r.source_zone || ''}</span></div>
+                      <div className="text-gray-500">NH: {r.source_nh || ''} · DC: {r.source_dc || ''}</div>
                     </td>
                     <td className="p-2 font-mono text-[10px]">
-                      <div>SZ: <span className="text-gray-900">{r.dest_zone || '—'}</span></div>
-                      <div className="text-gray-500">NH: {r.dest_nh || '—'} · DC: {r.dest_dc || '—'}</div>
+                      <div>SZ: <span className="text-gray-900">{r.dest_zone || ''}</span></div>
+                      <div className="text-gray-500">NH: {r.dest_nh || ''} · DC: {r.dest_dc || ''}</div>
                     </td>
                     <td className="p-2">
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${actionTone(r.action || '')}`}>
-                        {r.action || '—'}
+                        {r.action || ''}
                       </span>
                     </td>
-                    <td className="p-2 text-[10px] text-gray-700">{r.firewall_traversal || '—'}</td>
-                    <td className="p-2 text-[10px] text-gray-600">{r.reason || '—'}</td>
+                    <td className="p-2 text-[10px] text-gray-700">{r.firewall_traversal || ''}</td>
+                    <td className="p-2 text-[10px] text-gray-600">{r.reason || ''}</td>
                   </tr>
                 ))}
               </tbody>
@@ -242,9 +242,9 @@ export default function BirthrightRulesTab() {
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Service Overlay <span className="font-normal text-gray-500">— universal services on top of the matrix</span></h3>
+            <h3 className="text-sm font-semibold text-gray-900">Service Overlay <span className="font-normal text-gray-500">: universal services on top of the matrix</span></h3>
             <p className="text-[11px] text-gray-500">
-              DNS, NTP, Splunk forwarder, AppDynamics, PKI/OCSP, AD/Kerberos — the boilerplate flows every server depends on.
+              DNS, NTP, Splunk forwarder, AppDynamics, PKI/OCSP, AD/Kerberos. The boilerplate flows every server depends on.
               Only consulted for matrix cells that say "Firewall Request Required".
             </p>
           </div>
