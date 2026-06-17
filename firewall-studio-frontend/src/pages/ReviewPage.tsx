@@ -127,8 +127,8 @@ function groupRequestToReview(g: GroupChangeRequest): ReviewRequest {
     review_notes: null,
     rule_summary: {
       application: g.group_name.split('-')[1] || 'N/A',
-      source: g.added_members.join(', ') || '—',
-      destination: g.removed_members.join(', ') || '—',
+      source: g.added_members.join(', ') || '',
+      destination: g.removed_members.join(', ') || '',
       ports: '',
       environment: g.environment || '',
     },
@@ -359,7 +359,7 @@ export default function ReviewPage(props: { context?: string }) {
       key: 'dc_fanout_count', header: 'DCs', sortable: true, width: '90px',
       render: (_, row) => {
         const n = typeof row.dc_fanout_count === 'number' ? row.dc_fanout_count : 0;
-        if (!n) return <span className="text-[11px] text-gray-400">—</span>;
+        if (!n) return <span className="text-[11px] text-gray-400"></span>;
         const tip = (row.dc_pairs || []).join(' · ') || `${n} DC${n === 1 ? '' : 's'}`;
         const cls = row.subqueue === 'rule_request'
           ? 'bg-blue-50 text-blue-700 border border-blue-200'

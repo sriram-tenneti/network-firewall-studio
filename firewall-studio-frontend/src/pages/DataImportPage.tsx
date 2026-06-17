@@ -466,8 +466,8 @@ export default function DataImportPage({ context }: DataImportPageProps) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="bg-white rounded p-2"><span className="text-gray-500">New Rules Added:</span> <span className="font-bold text-green-700">{String(result.added ?? result.imported ?? 0)}</span></div>
               <div className="bg-white rounded p-2"><span className="text-gray-500">Duplicates Skipped:</span> <span className="font-bold text-amber-700">{String(result.duplicates ?? result.duplicates_skipped ?? 0)}</span></div>
-              <div className="bg-white rounded p-2"><span className="text-gray-500">Total in DB:</span> <span className="font-bold">{String(result.total ?? result.total_rules ?? '—')}</span></div>
-              <div className="bg-white rounded p-2"><span className="text-gray-500">Rows in File:</span> <span className="font-bold text-blue-700">{String(result.parsed_rows ?? result.total_file_rows ?? '—')}</span></div>
+              <div className="bg-white rounded p-2"><span className="text-gray-500">Total in DB:</span> <span className="font-bold">{String(result.total ?? result.total_rules ?? '')}</span></div>
+              <div className="bg-white rounded p-2"><span className="text-gray-500">Rows in File:</span> <span className="font-bold text-blue-700">{String(result.parsed_rows ?? result.total_file_rows ?? '')}</span></div>
             </div>
             {/* Header diagnostics */}
             {!!result.headers_found && (
@@ -570,7 +570,7 @@ export default function DataImportPage({ context }: DataImportPageProps) {
                       if (col === 'migration_status') {
                         return <td key={col} className="px-2 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${val === 'Completed' ? 'bg-green-100 text-green-700' : val === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{val}</span></td>;
                       }
-                      return <td key={col} className="px-2 py-1.5 max-w-[200px] truncate" title={val}>{val || <span className="text-gray-300 italic">—</span>}</td>;
+                      return <td key={col} className="px-2 py-1.5 max-w-[200px] truncate" title={val}>{val || <span className="text-gray-300 italic"></span>}</td>;
                     })}
                   </tr>
                 ))}

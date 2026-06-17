@@ -560,8 +560,8 @@ export default function SharedServicesTab() {
                 <select value={editingPresence.dc_id || ''}
                   onChange={(e) => setEditingPresence((p) => ({ ...(p!), dc_id: e.target.value }))}
                   className="w-full border rounded px-2 py-1 text-sm">
-                  <option value="">— select DC —</option>
-                  {datacenters.map((d) => <option key={d.code} value={d.code}>{d.code} — {d.name}</option>)}
+                  <option value="">select DC</option>
+                  {datacenters.map((d) => <option key={d.code} value={d.code}>{d.code} {d.name}</option>)}
                 </select>
               </div>
               <div>
@@ -569,8 +569,8 @@ export default function SharedServicesTab() {
                 <select value={editingPresence.nh_id || ''}
                   onChange={(e) => setEditingPresence((p) => ({ ...(p!), nh_id: e.target.value }))}
                   className="w-full border rounded px-2 py-1 text-sm">
-                  <option value="">— select NH —</option>
-                  {neighbourhoods.map((n) => <option key={n.nh_id} value={n.nh_id}>{n.nh_id} — {n.name}</option>)}
+                  <option value="">select NH</option>
+                  {neighbourhoods.map((n) => <option key={n.nh_id} value={n.nh_id}>{n.nh_id} {n.name}</option>)}
                 </select>
               </div>
               <div>
@@ -578,8 +578,8 @@ export default function SharedServicesTab() {
                 <select value={editingPresence.sz_code || ''}
                   onChange={(e) => setEditingPresence((p) => ({ ...(p!), sz_code: e.target.value }))}
                   className="w-full border rounded px-2 py-1 text-sm">
-                  <option value="">— select SZ —</option>
-                  {securityZones.map((z) => <option key={z.code} value={z.code}>{z.code} — {z.name}</option>)}
+                  <option value="">select SZ</option>
+                  {securityZones.map((z) => <option key={z.code} value={z.code}>{z.code} {z.name}</option>)}
                 </select>
               </div>
             </div>

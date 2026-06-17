@@ -707,7 +707,7 @@ export default function SettingsPage() {
     setHideSeedData(hide);
     localStorage.setItem('nfs_hide_seed', hide ? 'true' : 'false');
     try { await api.setHideSeed(hide); } catch { /* localStorage is primary */ }
-    showNotification(hide ? 'Seed data hidden — showing only real/imported data' : 'Seed data visible — showing all data', 'success');
+    showNotification(hide ? 'Seed data hidden, showing only real/imported data' : 'Seed data visible, showing all data', 'success');
   };
 
   const handleClearLegacy = async () => {
@@ -780,7 +780,7 @@ export default function SettingsPage() {
   };
 
   const handleClearAll = async () => {
-    if (!confirm('⚠️ CLEAN ALL DATA — This will clear ALL imported data across the entire portal:\n\n• Legacy Rules\n• Migration Data\n• Studio Rules\n• Reviews\n• Firewall Rules\n• Modifications\n\nSeed reference data (NHs, SZs, Policy Matrix, etc.) is NOT affected.\n\nContinue?')) return;
+    if (!confirm('⚠️ CLEAN ALL DATA: This will clear ALL imported data across the entire portal:\n\n• Legacy Rules\n• Migration Data\n• Studio Rules\n• Reviews\n• Firewall Rules\n• Modifications\n\nSeed reference data (NHs, SZs, Policy Matrix, etc.) is NOT affected.\n\nContinue?')) return;
     setClearingAll(true);
     try {
       const res = await api.clearAllUserData();
@@ -1061,7 +1061,7 @@ export default function SettingsPage() {
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hideSeedData ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
                 <span className={`text-sm font-medium ${hideSeedData ? 'text-indigo-700' : 'text-gray-500'}`}>
-                  {hideSeedData ? 'Seed data hidden — showing only real data' : 'Seed data visible — showing all data'}
+                  {hideSeedData ? 'Seed data hidden, showing only real data' : 'Seed data visible, showing all data'}
                 </span>
               </div>
             </div>
@@ -1327,7 +1327,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Neighbourhoods</h2>
-                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Logical groupings of hosts, subnets, and zones. CIDRs resolve at the SZ level per (DC, NH, SZ) — expand any NH row to see the breakdown.</p>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Logical groupings of hosts, subnets, and zones. CIDRs resolve at the SZ level per (DC, NH, SZ). Expand any NH row to see the breakdown.</p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {(['Production','Pre-Production','Non-Production'] as const).map(env => {
                         const n = neighbourhoods.filter(nh => String(nh.environment || '') === env).length;
@@ -1412,9 +1412,9 @@ export default function SettingsPage() {
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String(nh.environment) === 'Production' ? 'bg-green-100 text-green-800' : String(nh.environment) === 'Pre-Production' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{String(nh.environment || 'N/A')}</span>}</td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            <span className="text-gray-500">{nhSzEntries.length > 0 ? `${nhSzEntries.length} SZ entries` : '—'}</span>
+                            <span className="text-gray-500">{nhSzEntries.length > 0 ? `${nhSzEntries.length} SZ entries` : ''}</span>
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editNhForm.description || '')} onChange={e => setEditNhForm({ ...editNhForm, description: e.target.value })} /> : String(nh.description || '—')}</td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editNhForm.description || '')} onChange={e => setEditNhForm({ ...editNhForm, description: e.target.value })} /> : String(nh.description || '')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1620,8 +1620,8 @@ export default function SettingsPage() {
                             <select className={inp} value={String(editSzForm.fabric || '')} onChange={e => setEditSzForm({ ...editSzForm, fabric: e.target.value })}>
                               <option value="Production">Production</option><option value="Pre-Production">Pre-Production</option><option value="Non-Production">Non-Production</option><option value="All">All</option>
                             </select>
-                          ) : <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{String(sz.fabric || '—')}</span>}</td>
-                          <td className="px-3 py-2 font-mono text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '—')}</td>
+                          ) : <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{String(sz.fabric || '')}</span>}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editSzForm.vrf_prefix || '')} onChange={e => setEditSzForm({ ...editSzForm, vrf_prefix: e.target.value })} /> : String(sz.vrf_prefix || '')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1647,7 +1647,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                       <div className="text-xs font-bold text-emerald-800">CIDR Bindings for {code}</div>
-                                      <div className="text-[10px] text-gray-500">Per (DC, NH) — DC-specific takes precedence; empty DC = any-DC fallback.</div>
+                                      <div className="text-[10px] text-gray-500">Per (DC, NH). DC-specific takes precedence; empty DC = any-DC fallback.</div>
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
@@ -1701,7 +1701,7 @@ export default function SettingsPage() {
                                                     onChange={e => setEditSzBindingVrf(e.target.value)}
                                                   />
                                                 ) : (
-                                                  <span className="font-mono text-[10px] text-gray-600">{b.vrf_id || '—'}</span>
+                                                  <span className="font-mono text-[10px] text-gray-600">{b.vrf_id || ''}</span>
                                                 )}
                                               </td>
                                               <td className="px-2 py-1 text-right">
@@ -1859,13 +1859,13 @@ export default function SettingsPage() {
                           <td className="px-3 py-2"><span className={`px-2 py-0.5 text-xs font-bold rounded ${dcType === 'NGDC' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{dcType}</span></td>
                           <td className="px-3 py-2 font-mono text-xs font-medium text-indigo-700">{isEditing ? <input className={inp} value={String(editDcForm.dc_id || '')} onChange={e => setEditDcForm({ ...editDcForm, dc_id: e.target.value })} /> : dcId}</td>
                           <td className="px-3 py-2">{isEditing ? <input className={inp} value={String(editDcForm.name || '')} onChange={e => setEditDcForm({ ...editDcForm, name: e.target.value })} /> : String((dc as Record<string, unknown>).name || '')}</td>
-                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String((dc as Record<string, unknown>).region || '—')}</td>
+                          <td className="px-3 py-2 text-xs">{isEditing ? <input className={inp} value={String(editDcForm.region || '')} onChange={e => setEditDcForm({ ...editDcForm, region: e.target.value })} /> : String((dc as Record<string, unknown>).region || '')}</td>
                           <td className="px-3 py-2">{isEditing ? (
                             <select className={inp} value={String(editDcForm.status || 'Active')} onChange={e => setEditDcForm({ ...editDcForm, status: e.target.value })}>
                               <option value="Active">Active</option><option value="Planned">Planned</option><option value="Decommissioned">Decommissioned</option><option value="Migrating">Migrating</option>
                             </select>
                           ) : <span className={`px-2 py-0.5 text-xs rounded-full ${String((dc as Record<string, unknown>).status) === 'Active' ? 'bg-green-100 text-green-800' : String((dc as Record<string, unknown>).status) === 'Planned' ? 'bg-blue-100 text-blue-800' : String((dc as Record<string, unknown>).status) === 'Migrating' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800'}`}>{String((dc as Record<string, unknown>).status || 'Active')}</span>}</td>
-                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String((dc as Record<string, unknown>).description || '—')}</td>
+                          <td className="px-3 py-2 text-xs text-gray-600">{isEditing ? <input className={inp} value={String(editDcForm.description || '')} onChange={e => setEditDcForm({ ...editDcForm, description: e.target.value })} /> : String((dc as Record<string, unknown>).description || '')}</td>
                           <td className="px-3 py-2">
                             {isEditing ? (
                               <div className="flex gap-1">
@@ -1979,7 +1979,7 @@ export default function SettingsPage() {
                     // Render `id — friendly` only when both halves are
                     // non-empty so an empty app_name no longer leaves
                     // a dangling em-dash like ``CRM_PROD —``.
-                    const label = friendly ? `${id} — ${friendly}` : id;
+                    const label = friendly ? `${id} ${friendly}` : id;
                     return <option key={app.app_id} value={app.app_id}>{label}</option>;
                   })}
                 </select>
@@ -2004,14 +2004,14 @@ export default function SettingsPage() {
                     groups. ``primary_dc`` is retained only as a hint for the
                     rule builder's default source DC. */}
                 <div className="border border-indigo-200 rounded-lg p-3 bg-white/60 space-y-2">
-                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">— every NGDC app lives in all 4 DCs; this is just a hint for the rule builder's default source DC</span></h4>
+                  <h4 className="text-xs font-semibold text-indigo-800">Omnipresent Deployment <span className="font-normal text-gray-500">: every NGDC app lives in all 4 DCs; this is just a hint for the rule builder's default source DC</span></h4>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[11px] font-medium text-gray-500 mb-1">Primary DC <span className="text-gray-400 font-normal">(optional)</span></label>
                       <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
                         value={String(newAppForm.primary_dc || '')}
                         onChange={e => setNewAppForm({ ...newAppForm, primary_dc: e.target.value })}>
-                        <option value="">— unset (auto from presences) —</option>
+                        <option value="">unset (auto from presences)</option>
                         {ngdcDatacenters.map(dc => {
                           const code = String(dc.dc_id || dc.code || '');
                           return <option key={code} value={code}>{code}</option>;
@@ -2122,7 +2122,7 @@ export default function SettingsPage() {
                         <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md"
                           value={String(editAppForm.primary_dc || '')}
                           onChange={e => setEditAppForm({ ...editAppForm, primary_dc: e.target.value })}>
-                          <option value="">— unset (auto from presences) —</option>
+                          <option value="">unset (auto from presences)</option>
                           {ngdcDatacenters.map(dc => {
                             const code = String(dc.dc_id || dc.code || '');
                             return <option key={code} value={code}>{code}</option>;
@@ -2199,7 +2199,7 @@ export default function SettingsPage() {
                                 const heritage = !!r.is_heritage;
                                 const renderChips = (chips: typeof r.egress_members) =>
                                   !chips || chips.length === 0
-                                    ? <span className="text-[10px] italic text-rose-600">— no members for this DC —</span>
+                                    ? <span className="text-[10px] italic text-rose-600">no members for this DC</span>
                                     : (
                                       <div className="flex flex-wrap gap-1">
                                         {chips.map((c, i) => (
@@ -2215,9 +2215,9 @@ export default function SettingsPage() {
                                         {heritage ? 'Heritage' : 'NGDC'}
                                       </span>
                                     </td>
-                                    <td className="px-2 py-1 font-mono">{r.dc_id || <span className="text-rose-600">—</span>}</td>
-                                    <td className="px-2 py-1 font-mono">{heritage ? '—' : (r.nh_id || <span className="text-rose-600">—</span>)}</td>
-                                    <td className="px-2 py-1 font-mono">{heritage ? '—' : (r.sz_code || <span className="text-rose-600">—</span>)}</td>
+                                    <td className="px-2 py-1 font-mono">{r.dc_id || <span className="text-rose-600"></span>}</td>
+                                    <td className="px-2 py-1 font-mono">{heritage ? '' : (r.nh_id || <span className="text-rose-600"></span>)}</td>
+                                    <td className="px-2 py-1 font-mono">{heritage ? '' : (r.sz_code || <span className="text-rose-600"></span>)}</td>
                                     <td className="px-2 py-1">
                                       {r.has_ingress
                                         ? <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-100 text-purple-700 font-semibold">Yes</span>
@@ -2227,12 +2227,12 @@ export default function SettingsPage() {
                                     <td className="px-2 py-1">
                                       {r.has_ingress
                                         ? renderChips(r.ingress_members)
-                                        : <span className="text-[10px] italic text-gray-400">— ingress disabled —</span>}
+                                        : <span className="text-[10px] italic text-gray-400">ingress disabled</span>}
                                     </td>
                                     <td className="px-2 py-1">
                                       {heritage ? (
                                         (r.ngdc_source_dcs || []).length === 0
-                                          ? <span className="text-[10px] italic text-amber-700">— all NGDC DCs (no explicit mapping) —</span>
+                                          ? <span className="text-[10px] italic text-amber-700">all NGDC DCs (no explicit mapping)</span>
                                           : (
                                             <div className="flex flex-wrap gap-1">
                                               {(r.ngdc_source_dcs || []).map((dc) => (
@@ -2240,7 +2240,7 @@ export default function SettingsPage() {
                                               ))}
                                             </div>
                                           )
-                                      ) : <span className="text-[10px] text-gray-400">—</span>}
+                                      ) : <span className="text-[10px] text-gray-400"></span>}
                                     </td>
                                   </tr>
                                 );

@@ -1504,7 +1504,7 @@ export default function FirewallManagementPage() {
       {showMissingDetailsPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-amber-700 mb-2">App Not Found — Provide Additional Details</h3>
+            <h3 className="text-lg font-semibold text-amber-700 mb-2">App Not Found: Provide Additional Details</h3>
             <p className="text-xs text-gray-600 mb-4">
               No existing rules or applications match <strong>{bulkAppDistId}</strong>.
               You can provide additional details below, or skip to apply just the App Distributed ID.
@@ -1555,7 +1555,7 @@ export default function FirewallManagementPage() {
             <div className="flex justify-end gap-3 mt-5 pt-3 border-t">
               <button onClick={handleMissingDetailsSkip}
                 className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                Skip — Apply ID Only
+                Skip: Apply ID Only
               </button>
               <button onClick={handleMissingDetailsSubmit}
                 className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700">

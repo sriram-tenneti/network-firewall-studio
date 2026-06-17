@@ -10874,8 +10874,8 @@ def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
         "Source Expansion", "Destination Expansion",
     ]]
     for r in manifest.get("rules", []):
-        src_g = str(r.get("src_group", ""))
-        dst_g = str(r.get("dst_group", ""))
+        src_g = str(r.get("src_group_ref", "") or r.get("src_group", "") or r.get("source", ""))
+        dst_g = str(r.get("dst_group_ref", "") or r.get("dst_group", "") or r.get("destination", ""))
         rules_sheet.append([
             str(r.get("rule_id", "")),
             str(r.get("destination_ref", "")),

@@ -116,7 +116,7 @@ export function DesignStudioPage() {
           'Studio rule modification'
         );
       }
-      showNotification('Rule modified successfully' + (hasDelta ? ' — submitted for review' : ''), 'success');
+      showNotification('Rule modified successfully' + (hasDelta ? ', submitted for review' : ''), 'success');
       loadData();
     } catch {
       showNotification('Failed to modify rule', 'error');

@@ -249,7 +249,7 @@ export default function PortCatalogTab() {
                 className={`rounded-xl border ${a.border} ${a.bg} p-3 flex flex-col gap-2 hover:shadow-md transition-all`}>
                 <div className="flex items-center gap-2">
                   <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white border ${a.border} ${a.text}`}>{p.protocol}</span>
-                  <span className="text-lg font-bold text-gray-900 font-mono">{p.port === 0 ? '—' : p.port}</span>
+                  <span className="text-lg font-bold text-gray-900 font-mono">{p.port === 0 ? '*' : p.port}</span>
                   <span className="text-sm font-semibold text-gray-800 flex-1 truncate">{p.name}</span>
                 </div>
                 <div className="flex items-center gap-1 flex-wrap">

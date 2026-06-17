@@ -243,7 +243,7 @@ export function AppPresenceMatrix({
               >
                 <option value="">-- Select NH --</option>
                 {neighbourhoods.map(n => (
-                  <option key={n.nh_id} value={n.nh_id}>{n.nh_id} — {n.name}</option>
+                  <option key={n.nh_id} value={n.nh_id}>{n.nh_id} {n.name}</option>
                 ))}
               </select>
             </div>
@@ -337,7 +337,7 @@ export function AppPresenceMatrix({
           <textarea
             rows={2}
             className="w-full px-2 py-1.5 text-xs border border-sky-200 rounded-md bg-white font-mono"
-            placeholder="Paste IPs / CIDRs / ranges — one per line or comma-separated"
+            placeholder="Paste IPs / CIDRs / ranges, one per line or comma-separated"
             value={bulkText}
             onChange={e => setBulkText(e.target.value)}
           />
@@ -397,7 +397,7 @@ export function AppPresenceMatrix({
               <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] font-mono">
                 {bulkResult.misses.map((n, i) => (
                   <div key={i} className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 truncate">
-                    {n.value} — {n.reason}
+                    {n.value}: {n.reason}
                   </div>
                 ))}
               </div>
@@ -428,7 +428,7 @@ export function AppPresenceMatrix({
             )}
             {!loading && presences.length === 0 && (
               <tr><td colSpan={9} className="px-2 py-4 text-center text-gray-500">
-                No presences yet — add one above or bulk-paste IPs to auto-create.
+                No presences yet. Add one above or bulk-paste IPs to auto-create.
               </td></tr>
             )}
             {presences.map(p => (
@@ -439,9 +439,9 @@ export function AppPresenceMatrix({
                 <td className="px-2 py-1.5 font-mono text-[11px] text-gray-700 truncate max-w-[220px]" title={egressName(p)}>{egressName(p)}</td>
                 <td className="px-2 py-1.5 text-center font-semibold text-gray-800">{(p.egress_members || []).length}</td>
                 <td className="px-2 py-1.5 font-mono text-[11px] text-gray-700 truncate max-w-[220px]" title={ingressName(p)}>
-                  {p.has_ingress ? ingressName(p) : <span className="text-gray-400">—</span>}
+                  {p.has_ingress ? ingressName(p) : <span className="text-gray-400"></span>}
                 </td>
-                <td className="px-2 py-1.5 text-center font-semibold text-gray-800">{p.has_ingress ? (p.ingress_members || []).length : '—'}</td>
+                <td className="px-2 py-1.5 text-center font-semibold text-gray-800">{p.has_ingress ? (p.ingress_members || []).length : ''}</td>
                 <td className="px-2 py-1.5">
                   {p.has_ingress && (p.ingress_ports || []).length > 0 ? (
                     <div className="flex flex-wrap gap-1 max-w-[220px]">
@@ -463,7 +463,7 @@ export function AppPresenceMatrix({
                       )}
                     </div>
                   ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-gray-400"></span>
                   )}
                 </td>
                 <td className="px-2 py-1.5 text-right">

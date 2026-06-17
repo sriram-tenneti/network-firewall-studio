@@ -143,7 +143,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
       label: (() => {
         const id = a.app_distributed_id || a.app_id;
         const friendly = (a.app_name ?? '').trim();
-        return friendly ? `🏢 ${id} — ${friendly}` : `🏢 ${id}`;
+        return friendly ? `🏢 ${id} ${friendly}` : `🏢 ${id}`;
       })(),
       hint: 'Application (Ingress)',
     }));
@@ -407,12 +407,12 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                     else { setSrcKind('app'); setSrcApp(ref); }
                   }}
                   className="w-full border rounded px-2 py-1.5 text-sm">
-                  <option value="app:">— select source —</option>
+                  <option value="app:">select source</option>
                   <optgroup label="Applications">
                     {srcOptions.map((a) => {
                       const id = a.app_distributed_id || a.app_id;
                       const friendly = (a.app_name ?? '').trim();
-                      const label = friendly ? `${id} — ${friendly}` : id;
+                      const label = friendly ? `${id} ${friendly}` : id;
                       return (
                         <option key={`app-${id}`} value={`app:${id}`}>{label}</option>
                       );
@@ -437,7 +437,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   if (d) addDest(d);
                 }}
                 className="w-full border rounded px-2 py-1.5 text-sm">
-                <option value="">— add destination —</option>
+                <option value="">add destination</option>
                 <optgroup label="Shared Services">
                   {unifiedDestinations.filter((d) => d.kind === 'shared_service')
                     .map((d) => <option key={`ss-${d.ref}`} value={d.ref}>{d.label}</option>)}
@@ -518,7 +518,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             )}
             {isGodView && advancedMode && (<>
             <PresencePicker
-              title={`Source presences — which (DC · NH · SZ) for ${srcApp || 'the source'}?`}
+              title={`Source presences: which (DC · NH · SZ) for ${srcApp || 'the source'}?`}
               subtitle={srcKind === 'shared_service'
                 ? 'Each checked presence becomes one PhysicalRule with the matching grp-<Service>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'
                 : 'Each checked presence becomes one PhysicalRule with the matching grp-<App>-<NH>-<SZ> source group. Leave all unchecked to fan out across every presence (default).'}
@@ -533,7 +533,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               onChange={setSelectedSrcKeys}
             />
             <PresencePicker
-              title={`Destination presences — which (DC · NH · SZ) for ${dest?.label || 'the destination'}?`}
+              title={`Destination presences: which (DC · NH · SZ) for ${dest?.label || 'the destination'}?`}
               subtitle={dest?.kind === 'app_ingress'
                 ? 'Each checked presence becomes the destination grp-<App>-<NH>-<SZ>-Ingress group.'
                 : 'Each checked presence becomes the destination grp-<Service>-<NH>-<SZ> group.'}
@@ -591,7 +591,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
             </div>
             {isGodView ? (
               <details className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
-                <summary className="text-[11px] font-semibold text-amber-800 cursor-pointer">Advanced (SNS only) — Power-user Overrides</summary>
+                <summary className="text-[11px] font-semibold text-amber-800 cursor-pointer">Advanced (SNS only): Power-user Overrides</summary>
                 <p className="text-[11px] text-gray-600 mt-2">
                   Rules fan out automatically across <strong>all 4 NGDC DCs</strong> with strict
                   same-DC pairing (ALPHA→ALPHA, BETA→BETA, …). NGDC↔Heritage routing follows
@@ -613,7 +613,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               </details>
             ) : (
               <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-2 text-[11px] text-emerald-800">
-                Your rule will originate from your app's primary DC. The destination team handles east-west routing across their other DCs — you don't need to think in DC terms.
+                Your rule will originate from your app's primary DC. The destination team handles east-west routing across their other DCs. You don't need to think in DC terms.
               </div>
             )}
             <div className="flex justify-between">
@@ -671,7 +671,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                 <div className="flex items-center gap-2 mb-2">
                   <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600 text-white text-sm font-bold">✓</span>
                   <div className="flex-1">
-                    <div className="text-sm font-bold text-emerald-900">Rule Request submitted — now in <span className="text-amber-700">Pending Review</span></div>
+                    <div className="text-sm font-bold text-emerald-900">Rule Request submitted, now in <span className="text-amber-700">Pending Review</span></div>
                     <div className="text-[11px] text-emerald-700">Scroll down to the <strong>Rule Requests</strong> panel to Approve / Reject / Deploy / Certify.</div>
                   </div>
                 </div>
@@ -730,7 +730,7 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
                   <button onClick={() => setStep(2)} className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">Back</button>
                   <button onClick={() => void submit()}
                     disabled={submitting || !preview || preview.physical_rules.length === 0 || preview.block_submit}
-                    title={preview?.block_submit ? 'Submit blocked — see validation status above' : undefined}
+                    title={preview?.block_submit ? 'Submit blocked: see validation status above' : undefined}
                     className="px-4 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-300">
                     {submitting ? 'Submitting…' : (preview?.block_submit ? 'Blocked by validation' : 'Submit Rule Request')}
                   </button>
@@ -763,7 +763,7 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
     return (
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800 flex items-center gap-2">
         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-bold">✓</span>
-        <span><strong>Validation passed</strong> — no overlap with existing rules; no birthright coverage. Safe to submit.</span>
+        <span><strong>Validation passed</strong>: no overlap with existing rules; no birthright coverage. Safe to submit.</span>
       </div>
     );
   }
@@ -777,7 +777,7 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       </div>
       {hardMatches.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Hard-block — already exists</div>
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Hard-block: already exists</div>
           {hardMatches.map((m: DedupMatch, idx: number) => (
             <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-rose-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-rose-100 border border-rose-200 text-[10px] font-bold uppercase">{m.verdict}</span>
@@ -796,7 +796,7 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       )}
       {overlap.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Overlap — proceed with care</div>
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Overlap: proceed with care</div>
           {overlap.map((m: DedupMatch, idx: number) => (
             <div key={`${m.rule_id}-${idx}`} className="bg-white/60 border border-amber-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-[10px] font-bold uppercase">overlap</span>
@@ -814,13 +814,13 @@ function ValidationStatus({ preview }: { preview: RuleExpansionPreview | null })
       )}
       {birthMatches.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Birthright — already provided cluster-wide</div>
+          <div className="text-[11px] uppercase tracking-wide font-semibold opacity-80">Birthright: already provided cluster-wide</div>
           {birthMatches.map((b) => (
             <div key={b.birthright_id} className="bg-white/60 border border-emerald-200 rounded p-2 flex flex-wrap items-center gap-2">
               <span className="px-1.5 py-0.5 rounded bg-emerald-100 border border-emerald-200 text-[10px] font-bold uppercase">{b.birthright_id}</span>
               <span className="font-mono text-[10px]">{b.destination_ref}</span>
               <span className="font-mono text-[10px]">{b.ports}</span>
-              {b.description ? <span className="text-[10px] opacity-80">— {b.description}</span> : null}
+              {b.description ? <span className="text-[10px] opacity-80">{b.description}</span> : null}
             </div>
           ))}
         </div>
@@ -833,7 +833,7 @@ function FanOutTable({ rows }: { rows: PhysicalRuleExpansion[] }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500">
-        No physical rules — source and destination have no matching DC/environment presences.
+        No physical rules. Source and destination have no matching DC/environment presences.
       </div>
     );
   }
@@ -856,7 +856,7 @@ function FanOutTable({ rows }: { rows: PhysicalRuleExpansion[] }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
-              <td className="px-2 py-1.5 font-mono text-purple-700 truncate max-w-[140px]" title={r.destination_ref || ''}>{r.destination_ref || '—'}</td>
+              <td className="px-2 py-1.5 font-mono text-purple-700 truncate max-w-[140px]" title={r.destination_ref || ''}>{r.destination_ref || ''}</td>
               <td className="px-2 py-1.5 font-mono">{r.src_dc}</td>
               <td className="px-2 py-1.5 text-gray-400">→</td>
               <td className="px-2 py-1.5 font-mono">{r.dst_dc}</td>
@@ -967,7 +967,7 @@ function PresencePicker({
           ))}
           {allSelected && (
             <div className="text-[11px] text-gray-500">
-              All presences checked — equivalent to "Using all presences".
+              All presences checked. Equivalent to "Using all presences".
             </div>
           )}
         </div>

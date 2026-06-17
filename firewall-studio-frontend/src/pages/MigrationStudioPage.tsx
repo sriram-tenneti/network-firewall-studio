@@ -417,7 +417,7 @@ export function MigrationStudioPage() {
         const groups = await getGroups(appKey).catch(() => [] as FirewallGroup[]);
         setAppGroups(groups);
       } catch { /* ignore */ }
-      showNotification('Failed to load NGDC recommendations — showing basic rule info', 'error');
+      showNotification('Failed to load NGDC recommendations, showing basic rule info', 'error');
     }
     setLoadingRec(false);
   };
@@ -556,7 +556,7 @@ export function MigrationStudioPage() {
         );
         showNotification(`Group "${newGroupName}" created & submitted for policy review`, 'success');
       } catch {
-        showNotification(`Group "${newGroupName}" created but policy change submission failed — submit manually from Review page`, 'warning');
+        showNotification(`Group "${newGroupName}" created but policy change submission failed. Submit manually from Review page`, 'warning');
       }
 
       setShowNewGroupModal(false);
@@ -1496,7 +1496,7 @@ export function MigrationStudioPage() {
                           }`}>{componentGroups[0].environment}</span>
                         )}
                       </div>
-                      <p className="text-xs text-green-600">All IPs for each component are automatically grouped into NGDC groups. Legacy may or may not have groups — in NGDC, all IPs must be in groups. You can customize group names below.</p>
+                      <p className="text-xs text-green-600">All IPs for each component are automatically grouped into NGDC groups. Legacy may or may not have groups. In NGDC, all IPs must be in groups. You can customize group names below.</p>
                       {recommendation && recommendation.available_components && recommendation.available_components.length > 1 && (
                         <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
                           <span className="text-[10px] font-semibold text-amber-700">Multiple Components Available:</span>
@@ -2178,7 +2178,7 @@ export function MigrationStudioPage() {
                             <h4 className="text-xs font-semibold text-purple-700 mb-1">LDF / Firewall Boundaries</h4>
                             <div className="ml-2 text-xs text-gray-600">
                               <span className="font-medium">{(boundaryAnalysis as Record<string, unknown>).boundaries as number} boundaries</span>
-                              {' — '}{(boundaryAnalysis as Record<string, unknown>).flow_rule as string}
+                              {': '}{(boundaryAnalysis as Record<string, unknown>).flow_rule as string}
                             </div>
                           </div>
                         )}
