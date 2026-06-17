@@ -136,7 +136,13 @@ export default function RuleRequestsPanel({ environment = '', onChanged, reloadK
                   <code className="text-[11px] font-mono text-gray-700">{r.request_id}</code>
                   <span className="text-[11px] font-semibold text-gray-900">{r.application_ref}</span>
                   <span className="text-gray-400">→</span>
-                  <span className="text-[11px] font-semibold text-indigo-700">{r.destination_kind}:{r.destination_ref}</span>
+                  <span className="text-[11px] font-semibold text-indigo-700">
+                    {(r.destinations && r.destinations.length > 0)
+                      ? r.destinations.map((d: { kind: string; ref: string }, i: number) => (
+                          <span key={i}>{i > 0 ? ', ' : ''}{d.kind}:{d.ref}</span>
+                        ))
+                      : `${r.destination_kind}:${r.destination_ref}`}
+                  </span>
                   <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-600">{r.environment}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-600 font-mono">{r.ports}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded border ${statusStyle(r.status)}`}>{r.status}</span>

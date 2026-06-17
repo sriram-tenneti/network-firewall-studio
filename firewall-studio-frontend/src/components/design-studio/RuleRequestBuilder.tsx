@@ -433,18 +433,19 @@ export default function RuleRequestBuilder({ applications, onSubmitted }: RuleRe
               <label className="block text-xs font-medium text-gray-600 mb-1">Destinations (Apps with Ingress ∪ Shared Services)</label>
               <select value=""
                 onChange={(e) => {
-                  const d = unifiedDestinations.find((x) => x.ref === e.target.value);
+                  const key = e.target.value;
+                  const d = unifiedDestinations.find((x) => `${x.kind}:${x.ref}` === key);
                   if (d) addDest(d);
                 }}
                 className="w-full border rounded px-2 py-1.5 text-sm">
                 <option value="">add destination</option>
                 <optgroup label="Shared Services">
                   {unifiedDestinations.filter((d) => d.kind === 'shared_service')
-                    .map((d) => <option key={`ss-${d.ref}`} value={d.ref}>{d.label}</option>)}
+                    .map((d) => <option key={`ss-${d.ref}`} value={`${d.kind}:${d.ref}`}>{d.label}</option>)}
                 </optgroup>
                 <optgroup label="Applications (with Ingress)">
                   {unifiedDestinations.filter((d) => d.kind === 'app_ingress')
-                    .map((d) => <option key={`ai-${d.ref}`} value={d.ref}>{d.label}</option>)}
+                    .map((d) => <option key={`ai-${d.ref}`} value={`${d.kind}:${d.ref}`}>{d.label}</option>)}
                 </optgroup>
               </select>
 

@@ -8891,13 +8891,19 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
             "all_permitted": False, "any_blocked": False,
         }
         any_block = False
-        for dst in destinations:
+        for i_dst, dst in enumerate(destinations):
             sub_payload = {
                 **payload,
                 "destination_kind": dst["kind"],
                 "destination_ref": dst["ref"],
             }
             sub_payload.pop("destinations", None)
+            # destination_presences from the frontend is scoped to the first
+            # destination only (the presence picker uses dests[0]).  Drop it
+            # for subsequent destinations so we fan-out across ALL of their
+            # presences rather than filtering with the wrong keys.
+            if i_dst > 0:
+                sub_payload.pop("destination_presences", None)
             sub = await _expand_single_destination(sub_payload)
             for p in sub.get("physical_rules", []):
                 p["destination_ref"] = dst["ref"]
@@ -9025,7 +9031,7 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
             "source_kind": source_kind_norm,
             "destination_ref": p.get("destination_ref", payload.get("destination_ref", "")),
             "destination_kind": p.get("destination_kind", payload.get("destination_kind", "")),
-            "dst_application": payload.get("destination_ref", "") if payload.get("destination_kind") == "app_ingress" else "",
+            "dst_application": (p.get("destination_ref") or payload.get("destination_ref", "")) if (p.get("destination_kind") or payload.get("destination_kind")) == "app_ingress" else "",
             "status": "Pending Review",
             "rule_status": "Pending Review",
             "rule_migration_status": "Migrated",
@@ -10647,6 +10653,8 @@ def _artifact_manifest_for_request(
         )
         rules_out.append({
             "rule_id": rid,
+            "destination_ref": phys.get("destination_ref") or fw.get("destination_ref") or req.get("destination_ref", ""),
+            "destination_kind": phys.get("destination_kind") or fw.get("destination_kind") or req.get("destination_kind", ""),
             "src_dc": phys.get("src_dc"),
             "dst_dc": phys.get("dst_dc"),
             "src_group": phys.get("src_group_ref"),

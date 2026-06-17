@@ -87,7 +87,9 @@ function ruleRequestToReview(r: RuleRequestRecord): ReviewRequest {
     rule_summary: {
       application: r.application_ref || '',
       source: r.source_ref || r.source_kind || '',
-      destination: r.destination_ref || r.destination_kind || '',
+      destination: (r.destinations && r.destinations.length > 0)
+        ? r.destinations.map((d: { kind: string; ref: string }) => `${d.kind}:${d.ref}`).join(', ')
+        : (r.destination_ref || r.destination_kind || ''),
       ports: r.ports || '',
       environment: r.environment || '',
     },
