@@ -283,8 +283,10 @@ async def create_rule_request_route(payload: dict[str, Any]) -> dict[str, Any]:
             400,
             "source_ref (or legacy application_ref) is required",
         )
-    if not payload.get("destination_kind"):
-        raise HTTPException(400, "destination_kind is required")
+    has_multi = bool(payload.get("destinations"))
+    has_single = bool(payload.get("destination_kind"))
+    if not has_multi and not has_single:
+        raise HTTPException(400, "destinations[] or destination_kind is required")
     payload["source_kind"] = src_kind
     payload["source_ref"] = src_ref
     return await create_rule_request(payload)

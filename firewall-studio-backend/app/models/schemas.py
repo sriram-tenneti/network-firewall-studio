@@ -285,8 +285,13 @@ class RuleRequestCreate(BaseModel):
     source_kind: SourceEntityKind = SourceEntityKind.APP
     source_ref: Optional[str] = None  # app_distributed_id OR service_id
     application_ref: Optional[str] = ""  # legacy alias for app sources
-    destination_kind: DestinationEntityKind
+    destination_kind: DestinationEntityKind = DestinationEntityKind.SHARED_SERVICE
     destination_ref: Optional[str] = None  # app_distributed_id OR service_id
+    # Multi-destination fan-out: each entry is {"kind": "shared_service"|"app_ingress", "ref": "<id>"}.
+    # When provided, destination_kind/destination_ref are ignored and the engine
+    # iterates over each destination entry independently, concatenating all
+    # physical rules under one RR-#### request.
+    destinations: Optional[list[dict]] = None
     environment: Environment = Environment.PRODUCTION
     ports: str = "TCP 8080"
     action: Literal["ACCEPT", "DROP"] = "ACCEPT"

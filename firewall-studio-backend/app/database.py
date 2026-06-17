@@ -2595,6 +2595,9 @@ async def create_datacenter(data: dict[str, Any], dc_type: str = "ngdc") -> dict
     items = _load(coll) or []
     items.append(dict(data))
     _save(coll, items)
+    if coll == "ngdc_datacenters":
+        global _ngdc_dc_ids_cache
+        _ngdc_dc_ids_cache = None
     return data
 
 
@@ -2618,6 +2621,9 @@ async def update_datacenter(code: str, updates: dict[str, Any], dc_type: str = "
         if _dc_matches(item, code):
             item.update(updates)
             _save(coll, items)
+            if coll == "ngdc_datacenters":
+                global _ngdc_dc_ids_cache
+                _ngdc_dc_ids_cache = None
             return item
     return None
 
@@ -2629,6 +2635,9 @@ async def delete_datacenter(code: str, dc_type: str = "ngdc") -> bool:
     if len(new_items) == len(items):
         return False
     _save(coll, new_items)
+    if coll == "ngdc_datacenters":
+        global _ngdc_dc_ids_cache
+        _ngdc_dc_ids_cache = None
     return True
 
 
@@ -7904,10 +7913,21 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+_ngdc_dc_ids_cache: list[str] | None = None
+
+
 def _ngdc_dc_ids() -> list[str]:
-    """All NGDC DC IDs available in seed/runtime store. Excludes Heritage."""
-    return [d.get("dc_id", "") for d in (_load("ngdc_datacenters") or [])
-            if d.get("dc_id")]
+    """All NGDC DC IDs available in seed/runtime store. Excludes Heritage.
+
+    Cached after the first call since the DC list changes very rarely
+    (admin-level config). Hot path during fan-out can call this dozens
+    of times per request.
+    """
+    global _ngdc_dc_ids_cache
+    if _ngdc_dc_ids_cache is None:
+        _ngdc_dc_ids_cache = [d.get("dc_id", "") for d in (_load("ngdc_datacenters") or [])
+                              if d.get("dc_id")]
+    return _ngdc_dc_ids_cache
 
 
 def _resolve_target_dcs(deployment_mode: str | None,
@@ -8508,7 +8528,8 @@ async def _resolve_source_presences(source_ref: str, env: str,
                if str(p.get("service_id", "")).upper() == source_ref.upper()
                and p.get("environment") == env]
         if requested_dcs:
-            raw = [p for p in raw if p.get("dc_id") in requested_dcs]
+            dc_set = {str(d).upper() for d in requested_dcs}
+            raw = [p for p in raw if str(p.get("dc_id", "")).upper() in dc_set]
         out: list[dict[str, Any]] = []
         for p in raw:
             out.append({
@@ -8526,7 +8547,8 @@ async def _resolve_source_presences(source_ref: str, env: str,
             if str(p.get("app_distributed_id", "")).upper() == source_ref.upper()
             and p.get("environment") == env]
     if requested_dcs:
-        pres = [p for p in pres if p.get("dc_id") in requested_dcs]
+        dc_set = {str(d).upper() for d in requested_dcs}
+        pres = [p for p in pres if str(p.get("dc_id", "")).upper() in dc_set]
     for p in pres:
         p.setdefault("_source_kind", "app")
     return _filter_by_presence_keys(pres, _presence_key_set(presence_keys))
@@ -8549,45 +8571,20 @@ async def _resolve_destination_presences(kind: str, dest_ref: str | None,
     else:
         pres = []
     if requested_dcs:
-        pres = [p for p in pres if p.get("dc_id") in requested_dcs]
+        dc_set = {str(d).upper() for d in requested_dcs}
+        pres = [p for p in pres if str(p.get("dc_id", "")).upper() in dc_set]
     return _filter_by_presence_keys(pres, _presence_key_set(presence_keys))
 
 
-async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
-    """Compute the multi-DC fan-out for a proposed rule request.
-
-    Default behaviour (matches the architecture: every NGDC app/service
-    has presence in all 4 NGDC DCs; one logical submit must materialise
-    one firewall request **per source DC per destination**):
-
-      - Source side fans out across **all** NGDC DCs the source has
-        presence in (no primary-DC scoping by default).
-      - For NGDC ↔ NGDC flows, src_dc and dst_dc are **strictly paired
-        same-DC** (ALPHA → ALPHA, BETA → BETA …) so a 4-DC source
-        talking to a 4-DC destination produces exactly 4 R-#### rules
-        under one parent RR-####. Cross-DC reasoning does not apply
-        within NGDC (every app lives in every DC); the legacy
-        `include_cross_dc` toggle is ignored for NGDC↔NGDC and only
-        matters for Heritage routing exceptions.
-      - For NGDC → Heritage (or Heritage → NGDC), the **Heritage
-        presence's `ngdc_source_dcs[]` mapping** drives which NGDC DCs
-        route into / out of that Heritage DC. This is the architectural
-        hook for the 2-NGDC-servers-→-1-Heritage-DC pattern: the app
-        team declares the routing on the Heritage row of the editor.
-        Empty mapping = all NGDC DCs (a warning is surfaced telling
-        the user to declare the mapping explicitly).
-      - Each emitted physical row carries `dc_to_dc_path`,
-        `egress_ip_dependency`, and `ingress_ip_dependency` so the
-        manifest export and Review queue can document the hop.
-
-    Power-user toggles:
-      - `requested_dcs` — explicit src+dst DC scope (overrides the all-DC default).
-      - `include_cross_dc=True` — full cross-product across NGDC DCs (DR / cutover).
-      - `destination_dc_override=<dc_id>` — pin destination DC.
-
-    Returns { physical_rules: [...], warnings: [...] } without persisting.
-    """
-    env = payload.get("environment", "Production")
+async def _expand_single_destination(payload: dict[str, Any]) -> dict[str, Any]:
+    """Core single-destination expansion logic. Returns
+    ``{ physical_rules, warnings, dedup, birthright, policy_matrix, block_submit }``
+    for exactly one (source, destination) pair. Shared by both the legacy
+    single-destination path and the new multi-destination iterator."""
+    # Normalize environment to title-case for consistent matching with
+    # presence data (which stores "Production", "Non-Production", etc.)
+    raw_env = payload.get("environment", "Production")
+    env = raw_env.strip().title() if isinstance(raw_env, str) else "Production"
     source_kind = (payload.get("source_kind") or "app").lower()
     src_ref = (payload.get("source_ref")
                or payload.get("application_ref")
@@ -8608,10 +8605,11 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     # request per source DC per destination DC". Callers that still want
     # primary-DC scoping must pass `requested_dcs` explicitly or set
     # `destination_dc_override`.
-    src_dc_filter = list(requested_dcs) if requested_dcs else None
-    dst_dc_filter = list(requested_dcs) if requested_dcs else None
+    # Normalize DC filters to upper-case so comparisons are case-insensitive
+    src_dc_filter = [str(d).upper() for d in requested_dcs] if requested_dcs else None
+    dst_dc_filter = [str(d).upper() for d in requested_dcs] if requested_dcs else None
     if dest_dc_override and not dst_dc_filter:
-        dst_dc_filter = [dest_dc_override]
+        dst_dc_filter = [str(dest_dc_override).upper()]
 
     src_pres = await _resolve_source_presences(
         src_ref, env, src_dc_filter, source_presences,
@@ -8759,8 +8757,9 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
                     )
     if not physical and not warnings:
         warnings.append(
-            "Source and destination have no DC in common; "
-            "enable 'Include cross-DC' to fan out across DCs."
+            "No physical rules generated — source and destination have no "
+            "overlapping DC presences in the selected environment. Check that "
+            "both entities have presences configured for this environment."
         )
     # Pre-submit validation — same engine that runs at create time so the
     # builder can render a green/amber/red status block in Step 3.
@@ -8869,6 +8868,74 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute the multi-DC fan-out for a proposed rule request.
+
+    When ``payload["destinations"]`` is a non-empty list, the engine iterates
+    over each destination entry, calls ``_expand_single_destination`` for each,
+    and concatenates all physical rules into one response. Each physical rule
+    is tagged with ``destination_ref`` / ``destination_kind`` so the XLSX and
+    UI can group them.
+
+    When ``destinations`` is absent or empty, falls back to the existing
+    single-destination behaviour using ``destination_kind``/``destination_ref``.
+    """
+    destinations = payload.get("destinations") or []
+    if destinations:
+        all_physical: list[dict[str, Any]] = []
+        all_warnings: list[str] = []
+        combined_dedup: dict[str, Any] = {"verdict": "ok", "block": False, "matches": []}
+        combined_birthright: dict[str, Any] = {"covered": False, "matches": []}
+        combined_pm: dict[str, Any] = {
+            "permitted": [], "rule_required": [], "blocked": [],
+            "all_permitted": False, "any_blocked": False,
+        }
+        any_block = False
+        for dst in destinations:
+            sub_payload = {
+                **payload,
+                "destination_kind": dst["kind"],
+                "destination_ref": dst["ref"],
+            }
+            sub_payload.pop("destinations", None)
+            sub = await _expand_single_destination(sub_payload)
+            for p in sub.get("physical_rules", []):
+                p["destination_ref"] = dst["ref"]
+                p["destination_kind"] = dst["kind"]
+                all_physical.append(p)
+            all_warnings.extend(sub.get("warnings", []))
+            # Merge validation verdicts
+            sub_dedup = sub.get("dedup") or {}
+            if sub_dedup.get("block"):
+                combined_dedup["block"] = True
+            combined_dedup["matches"].extend(sub_dedup.get("matches", []))
+            sub_birth = sub.get("birthright") or {}
+            if sub_birth.get("covered"):
+                combined_birthright["covered"] = True
+            combined_birthright["matches"].extend(sub_birth.get("matches", []))
+            sub_pm = sub.get("policy_matrix") or {}
+            for k in ("permitted", "rule_required", "blocked"):
+                combined_pm[k].extend(sub_pm.get(k, []))
+            if sub.get("block_submit"):
+                any_block = True
+        combined_pm["all_permitted"] = (
+            bool(all_physical)
+            and not combined_pm["rule_required"]
+            and not combined_pm["blocked"]
+        )
+        combined_pm["any_blocked"] = bool(combined_pm["blocked"])
+        return {
+            "physical_rules": all_physical,
+            "warnings": all_warnings,
+            "dedup": combined_dedup,
+            "birthright": combined_birthright,
+            "policy_matrix": combined_pm,
+            "block_submit": any_block,
+        }
+    # Legacy single-destination path
+    return await _expand_single_destination(payload)
+
+
 async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
     """Create a multi-DC RuleRequest and also materialize each PhysicalRule
     into the main `firewall_rules` store so submissions immediately show
@@ -8956,6 +9023,8 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
             "application": src_ref_norm if source_kind_norm == "app" else "",
             "shared_service_ref": src_ref_norm if source_kind_norm == "shared_service" else "",
             "source_kind": source_kind_norm,
+            "destination_ref": p.get("destination_ref", payload.get("destination_ref", "")),
+            "destination_kind": p.get("destination_kind", payload.get("destination_kind", "")),
             "dst_application": payload.get("destination_ref", "") if payload.get("destination_kind") == "app_ingress" else "",
             "status": "Pending Review",
             "rule_status": "Pending Review",
@@ -9014,6 +9083,7 @@ async def create_rule_request(payload: dict[str, Any]) -> dict[str, Any]:
         "application_ref": src_ref_rec if src_kind_rec == "app" else "",
         "destination_kind": payload.get("destination_kind", "shared_service"),
         "destination_ref": payload.get("destination_ref"),
+        "destinations": payload.get("destinations") or [],
         "environment": payload.get("environment", "Production"),
         "ports": payload.get("ports", "TCP 8080"),
         "action": payload.get("action", "ACCEPT"),
@@ -10796,7 +10866,8 @@ def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
         return cached
 
     rules_sheet = [[
-        "rule_id", "vrf", "src_dc", "dst_dc",
+        "rule_id", "destination_ref", "destination_kind",
+        "vrf", "src_dc", "dst_dc",
         "src_group", "dst_group",
         "src_nh", "src_sz", "dst_nh", "dst_sz",
         "protocol", "ports", "action", "lifecycle_status",
@@ -10807,6 +10878,8 @@ def _artifact_xlsx_rows(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
         dst_g = str(r.get("dst_group", ""))
         rules_sheet.append([
             str(r.get("rule_id", "")),
+            str(r.get("destination_ref", "")),
+            str(r.get("destination_kind", "")),
             str(r.get("vrf", "")),
             str(r.get("src_dc", "")),
             str(r.get("dst_dc", "")),
