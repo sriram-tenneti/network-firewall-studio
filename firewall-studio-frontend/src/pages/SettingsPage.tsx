@@ -932,25 +932,50 @@ export default function SettingsPage() {
 
   const filteredNhs = nhEnvFilter === 'all' ? neighbourhoods : neighbourhoods.filter(n => String(n.environment || '').toLowerCase().includes(nhEnvFilter.toLowerCase()));
 
-  const tabs = [
-    { id: 'data_mode', label: 'Data Mode' },
-    { id: 'data_management', label: 'Data Management' },
-    { id: 'neighbourhoods', label: 'Neighbourhoods' },
-    { id: 'security_zones', label: 'Security Zones' },
-    { id: 'datacenters', label: 'Data Centers' },
-    { id: 'app_management', label: 'App Management' },
-    { id: 'shared_services', label: 'Shared Services' },
-    { id: 'port_catalog', label: 'Port Configuration' },
-    { id: 'policy_matrix', label: 'Policy Matrix' },
-    { id: 'naming_standards', label: 'Naming Standards' },
-    { id: 'fw_devices', label: 'Firewall Devices' },
-    { id: 'sz_naming', label: 'SZ Naming Mode' },
-    { id: 'birthright', label: 'Birthright Rules' },
-    { id: 'itsm', label: 'ITSM Connectors' },
-    { id: 'ad_groups', label: 'User Groups' },
-    { id: 'ad_users', label: 'Users' },
-    { id: 'ad_config', label: 'AD Configuration' },
+  // Settings is grouped into 3 top-level pillars so the tabs no
+  // longer dump on the operator in one row. Each pillar maps to one of
+  // the architectural concerns of the portal:
+  //   - Topology       : where the network actually lives (DCs / NHs / SZs / ports)
+  //   - Apps & Services: what runs on top of the topology + their policies
+  //   - Admin          : platform-level config (modes, naming, devices, users)
+  type TabGroup = 'topology' | 'apps' | 'admin';
+  const TAB_GROUPS: { id: TabGroup; label: string; description: string }[] = [
+    { id: 'topology', label: 'Topology', description: 'Data Centers, Neighbourhoods, Security Zones, Ports' },
+    { id: 'apps', label: 'Apps & Services', description: 'Applications, Shared Services, Policy Matrix, Birthright Rules' },
+    { id: 'admin', label: 'Admin', description: 'Data mode, naming, firewall devices, ITSM, users & AD' },
   ];
+  const TABS_BY_GROUP: Record<TabGroup, { id: string; label: string }[]> = {
+    topology: [
+      { id: 'datacenters', label: 'Data Centers' },
+      { id: 'neighbourhoods', label: 'Neighbourhoods' },
+      { id: 'security_zones', label: 'Security Zones' },
+      { id: 'port_catalog', label: 'Port Catalog' },
+    ],
+    apps: [
+      { id: 'app_management', label: 'App Management' },
+      { id: 'shared_services', label: 'Shared Services' },
+      { id: 'policy_matrix', label: 'Policy Matrix' },
+      { id: 'birthright', label: 'Birthright Rules' },
+    ],
+    admin: [
+      { id: 'data_mode', label: 'Data Mode' },
+      { id: 'data_management', label: 'Data Management' },
+      { id: 'naming_standards', label: 'Naming Standards' },
+      { id: 'sz_naming', label: 'SZ Naming Mode' },
+      { id: 'fw_devices', label: 'Firewall Devices' },
+      { id: 'itsm', label: 'ITSM Connectors' },
+      { id: 'ad_groups', label: 'User Groups' },
+      { id: 'ad_users', label: 'Users' },
+      { id: 'ad_config', label: 'AD Configuration' },
+    ],
+  };
+  const groupOf = (tabId: string): TabGroup => {
+    if (TABS_BY_GROUP.topology.some(t => t.id === tabId)) return 'topology';
+    if (TABS_BY_GROUP.apps.some(t => t.id === tabId)) return 'apps';
+    return 'admin';
+  };
+  const [tabGroup, setTabGroup] = useState<TabGroup>(() => groupOf(activeTab));
+  const subTabs = TABS_BY_GROUP[tabGroup];
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -959,7 +984,29 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Admin &amp; Settings</h1>
         <p className="text-sm text-gray-500 mt-1">Application management, policy matrix, naming standards, AD integration</p>
       </div>
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      <div className="flex gap-2 mb-3">
+        {TAB_GROUPS.map(g => {
+          const active = tabGroup === g.id;
+          return (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => {
+                setTabGroup(g.id);
+                const first = TABS_BY_GROUP[g.id][0];
+                if (first && !TABS_BY_GROUP[g.id].some(t => t.id === activeTab)) {
+                  setActiveTab(first.id);
+                }
+              }}
+              className={`flex-1 text-left px-4 py-2.5 rounded-lg border transition ${active ? 'border-indigo-500 bg-indigo-50 shadow-sm' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+            >
+              <div className={`text-sm font-semibold ${active ? 'text-indigo-700' : 'text-gray-800'}`}>{g.label}</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">{g.description}</div>
+            </button>
+          );
+        })}
+      </div>
+      <Tabs tabs={subTabs} activeTab={activeTab} onChange={setActiveTab} />
 
       {(activeTab === 'ad_groups' || activeTab === 'ad_users') && (
         <div className="mt-4">
