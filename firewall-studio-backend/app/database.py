@@ -8707,7 +8707,8 @@ async def _expand_single_destination(payload: dict[str, Any]) -> dict[str, Any]:
             else:
                 if _is_heritage_presence(d):
                     dst_group = _heritage_app_group_name(
-                        d.get("app_distributed_id", ""), d.get("dc_id", ""))
+                        d.get("app_distributed_id", ""), d.get("dc_id", ""),
+                        direction="ingress")
                 else:
                     dst_group = _app_ingress_group_name(
                         d["app_distributed_id"], d["nh_id"], d["sz_code"])
