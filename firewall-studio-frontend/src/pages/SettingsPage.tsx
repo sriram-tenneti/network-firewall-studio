@@ -2039,7 +2039,7 @@ export default function SettingsPage() {
                 <PresencePerDcEditor
                   rows={newAppPresences}
                   onChange={setNewAppPresences}
-                  ngdcDcs={ngdcDatacenters.map(dc => ({ code: String(dc.dc_id || dc.code || '') })).filter(d => d.code)}
+                  ngdcDcs={ngdcDatacenters.map(dc => ({ code: String(dc.dc_id || dc.code || '').replace(/^[\s\-–—]+/, '').trim() })).filter(d => d.code)}
                   title="Per-DC Presences"
                   subtitle="One row per (DC, NH, SZ) for NGDC, or per Heritage DC. Egress + ingress IPs/CIDRs declared here flow into the matching grp-<APP>-… groups + fan into rules at submit time."
                 />
@@ -2148,7 +2148,7 @@ export default function SettingsPage() {
                     <PresencePerDcEditor
                       rows={editAppPresences}
                       onChange={setEditAppPresences}
-                      ngdcDcs={ngdcDatacenters.map(dc => ({ code: String(dc.dc_id || dc.code || '') })).filter(d => d.code)}
+                      ngdcDcs={ngdcDatacenters.map(dc => ({ code: String(dc.dc_id || dc.code || '').replace(/^[\s\-–—]+/, '').trim() })).filter(d => d.code)}
                       title="Per-DC Presences"
                       subtitle="One row per (DC, NH, SZ) for NGDC, or per Heritage DC. Egress + ingress chips here flow into the matching grp-<APP>-… groups + are picked up by the rule builder."
                     />

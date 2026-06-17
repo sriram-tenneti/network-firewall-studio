@@ -248,6 +248,10 @@ def _save(name: str, data: Any) -> None:
     indent = None if isinstance(data, list) and len(data) > 5000 else 2
     with open(path, "w") as f:
         json.dump(data, f, indent=indent, default=str)
+    # Invalidate caches that depend on this store
+    if name == "ngdc_datacenters":
+        global _ngdc_dc_ids_cache
+        _ngdc_dc_ids_cache = None
 
 
 # --- Org-level reference data helpers (always use SEED_DATA_DIR) ---
@@ -7727,6 +7731,7 @@ async def upsert_shared_service_presence(data: dict[str, Any]) -> dict[str, Any]
     naming applies."""
     items = _load("shared_service_presences") or []
     data = dict(data)
+    data["dc_id"] = str(data.get("dc_id", "")).lstrip("- \u2013\u2014").strip()
     data["service_id"] = str(data.get("service_id", "")).upper()
     key = (data["service_id"], data.get("dc_id", ""),
            data.get("environment", "Production"),
@@ -7819,6 +7824,7 @@ async def get_app_presences(app_dist_id: str | None = None) -> list[dict[str, An
 async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
     items = _load("app_presences") or []
     data = dict(data)
+    data["dc_id"] = str(data.get("dc_id", "")).lstrip("- \u2013\u2014").strip()
     data["app_distributed_id"] = str(data.get("app_distributed_id", "")).upper()
     key = (data["app_distributed_id"], data.get("dc_id", ""),
            data.get("environment", "Production"),
@@ -7904,10 +7910,20 @@ async def upsert_app_presence(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+_ngdc_dc_ids_cache: list[str] | None = None
+
+
 def _ngdc_dc_ids() -> list[str]:
-    """All NGDC DC IDs available in seed/runtime store. Excludes Heritage."""
-    return [d.get("dc_id", "") for d in (_load("ngdc_datacenters") or [])
-            if d.get("dc_id")]
+    """All NGDC DC IDs available in seed/runtime store. Excludes Heritage.
+
+    Result is cached after first call; the cache is invalidated whenever
+    the ngdc_datacenters store is written to (via _save).
+    """
+    global _ngdc_dc_ids_cache
+    if _ngdc_dc_ids_cache is None:
+        _ngdc_dc_ids_cache = [d.get("dc_id", "") for d in (_load("ngdc_datacenters") or [])
+                              if d.get("dc_id")]
+    return _ngdc_dc_ids_cache
 
 
 def _resolve_target_dcs(deployment_mode: str | None,
@@ -7931,6 +7947,63 @@ def _envs_for_entity(entity: dict[str, Any]) -> list[str]:
     return list(envs) if isinstance(envs, list) else [str(envs)]
 
 
+async def _fan_out_presences(
+    entity: dict[str, Any],
+    entity_id_key: str,
+    store_name: str,
+    upsert_fn,
+    ngdc_row_builder,
+    heritage_row_builder,
+) -> int:
+    """Shared DRY helper for app and shared-service fan-out.
+
+    Materializes presence rows for every tier across every target DC.
+    Idempotent — existing presences (matched on the unique key) are
+    left untouched, so member overrides survive re-fans.
+    """
+    tiers = entity.get("tiers") or []
+    heritage_tiers = entity.get("heritage_tiers") or entity.get("legacy_tiers") or []
+    if not tiers and not heritage_tiers:
+        return 0
+    eid = str(entity.get(entity_id_key, "")).upper()
+    if not eid:
+        return 0
+    items = _load(store_name) or []
+    existing = {(str(p.get(entity_id_key, "")).upper(),
+                 p.get("dc_id", ""), str(p.get("environment", "Production")).upper(),
+                 p.get("nh_id", ""), p.get("sz_code", ""))
+                for p in items}
+    created = 0
+    target_dcs = _resolve_target_dcs(entity.get("deployment_mode"),
+                                      entity.get("excluded_dcs"))
+    if tiers and target_dcs:
+        for env in _envs_for_entity(entity):
+            for dc in target_dcs:
+                for tier in tiers:
+                    nh = str(tier.get("nh_id", "")).strip()
+                    sz = str(tier.get("sz_code", "")).strip()
+                    if not nh or not sz:
+                        continue
+                    key = (eid, dc, env.upper(), nh, sz)
+                    if key in existing:
+                        continue
+                    await upsert_fn(ngdc_row_builder(eid, dc, env, nh, sz, tier))
+                    existing.add(key)
+                    created += 1
+    for env in _envs_for_entity(entity):
+        for htier in heritage_tiers:
+            dc = str(htier.get("dc_id", "")).strip()
+            if not dc:
+                continue
+            key = (eid, dc, env.upper(), "", "")
+            if key in existing:
+                continue
+            await upsert_fn(heritage_row_builder(eid, dc, env, htier))
+            existing.add(key)
+            created += 1
+    return created
+
+
 async def auto_fan_app_presences(app: dict[str, Any]) -> int:
     """Materialize AppPresence rows for every NGDC tier (across every
     target NGDC DC) AND every legacy tier (one per legacy DC). Both
@@ -7942,76 +8015,39 @@ async def auto_fan_app_presences(app: dict[str, Any]) -> int:
 
     Returns the number of new presences created.
     """
-    tiers = app.get("tiers") or []
-    heritage_tiers = app.get("heritage_tiers") or app.get("legacy_tiers") or []
-    if not tiers and not heritage_tiers:
-        return 0
-    app_id = str(app.get("app_distributed_id", "")).upper()
-    if not app_id:
-        return 0
-    items = _load("app_presences") or []
-    existing = {(str(p.get("app_distributed_id", "")).upper(),
-                 p.get("dc_id", ""), p.get("environment", ""),
-                 p.get("nh_id", ""), p.get("sz_code", ""))
-                for p in items}
-    created = 0
-    # ---- NGDC fan-out ----
-    target_dcs = _resolve_target_dcs(app.get("deployment_mode"),
-                                      app.get("excluded_dcs"))
-    if tiers and target_dcs:
-        for env in _envs_for_entity(app):
-            for dc in target_dcs:
-                for tier in tiers:
-                    nh = str(tier.get("nh_id", "")).strip()
-                    sz = str(tier.get("sz_code", "")).strip()
-                    if not nh or not sz:
-                        continue
-                    key = (app_id, dc, env, nh, sz)
-                    if key in existing:
-                        continue
-                    await upsert_app_presence({
-                        "app_distributed_id": app_id,
-                        "dc_id": dc,
-                        "dc_type": "NGDC",
-                        "environment": env,
-                        "nh_id": nh,
-                        "sz_code": sz,
-                        "has_ingress": bool(tier.get("has_ingress")),
-                        "egress_members": [],
-                        "ingress_members": [],
-                        "ingress_ports": [],
-                    })
-                    existing.add(key)
-                    created += 1
-    # ---- Heritage fan-out ----
-    # One presence per (env, heritage_dc) — Heritage DCs don't have
-    # NH/SZ segmentation so the presence is flat. Group materialisation
-    # in upsert_app_presence detects is_heritage and emits
-    # `grp-<APP>-HERITAGE-<DC>`.
-    for env in _envs_for_entity(app):
-        for htier in heritage_tiers:
-            dc = str(htier.get("dc_id", "")).strip()
-            if not dc:
-                continue
-            key = (app_id, dc, env, "", "")
-            if key in existing:
-                continue
-            await upsert_app_presence({
-                "app_distributed_id": app_id,
-                "dc_id": dc,
-                "dc_type": "Heritage",
-                "is_heritage": True,
-                "environment": env,
-                "nh_id": "",
-                "sz_code": "",
-                "has_ingress": bool(htier.get("has_ingress")),
-                "egress_members": [],
-                "ingress_members": [],
-                "ingress_ports": [],
-            })
-            existing.add(key)
-            created += 1
-    return created
+    def _ngdc_row(eid, dc, env, nh, sz, tier):
+        return {
+            "app_distributed_id": eid,
+            "dc_id": dc,
+            "dc_type": "NGDC",
+            "environment": env,
+            "nh_id": nh,
+            "sz_code": sz,
+            "has_ingress": bool(tier.get("has_ingress")),
+            "egress_members": [],
+            "ingress_members": [],
+            "ingress_ports": [],
+        }
+
+    def _heritage_row(eid, dc, env, htier):
+        return {
+            "app_distributed_id": eid,
+            "dc_id": dc,
+            "dc_type": "Heritage",
+            "is_heritage": True,
+            "environment": env,
+            "nh_id": "",
+            "sz_code": "",
+            "has_ingress": bool(htier.get("has_ingress")),
+            "egress_members": [],
+            "ingress_members": [],
+            "ingress_ports": [],
+        }
+
+    return await _fan_out_presences(
+        app, "app_distributed_id", "app_presences",
+        upsert_app_presence, _ngdc_row, _heritage_row,
+    )
 
 
 async def auto_fan_service_presences(svc: dict[str, Any]) -> int:
@@ -8019,66 +8055,33 @@ async def auto_fan_service_presences(svc: dict[str, Any]) -> int:
     target NGDC DC AND every legacy tier. Same idempotent semantics as
     the app variant.
     """
-    tiers = svc.get("tiers") or []
-    heritage_tiers = svc.get("heritage_tiers") or svc.get("legacy_tiers") or []
-    if not tiers and not heritage_tiers:
-        return 0
-    sid = str(svc.get("service_id", "")).upper()
-    if not sid:
-        return 0
-    items = _load("shared_service_presences") or []
-    existing = {(str(p.get("service_id", "")).upper(),
-                 p.get("dc_id", ""), p.get("environment", ""),
-                 p.get("nh_id", ""), p.get("sz_code", ""))
-                for p in items}
-    created = 0
-    # ---- NGDC fan-out ----
-    target_dcs = _resolve_target_dcs(svc.get("deployment_mode"),
-                                      svc.get("excluded_dcs"))
-    if tiers and target_dcs:
-        for env in _envs_for_entity(svc):
-            for dc in target_dcs:
-                for tier in tiers:
-                    nh = str(tier.get("nh_id", "")).strip()
-                    sz = str(tier.get("sz_code", "")).strip()
-                    if not nh or not sz:
-                        continue
-                    key = (sid, dc, env, nh, sz)
-                    if key in existing:
-                        continue
-                    await upsert_shared_service_presence({
-                        "service_id": sid,
-                        "dc_id": dc,
-                        "dc_type": "NGDC",
-                        "environment": env,
-                        "nh_id": nh,
-                        "sz_code": sz,
-                        "members": [],
-                    })
-                    existing.add(key)
-                    created += 1
-    # ---- Heritage fan-out ----
-    for env in _envs_for_entity(svc):
-        for htier in heritage_tiers:
-            dc = str(htier.get("dc_id", "")).strip()
-            if not dc:
-                continue
-            key = (sid, dc, env, "", "")
-            if key in existing:
-                continue
-            await upsert_shared_service_presence({
-                "service_id": sid,
-                "dc_id": dc,
-                "dc_type": "Heritage",
-                "is_heritage": True,
-                "environment": env,
-                "nh_id": "",
-                "sz_code": "",
-                "members": [],
-            })
-            existing.add(key)
-            created += 1
-    return created
+    def _ngdc_row(eid, dc, env, nh, sz, tier):
+        return {
+            "service_id": eid,
+            "dc_id": dc,
+            "dc_type": "NGDC",
+            "environment": env,
+            "nh_id": nh,
+            "sz_code": sz,
+            "members": [],
+        }
+
+    def _heritage_row(eid, dc, env, htier):
+        return {
+            "service_id": eid,
+            "dc_id": dc,
+            "dc_type": "Heritage",
+            "is_heritage": True,
+            "environment": env,
+            "nh_id": "",
+            "sz_code": "",
+            "members": [],
+        }
+
+    return await _fan_out_presences(
+        svc, "service_id", "shared_service_presences",
+        upsert_shared_service_presence, _ngdc_row, _heritage_row,
+    )
 
 
 def _desired_app_presence_keys(app: dict[str, Any]) -> set[tuple[str, str, str, str, str]]:
@@ -8503,10 +8506,11 @@ async def _resolve_source_presences(source_ref: str, env: str,
     from `shared_service_presences` and the result is normalized to look
     like an app presence so the engine can stay uniform.
     """
+    env_upper = env.upper() if env else "PRODUCTION"
     if source_kind == "shared_service":
         raw = [p for p in (_load("shared_service_presences") or [])
                if str(p.get("service_id", "")).upper() == source_ref.upper()
-               and p.get("environment") == env]
+               and str(p.get("environment", "Production")).upper() == env_upper]
         if requested_dcs:
             raw = [p for p in raw if p.get("dc_id") in requested_dcs]
         out: list[dict[str, Any]] = []
@@ -8524,7 +8528,7 @@ async def _resolve_source_presences(source_ref: str, env: str,
         return _filter_by_presence_keys(out, _presence_key_set(presence_keys))
     pres = [p for p in (_load("app_presences") or [])
             if str(p.get("app_distributed_id", "")).upper() == source_ref.upper()
-            and p.get("environment") == env]
+            and str(p.get("environment", "Production")).upper() == env_upper]
     if requested_dcs:
         pres = [p for p in pres if p.get("dc_id") in requested_dcs]
     for p in pres:
@@ -8537,14 +8541,15 @@ async def _resolve_destination_presences(kind: str, dest_ref: str | None,
                                          requested_dcs: list[str] | None,
                                          presence_keys: list[dict[str, Any]] | None = None,
                                          ) -> list[dict[str, Any]]:
+    env_upper = env.upper() if env else "PRODUCTION"
     if kind == "shared_service" and dest_ref:
         pres = [p for p in (_load("shared_service_presences") or [])
                 if str(p.get("service_id", "")).upper() == dest_ref.upper()
-                and p.get("environment") == env]
+                and str(p.get("environment", "Production")).upper() == env_upper]
     elif kind == "app_ingress" and dest_ref:
         pres = [p for p in (_load("app_presences") or [])
                 if str(p.get("app_distributed_id", "")).upper() == dest_ref.upper()
-                and p.get("environment") == env
+                and str(p.get("environment", "Production")).upper() == env_upper
                 and p.get("has_ingress")]
     else:
         pres = []
@@ -8622,13 +8627,17 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
     warnings: list[str] = []
     if not src_pres:
         warnings.append(
-            f"No source presence for {source_kind}:{src_ref} in environment {env}"
-            + (f" / DCs {src_dc_filter}" if src_dc_filter else "")
+            f"No source presence for {source_kind}:{src_ref} in environment "
+            f"'{env}' — ensure the app/service has presences declared in "
+            f"Settings → Per-DC Presences for this environment"
+            + (f" (filtered to DCs: {', '.join(src_dc_filter)})" if src_dc_filter else "")
         )
     if not dst_pres:
         warnings.append(
-            f"No destination presence for {kind}:{dest_ref} in environment {env}"
-            + (f" / DCs {dst_dc_filter}" if dst_dc_filter else "")
+            f"No destination presence for {kind}:{dest_ref} in environment "
+            f"'{env}' — ensure the destination has presences declared for "
+            f"this environment"
+            + (f" (filtered to DCs: {', '.join(dst_dc_filter)})" if dst_dc_filter else "")
         )
 
     def _chip_values(chips: Any) -> list[str]:
@@ -8660,26 +8669,28 @@ async def preview_rule_expansion(payload: dict[str, Any]) -> dict[str, Any]:
         """
         s_h = _is_heritage_presence(s_pres)
         d_h = _is_heritage_presence(d_pres)
+        s_dc = s_pres["dc_id"].lstrip("- ").strip().upper()
+        d_dc = d_pres["dc_id"].lstrip("- ").strip().upper()
         if d_h and not s_h:
-            allowed = [str(x).upper().strip()
+            allowed = [str(x).lstrip("- ").strip().upper()
                        for x in (d_pres.get("ngdc_source_dcs") or [])
                        if str(x).strip()]
-            if allowed and s_pres["dc_id"].upper() not in allowed:
+            if allowed and s_dc not in allowed:
                 return False
             return True
         if s_h and not d_h:
-            allowed = [str(x).upper().strip()
+            allowed = [str(x).lstrip("- ").strip().upper()
                        for x in (s_pres.get("ngdc_source_dcs") or [])
                        if str(x).strip()]
-            if allowed and d_pres["dc_id"].upper() not in allowed:
+            if allowed and d_dc not in allowed:
                 return False
             return True
         if not s_h and not d_h:
             # Strict same-DC pairing for NGDC<->NGDC. The legacy
             # `include_cross_dc` toggle is intentionally ignored here
-            # \u2014 cross-DC reasoning is reserved for NGDC<->Heritage
+            # — cross-DC reasoning is reserved for NGDC<->Heritage
             # flows governed by `ngdc_source_dcs[]`.
-            return s_pres["dc_id"] == d_pres["dc_id"]
+            return s_dc == d_dc
         # heritage <-> heritage: allow all
         return True
 
