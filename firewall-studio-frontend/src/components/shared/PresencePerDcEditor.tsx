@@ -103,7 +103,7 @@ export default function PresencePerDcEditor({
           (d || []).map((row) => {
             const r = row as unknown as Record<string, unknown>;
             return {
-              code: String(r.dc_id || r.code || ''),
+              code: String(r.dc_id || r.code || '').replace(/^[\s\-–—]+/, '').trim(),
               name: String(r.name || r.code || r.dc_id || ''),
             };
           }).filter((r) => r.code),
@@ -120,7 +120,7 @@ export default function PresencePerDcEditor({
           (d || []).map((row) => {
             const r = row as unknown as Record<string, unknown>;
             return {
-              code: String(r.dc_id || r.code || ''),
+              code: String(r.dc_id || r.code || '').replace(/^[\s\-–—]+/, '').trim(),
               name: String(r.name || r.code || r.dc_id || ''),
             };
           }).filter((r) => r.code),

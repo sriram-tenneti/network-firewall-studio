@@ -64,7 +64,7 @@ export function AppPresenceMatrix({
       setPortCatalog(ports || []);
       setDcs(
         (dcList || []).map((d: { dc_id?: string; id?: string; name?: string; dc_name?: string; type?: string }) => ({
-          id: String(d.dc_id ?? d.id ?? ''),
+          id: String(d.dc_id ?? d.id ?? '').replace(/^[\s\-–—]+/, '').trim(),
           name: String(d.dc_name ?? d.name ?? d.dc_id ?? d.id ?? ''),
           type: d.type,
         })),
