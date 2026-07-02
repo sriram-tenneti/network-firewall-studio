@@ -1,0 +1,51 @@
+# Checkmarx SAST Configuration for Network Firewall Studio
+# This file configures Checkmarx static application security testing
+
+project:
+  name: network-firewall-studio
+  team: /CxServer
+
+scan:
+  preset: Checkmarx Default
+  configuration: Default Configuration
+  incremental: true
+  force_scan: false
+
+# Languages to scan
+languages:
+  - Python
+  - TypeScript
+  - JavaScript
+
+# Source paths
+source:
+  include:
+    - firewall-studio-backend/app/**
+    - firewall-studio-frontend/src/**
+
+  exclude:
+    - "**/node_modules/**"
+    - "**/.venv/**"
+    - "**/__pycache__/**"
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/coverage/**"
+    - "**/htmlcov/**"
+    - "**/*.test.*"
+    - "**/*.spec.*"
+    - "**/package-lock.json"
+
+# Severity thresholds (fail build if exceeded)
+thresholds:
+  high: 0
+  medium: 10
+  low: 50
+
+# Report generation
+report:
+  format:
+    - pdf
+    - xml
+  location: checkmarx-reports/
